@@ -25,7 +25,7 @@
 - `INVARIANT_LOCKFILE_NO_GIT_RESOLUTION`
   `bun.lock` / `package-lock.json` / `pnpm-lock.yaml` などのロックファイルに git / github で解決された依存が無いことを保証する。`bun.lockb` (バイナリ) は静的検査困難として警告。
 - `INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT`
-  `bunfig.toml` に `trustedDependencies = []` が明示されていることを確認する。Bun が暗黙信頼する「top 500 npm パッケージ」の lifecycle script をゼロにする。`.npmrc` は Bun が読まないため意図的に置かない (security theater の排除)。詳細は [ADR-0001](../adr/0001-supply-chain-hardening.md) を参照。
+  `bunfig.toml` と `package.json` の両方に `trustedDependencies = []` が明示されていることを確認する。Bun が暗黙信頼する「top 500 npm パッケージ」の lifecycle script をゼロにし、package 更新で `llama.rn` などが opt-in される drift も止める。`.npmrc` は Bun が読まないため意図的に置かない (security theater の排除)。詳細は [ADR-0001](../adr/0001-supply-chain-hardening.md) と [ADR-0010](../adr/0010-native-delivery-quality-gates.md) を参照。
 - `INVARIANT_SKILL_FRONTMATTER_VALID`
   `.claude/skills/<dir>/SKILL.md` は YAML frontmatter に `name` と `description` を持ち、`name` はディレクトリ名と一致させる (スキル名は公開 API。リネームは breaking change)。`description` は 50 文字以上 1024 文字以下で、トリガー語彙と「いつ使うか」を明示する。曖昧な description はスキルの誤発火 (trigger abuse) を招くため warning で検出する。詳細は [ADR-0002](../adr/0002-skill-audit-invariants.md) を参照。
 - `INVARIANT_AGENT_FRONTMATTER_VALID`

@@ -31,6 +31,20 @@
       "description": "Bun ワークスペースパッケージ",
       "matchFileNames": ["packages/*/package.json"],
       "groupName": "workspace dependencies"
+    },
+    {
+      "description": "Expo と Native module の互換性更新は専用 CI を必須にする",
+      "matchPackageNames": [
+        "expo",
+        "/^expo-/",
+        "react",
+        "react-dom",
+        "react-native",
+        "react-native-web",
+        "llama.rn"
+      ],
+      "groupName": "expo native compatibility",
+      "automerge": false
     }
   ],
   "bun": {
