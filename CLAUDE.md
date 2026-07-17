@@ -16,16 +16,16 @@ Owner: リポジトリメンテナ（変更は PR レビュー必須）。記事
 /feature
 ```
 
-フロー: ヒアリング（AskUserQuestion）→ 仕様書承認 → Issue 作成 → 5 役割並列実装（PM / Designer / Developer / QA / User）→ 統合 → PR
+フロー: ヒアリング（AskUserQuestion）→ 仕様書承認 → Issue 作成 → 5 役割並列実装（PM / Designer / Developer / QA / User）→ 統合 → PR。
 
 ## 実装原則
 
 - **品質ファースト**: MVP は完了条件ではない。プロがそのまま使える品質で初回から出す。シンプルさは手抜きではなく、考え抜いた最善の構成が結果そう見えること。正本は [`docs/architecture/quality-bar.md`](./docs/architecture/quality-bar.md)（根拠 [ADR-0003](./docs/adr/0003-quality-first-no-mvp.md)）。
 - **設計ゲート**: 実装前に設計を残す（新機能は `docs/design/`、小変更は Plan.md）。代替案・選定理由・エッジケース。最初に動いた構造を採用しない。
-- **TDD**: テストを先に書く（Red → Green → Refactor）。カバレッジ 100% を維持する。
+- **TDD**: テストを先に書く（Red → Green → Refactor）。カバレッジ 100％を維持する。
 - **BDD スタイル**: `describe`/`it` を日本語で記述し、振る舞いを表現する。
 - **No Mock**: 実際の DB・API・ファイル I/O を使う。モックデータ・スタブ API 禁止。
-- **フルスタック一気通貫**: 新機能はデータモデル・API・フロント・テストをまとめて実装する。
+- **アプリ一気通貫**: 新機能は純 TypeScript Domain・Provider・共通 Screen・テストをまとめて実装する。
 - **Plan.md 運用**: 実装前に計画を作成し、進捗ログと振り返りを記録する（削除禁止）。
 
 ## Plan.md の構成
@@ -49,26 +49,25 @@ PR 作成前の必須ゲート（順序・コマンドは AGENTS.md の「品質
 | `/architecture-harness` | invariant の機械検証と `why <RULE_ID>` での意図表示 |
 | `/skill-audit` | スキル・フック・設定の監査。`.claude/` を変更したら必須 |
 | `/follow-up` | scope 外発見の記録・解消管理 |
-| `/init-project` | 初回スキャフォールド（ユーザー専用） |
 | `/frontend-design` | 高品質なフロントエンド実装 |
 
-スキルの書き方は AGENTS.md の「スキルの書き方」を正本とし、`.claude/rules/skill-authoring.md`（path-scoped rule）が `.claude/skills/` 配下の作業時に自動で読み込まれる。
+スキルの書き方は AGENTS.md の「スキルの書き方」を正本とし、`.claude/rules/skill-authoring.md`（パス scoped rule）が `.claude/skills/` 配下の作業時に自動で読み込まれる。
 
 同梱の subagent として、コードレビュー用の [`.claude/agents/code-reviewer.md`](./.claude/agents/code-reviewer.md) とデバッグ用の [`.claude/agents/debugger.md`](./.claude/agents/debugger.md) を用意する。それぞれ専用コンテキストでレビュー・障害調査を担う。
 
 ## AI 機能を実装するときのモデル指針
 
-- Claude モデルを使う実装では最新世代を既定にする（2026-06 時点: `claude-fable-5` / `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5`）。
+- Claude モデルを使う実装では最新世代をデフォルトにする（2026-06 時点: `claude-fable-5` / `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5`）。
 - モデル ID をコードに直書きせず、設定または環境変数に切り出す。
 - 選定・移行の根拠はモデル世代が変わるたびに ADR で残す。
 
 ## ドキュメント規則
 
-文体規則（文末「。」・日本語と半角英数字の間の半角スペース・絵文字と太字の併用回避）は path-scoped rule [`.claude/rules/doc-style.md`](./.claude/rules/doc-style.md) を正本とし、Markdown 編集時に自動で読み込まれる。textlint はセーフティネットであり、執筆時点で意識してエラーを作らない。
+文体規則（文末を句点にする・日本語と半角英数字の間に半角スペースを入れる・絵文字と太字の併用を避ける）は path-scoped rule [`.claude/rules/doc-style.md`](./.claude/rules/doc-style.md) を正本とし、Markdown 編集時に自動で読み込まれる。textlint はセーフティネットであり、執筆時点で意識してエラーを作らない。
 
 ## steering 機構の使い分け
 
-CLAUDE.md・skill・hook・path-scoped rule・subagent の役割分担と使い分けは [`docs/architecture/steering.md`](./docs/architecture/steering.md) を正本とする。常時ロードのコンテキストは軽く保ち、パス固有の規則は rule へ寄せる。
+CLAUDE.md・skill・hook・パス scoped rule・subagent の役割分担と使い分けは [`docs/architecture/steering.md`](./docs/architecture/steering.md) を正本とする。常時ロードのコンテキストは軽く保ち、パス固有の規則は rule へ寄せる。
 
 ## コンパクション指示
 

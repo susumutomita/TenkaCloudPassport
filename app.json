@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "TenkaCloud Passport",
+    "slug": "tenkacloud-passport",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f4f1ea"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "cloud.tenka.passport"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#f4f1ea"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "cloud.tenka.passport"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "assetBundlePatterns": ["**/*"]
+  }
+}
