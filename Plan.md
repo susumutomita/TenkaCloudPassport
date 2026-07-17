@@ -1397,3 +1397,183 @@ Consent を備えた Owner Question の Consent Flow をライブの体験とし
   100%）、`bunx textlint`、`make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error`
   （harness・harness_test・pre_release_check・lint_text・lint・typecheck・
   test_coverage・Web Export の全段階）を再実行し、すべて Green を確認した。
+
+---
+
+### [Issue 12 根拠付き Bridge を参加者ごとに 1 つだけ生成する] - 2026-07-17
+
+#### 目的
+
+大量の弱い推薦ではなく、確認済みの共通点または相互補完から今すぐ話せる理由を 1 つ提示する。
+根拠がなければ捏造せず `no-signal` を返す。Issue 10 / 11 が固定した 2 者間の bounded
+protocol（`src/domain/pet-interaction.ts`）はそのままに、Bridge 選定そのものを
+「単一の共有手掛かり」から「Topic 共通・Offer/Need 相互補完・共通 Language という 3 種類の
+Evidence + Fairness Rule を伴う 2〜6 名の判定」へ一般化する。
+
+#### 制約
+
+- `PetInteractionState` / `reducePetInteraction`、Lounge 本体の状態機械
+  （`lounge.ts` / `lounge-room.ts`）を重複実装しない。
+- Bridge の全 Claim は Evidence ID へ Trace できる形にし、数値の人物 Score は一切扱わない。
+- 各参加者の主要 Bridge は最大 1 件、Fairness の Tie-break は参加者の入力順序に依存しない
+  決定的な規則にする。
+- 2 者間の既存 Live 経路（`rules-provider.ts` / `interaction-discovery-provider.ts`）を
+  壊さない。既存テストは可能な限りそのまま Green を保ち、変更する場合は理由を明記する。
+- 新しい依存を追加しない。Git 操作、設定ファイル・harness invariant の変更を行わない。
+
+#### 設計判断
+
+1. Evidence 種別ごとに別モジュールを新設する案は責務が分散しすぎ、Fairness の
+   Tie-break が複数モジュールにまたがって追いにくくなる。
+2. 3〜6 名の判定を Live 経路（`rules-provider.ts` 等）へ直接組み込む案は、今の M1 が
+   2 者間 Lounge しか持たないため、実配線できない振る舞いを仕様として固定してしまう。
+3. 新規モジュール `src/domain/bridge-selection.ts` に、ID を持たない Public Passport
+   ペアの純粋判定（Layer 1）と、Participant ID を伴う N 者間 Fairness 選定（Layer 2）を
+   分離して集約し、2 者間 Live 経路は Layer 1 の関数を再利用するだけに留める案を採用する。
+
+案 3 を採用する。Topic 共通は既存の `findFirstSharedConfirmedClue`
+（`shared-clue-match.ts`）をそのまま再利用し重複実装しない。Offer/Need 相互補完・
+共通 Language は新規の Layer 1 純粋関数として追加し、2 者間 Live 経路と 3〜6 名の
+`selectBridges` の両方から同じ判定ロジックを共有する。Fairness の Tie-break は
+Confidence → Evidence 件数 → 正規化した参加者 ID の辞書順という、入力配列の順序に
+一切依存しない決定的な規則にする。詳細は
+[根拠付き Bridge 選定アルゴリズムの設計](./docs/design/bridge-selection.md) を正本とする。
+
+2 者間 Live 経路（`rules-provider.ts` / `interaction-discovery-provider.ts`）は Topic 共通を
+最優先（既存 Issue 4 以来の判定と後方互換）にしつつ、それが無い場合だけ Offer/Need
+相互補完へフォールバックする。共通 Language は、2 者間 Live 経路の `MatchEvidence.clues`
+（Wire 型）が `ConfirmedClue` の配列で `LanguageCode` を運べないため、この経路では根拠に
+せず、3〜6 名の `selectBridges` 経路（M3 で実配線）だけで使う。`src/protocol/schema.ts` の
+`Bridge.messageKey` はこの新しい Evidence 種別（`offer-need-complement`）を受理するよう
+拡張する。
+
+#### タスク
+
+1. 設計書、本セクションを先に作成する。
+2. `src/domain/bridge-selection.ts` を日本語 BDD テスト先行で実装する（Evidence 計算・
+   Confidence 規則・Fairness の Tie-break・2〜6 名・同点・奇数・Owner Rejection・
+   Unicode・表記揺れ・境界値・決定性）。
+3. `rules-provider.ts` / `interaction-discovery-provider.ts` を Offer/Need 相互補完へ
+   フォールバックするよう配線し、既存テストが Green のまま追加テストで新経路を固定する。
+4. `bridge.ts` に `createComplementBridge` を追加し、`protocol/schema.ts` の
+   `parseBridge` を新しい `messageKey` へ対応させる。
+5. UI（`OutcomeScreen.tsx`）が Score ではなく理由・Opener だけを表示することを固定する。
+6. 指定ゲートを実行し、合格後にコミットする。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test src --coverage` で 100% を確認する。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown を検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error`。
+- 2、3、4、5、6 名・同点・奇数・`no-signal`・Owner Rejection・Order-independence の
+  テストが揃っていることを確認する。
+
+#### 進捗ログ
+
+- 2026-07-17: AGENTS.md、CLAUDE.md、Issue 10 / 11 の Plan.md セクション、
+  `docs/design/pet-interaction-protocol.md`、`docs/design/owner-question-consent-flow.md`、
+  `src/domain/pet-interaction.ts`、`src/domain/shared-clue-match.ts`、
+  `src/domain/rules-provider.ts`、`src/domain/interaction-discovery-provider.ts`、
+  `src/domain/passport.ts`、`src/app/pet-interaction-flow.ts` を確認した。既存の
+  Bridge 判定が「カタログ順で最初に一致する確認済み手掛かり」だけを根拠にしており、
+  `Bridge` / `MatchEvidence`（`bridge.ts` / `match-evidence.ts`）は Peer Wire Protocol
+  （`peer-envelope.ts`）に含まれない、Lounge 内だけの Domain 型であることを確認した。
+- 2026-07-17: 設計書とタスク分解を先に作成し、Layer 1（ID なし純粋判定）/ Layer 2
+  （Participant ID を伴う Fairness 選定）の分離、Confidence 規則（Evidence 2 件以上、
+  または Offer/Need 相互補完単独で `promising`）、3 人 Bridge を「欲張り法で Pair を
+  組んだ後に残った 1 名だけを統合対象にする」単純化、共通 Language を 2 者間 Live 経路の
+  根拠にしない境界という 4 判断を確定した。
+- 2026-07-17: `src/domain/bridge-selection.ts`（Evidence 計算・Confidence・Fairness の
+  Tie-break・欲張り法 + 1 名統合の 3 人 Bridge・Owner Rejection の除外集合）と
+  `src/domain/bridge-selection.test.ts` を日本語 BDD テスト先行で実装した。
+  `noUncheckedIndexedAccess` 下で「型上は空配列だが実行時には非空」という到達不能分岐を
+  作らないため、`findLoneLeftover` は `.length !== 1` を判定した直後にそのまま
+  `unclaimed[0]`（`T | undefined`）を返す設計にし、`bridgeConfidence` /
+  `selectedBridgeFromEvidence` の空 Evidence 例外は Bridge Contract の公開関数として
+  直接テストする（`bridge.ts` の `createBridgeFromEvidence` と同じ既存パターン）ことで
+  無理な防御分岐を避けた。
+- 2026-07-17: `rules-provider.ts` / `interaction-discovery-provider.ts` を Offer/Need
+  相互補完へフォールバックするよう配線した。`bridge.ts` に `createComplementBridge` を
+  追加し、`protocol/schema.ts` の `parseBridge` を `messageKey:
+  'shared-clue' | 'offer-need-complement'` の 2 値に対応させた。既存の
+  `rules-provider.test.ts` / `interaction-discovery-provider.test.ts` は無変更のまま
+  Green を維持し、新しい相互補完のケースをテストへ追加した。
+- 2026-07-17: `src/screens/outcome-screen-no-score.test.ts` を追加し、`OutcomeScreen` が
+  Bridge の `message`（理由 + Opener）だけを表示し、数値の Score・Confidence・順位を
+  直接埋め込まないことを固定した。
+- 2026-07-17: `bun run typecheck`、`bun test src --coverage`（400 テスト、対象ファイル
+  100%）、`bun biome check .`、変更 Markdown への `bunx textlint` を実行し、Green を確認した。
+- 2026-07-17: 独立した 2 レビュー（正確性・Fairness 系統／Reuse・Simplification 系統）を
+  並列実行した。両系統とも実行で再現できる具体的な指摘だったため、指摘を鵜呑みにせず
+  自分でも同じ入力を実行して再現を確認したうえで修正した。
+  1. **[High, Correctness/Security]** `protocol/schema.ts` の `parseBridge` が
+     `messageKey: 'offer-need-complement'` を受理する条件を手掛かりの件数（2 件）
+     だけにしており、無関係な 2 件の手掛かり（例: 両方とも `topics`）でも
+     「相互補完した」という Bridge を偽装できた（実際に `parseBridge` へ渡して
+     エラーにならないことを確認して再現した）。`bridge-selection.ts` の
+     `firstOfferNeedMatch` と同じ意味論（1 件目が `offers`、2 件目が `lookingFor`、
+     同じ `category`）を強制する検証を追加し、2 種類の偽装形状（両方 `topics`、
+     `category` 不一致）を拒否するテストを追加した。
+  2. **[High, Correctness]** `findTripleMerge` が Pair の辺と孤立 1 名の 2 辺、
+     計 3 辺の Evidence を去重せずに連結しており、3 人が同じ確認済み手掛かりを
+     持つ場合に同じ事実が 3 件の Evidence として数えられ、Confidence が実際より
+     強い `promising` に水増しされ、`reason` にも同じ文が 3 回並んでいた（実際に
+     `selectBridges` を実行して reason 文字列を確認し再現した）。`kind` +
+     手掛かり／Language の内容を鍵にした `evidenceFactKey` と `dedupeGroupEvidence`
+     を追加し、`shared-topic` / `shared-language` は Bridge の全参加者を対象にした
+     Evidence ID へ再構成したうえで去重するよう修正した。去重後も 2 件以上の
+     独立した事実（Topic + Language、または Topic + Offer/Need 相互補完）が
+     残る場合は `promising` のままになることを別テストで固定した。
+  3. **[Medium, Reuse]** `bridge-selection.test.ts` の `aliasedParticipant` が
+     `domain-test-kit.ts` の `publicPassportWithClues` とほぼ同じ Passport 組み立てを
+     重複していたため、`publicPassportWithClues` に任意の第 3 引数 `ownerAlias` を
+     追加し、ローカルの重複ヘルパーを削除した。
+  4. **[Medium, Reuse]** `OfferNeedComplementEvidence.offer.participantId` /
+     `.seek.participantId` が Evidence ID の文字列を組み立てる以外に使われておらず
+     Write-only だったため、上記 2 の去重鍵（`evidenceFactKey`）で実際に読む形にし、
+     Offer/Need 相互補完と Topic 共通が同じ 3 人 Bridge に混在するケースのテストを
+     追加してこのフィールドの利用と去重されないことの両方を固定した。
+  5. **[Medium, Simplification]** テストファイル全体で `if (result.kind !== 'bridge')
+     throw new Error('unreachable')` という同じ narrowing を 11 箇所で繰り返して
+     いたため、`expectBridge(result)` ヘルパーへ集約した。
+  6. **[Low, Naming]** `selectedBridgeFromEvidence` を、同モジュール内の
+     `buildPairEvidence` / `buildPairCandidates` と同じ動詞始まりの命名規則に揃え
+     `buildSelectedBridgeFromEvidence` へ改名した。
+  7. **[Low, Reuse]** `rules-provider.ts` / `interaction-discovery-provider.ts` が
+     同じ「`offerNeedComplementMatches` の先頭 1 件を取る」1 行を重複させていたため、
+     `firstOfferNeedComplementMatch`（`bridge-selection.ts`）へ集約した。
+  修正後に `bun run typecheck`、`bun test src --coverage`（404 テスト、対象ファイル
+  100%）、`bun biome check .`、`bunx textlint`（本セクション・設計書）を再実行し、
+  すべて Green を確認した。設計書（`docs/design/bridge-selection.md`）にも、
+  3 人 Bridge の Evidence 去重規則と `parseBridge` の意味論的検証を追記した。
+
+#### 振り返り
+
+- **問題**: `noUncheckedIndexedAccess` の下で「型システム上は `undefined` の可能性が
+  残るが、実行時には到達しない」防御分岐を書くと、100% カバレッジ要件との間で
+  必ずどちらかが破綻する。
+- **根本原因**: TypeScript の制御フロー解析は、別の条件（配列長のチェック等）から
+  「このインデックスアクセスは必ず値を持つ」という事実を跨いで narrowing しない。
+- **予防策**: 「実行時に本当に空になり得る」関数は、その空入力を直接テストできる
+  公開関数として設計し、既存の `createBridgeFromEvidence` と同じパターンに揃える。
+  「呼び出し元の事前条件によって本当に到達しない」ケースは、`T | undefined` を返す
+  関数の自然な戻り値としてそのまま返し、無理な `if (!x) throw` の防御分岐を作らない。
+- **問題**: 外部境界の検証（`parseBridge`）を「件数さえ合えば通す」形で実装すると、
+  内容の意味論（どちらが `offers` でどちらが `lookingFor` か）を検証しないまま
+  Evidence を組み立てられてしまう。複数の辺から同じ 1 つの事実を独立に検出する
+  アルゴリズム（3 人 Bridge の統合）を素朴に結合すると、同じ事実が重複して
+  Confidence を水増しする。
+- **根本原因**: 「型が合っている」ことと「その値が実際に主張している意味を満たす」
+  ことは別の検証軸であり、前者だけを見て後者を省略すると偽装や水増しの余地が残る。
+  N 者間のグラフ構造を持つアルゴリズムでは、辺ごとに独立して計算した結果を単純に
+  連結すると、同じ「事実」が辺の数だけ重複しうることを実装当初は見落としていた。
+- **予防策**: 外部入力を受理する境界では、値の形（件数・型）だけでなく、ドメインの
+  制約関数（`firstOfferNeedMatch` と同じ意味論）を再適用して検証する。複数の辺・
+  複数の視点から同じ事実を検出しうる集約処理には、事実の内容そのもの（Evidence の
+  `kind` + 手掛かり／Language の値）を鍵にした去重を必ず挟み、去重後の Evidence ID は
+  元の狭い視点（1 辺 2 名）ではなく、集約後の対象全体を指す形へ再構成する。
+  2 つの独立レビュー（正確性・Fairness／Reuse・Simplification）の指摘は、鵜呑みにせず
+  自分で同じ入力を実行して再現を確認してから修正した。

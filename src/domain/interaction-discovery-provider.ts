@@ -1,3 +1,4 @@
+import { firstOfferNeedComplementMatch } from './bridge-selection';
 import { type OwnerQuestion, ownerQuestion } from './owner-question';
 import type { ConfirmedClue, PublicPassport } from './passport';
 import { findFirstSharedConfirmedClue } from './shared-clue-match';
@@ -44,18 +45,38 @@ export interface RulesInteractionDiscoveryProvider {
 }
 
 /**
- * Rules Provider と同じ「カタログ順で最初に一致する確認済み手掛かり」だけを根拠にする
- * 決定的な Discovery Provider。端末外へ通信せず、同じ入力には常に同じ結果を返す。
+ * Rules Provider と同じ「カタログ順で最初に一致する確認済み手掛かり」を最優先根拠に
+ * する決定的な Discovery Provider。端末外へ通信せず、同じ入力には常に同じ結果を返す。
+ * Issue 12: Topic 共通の候補が無い場合は Offer/Need 相互補完（`bridge-selection.ts`）を
+ * 調べ、Owner 自身の側の手掛かりを候補にする（Owner Question は常に Owner 自身の
+ * 手掛かりについて尋ねるため）。
  */
 export const RULES_INTERACTION_PROVIDER: RulesInteractionDiscoveryProvider = {
   kind: 'rules',
   discover(input) {
-    const candidateClue = findFirstSharedConfirmedClue(input);
-    if (!candidateClue) return { kind: 'no-signal' };
-    return {
-      kind: 'candidate',
-      candidateClue,
-      question: ownerQuestion('confirm-shared-clue', candidateClue),
-    };
+    const topicClue = findFirstSharedConfirmedClue(input);
+    if (topicClue) {
+      return {
+        kind: 'candidate',
+        candidateClue: topicClue,
+        question: ownerQuestion('confirm-shared-clue', topicClue),
+      };
+    }
+    const complement = firstOfferNeedComplementMatch(
+      input.ownerPassport,
+      input.encounteredPassport
+    );
+    if (complement) {
+      const ownerSideClue =
+        complement.offerSide === 'a'
+          ? complement.offerClue
+          : complement.seekClue;
+      return {
+        kind: 'candidate',
+        candidateClue: ownerSideClue,
+        question: ownerQuestion('confirm-shared-clue', ownerSideClue),
+      };
+    }
+    return { kind: 'no-signal' };
   },
 };

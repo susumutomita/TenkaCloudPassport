@@ -66,4 +66,30 @@ describe('Rules Provider', () => {
 
     expect(outcome).toEqual({ kind: 'no-signal' });
   });
+
+  describe('Issue 12: Topic 共通が無くても Offer/Need 相互補完で主要 Bridge を返す', () => {
+    it('一方の offers ともう一方の lookingFor が同じ category なら Bridge を返す', () => {
+      const outcome = RULES_PROVIDER.decide({
+        ownerPassport: passport(['information-security']),
+        encounteredPassport: passport(['product-design']),
+      });
+
+      expect(outcome.kind).toBe('bridge');
+      if (outcome.kind === 'bridge') {
+        expect(outcome.bridge.messageKey).toBe('offer-need-complement');
+        expect(outcome.bridge.evidence.clues.map((clue) => clue.value)).toEqual(
+          ['information-security', 'product-design']
+        );
+      }
+    });
+
+    it('category が異なる Offer/Need は相互補完とみなさず no-signal のままになる', () => {
+      const outcome = RULES_PROVIDER.decide({
+        ownerPassport: passport(['regional-event-operations']),
+        encounteredPassport: passport(['product-design']),
+      });
+
+      expect(outcome).toEqual({ kind: 'no-signal' });
+    });
+  });
 });
