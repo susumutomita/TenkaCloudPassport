@@ -1,5 +1,88 @@
 # Plan.md
 
+### [Issue 1 プロダクト契約正本化] - 2026-07-17
+
+#### 目的
+
+TenkaCloud Passport が、イベントへ同伴した Pet を介して確認済みの手掛かりを交換し、
+人間同士の口頭会話を始める理由を 1 つだけ提示して退くプロダクトであることを正本化する。
+対象利用者、JTBD、成功の瞬間、失敗状態、用語、不変条件、非目標、成功指標を日本語と
+英語で一致させ、後続の設計と実装がデジタル名刺や継続チャットへ逸脱しない基準を作る。
+
+#### 制約
+
+- 日本語を正本とし、各ファイル内の English 節を同じ意味に保つ。
+- `docs/product/glossary.md` を指定用語の定義の正本とし、他文書では定義を変更しない。
+- アカウント、中央サーバー、安定追跡 ID を中核体験の前提にしない。
+- 不明な情報を推測せず、根拠が弱い場合は `no-signal` を選ぶ。
+- Issue 1 の文書と本セクション以外へスコープを広げない。
+- 設定ファイルと architecture harness の invariant は変更しない。
+
+#### 設計判断
+
+文書構成は次の案を比較した。
+
+1. 全契約を `CONCEPT.md` に集約する案は入口が 1 つになるが、行動、用語、測定の責務が混ざり、
+   更新時に定義の正本を判別しにくい。
+2. 日本語と英語を別ファイルにする案は各言語を読みやすいが、同時更新の漏れと意味のずれを
+   発見しにくい。
+3. 4 文書を責務別に分け、各文書内で日本語と英語を併記する案はファイル数が増えるが、
+   用語と測定の正本を分離しながら日英を隣接させてレビューできる。
+
+案 3 を採用する。`CONCEPT.md` は入口、`product-contract.md` は行動契約、`glossary.md` は
+用語定義、`success-metrics.md` は測定契約を担う。指定用語は用語集だけで定義し、他文書は
+同じ語義を参照する。
+
+情報は、Owner が公開を許可した手掛かりを Passport に入れ、Pet が現地の Lounge で交換し、
+必要な場合だけ Owner Question を 1 問行い、Owner へ参加者単位の Bridge または `no-signal` を
+返した後、その Pet が `retired` へ遷移する順に流れる。Owner は公開範囲と人間の会話、
+Pet は推測しない判定と退場、
+Lounge は使い捨ての交換、成功指標は匿名の自己申告集計を担う。
+
+弱い根拠、不明な情報、Owner Question の未回答、複数参加者で結果が分かれる場合、Bridge 後と
+`no-signal` 後の追加応答、成功指標への未回答、中央サービス停止をエッジケースとして扱う。
+いずれも推測や再試行で埋めず、参加者単位の `no-signal`、Pet 単位の `retired`、不明、
+端末内処理へ安全側に倒す。
+
+#### タスク
+
+1. `CONCEPT.md` にプロダクトの要約、JTBD、対象利用者、成功、失敗、非目標を記載する。
+2. `docs/product/product-contract.md` に中核フローと不変条件を正本化する。
+3. `docs/product/glossary.md` に指定された 8 用語の一意な定義を記載する。
+4. `docs/product/success-metrics.md` に主成功指標、測定方法、ガードレールを記載する。
+5. 文体、日英の意味、受け入れ条件、差分をレビューする。
+6. 指定ゲートを実行し、合格後に Conventional Commits でコミットして PR を作成する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `git diff --check` と受け入れ条件の語句検査。
+- `/review`、`/security-review`、`/simplify` に相当する目視レビュー。
+
+#### 進捗ログ
+
+- 2026-07-17: `AGENTS.md`、`.claude/rules/doc-style.md`、Issue 1 の本文、既存の
+  Definition of Done を確認した。
+- 2026-07-17: ローカル Git メタデータが読み取り専用で、GitHub 接続によるブランチ作成も
+  拒否されたため、`main` へコミットせず文書作成と検証を先行した。
+- 2026-07-17: 4 文書を作成し、指定 8 用語、6 不変条件、10 非目標、会話開始の自己申告率、
+  TenkaCloud との関係を日本語と英語で揃えた。対象文書への追加 textlint も通過した。
+- 2026-07-17: read-only レビューで検出した `no-signal` の単位、Bridge の根拠数、ガードレールの
+  false-pass、設計ゲート、英訳の曖昧さを修正し、再レビューは指摘なしだった。
+- 2026-07-17: `bun scripts/architecture-harness.ts --staged --fail-on=error` と
+  `make before-commit` を再実行し、harness 0 件、68 tests、textlint、Biome がすべて通過した。
+
+#### 振り返り
+
+- 行動、用語、測定の正本を分けたことで、重複する説明がどの契約へ従うかを明確にできた。
+- `no-signal` を参加者単位の結果、`retired` を Pet 単位の終端状態に固定し、複数参加者でも
+  状態を一意にした。
+- Bridge 表示率を成功から外し、必須ガードレール違反を成功判定から除外することで、無理な
+  Bridge を増やす誘因を防いだ。
+
+---
+
 ### 公開品質ガードと blindspot pass - 2026-07-04
 
 #### 目的
