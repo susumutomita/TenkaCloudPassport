@@ -360,6 +360,95 @@ describe('Versioned Domain Schema', () => {
     );
   });
 
+  it('Issue 12: offer-need-complement の messageKey を 2 件の手掛かりから再構築する', () => {
+    const offerClue = {
+      value: 'information-security',
+      category: 'skill',
+      source: 'owner-selected',
+    } as const;
+    const seekClue = {
+      value: 'product-design',
+      category: 'skill',
+      source: 'owner-selected',
+    } as const;
+    const complementBridge = {
+      schemaVersion: 1,
+      messageKey: 'offer-need-complement',
+      evidence: { schemaVersion: 1, clues: [offerClue, seekClue] },
+    } as const;
+
+    const parsed = parseBridge(complementBridge);
+
+    expect(parsed.messageKey).toBe('offer-need-complement');
+    expect(parsed.message).toContain('情報セキュリティ');
+    expect(parsed.message).toContain('プロダクトデザイン');
+  });
+
+  it('Issue 12: offer-need-complement は手掛かりが 2 件でなければ拒否する', () => {
+    expectSchemaError(
+      () =>
+        parseBridge({
+          schemaVersion: 1,
+          messageKey: 'offer-need-complement',
+          evidence: EVIDENCE,
+        }),
+      'INVALID_VALUE'
+    );
+  });
+
+  it('Issue 12: offer-need-complement は無関係な 2 件の手掛かりを相互補完と偽装できない（両方 topics）', () => {
+    const twoTopicClues = [
+      { value: 'open-source', category: 'interest', source: 'owner-selected' },
+      {
+        value: 'accessibility',
+        category: 'interest',
+        source: 'owner-selected',
+      },
+    ] as const;
+
+    expectSchemaError(
+      () =>
+        parseBridge({
+          schemaVersion: 1,
+          messageKey: 'offer-need-complement',
+          evidence: { schemaVersion: 1, clues: twoTopicClues },
+        }),
+      'INVALID_VALUE'
+    );
+  });
+
+  it('Issue 12: offer-need-complement は offers/lookingFor の category が一致しないと偽装できない', () => {
+    const mismatchedCategoryClues = [
+      {
+        value: 'information-security',
+        category: 'skill',
+        source: 'owner-selected',
+      },
+      {
+        value: 'local-tournament',
+        category: 'activity',
+        source: 'owner-selected',
+      },
+    ] as const;
+
+    expectSchemaError(
+      () =>
+        parseBridge({
+          schemaVersion: 1,
+          messageKey: 'offer-need-complement',
+          evidence: { schemaVersion: 1, clues: mismatchedCategoryClues },
+        }),
+      'INVALID_VALUE'
+    );
+  });
+
+  it('Bridge の messageKey は許可された 2 値以外を拒否する', () => {
+    expectSchemaError(
+      () => parseBridge({ ...BRIDGE, messageKey: 'ranking-score' }),
+      'INVALID_VALUE'
+    );
+  });
+
   it('Lounge は 8 人まで受理し、重複と 9 人目を拒否する', () => {
     const participantIds = Array.from(
       { length: 8 },

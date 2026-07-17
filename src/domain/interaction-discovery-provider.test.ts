@@ -41,4 +41,32 @@ describe('Rules Interaction Provider の Discovery', () => {
 
     expect(first).toEqual(second);
   });
+
+  describe('Issue 12: Topic 共通が無くても Offer/Need 相互補完で候補を返す', () => {
+    it('Owner が提供し相手が探している場合、Owner の offers 側の手掛かりを候補にする', () => {
+      const result = RULES_INTERACTION_PROVIDER.discover({
+        ownerPassport: passport(['information-security']),
+        encounteredPassport: passport(['product-design']),
+      });
+
+      expect(result.kind).toBe('candidate');
+      if (result.kind === 'candidate') {
+        expect(result.candidateClue.value).toBe('information-security');
+        expect(result.question.purpose).toBe('canOffer');
+      }
+    });
+
+    it('相手が提供し Owner が探している場合、Owner の lookingFor 側の手掛かりを候補にする', () => {
+      const result = RULES_INTERACTION_PROVIDER.discover({
+        ownerPassport: passport(['product-design']),
+        encounteredPassport: passport(['information-security']),
+      });
+
+      expect(result.kind).toBe('candidate');
+      if (result.kind === 'candidate') {
+        expect(result.candidateClue.value).toBe('product-design');
+        expect(result.question.purpose).toBe('lookingFor');
+      }
+    });
+  });
 });

@@ -4,7 +4,11 @@ import type {
   DeviceSettings,
   ModelVerification,
 } from '../domain/backup';
-import { type Bridge, createBridgeFromEvidence } from '../domain/bridge';
+import {
+  type Bridge,
+  createBridgeFromEvidence,
+  createComplementBridge,
+} from '../domain/bridge';
 import {
   CATALOG_VERSION,
   type ClueId,
@@ -478,8 +482,41 @@ export function parseBridge(value: unknown): Bridge {
     'evidence',
   ]);
   schemaVersion(record, path);
-  assertLiteral(record.messageKey, 'shared-clue', `${path}.messageKey`);
-  return createBridgeFromEvidence(parseMatchEvidence(record.evidence));
+  const messageKey = assertOneOf(
+    record.messageKey,
+    ['shared-clue', 'offer-need-complement'],
+    `${path}.messageKey`
+  );
+  const evidence = parseMatchEvidence(record.evidence);
+  if (messageKey === 'offer-need-complement') {
+    const [offerClue, seekClue] = evidence.clues;
+    if (!offerClue || !seekClue || evidence.clues.length !== 2) {
+      return schemaError(
+        'INVALID_VALUE',
+        `${path}.evidence.clues`,
+        'offer-need-complement の Bridge には手掛かりが 2 件必要です。'
+      );
+    }
+    // `messageKey` と手掛かりの件数だけを見ると、無関係な 2 件の手掛かり
+    // （例: 両方とも topics）を「相互補完した」と偽って主張できてしまう。
+    // `bridge-selection.ts` の `firstOfferNeedMatch` と同じ意味論
+    // （1 件目は offers、2 件目は lookingFor、同じ category）を強制する。
+    const offerDefinition = clueById(offerClue.value);
+    const seekDefinition = clueById(seekClue.value);
+    if (
+      offerDefinition.passportField !== 'offers' ||
+      seekDefinition.passportField !== 'lookingFor' ||
+      offerDefinition.category !== seekDefinition.category
+    ) {
+      return schemaError(
+        'INVALID_VALUE',
+        `${path}.evidence.clues`,
+        'offer-need-complement は 1 件目が offers、2 件目が lookingFor で同じ category の手掛かりである必要があります。'
+      );
+    }
+    return createComplementBridge(offerClue, seekClue);
+  }
+  return createBridgeFromEvidence(evidence);
 }
 
 export function parseAgentDecision(value: unknown): AgentDecision {
