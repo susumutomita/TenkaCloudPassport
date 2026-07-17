@@ -1,53 +1,65 @@
 {
-  "name": "typescript-template",
+  "name": "tenkacloud-passport",
   "version": "1.0.0",
-  "description": "TypeScript + Bun + Hono + Vite + React + Biome の Claude Code 向けモノレポテンプレート。サプライチェイン防御 (ADR-0001) と architecture-harness invariant が既定で入っている。",
+  "description": "TenkaCloud のイベントで確認済みの手掛かりから人間同士の会話を始める、アカウント不要の Expo アプリ。",
   "author": "Susumu Tomita <oyster880@gmail.com>",
   "license": "MIT",
   "private": true,
   "type": "module",
+  "main": "index.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/susumutomita/typescript-template.git"
+    "url": "git+https://github.com/susumutomita/TenkaCloudPassport.git"
   },
-  "homepage": "https://github.com/susumutomita/typescript-template#readme",
+  "homepage": "https://github.com/susumutomita/TenkaCloudPassport#readme",
   "bugs": {
-    "url": "https://github.com/susumutomita/typescript-template/issues"
+    "url": "https://github.com/susumutomita/TenkaCloudPassport/issues"
   },
   "packageManager": "bun@1.3.11",
   "engines": {
     "bun": ">=1.3.0",
-    "node": ">=22.0.0"
-  },
-  "workspaces": [
-    "packages/*"
-  ],
-  "overrides": {
-    "hono": "4.12.23"
+    "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "bun run --filter '*' dev",
-    "build": "bun run --filter '*' build",
-    "test": "bun run --filter '*' test",
-    "test:coverage": "bun run --filter '*' test:coverage",
-    "typecheck": "bun run --filter '*' typecheck",
-    "clean": "bun rimraf node_modules 'packages/*/node_modules' 'packages/*/dist' 'packages/*/coverage'",
+    "start": "expo start",
+    "dev": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "build": "bun run build:web",
+    "build:web": "expo export --platform web --output-dir dist",
+    "test": "bun test",
+    "test:coverage": "bun test src --coverage",
+    "typecheck": "tsc --noEmit",
+    "expo:check": "expo install --check",
+    "clean": "rimraf .expo dist coverage",
     "lint": "bun biome check .",
     "lint:fix": "bun biome check --write .",
-    "lint:text": "bun textlint ./README.md",
+    "lint:text": "bun textlint README.md",
     "check:pre-release": "bun scripts/architecture-harness.ts --pre-release --fail-on=error",
     "lint-staged": "lint-staged",
     "format": "bun biome format --write .",
     "format:check": "bun biome format .",
     "prepare": "husky"
   },
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.5",
+    "expo": "~57.0.6",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-web": "~0.21.0"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
+    "@types/bun": "^1.3.11",
+    "@types/react": "~19.2.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.7",
     "rimraf": "^6.1.3",
     "textlint": "^15.7.1",
-    "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
     "textlint-rule-ja-no-abusage": "^3.0.0",
     "textlint-rule-ja-no-inappropriate-words": "^2.0.0",
     "textlint-rule-no-double-negative-ja": "^2.0.1",
@@ -55,6 +67,7 @@
     "textlint-rule-prefer-tari-tari": "^1.0.3",
     "textlint-rule-preset-ja-spacing": "^2.2.0",
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
-    "textlint-rule-spellcheck-tech-word": "^5.0.0"
+    "textlint-rule-spellcheck-tech-word": "^5.0.0",
+    "typescript": "~6.0.3"
   }
 }
