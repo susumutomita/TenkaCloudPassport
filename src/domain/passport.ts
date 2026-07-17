@@ -1,5 +1,6 @@
 import {
   CATALOG_VERSION,
+  CLUE_IDS,
   type ClueCategory,
   type ClueId,
   clueById,
@@ -9,6 +10,7 @@ import {
 export type PassportValidationCode =
   | 'UNKNOWN_CLUE'
   | 'DUPLICATE_CLUE'
+  | 'PROFILE_CLUE_COUNT'
   | 'CLUE_NOT_IN_PROFILE'
   | 'CLUE_NOT_SELECTED'
   | 'OWNER_CONFIRMATION_REQUIRED'
@@ -34,6 +36,7 @@ export interface LocalPrivateProfile {
   readonly schemaVersion: 1;
   readonly catalogVersion: typeof CATALOG_VERSION;
   readonly candidateClues: readonly ProfileClue[];
+  readonly excludedTopics: readonly ClueId[];
 }
 
 export interface ConfirmedClue {
@@ -51,6 +54,7 @@ export interface PublicPassport {
 interface CreateProfileInput {
   readonly candidateClueIds: readonly string[];
   readonly selectedForPassportClueIds: readonly string[];
+  readonly excludedTopicIds?: readonly string[];
 }
 
 interface ProjectPassportInput {
@@ -81,8 +85,21 @@ function validatedClueIds(values: readonly string[]): ClueId[] {
 export function createLocalPrivateProfile(
   input: CreateProfileInput
 ): LocalPrivateProfile {
+  if (input.candidateClueIds.length > CLUE_IDS.length) {
+    throw new PassportValidationError(
+      'PROFILE_CLUE_COUNT',
+      `Local Private Profile の候補は ${CLUE_IDS.length} 件以下にしてください。`
+    );
+  }
   const candidateIds = validatedClueIds(input.candidateClueIds);
   const selectedIds = validatedClueIds(input.selectedForPassportClueIds);
+  const excludedTopicIds = validatedClueIds(input.excludedTopicIds ?? []);
+  if (excludedTopicIds.length > CLUE_IDS.length) {
+    throw new PassportValidationError(
+      'PROFILE_CLUE_COUNT',
+      `Local Private Profile の除外トピックは ${CLUE_IDS.length} 件以下にしてください。`
+    );
+  }
   const candidates = new Set<ClueId>(candidateIds);
   for (const selectedId of selectedIds) {
     if (!candidates.has(selectedId)) {
@@ -104,6 +121,7 @@ export function createLocalPrivateProfile(
         selectedForPassport: selected.has(id),
       };
     }),
+    excludedTopics: excludedTopicIds,
   };
 }
 
