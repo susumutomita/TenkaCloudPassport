@@ -1,0 +1,19 @@
+{
+  "name": "english-language-template",
+  "input": {
+    "ownerClueIds": ["open-source"],
+    "encounteredClueIds": ["open-source", "accessibility"],
+    "ownerLanguageCodes": [],
+    "encounteredLanguageCodes": [],
+    "ownerAnswer": null,
+    "language": "en",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "possible",
+    "evidenceIds": ["topic:open-source"],
+    "reason": "You both have published the confirmed shared topic \"オープンソース\".",
+    "opener": "Try opening with \"オープンソース\"."
+  }
+}

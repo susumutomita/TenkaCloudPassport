@@ -1,0 +1,19 @@
+{
+  "name": "english-language-multi-evidence",
+  "input": {
+    "ownerClueIds": ["open-source"],
+    "encounteredClueIds": ["open-source"],
+    "ownerLanguageCodes": ["ja", "en"],
+    "encounteredLanguageCodes": ["en"],
+    "ownerAnswer": null,
+    "language": "en",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "promising",
+    "evidenceIds": ["topic:open-source", "language:en"],
+    "reason": "You both have published the confirmed shared topic \"オープンソース\". You share a common language: \"English\".",
+    "opener": "Try opening with \"オープンソース\"."
+  }
+}

@@ -205,3 +205,11 @@ Owner の生の回答（`'yes' | 'no' | 'decline'`）を受け取って純粋に
 - `evaluateLounge` / `RULES_PROVIDER` はアプリの実行経路から外れた後も既存 API として
   残っている。将来 Local Agent 接続が完了した時点で、この未使用経路を削除するか、
   運用ツール向けの明示的なフォールバック経路として残すかを改めて判断する。
+- **追記（Issue 13）**: Issue 13 は、この bounded protocol と `RULES_INTERACTION_PROVIDER`
+  が抱える「Local Agent（`llama.rn`）を接続する統一 Contract」を
+  `src/domain/agent-model-provider.ts`（`AgentModelProvider`）として新設した。ただし今回は
+  既存の `pet-interaction-flow.ts` / `RULES_INTERACTION_PROVIDER` の Live 経路を変更せず、
+  並行する新しい Contract として追加している。詳細は
+  [Agent Model Provider Contract の設計](./agent-model-provider-contract.md) を参照する。
+  `pet-interaction-flow.ts` をこの新しい Contract の上へ再配線するかどうかは、Issue 17 の
+  Local Agent 接続が完了した時点で改めて判断する。

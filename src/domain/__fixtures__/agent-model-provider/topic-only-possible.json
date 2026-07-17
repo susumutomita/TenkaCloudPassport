@@ -1,0 +1,19 @@
+{
+  "name": "topic-only-possible",
+  "input": {
+    "ownerClueIds": ["open-source"],
+    "encounteredClueIds": ["open-source", "accessibility"],
+    "ownerLanguageCodes": [],
+    "encounteredLanguageCodes": [],
+    "ownerAnswer": null,
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "possible",
+    "evidenceIds": ["topic:open-source"],
+    "reason": "お互いが「オープンソース」という確認済みの共通点を公開しています。",
+    "opener": "「オープンソース」について話しかけてみましょう。"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "owner-confirmed-only-promising",
+  "input": {
+    "ownerClueIds": ["regional-event-operations"],
+    "encounteredClueIds": ["accessibility"],
+    "ownerLanguageCodes": [],
+    "encounteredLanguageCodes": [],
+    "ownerAnswer": {
+      "candidateClue": {
+        "value": "community-operations",
+        "category": "activity",
+        "source": "owner-selected"
+      },
+      "answer": "yes"
+    },
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "promising",
+    "evidenceIds": ["owner-confirmed:community-operations"],
+    "reason": "Owner がこの手掛かり「コミュニティの共同運営」を今回の Lounge で使うことに同意しました。",
+    "opener": "「コミュニティの共同運営」について話しかけてみましょう。"
+  }
+}
