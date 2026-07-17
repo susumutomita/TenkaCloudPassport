@@ -44,4 +44,21 @@ describe('Pet Interaction の状態表示 (interactionStatusNotice)', () => {
       }
     }
   });
+
+  it('locale が en のとき、6 つのフェーズすべてに固定の英語文言を持つ', () => {
+    for (const phase of PHASES) {
+      const notice = interactionStatusNotice(phase, 'en');
+      expect(notice.message.length).toBeGreaterThan(0);
+      expect(notice.message).not.toBe(interactionStatusNotice(phase).message);
+    }
+  });
+
+  it('locale が en でも内部推論・Prompt・Evidence の語彙を一切含まない', () => {
+    for (const phase of PHASES) {
+      const notice = interactionStatusNotice(phase, 'en');
+      for (const forbidden of FORBIDDEN_INTERNAL_VOCABULARY) {
+        expect(notice.message).not.toContain(forbidden);
+      }
+    }
+  });
 });

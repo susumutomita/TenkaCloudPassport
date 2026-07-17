@@ -1,42 +1,34 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
-import type {
-  DestroyedLounge,
-  LoungeDestructionReason,
-} from '../domain/lounge';
+import type { DestroyedLounge } from '../domain/lounge';
 import { colors, spacing } from '../ui/theme';
-
-const REASON_LABELS: Record<LoungeDestructionReason, string> = {
-  completed: '結果画面を閉じました。',
-  'owner-exit': 'Owner が退出しました。',
-  'host-ended': 'Host が Lounge を終了しました。',
-  expired: '開始から 20 分が満了しました。',
-};
 
 interface DestroyedLoungeScreenProps {
   readonly lounge: DestroyedLounge;
+  readonly locale?: Locale;
   readonly onRestart: () => void;
 }
 
 export default function DestroyedLoungeScreen({
   lounge,
+  locale = DEFAULT_LOCALE,
   onRestart,
 }: DestroyedLoungeScreenProps) {
+  const t = MESSAGES[locale].destroyedLounge;
   return (
     <AppScreen
       eyebrow="Lounge Destroyed"
-      title="この Lounge のデータを端末から破棄しました。"
-      description="Passport、相手の手掛かり、判定入力、Bridge または no-signal は履歴へ保存していません。"
+      title={t.title}
+      description={t.description}
     >
       <View style={styles.receipt}>
-        <Text style={styles.receiptLabel}>終了理由</Text>
-        <Text style={styles.receiptValue}>{REASON_LABELS[lounge.reason]}</Text>
+        <Text style={styles.receiptLabel}>{t.reasonLabel}</Text>
+        <Text style={styles.receiptValue}>{t.reasons[lounge.reason]}</Text>
       </View>
-      <ActionButton
-        label="保存済み Profile で新しい Encounter"
-        onPress={onRestart}
-      />
+      <ActionButton label={t.restartButton} onPress={onRestart} />
     </AppScreen>
   );
 }

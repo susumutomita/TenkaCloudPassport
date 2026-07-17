@@ -1,5 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { expiryNotice } from '../app/expiry-notice';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import { interactionStatusNotice } from '../app/interaction-status-notice';
 import { providerSwitchNotice } from '../app/provider-switch-notice';
 import ActionButton from '../components/ActionButton';
@@ -11,10 +14,71 @@ import { colors, spacing } from '../ui/theme';
 interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
   readonly remainingMs: number;
+  readonly locale?: Locale;
+  /**
+   * Issue 15: OS の Reduce Motion 設定（`src/app/reduced-motion-port.ts` が判定した値）。
+   * 真のとき、Pet Emoji の拍動 Animation を静的な表示へ置換する。
+   */
+  readonly reduceMotion?: boolean;
   readonly onBeginInteraction: () => void;
   readonly onExit: () => void;
   readonly onHostEnd: () => void;
+  /**
+   * Issue 15: Active Lounge の最中でも Settings（言語切り替え）へ到達できることを
+   * 示す。`PassportApp.tsx` は `stage === 'settings'` を Lounge の状態確認より先に
+   * 判定するため、この画面から離れても `lounge` state は変更されない
+   * （`docs/design/i18n-and-accessibility.md` の設計判断 1）。
+   */
+  readonly onOpenSettings: () => void;
   readonly errorMessage: string | null;
+}
+
+/**
+ * Interaction 実行中の Pet を表す軽い拍動 Animation。`reduceMotion` が真のときは
+ * `Animated` を一切使わず静的な `Text` を描画する（`docs/design/i18n-and-accessibility.md`
+ * の Reduce Motion 節）。この repo はレンダリング用の統合テスト基盤を持たないため、
+ * 挙動は `active-lounge-reduced-motion.test.ts` のソーステキスト検査で固定する。
+ */
+function PetEmojiGlyph({
+  emoji,
+  reduceMotion,
+}: {
+  readonly emoji: string;
+  readonly reduceMotion: boolean;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      scale.setValue(1);
+      return undefined;
+    }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, {
+          toValue: 1.12,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scale, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [reduceMotion, scale]);
+
+  if (reduceMotion) {
+    return <Text style={styles.petEmojiGlyph}>{emoji} </Text>;
+  }
+  return (
+    <Animated.Text style={[styles.petEmojiGlyph, { transform: [{ scale }] }]}>
+      {emoji}{' '}
+    </Animated.Text>
+  );
 }
 
 function PassportSummary({
@@ -22,19 +86,23 @@ function PassportSummary({
   petName,
   petEmoji,
   values,
+  reduceMotion,
 }: {
   readonly title: string;
   readonly petName: string;
   readonly petEmoji: string | undefined;
   readonly values: readonly ClueId[];
+  readonly reduceMotion: boolean;
 }) {
   return (
     <View style={styles.passport}>
       <Text style={styles.passportTitle}>{title}</Text>
-      <Text style={styles.petName}>
-        {petEmoji ? `${petEmoji} ` : ''}
-        {petName}
-      </Text>
+      <View style={styles.petNameRow}>
+        {petEmoji ? (
+          <PetEmojiGlyph emoji={petEmoji} reduceMotion={reduceMotion} />
+        ) : null}
+        <Text style={styles.petName}>{petName}</Text>
+      </View>
       {values.map((value) => (
         <Text key={value} style={styles.clue}>
           {clueById(value).label}
@@ -47,29 +115,36 @@ function PassportSummary({
 export default function ActiveLoungeScreen({
   lounge,
   remainingMs,
+  locale = DEFAULT_LOCALE,
+  reduceMotion = false,
   onBeginInteraction,
   onExit,
   onHostEnd,
+  onOpenSettings,
   errorMessage,
 }: ActiveLoungeScreenProps) {
-  const notice = expiryNotice(remainingMs);
+  const t = MESSAGES[locale].activeLounge;
+  const common = MESSAGES[locale].common;
+  const notice = expiryNotice(remainingMs, locale);
   return (
     <AppScreen
       eyebrow="Step 4 / Lounge"
-      title="確認済みの手掛かりだけで判定する。"
-      description="Local Agent は端末外へ通信せず、共通項目がなければ推測せずに no-signal を返します。必要な場合は Owner へ 1 問だけ確認します。"
+      title={t.title}
+      description={t.description}
     >
       <View style={styles.grid}>
         <PassportSummary
           petEmoji={lounge.ownerPassport.petEmoji}
           petName={lounge.ownerPassport.petName}
-          title="この端末"
+          reduceMotion={reduceMotion}
+          title={t.localPassportTitle}
           values={lounge.ownerPassport.clues.map((clue) => clue.value)}
         />
         <PassportSummary
           petEmoji={lounge.encounteredPassport.petEmoji}
           petName={lounge.encounteredPassport.petName}
-          title="Encounter"
+          reduceMotion={reduceMotion}
+          title={t.peerPassportTitle}
           values={lounge.encounteredPassport.clues.map((clue) => clue.value)}
         />
       </View>
@@ -82,7 +157,7 @@ export default function ActiveLoungeScreen({
         accessibilityLabel は付けない。
       */}
       <Text style={styles.interactionStatus}>
-        {interactionStatusNotice('discovering').message}
+        {interactionStatusNotice('discovering', locale).message}
       </Text>
       {/*
         Issue 13: Provider 切替理由を内容を含まない Status として表示する。この画面は
@@ -91,13 +166,11 @@ export default function ActiveLoungeScreen({
         であり、live な per-session readout ではない。
       */}
       <Text style={styles.providerStatus}>
-        {providerSwitchNotice(null).message}
+        {providerSwitchNotice(null, locale).message}
       </Text>
       <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>使い捨て Lounge</Text>
-        <Text style={styles.noticeText}>
-          20 分満了、退出、Host 終了の最早契機で、現在のデータを破棄します。
-        </Text>
+        <Text style={styles.noticeTitle}>{t.disposableNoticeTitle}</Text>
+        <Text style={styles.noticeText}>{t.disposableNoticeText}</Text>
       </View>
       {notice.level === 'warning' ? (
         <View accessibilityRole="alert" style={styles.expiryWarning}>
@@ -109,12 +182,21 @@ export default function ActiveLoungeScreen({
           {errorMessage}
         </Text>
       ) : null}
-      <ActionButton label="会話の糸を探す" onPress={onBeginInteraction} />
-      <ActionButton label="退出して破棄" onPress={onExit} variant="secondary" />
       <ActionButton
-        label="Host として終了"
+        label={t.beginInteractionButton}
+        onPress={onBeginInteraction}
+      />
+      <ActionButton label={t.exitButton} onPress={onExit} variant="secondary" />
+      <ActionButton
+        label={t.hostEndButton}
         onPress={onHostEnd}
         variant="danger"
+      />
+      <ActionButton
+        accessibilityHint={common.settingsButtonHint}
+        label={common.settingsButton}
+        onPress={onOpenSettings}
+        variant="secondary"
       />
     </AppScreen>
   );
@@ -155,11 +237,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  petNameRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginBottom: spacing.xs,
+  },
+  petEmojiGlyph: {
+    fontSize: 18,
+  },
   petName: {
     color: colors.ink,
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: spacing.xs,
   },
   notice: {
     backgroundColor: colors.primarySoft,

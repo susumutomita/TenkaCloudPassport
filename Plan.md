@@ -1953,3 +1953,164 @@ Share Sheet Port だけを完成させる。
   の原子性、Native の実ファイル書き込みの決定的なラウンドトリップ）が特定の失敗経路を
   実質的に発生させないという前提に依存する保証は、その前提ごと明記し、実装を差し替えた
   場合の再検討事項として Known follow-ups に残す。
+
+### [Issue 15 日本語・英語・アクセシビリティを主要フローで保証する] - 2026-07-17
+
+#### 目的
+
+異なる言語の参加者が同じ Lounge に参加しても、Privacy / Consent / Bridge を同じ強さで
+理解できる状態にする。介助技術（VoiceOver / TalkBack）や文字拡大を使っても、Passport
+作成から Exit までの主要フローを完走できるようにする。
+
+#### 制約
+
+- 日本語と英語の 2 言語だけを対象とし、全言語対応・Cloud Translation・音声録音や
+  文字起こしは行わない。
+- LLM による未検証の自動翻訳を唯一の表示にしない。翻訳は型付き Message Catalog の
+  固定文言とし、Bridge は Rules Provider 由来の安全な定型文だけを使う。
+- 新しい npm 依存を追加しない。Reduce Motion は React Native 同梱の `AccessibilityInfo`
+  だけで賄う。
+- カタログの Clue Label・Owner Question の質問文（Wire Protocol）自体の翻訳は対象外とし、
+  Issue 13 の Known follow-up を継続する。
+- Git 操作、`rm`、`npx`、型エスケープ、Mock、Stub、フォーカスしたテストを使わない。
+- レンダリング用の統合テスト基盤（React Testing Library 相当）を新設しない。既存の
+  ソーステキスト検査の規約に揃える。
+
+#### 設計判断
+
+1. Locale は React Context ではなく、既存の `PassportApp` の `useState` + Prop 経由で
+   Screen へ渡す。この repo に Context の前例が無く、Context 配線が実際に機能することを
+   検証する手段がソーステキスト検査だけになり、既存の prop drilling より確認の粒度が
+   粗くなるため見送った。
+2. Message Catalog を `Record<Locale, AppMessages>` の型にし、`ja` / `en` 両方が全 key を
+   実装することを `bun run typecheck` で強制する。実行時にも Key 集合の一致・非空・
+   翻訳差分を確認する `messages.test.ts` を追加する。
+3. 製品語彙（Bridge / Lounge / Pet / Owner / Passport 等）は翻訳しない。翻訳対象は
+   その前後を接続する自然文だけとする。
+4. Bridge の言語追従は、`createBridge` / `createComplementBridge` /
+   `createBridgeFromEvidence` にデフォルト値 `'ja'` の追加引数 `language` を足す形にし、
+   既存呼び出し・既存テストを無変更で Green に保つ。Issue 13 の `agent-model-provider.ts`
+   （Golden Contract 専用）は変更しない。
+5. Owner Question の質問文とカタログ Label は今回も翻訳しない。開示文・選択肢ラベル・
+   エラーだけを Locale 対応する。
+6. 受け入れ条件「異言語 Bridge は原文と端末内生成の補助文を区別する」を満たすため、
+   `Bridge` に `sourceLabels`（Clue Label そのもの、翻訳しない原文）を追加し、
+   `OutcomeScreen` は `message`（`language` ごとに端末内で今回生成した接続文）とは
+   別の Text として `sourceLabels` をキャプション付きで表示する。Wire Protocol は元々
+   `message` 自体を運ばないため、Wire 型の拡張は不要である。
+7. Reduce Motion は `src/app/reduced-motion-port.ts` の Port（`AccessibilityInfo` を
+   直接 import しない）として定義し、`ActiveLoungeScreen` の Pet 拍動 Animation を
+   `reduceMotion` が真のとき静的表示へ置換する。
+8. 44 pt Touch Target は `src/ui/touch-target.ts` の `MIN_TOUCH_TARGET` 定数 1 つに
+   留め、既存コンポーネントは元々上回っていたためスタイル変更は最小限にする。
+
+詳細は [日本語・英語 i18n と主要フローの Accessibility の設計](./docs/design/i18n-and-accessibility.md)
+を正本とする。
+
+#### タスク
+
+1. 設計書、本セクションを先に作成する。
+2. `src/app/i18n/locale.ts` / `messages.ts`（型付き Message Catalog）を日本語 BDD テスト
+   先行で実装する。
+3. 9 個の notice / error モジュール（`camera-permission-notice.ts` 等）と 12 Screen +
+   6 Component を Message Catalog 参照へ配線し直す。
+4. `src/domain/bridge.ts` に `language` 引数と `sourceLabels` を追加し、
+   `pet-interaction.ts` / `pet-interaction-flow.ts` / `PassportApp.tsx` まで一本の
+   追加引数として通す。
+5. 新設 `SettingsScreen`（言語切り替え）を実装し、`PassportApp.tsx` の `stage` 判定を
+   Lounge の状態確認より先に行うことで、Active Lounge 中でも Settings へ到達できる
+   ようにする。`openSettings` / `closeSettings` が Lounge / Room / Interaction / Profile
+   の state に触れないことをソーステキストで固定する。
+6. `src/app/reduced-motion-port.ts`（Port）と `ActiveLoungeScreen` の Pet 拍動
+   Animation 置換を実装する。
+7. `src/ui/touch-target.ts`（44 pt 共有定数）を実装し、境界となる
+   `EncounterSetupScreen` の確認チェックボックス行へ適用する。
+8. `font-scaling.test.ts`（200% Text）、`touch-target.test.ts`、
+   `active-lounge-reduced-motion.test.ts`、`settings-accessibility.test.ts` を追加する。
+9. `docs/checklists/accessibility.md` に TenkaCloud Passport 主要フロー固有の検証
+   マトリクスと、Issue 30 パイロットで記入する実機検証記録の節を追加する。
+10. 指定ゲートを実行し、2 系統の独立レビュー（正確性・Reuse/Simplification）を経て
+    指摘を解消し、合格後にコミットする。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test src --coverage` で 100% を確認する。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown を検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error`。
+- 全画面の JA/EN 文言、Settings 切替時に Lounge State / Consent が保たれること、Bridge の
+  原文と生成文の区別、Accessible Name/Role/State、200% Text、44 pt Touch Target、
+  Reduce Motion の Test が揃っていることを確認する。
+
+#### 進捗ログ
+
+- 2026-07-17: 設計書 `docs/design/i18n-and-accessibility.md` を作成し、Message Catalog・
+  Bridge 言語追従・Settings 画面・Reduce Motion・Touch Target の設計判断を記録した。
+  型付き Message Catalog（`src/app/i18n/locale.ts` / `messages.ts`）を実装し、9 個の
+  notice / error モジュールと 12 Screen + 6 Component を Message Catalog 参照へ配線し
+  直した。新設 `SettingsScreen` を `PassportApp.tsx` へ配線し、`stage === 'settings'` を
+  Lounge の状態確認より先に判定することで、Active Lounge 中でも Settings へ到達でき、
+  `closeSettings` が Lounge の状態を変更しないため元の画面へ自然に戻ることを
+  `passport-app-stage-flow.test.ts` で固定した。`src/domain/bridge.ts` /
+  `pet-interaction.ts` / `pet-interaction-flow.ts` に `language` 引数を通し、Bridge の
+  2 者間 Live 経路を JA/EN 追従させた。`src/app/reduced-motion-port.ts` と
+  `ActiveLoungeScreen` の Pet 拍動 Animation 置換、`src/ui/touch-target.ts` の 44 pt
+  共有定数を実装した。
+- 2026-07-17: 実装を受け入れ条件と突き合わせて検証したところ、次の 3 件の不足を発見し
+  同じ作業の中で解消した。
+  1. 受け入れ条件「異言語 Bridge は原文と端末内生成の補助文を区別する」が未実装だった。
+     `Bridge` に `sourceLabels`（Clue Label そのものの原文）を追加し、`OutcomeScreen` が
+     `message`（端末内で今回生成した接続文、`t.generatedNoteCaption` 付き）とは別の
+     Text として `sourceLabels`（`t.sourceLabelCaption` 付き）を表示するようにした。
+     `bridge.test.ts` に `language` を変えても `sourceLabels` が変わらないことを固定する
+     Test を追加し、`outcome-bridge-source-distinction.test.ts` を新設した。
+  2. `src/app/i18n/locale.ts` の `isLocale` と `src/app/reduced-motion-port.ts` の
+     `REDUCE_MOTION_UNAVAILABLE_PORT` が、どこからも呼ばれない dead export になっていた
+     （前者はカバレッジ計測で 0% Funcs として可視化された）。呼び出し元を追加する
+     根拠が無かったため、両方とも削除した。
+  3. `docs/checklists/accessibility.md` が汎用 WCAG チェックリストのままで、Issue 15 の
+     設計書が言及する「検証マトリクス」が存在しなかった。TenkaCloud Passport の主要
+     フロー（Passport 作成 → QR → Ready → Lounge → Question → Bridge/no-signal →
+     Exit、Backup・Settings）ごとの検証状況表と、Issue 30 のパイロットで記入する実機
+     検証記録の節を追加した。
+- 2026-07-17: 修正後に `bun run typecheck`、`bun test src --coverage`（583 テスト、
+  対象ファイル 100%）、`bun biome check .`、`bunx textlint`（設計書・チェックリスト・
+  本セクション）、`bun scripts/architecture-harness.ts --staged --fail-on=error`、
+  `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error` を実行し、すべて
+  Green を確認した。
+- 2026-07-17: 正確性・Reuse/Simplification の 2 系統独立レビューを実施した。
+  Reuse/Simplification 側は指摘なし（`OutcomeScreen.tsx` の Caption 系スタイル 2 つが
+  近い形をしている点は severity の低い任意の磨き込みとして許容した）。正確性側から
+  `HostInviteScreen.tsx` の参加者行に全角コロン「：」が直書きされており、英語表示でも
+  "You (Host)：Ready" のように区切り記号だけ日本語のまま残るという指摘を受けた。
+  `hostInvite.participantRow(name, status)` を Message Catalog へ追加し（ja は
+  `${name}：${status}`、en は `${name}: ${status}`）、`HostInviteScreen.tsx` をこれ
+  経由に書き換えた。`messages.test.ts` に JA/EN 双方の区切り文言を固定するテスト、
+  `qr-invite-accessibility.test.ts` に画面が全角コロンを直書きしないことを固定する
+  テストを追加し、`bun test src --coverage`（585 テスト、対象ファイル 100%）、
+  `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error` で再度 Green を
+  確認した。
+
+#### 振り返り
+
+- **問題**: 受け入れ条件を 1 行ずつ機械的に照合するだけでは、「異言語 Bridge は原文と
+  端末内生成の補助文を区別する」という条件が実装されていないことに気づけなかった。
+  `message` 文字列の中に既に「翻訳しない原文（Clue Label）」と「Locale ごとに生成した
+  接続文」が引用符で混在しており、一見するとテンプレートの語順の違いだけに見えた。
+- **根本原因**: Bridge の言語追従（設計判断 4）を実装した時点で、「`language` 引数で
+  文言が切り替わる」ことと「原文と生成文を利用者が区別できる」ことを同じ達成条件だと
+  みなし、後者を UI 表現の課題として独立に検討していなかった。
+- **予防策**: 受け入れ条件の文中にある動詞（この場合は「区別する」）が、既存の実装の
+  どのデータ構造・UI 要素に対応するかを具体的に指差し確認してから完了と判断する。
+  対応する要素が無ければ、その時点で実装漏れとして扱う。
+- **問題**: `isLocale` と `REDUCE_MOTION_UNAVAILABLE_PORT` の 2 つの dead export が、
+  実装のどこからも呼ばれないまま残っていた。後者は自身のテストで 100% カバレッジに
+  なっていたため、テストカバレッジの数値だけでは検出できなかった。
+- **根本原因**: 「将来ここから呼ばれるはずの Port / Validator」を先回りして用意し、
+  実際の呼び出し元（Composition Root）を配線する前にテストだけを揃えてしまった。
+- **予防策**: 新しいユーティリティ関数・定数を追加したら、実装を完了と判断する前に
+  `grep` で実際の呼び出し元が存在することを確認する。呼び出し元が無い場合は、
+  テストが green であっても実装漏れ（配線忘れ）として扱い、削除するか呼び出し元を
+  追加するかをその場で判断する。

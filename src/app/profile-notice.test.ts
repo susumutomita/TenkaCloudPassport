@@ -49,4 +49,28 @@ describe('Local Profile の Storage Notice', () => {
       message: 'Storage の処理に失敗しました。もう一度実行してください。',
     });
   });
+
+  it('locale を省略すると既定で日本語の Fallback を返す（既存呼び出しとの後方互換）', () => {
+    expect(profileNoticeFromStorageError({}, 'load')).toEqual({
+      kind: 'read-error',
+      message: 'Storage の処理に失敗しました。もう一度実行してください。',
+    });
+  });
+
+  it('locale が en のとき、型なし例外の Fallback を英語で返す', () => {
+    expect(profileNoticeFromStorageError({}, 'load', 'en')).toEqual({
+      kind: 'read-error',
+      message: 'Storage operation failed. Please try again.',
+    });
+    expect(profileNoticeFromStorageError({}, 'save', 'en')).toEqual({
+      kind: 'save-error',
+      message: 'Storage operation failed. Please try again.',
+    });
+  });
+
+  it('locale が en でも Error インスタンス自身の message はそのまま使う', () => {
+    expect(
+      profileNoticeFromStorageError(new Error('Web API failure'), 'load', 'en')
+    ).toEqual({ kind: 'read-error', message: 'Web API failure' });
+  });
 });

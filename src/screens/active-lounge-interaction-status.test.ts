@@ -16,7 +16,7 @@ describe('Active Lounge 画面の Pet Interaction 状態表示', () => {
     const text = await source();
 
     expect(text).toContain("from '../app/interaction-status-notice'");
-    expect(text).toContain("interactionStatusNotice('discovering')");
+    expect(text).toContain("interactionStatusNotice('discovering', locale)");
   });
 
   it('内部推論・Prompt・Evidence の語彙を直接埋め込まない', async () => {

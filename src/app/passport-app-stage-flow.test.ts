@@ -350,4 +350,83 @@ describe('PassportApp の Stage 遷移契約', () => {
       expect(ownerQuestionBlock).toContain('onHostEnd={endAsHost}');
     });
   });
+
+  describe('Issue 15: Settings（言語切り替え）は Lounge State と Consent を失わない', () => {
+    it('stage === "settings" の判定は Lounge の状態確認より先に行う（Active Lounge 中でも Settings へ到達できる）', async () => {
+      const text = await source();
+
+      expectInOrder(text, [
+        "if (stage === 'settings') {",
+        '<SettingsScreen',
+        "if (lounge?.status === 'active' && interaction?.phase === 'clarifying') {",
+      ]);
+    });
+
+    it('openSettings / closeSettings は setStage だけを呼び、Lounge / Room / Interaction / Profile の state に触れない', async () => {
+      const text = await source();
+      const forbiddenSetters = [
+        'setLounge',
+        'setLoungeRoom',
+        'setInteraction',
+        'setPrivateProfile',
+        'setShareSelection',
+        'setPetName',
+        'setOwnerSelection',
+      ];
+
+      for (const name of ['openSettings', 'closeSettings']) {
+        const body = functionBody(text, name);
+        expect(body).toContain('setStage(');
+        for (const forbidden of forbiddenSetters) {
+          expect(body).not.toContain(forbidden);
+        }
+      }
+    });
+
+    it('discardInviteFlow / restartEncounter / leave / endAsHost / editLocalProfile は setLocale を一切呼ばない', async () => {
+      const text = await source();
+
+      for (const name of [
+        'discardInviteFlow',
+        'restartEncounter',
+        'leave',
+        'endAsHost',
+        'editLocalProfile',
+      ] as const) {
+        expect(functionBody(text, name)).not.toContain('setLocale');
+      }
+    });
+
+    it('applyLoungeAdvance / applyRoomAdvance（Room / Lounge の 1 秒 tick と Background 復帰）も setLocale を呼ばない', async () => {
+      const text = await source();
+
+      for (const name of ['applyLoungeAdvance', 'applyRoomAdvance'] as const) {
+        expect(functionBody(text, name)).not.toContain('setLocale');
+      }
+    });
+
+    it('Active Lounge 画面から Settings を開ける（onOpenSettings を渡す）', async () => {
+      const text = await source();
+      const activeLoungeStart = text.indexOf('<ActiveLoungeScreen');
+      const activeLoungeEnd = text.indexOf('/>', activeLoungeStart);
+      const activeLoungeBlock = text.slice(activeLoungeStart, activeLoungeEnd);
+
+      expect(activeLoungeBlock).toContain('onOpenSettings={openSettings}');
+    });
+
+    it('PassportCreationScreen（Step 1）からも Settings を開ける', async () => {
+      const text = await source();
+
+      expect(text).toContain('onOpenSettings={onOpenSettings}');
+    });
+
+    it('PassportApp.tsx は setLocale を直接呼び出さず、SettingsScreen の onChangeLocale へ関数参照として渡すだけ', async () => {
+      const text = await source();
+
+      // PassportApp.tsx 自身は `setLocale(...)` という呼び出しを一度も行わない
+      // （Settings 以外の Stage 遷移関数から locale を書き換える経路が無いことの固定）。
+      expect(text.match(/setLocale\(/g) ?? []).toHaveLength(0);
+      expect(text).toContain('onChangeLocale={setLocale}');
+    });
+  });
 });

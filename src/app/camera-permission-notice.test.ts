@@ -47,4 +47,21 @@ describe('Camera Permission の UI 状態別 Notice', () => {
       );
     }
   });
+
+  it('locale が en のとき、5 状態それぞれに固有の英語 title を持つ', () => {
+    const notices = STATES.map((state) => cameraPermissionNotice(state, 'en'));
+
+    expect(new Set(notices.map((notice) => notice.title)).size).toBe(
+      STATES.length
+    );
+    for (const state of [
+      'denied',
+      'revoked',
+      'hardware-unavailable',
+    ] as const) {
+      expect(cameraPermissionNotice(state, 'en').message).toContain(
+        'Editing your Passport, Backup, and Settings'
+      );
+    }
+  });
 });

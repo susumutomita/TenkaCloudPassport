@@ -1,3 +1,5 @@
+import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
+import { MESSAGES } from './i18n/messages';
 import { LocalProfileStorageError } from './local-profile-storage';
 
 export type ProfileNotice =
@@ -13,9 +15,16 @@ export type ProfileNotice =
   // この kind は Room 段階からの離脱経路（`editLocalProfile`）専用にする。
   | { readonly kind: 'lounge-discarded'; readonly message: string };
 
+/**
+ * `LocalProfileStorageError.message`（Storage adapter が生成する技術的な診断文）自体は
+ * Issue 15 の対象外（Known follow-up、`docs/design/i18n-and-accessibility.md`）で日本語の
+ * ままだが、型を持たない例外の既定文言（Owner に見せる唯一の Fallback）はこの Issue で
+ * `locale` に対応する。
+ */
 export function profileNoticeFromStorageError(
   error: unknown,
-  operation: 'load' | 'save'
+  operation: 'load' | 'save',
+  locale: Locale = DEFAULT_LOCALE
 ): ProfileNotice {
   if (error instanceof LocalProfileStorageError) {
     if (error.code === 'UNAVAILABLE') {
@@ -29,11 +38,12 @@ export function profileNoticeFromStorageError(
     }
     return { kind: 'save-error', message: error.message };
   }
+  const fallback =
+    operation === 'load'
+      ? MESSAGES[locale].profileNotice.readErrorFallback
+      : MESSAGES[locale].profileNotice.saveErrorFallback;
   return {
     kind: operation === 'load' ? 'read-error' : 'save-error',
-    message:
-      error instanceof Error
-        ? error.message
-        : 'Storage の処理に失敗しました。もう一度実行してください。',
+    message: error instanceof Error ? error.message : fallback,
   };
 }

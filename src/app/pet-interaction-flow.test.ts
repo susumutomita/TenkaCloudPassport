@@ -104,6 +104,34 @@ describe('Pet Interaction を Active Lounge の実判定経路へ配線する Ap
       }
     });
 
+    it('Issue 15: language に en を渡すと Bridge 文言が英語で確定する', () => {
+      const active = activeLounge(['open-source'], ['open-source']);
+      const clarifying = beginPetInteraction(
+        active,
+        RULES_INTERACTION_PROVIDER,
+        CLOCK
+      ).interaction;
+      if (clarifying?.phase !== 'clarifying') throw new Error('unreachable');
+
+      const step = submitOwnerQuestionAnswer(
+        clarifying,
+        active,
+        'yes',
+        CLOCK,
+        'en'
+      );
+
+      expect(step.lounge.status).toBe('retired');
+      if (
+        step.lounge.status === 'retired' &&
+        step.lounge.outcome.kind === 'bridge'
+      ) {
+        expect(step.lounge.outcome.bridge.message).not.toContain(
+          '話してみませんか'
+        );
+      }
+    });
+
     it('分からない（no）は Agent を止めずに retired(no-signal) へ進む', () => {
       const active = activeLounge(['open-source'], ['open-source']);
       const clarifying = beginPetInteraction(

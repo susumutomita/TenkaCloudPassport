@@ -85,6 +85,42 @@ describe('backupNoticeFromImportCommitFailure', () => {
   });
 });
 
+describe('locale が en のとき', () => {
+  it('shareOutcome を英語通知へ変換する', () => {
+    expect(backupNoticeFromShareOutcome({ kind: 'shared' }, 'en')).toEqual({
+      kind: 'share-succeeded',
+      message: 'Shared.',
+    });
+    expect(
+      backupNoticeFromShareOutcome(
+        { kind: 'saved-to-file', destination: 'backup.json' },
+        'en'
+      )
+    ).toEqual({
+      kind: 'share-saved-to-file',
+      message: 'Saved as a file (backup.json).',
+    });
+  });
+
+  it('Error 以外の share 失敗は英語の既定文言にする', () => {
+    expect(backupNoticeFromShareFailure('文字列エラー', 'en')).toEqual({
+      kind: 'share-failed',
+      message: 'Could not open the Share Sheet.',
+    });
+  });
+
+  it('Import Commit の成功・失敗を英語で通知する', () => {
+    expect(backupNoticeFromImportCommitSuccess('en')).toEqual({
+      kind: 'import-committed',
+      message: 'Saved the imported content on this device.',
+    });
+    expect(backupNoticeFromImportCommitFailure(null, 'en')).toEqual({
+      kind: 'import-commit-failed',
+      message: 'The import commit failed, so the existing Profile was kept.',
+    });
+  });
+});
+
 describe('backupNoticeIsError', () => {
   it('share-failed・import-commit-failed をエラーと判定する', () => {
     expect(backupNoticeIsError({ kind: 'share-failed', message: '' })).toBe(

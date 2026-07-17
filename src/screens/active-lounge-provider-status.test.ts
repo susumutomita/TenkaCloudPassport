@@ -16,7 +16,7 @@ describe('Active Lounge 画面の Provider 切替 Status 表示', () => {
     const text = await source();
 
     expect(text).toContain("from '../app/provider-switch-notice'");
-    expect(text).toContain('providerSwitchNotice(null)');
+    expect(text).toContain('providerSwitchNotice(null, locale)');
   });
 
   it('内部推論・Prompt・Evidence・内部エラー型名の語彙を直接埋め込まない', async () => {

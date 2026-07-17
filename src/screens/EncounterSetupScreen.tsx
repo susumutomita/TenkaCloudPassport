@@ -1,4 +1,6 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import ClueSelector from '../components/ClueSelector';
@@ -10,6 +12,7 @@ import {
   PUBLIC_PASSPORT_MAX_CLUES,
 } from '../domain/passport';
 import { colors, spacing } from '../ui/theme';
+import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 
 interface EncounterSetupScreenProps {
   readonly privatePetName: string;
@@ -18,6 +21,7 @@ interface EncounterSetupScreenProps {
   readonly encounteredPetEmoji: PetEmoji;
   readonly selectedIds: readonly ClueId[];
   readonly confirmed: boolean;
+  readonly locale?: Locale;
   readonly onChangePetName: (value: string) => void;
   readonly onSelectPetEmoji: (emoji: PetEmoji) => void;
   readonly onToggle: (id: ClueId) => void;
@@ -34,6 +38,7 @@ export default function EncounterSetupScreen({
   encounteredPetEmoji,
   selectedIds,
   confirmed,
+  locale = DEFAULT_LOCALE,
   onChangePetName,
   onSelectPetEmoji,
   onToggle,
@@ -42,58 +47,59 @@ export default function EncounterSetupScreen({
   onBack,
   errorMessage,
 }: EncounterSetupScreenProps) {
+  const t = MESSAGES[locale].encounterSetup;
   return (
     <AppScreen
       eyebrow="Step 2 / Encounter"
-      title="相手が公開した手掛かりを受け取る。"
-      description="実在する相手がこの場で公開した項目だけを入力します。氏名、連絡先、位置情報、機密情報は入力しないでください。"
+      title={t.title}
+      description={t.description}
     >
       <View accessibilityRole="summary" style={styles.summary}>
-        <Text style={styles.summaryLabel}>この端末の Local Profile</Text>
+        <Text style={styles.summaryLabel}>{t.localProfileSummaryLabel}</Text>
         <Text style={styles.summaryValue}>
-          {privatePetName}・候補 {privateClueCount} 件
+          {t.localProfileSummaryValue(privatePetName, privateClueCount)}
         </Text>
       </View>
       <View style={styles.field}>
-        <Text style={styles.sectionTitle}>相手の Pet Name</Text>
+        <Text style={styles.sectionTitle}>{t.peerPetNameSectionTitle}</Text>
         <TextInput
-          accessibilityLabel="相手の Pet Name"
-          accessibilityHint={`${PET_NAME_MAX_LENGTH} 文字以下で、相手が公開した Pet Name を入力します。`}
+          accessibilityLabel={t.peerPetNameAccessibilityLabel}
+          accessibilityHint={t.peerPetNameHint(PET_NAME_MAX_LENGTH)}
           maxLength={PET_NAME_MAX_LENGTH}
           onChangeText={onChangePetName}
-          placeholder="相手が公開した Pet Name"
+          placeholder={t.peerPetNamePlaceholder}
           style={styles.input}
           value={encounteredPetName}
         />
         <Text style={styles.limit}>
-          {encounteredPetName.length} / {PET_NAME_MAX_LENGTH}
-          。機密情報を入力しないでください。
+          {t.peerPetNameCounter(encounteredPetName.length, PET_NAME_MAX_LENGTH)}
         </Text>
       </View>
       <View style={styles.field}>
-        <Text style={styles.sectionTitle}>相手の Pet Emoji</Text>
+        <Text style={styles.sectionTitle}>{t.peerPetEmojiSectionTitle}</Text>
         <PetEmojiSelector
+          locale={locale}
           onSelect={onSelectPetEmoji}
           selected={encounteredPetEmoji}
         />
       </View>
       <View style={styles.counterRow}>
-        <Text style={styles.sectionTitle}>相手の公開項目</Text>
+        <Text style={styles.sectionTitle}>{t.peerCluesSectionTitle}</Text>
         <Text style={styles.counter}>
-          {selectedIds.length} / {PUBLIC_PASSPORT_MAX_CLUES}
+          {t.peerCluesCounter(selectedIds.length, PUBLIC_PASSPORT_MAX_CLUES)}
         </Text>
       </View>
       <Text style={styles.limit}>
-        カタログから最大 {PUBLIC_PASSPORT_MAX_CLUES}{' '}
-        件です。自由記述の機密情報は入力できません。
+        {t.peerCluesLimitNote(PUBLIC_PASSPORT_MAX_CLUES)}
       </Text>
       <ClueSelector
+        locale={locale}
         maximum={PUBLIC_PASSPORT_MAX_CLUES}
         onToggle={onToggle}
         selectedIds={selectedIds}
       />
       <Pressable
-        accessibilityLabel="相手が今回公開した内容であることを確認"
+        accessibilityLabel={t.confirmationAccessibilityLabel}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: confirmed }}
         onPress={onToggleConfirmed}
@@ -106,31 +112,25 @@ export default function EncounterSetupScreen({
         <View style={[styles.checkbox, confirmed ? styles.checked : undefined]}>
           {confirmed ? <Text style={styles.checkmark}>✓</Text> : null}
         </View>
-        <Text style={styles.confirmationText}>
-          相手が現在の Lounge で公開した内容だと確認しました。
-        </Text>
+        <Text style={styles.confirmationText}>{t.confirmationText}</Text>
       </Pressable>
       {errorMessage ? (
         <View accessibilityRole="alert" style={styles.errorBox}>
-          <Text style={styles.errorTitle}>Validation Error</Text>
+          <Text style={styles.errorTitle}>{t.validationErrorTitle}</Text>
           <Text style={styles.error}>{errorMessage}</Text>
         </View>
       ) : null}
       <ActionButton
-        accessibilityHint="自分が今回共有する項目の最終 Preview へ進みます。"
+        accessibilityHint={t.continueButtonHint}
         disabled={
           encounteredPetName.trim().length === 0 ||
           selectedIds.length === 0 ||
           !confirmed
         }
-        label="今回の共有 Preview へ"
+        label={t.continueButton}
         onPress={onContinue}
       />
-      <ActionButton
-        label="Local Profile を編集"
-        onPress={onBack}
-        variant="secondary"
-      />
+      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
     </AppScreen>
   );
 }
@@ -194,6 +194,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.md,
+    minHeight: MIN_TOUCH_TARGET,
     padding: spacing.md,
   },
   confirmed: {

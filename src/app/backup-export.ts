@@ -10,6 +10,7 @@ import {
 } from '../domain/clue-catalog';
 import type { LocalPrivateProfile } from '../domain/passport';
 import { parseBackup } from '../protocol/schema';
+import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 
 export interface BackupPreviewItem {
   readonly key: string;
@@ -33,15 +34,19 @@ export interface BackupExportPreview {
 }
 
 /**
- * M1 には Device Settings 専用の設定画面がまだ無いため、Export 時の既定値を返す。
- * 既定値そのものは allowlist の一部であり、Lounge 由来のデータではない。
- * 専用画面と永続化 Port の新設は Known follow-ups とする
- * （`docs/design/backup-export-import.md` 参照）。
+ * M1 には Device Settings の値を永続化する専用 Storage Port がまだ無いため
+ * （Known follow-up、`docs/design/backup-export-import.md` 参照）、Export 時点の
+ * `language`（Issue 15 の Settings 画面が切り替える UI 表示言語）と `reduceMotion`
+ * （`src/app/reduced-motion-port.ts` が判定した OS 設定）をその場で渡せるようにする。
+ * 両方省略した既定値（`ja` / Reduce Motion OFF）は既存呼び出しと Byte-for-byte 互換。
  */
-export function createDefaultDeviceSettings(): DeviceSettings {
+export function createDefaultDeviceSettings(
+  language: Locale = DEFAULT_LOCALE,
+  reduceMotion = false
+): DeviceSettings {
   return {
-    language: 'ja',
-    reduceMotion: false,
+    language,
+    reduceMotion,
     selectedModelDigest: null,
     catalogVersion: CATALOG_VERSION,
   };

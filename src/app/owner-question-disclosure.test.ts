@@ -24,4 +24,14 @@ describe('Owner Question の事前開示', () => {
   it('毎回同じ内容を返す（Chain of Thought のような都度生成の文言ではない）', () => {
     expect(ownerQuestionDisclosure()).toEqual(ownerQuestionDisclosure());
   });
+
+  it('locale が en のとき、共有先・削除時期・Passport 非保存を英語で示す', () => {
+    const disclosure = ownerQuestionDisclosure('en');
+
+    expect(disclosure.sharedWithMessage).not.toBe(
+      ownerQuestionDisclosure().sharedWithMessage
+    );
+    expect(disclosure.deletedWhenMessage.length).toBeGreaterThan(0);
+    expect(disclosure.notSavedToPassportMessage).toContain('Passport');
+  });
 });

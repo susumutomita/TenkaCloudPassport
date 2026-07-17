@@ -88,9 +88,12 @@ describe('GitHub Token 入力欄が存在しないことの契約（Issue 14）'
       const text = await Bun.file(new URL(fileName, import.meta.url)).text();
       expect(TOKEN_IDENTIFIER_PATTERN.test(text)).toBe(false);
     }
-    const exportText = await Bun.file(
-      new URL('../screens/BackupExportScreen.tsx', import.meta.url)
+    // Issue 15: 説明文そのものは Message Catalog（`src/app/i18n/messages.ts`）へ
+    // 集約したため、JA/EN 双方に「Token を扱わない」旨があることをそちらで確認する。
+    const messagesText = await Bun.file(
+      new URL('./i18n/messages.ts', import.meta.url)
     ).text();
-    expect(exportText).toContain('GitHub API と接続せず、Token を扱いません');
+    expect(messagesText).toContain('GitHub API と接続せず、Token を扱いません');
+    expect(messagesText).toContain('never handles a Token');
   });
 });

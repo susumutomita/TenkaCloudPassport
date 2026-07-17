@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { AppState } from 'react-native';
+import { AccessibilityInfo, AppState } from 'react-native';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
@@ -51,8 +51,11 @@ import PassportCreationScreen from '../screens/PassportCreationScreen';
 import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
+import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
+import { MESSAGES } from './i18n/messages';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -82,6 +85,7 @@ import {
   createInProcessQrScannerPort,
 } from './qr-scanner-port';
 import { readableError } from './readable-error';
+import { createReducedMotionPort } from './reduced-motion-port';
 import { type BackupFlow, useBackupFlow } from './use-backup-flow';
 
 interface PassportAppProps {
@@ -97,7 +101,8 @@ type SetupStage =
   | 'guest-scan'
   | 'guest-share-preview'
   | 'backup-export'
-  | 'backup-import';
+  | 'backup-import'
+  | 'settings';
 
 function currentClock(): ClockSnapshot {
   return {
@@ -169,7 +174,9 @@ interface PassportCreationBranchProps {
 interface ProfileHomeGateProps {
   readonly stage: SetupStage;
   readonly privateProfile: LocalPrivateProfile | null;
+  readonly locale: Locale;
   readonly backupFlow: BackupFlow;
+  readonly onOpenSettings: () => void;
   readonly encounter: EncounterBranchProps;
   readonly creation: PassportCreationBranchProps;
 }
@@ -186,7 +193,9 @@ interface ProfileHomeGateProps {
 function ProfileHomeGate({
   stage,
   privateProfile,
+  locale,
   backupFlow,
+  onOpenSettings,
   encounter,
   creation,
 }: ProfileHomeGateProps) {
@@ -195,6 +204,7 @@ function ProfileHomeGate({
       <BackupStageGate
         backupFlow={backupFlow}
         hasExistingProfile={privateProfile !== null}
+        locale={locale}
         stage={stage}
       />
     );
@@ -206,6 +216,7 @@ function ProfileHomeGate({
         encounteredPetEmoji={encounter.encounteredPetEmoji}
         encounteredPetName={encounter.encounteredPetName}
         errorMessage={encounter.errorMessage}
+        locale={locale}
         onBack={encounter.onBack}
         onChangePetName={encounter.onChangePetName}
         onContinue={encounter.onContinue}
@@ -221,10 +232,12 @@ function ProfileHomeGate({
   return (
     <PassportCreationScreen
       languageCodes={creation.languageSelection}
+      locale={locale}
       notice={creation.notice}
       onChangeOwnerAlias={creation.onChangeOwnerAlias}
       onChangePetName={creation.onChangePetName}
       onOpenBackup={backupFlow.open}
+      onOpenSettings={onOpenSettings}
       onSave={creation.onSave}
       onSelectPetEmoji={creation.onSelectPetEmoji}
       onToggleClue={creation.onToggleClue}
@@ -242,6 +255,7 @@ interface BackupStageGateProps {
   readonly stage: 'backup-export' | 'backup-import';
   readonly backupFlow: BackupFlow;
   readonly hasExistingProfile: boolean;
+  readonly locale: Locale;
 }
 
 /**
@@ -254,10 +268,12 @@ function BackupStageGate({
   stage,
   backupFlow,
   hasExistingProfile,
+  locale,
 }: BackupStageGateProps) {
   if (stage === 'backup-export') {
     return (
       <BackupExportScreen
+        locale={locale}
         notice={backupFlow.exportNotice}
         onBack={backupFlow.close}
         onOpenImport={backupFlow.openImport}
@@ -272,6 +288,7 @@ function BackupStageGate({
       choice={backupFlow.importChoice}
       committing={backupFlow.committing}
       hasExistingProfile={hasExistingProfile}
+      locale={locale}
       notice={backupFlow.importNotice}
       onBack={backupFlow.close}
       onChangeChoice={backupFlow.setImportChoice}
@@ -299,6 +316,7 @@ interface SharePreviewGateProps {
   readonly profile: LocalPrivateProfile;
   readonly selection: PassportShareSelection;
   readonly errorMessage: string | null;
+  readonly locale: Locale;
   readonly onSelectionChange: Dispatch<
     SetStateAction<PassportShareSelection | null>
   >;
@@ -315,6 +333,7 @@ function SharePreviewGate({
   profile,
   selection,
   errorMessage,
+  locale,
   onSelectionChange,
   onStart,
   onBack,
@@ -335,6 +354,7 @@ function SharePreviewGate({
   }
   return (
     <PassportSharePreviewScreen
+      locale={locale}
       onBack={onBack}
       onStart={onStart}
       onToggleClue={(id) => dispatch({ type: 'toggle-clue', id })}
@@ -364,9 +384,14 @@ export default function PassportApp({
   const [restoring, setRestoring] = useState(true);
   const [saving, setSaving] = useState(false);
   const [stage, setStage] = useState<SetupStage>('profile');
+  // Issue 15: 表示言語。Settings 画面（`onChangeLocale`）だけが更新し、Lounge / Room /
+  // Pet Interaction / 保存済み Local Profile のいずれの state にも触れない。既に画面へ
+  // 表示済みの Notice（例: 直前に確定した保存成功メッセージ）は locale 変更を遡って
+  // 再翻訳しない（`docs/design/i18n-and-accessibility.md` の Known follow-up）。
+  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
   const [notice, setNotice] = useState<ProfileNotice>({
     kind: 'empty',
-    message: 'Pet と会話の材料を入力し、端末内保存を明示してください。',
+    message: MESSAGES[DEFAULT_LOCALE].passportApp.initialNotice,
   });
   const [petName, setPetName] = useState('');
   const [petEmoji, setPetEmoji] = useState<PetEmoji>('🐾');
@@ -407,6 +432,15 @@ export default function PassportApp({
     useState<CameraPermissionState>('not-determined');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Issue 15: OS の Reduce Motion 設定。Composition Root（このファイル）だけが
+  // `AccessibilityInfo`（React Native 同梱）を直接扱い、Port 自体（`reduced-motion-port.ts`）
+  // は環境依存の取得手段を注入されるだけの純粋な形を保つ。
+  const [reducedMotionPort] = useState(() =>
+    createReducedMotionPort({
+      isReduceMotionEnabled: () => AccessibilityInfo.isReduceMotionEnabled(),
+    })
+  );
+  const [reduceMotion, setReduceMotion] = useState(false);
   const handleBackupImportCommitted = useCallback(
     (committed: LocalPrivateProfile): void => {
       setPrivateProfile(committed);
@@ -419,6 +453,8 @@ export default function PassportApp({
     localProfileStorage,
     backupSharePort,
     privateProfile,
+    locale,
+    reduceMotion,
     onImportCommitted: handleBackupImportCommitted,
     onOpenStage: setStage,
     onCloseStage: closeBackupStage,
@@ -471,6 +507,10 @@ export default function PassportApp({
     setEncounteredConfirmed(false);
   }, [qrScannerPort]);
 
+  // 初回復元は起動時 1 回だけ実行する副作用であり、その後の locale 切替のたびに
+  // 再実行（＝再読込）すると Settings の「Lounge State と Consent を失わない」契約に
+  // 反する。locale は復元完了時点の表示言語としてクロージャの値をそのまま使う。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 起動時 1 回だけの実行を保つため locale を意図的に依存配列から外す
   useEffect(() => {
     let active = true;
     void localProfileStorage
@@ -480,8 +520,7 @@ export default function PassportApp({
         if (!profile) {
           setNotice({
             kind: 'empty',
-            message:
-              '保存済み Profile はありません。入力は明示保存するまで復元されません。',
+            message: MESSAGES[locale].passportApp.emptyOnLoad,
           });
           return;
         }
@@ -495,12 +534,12 @@ export default function PassportApp({
         setStage('encounter');
         setNotice({
           kind: 'restored',
-          message: '明示保存済みの Local Profile だけを復元しました。',
+          message: MESSAGES[locale].passportApp.restoredOnLoad,
         });
       })
       .catch((error: unknown) => {
         if (active) {
-          setNotice(profileNoticeFromStorageError(error, 'load'));
+          setNotice(profileNoticeFromStorageError(error, 'load', locale));
         }
       })
       .finally(() => {
@@ -613,6 +652,24 @@ export default function PassportApp({
     return () => subscription.remove();
   }, [lounge, loungeRoom, applyRoomAdvance, applyLoungeAdvance]);
 
+  // Issue 15: 起動時に一度 Reduce Motion を判定し、以後は OS の変更を購読する。
+  // `reducedMotionPort` は fail-safe（取得失敗時は Motion 有効）のため、この effect
+  // 自体は例外を投げない。
+  useEffect(() => {
+    let active = true;
+    void reducedMotionPort.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      (enabled: boolean) => setReduceMotion(enabled)
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [reducedMotionPort]);
+
   async function saveLocalProfile(): Promise<void> {
     if (saving) return;
     setSaving(true);
@@ -630,14 +687,14 @@ export default function PassportApp({
       setShareSelection(createDefaultPassportShareSelection(profile));
       setNotice({
         kind: 'restored',
-        message: 'この Local Profile を端末内へ明示保存しました。',
+        message: MESSAGES[locale].passportApp.savedNotice,
       });
       setErrorMessage(null);
       setStage('encounter');
     } catch (error: unknown) {
       setNotice(
         error instanceof LocalProfileStorageError
-          ? profileNoticeFromStorageError(error, 'save')
+          ? profileNoticeFromStorageError(error, 'save', locale)
           : {
               kind: 'validation-error',
               message: readableError(error, VALIDATION_ERROR_FALLBACK),
@@ -692,7 +749,7 @@ export default function PassportApp({
       setErrorMessage(null);
       setStage('host-invite');
     } catch (error: unknown) {
-      setErrorMessage(qrFlowErrorMessage(error));
+      setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
 
@@ -715,7 +772,7 @@ export default function PassportApp({
         setLoungeRoom(updated);
       }
     } catch (error: unknown) {
-      setErrorMessage(qrFlowErrorMessage(error));
+      setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
 
@@ -738,9 +795,7 @@ export default function PassportApp({
       .then((result) => {
         setSeenRawPayloads(result.seenRawPayloads);
         if (result.payload.kind !== 'lounge-invite') {
-          setErrorMessage(
-            'この QR は Lounge Invite ではありません。Host の Invite QR を読み取ってください。'
-          );
+          setErrorMessage(MESSAGES[locale].qrErrorNotice.notLoungeInviteQr);
           return;
         }
         // Guest が公開する内容は、対面で相手が declare した内容として既に Encounter
@@ -750,7 +805,7 @@ export default function PassportApp({
         const resolvedGuestProfile = resolveGuestProfile(encounteredProfile);
         if (!resolvedGuestProfile) {
           setErrorMessage(
-            '相手の公開内容を確認できません。Encounter の入力を見直してください。'
+            MESSAGES[locale].qrErrorNotice.unresolvedGuestProfile
           );
           return;
         }
@@ -762,7 +817,7 @@ export default function PassportApp({
         setStage('guest-share-preview');
       })
       .catch((error: unknown) => {
-        setErrorMessage(qrFlowErrorMessage(error));
+        setErrorMessage(qrFlowErrorMessage(error, locale));
       });
   }
 
@@ -792,7 +847,7 @@ export default function PassportApp({
         setStage('host-invite');
       }
     } catch (error: unknown) {
-      setErrorMessage(qrFlowErrorMessage(error));
+      setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
 
@@ -834,7 +889,9 @@ export default function PassportApp({
   /**
    * Owner Question への回答（答える(yes) / 分からない(no) / パス(decline)）を適用する。
    * `submitOwnerQuestionAnswer` が `clarifying` 以外では no-op を返すため、二重送信や
-   * 締切超過後の遅延送信は安全に無視される（Question Budget を超えない）。
+   * 締切超過後の遅延送信は安全に無視される（Question Budget を超えない）。`locale`
+   * （UI 表示言語）は Bridge が確定する場合だけ `receiveOwnerAnswer` を経由して
+   * Bridge 文言へ反映される（Issue 15）。
    */
   function submitOwnerAnswer(value: OwnerAnswerValue): void {
     if (lounge?.status !== 'active') return;
@@ -842,7 +899,8 @@ export default function PassportApp({
       interaction,
       lounge,
       value,
-      currentClock()
+      currentClock(),
+      locale
     );
     setInteraction(step.interaction);
     setLounge(step.lounge);
@@ -896,16 +954,45 @@ export default function PassportApp({
     if (hadInviteInProgress) {
       setNotice({
         kind: 'lounge-discarded',
-        message:
-          'この Lounge のデータを端末から破棄しました。参加者、共有内容、Invite QR は残っていません。',
+        message: MESSAGES[locale].passportApp.loungeDiscardedNotice,
       });
     }
+  }
+
+  /**
+   * Issue 15: Settings 画面への往復。`onChangeLocale` は `setLocale` だけを呼び、
+   * Lounge / Room / Pet Interaction / 保存済み Local Profile のいずれの state にも
+   * 触れない（`src/screens/settings-accessibility.test.ts` が Settings 画面側の
+   * 契約を、`passport-app-stage-flow.test.ts` がこの配線を固定する）。
+   */
+  function openSettings(): void {
+    setStage('settings');
+  }
+
+  function closeSettings(): void {
+    setStage('profile');
+  }
+
+  // Issue 15: Settings は Lounge の状態確認より先に判定する。これにより、Active Lounge /
+  // Owner Question / Outcome / Destroyed のどの段階からでも Settings（言語切り替え）を
+  // 開け、`closeSettings` が `stage` を 'profile' へ戻しても `lounge` state は変更して
+  // いないため、次の render で元の Lounge 段階の画面へそのまま戻る（`lounge` の判定が
+  // 常に `stage` より優先されるため、2 段構えの復元処理を書く必要がない）。
+  if (stage === 'settings') {
+    return (
+      <SettingsScreen
+        locale={locale}
+        onBack={closeSettings}
+        onChangeLocale={setLocale}
+      />
+    );
   }
 
   if (lounge?.status === 'active' && interaction?.phase === 'clarifying') {
     return (
       <OwnerQuestionScreen
         errorMessage={errorMessage}
+        locale={locale}
         onAnswer={submitOwnerAnswer}
         onExit={leave}
         onHostEnd={endAsHost}
@@ -918,10 +1005,13 @@ export default function PassportApp({
     return (
       <ActiveLoungeScreen
         errorMessage={errorMessage}
+        locale={locale}
         lounge={lounge}
         onBeginInteraction={startPetInteraction}
         onExit={leave}
         onHostEnd={endAsHost}
+        onOpenSettings={openSettings}
+        reduceMotion={reduceMotion}
         remainingMs={lounge.expiresAtWallClockMs - nowMs}
       />
     );
@@ -929,6 +1019,7 @@ export default function PassportApp({
   if (lounge?.status === 'retired') {
     return (
       <OutcomeScreen
+        locale={locale}
         lounge={lounge}
         onComplete={complete}
         onExit={leave}
@@ -939,10 +1030,14 @@ export default function PassportApp({
   }
   if (lounge?.status === 'destroyed') {
     return (
-      <DestroyedLoungeScreen lounge={lounge} onRestart={restartEncounter} />
+      <DestroyedLoungeScreen
+        locale={locale}
+        lounge={lounge}
+        onRestart={restartEncounter}
+      />
     );
   }
-  if (restoring) return <ProfileLoadingScreen />;
+  if (restoring) return <ProfileLoadingScreen locale={locale} />;
 
   if (
     stage === 'host-invite' &&
@@ -956,6 +1051,7 @@ export default function PassportApp({
         errorMessage={errorMessage}
         hostParticipantId={hostParticipantId}
         inviteQrPayload={inviteQrPayload}
+        locale={locale}
         onCancel={cancelInvite}
         onMarkHostReady={markHostReady}
         onProceedToGuestScan={beginGuestScan}
@@ -969,6 +1065,7 @@ export default function PassportApp({
     return (
       <QrScanScreen
         errorMessage={errorMessage}
+        locale={locale}
         onBackToHostInvite={() => {
           setErrorMessage(null);
           setStage('host-invite');
@@ -986,6 +1083,7 @@ export default function PassportApp({
     return (
       <SharePreviewGate
         errorMessage={errorMessage}
+        locale={locale}
         onBack={() => {
           // 'guest-scan' へ戻すと、同じ Invite の再読取が重複読取として拒否される
           // ため、再走査を強制しない 'host-invite' へ戻す。
@@ -1004,6 +1102,7 @@ export default function PassportApp({
     return (
       <SharePreviewGate
         errorMessage={errorMessage}
+        locale={locale}
         onBack={() => {
           setErrorMessage(null);
           setStage('encounter');
@@ -1056,6 +1155,8 @@ export default function PassportApp({
           ),
         onToggleConfirmed: () => setEncounteredConfirmed((current) => !current),
       }}
+      locale={locale}
+      onOpenSettings={openSettings}
       privateProfile={privateProfile}
       stage={stage}
     />
