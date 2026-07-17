@@ -1,3 +1,4 @@
+import { afterEach } from 'bun:test';
 import {
   existsSync,
   lstatSync,
@@ -11,7 +12,9 @@ import {
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import type { LocalPrivateProfile } from '../domain/passport';
 import type { ProfileDocument } from './expo-file-system-local-profile-storage';
+import type { LocalProfileStoragePort } from './local-profile-storage';
 import type { WebKeyValueStorage } from './web-local-profile-storage';
 
 /**
@@ -40,6 +43,28 @@ export function removeTemporaryDirectory(directory: string): void {
   if (!existsSync(directory)) return;
   clearDirectory(directory);
   rmdirSync(directory);
+}
+
+/**
+ * 複数のテストファイル（Issue 9 の Privacy Regression Test、Issue 14 の
+ * `backup-import.test.ts` / `web-backup-share.test.ts`）が、同じ「使い捨てディレクトリを
+ * 作り、各テスト後に必ず削除する」という `afterEach` 登録パターンを重複実装していたため、
+ * ここへ集約する。呼び出し側は `create()` で新しいディレクトリを作るだけでよい。
+ */
+export function trackTemporaryDirectories(): { create(): string } {
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const root of roots.splice(0)) {
+      removeTemporaryDirectory(root);
+    }
+  });
+  return {
+    create(): string {
+      const directory = temporaryDirectory();
+      roots.push(directory);
+      return directory;
+    },
+  };
 }
 
 /** Web の `localStorage` 相当を、実ディレクトリ配下の 1 ファイル 1 キーへマップする実装。 */
@@ -81,5 +106,85 @@ export class BunProfileDocument implements ProfileDocument {
 
   write(content: string): Promise<void> {
     return writeFile(this.filePath, content, 'utf8');
+  }
+}
+
+/**
+ * Issue 14: Import の Atomic Commit（write-then-verify）が、書き込み失敗時に既存の
+ * Profile を一切変更しないことを検証するための実装。読み込み（`exists` / `text()`）は
+ * `BunProfileDocument` へ委譲した本物の実ファイル I/O だが、`write()` だけは実ファイルへ
+ * 一切触れずに確実に reject する。ディスク容量不足・権限エラーなど、実際の書き込みが
+ * 失敗する環境を安定して再現できないため、この形で「書き込みだけが失敗する」状況を作る。
+ * `local-profile-storage.ts` の `UnavailableLocalProfileStorageAdapter`（本番でも使われ得る、
+ * Storage 自体が使えない状況を表す本物の実装）と同じ考え方であり、モックで振る舞いを
+ * 偽装するのではなく Port の契約を満たす別の本物の実装を注入する。
+ */
+export class WriteFailingProfileDocument implements ProfileDocument {
+  private readonly delegate: BunProfileDocument;
+
+  constructor(
+    filePath: string,
+    private readonly failure: Error
+  ) {
+    this.delegate = new BunProfileDocument(filePath);
+  }
+
+  get exists(): boolean {
+    return this.delegate.exists;
+  }
+
+  text(): Promise<string> {
+    return this.delegate.text();
+  }
+
+  write(_content: string): Promise<void> {
+    return Promise.reject(this.failure);
+  }
+}
+
+/**
+ * Web 相当の同じ意図を持つ実装。`getItem` は `FileBackedWebStorage` （実ファイル I/O）へ
+ * 委譲し、`setItem` だけが実ファイルへ一切触れずに確実に throw する。
+ */
+export class WriteFailingWebStorage implements WebKeyValueStorage {
+  private readonly delegate: FileBackedWebStorage;
+
+  constructor(
+    root: string,
+    private readonly failure: Error
+  ) {
+    this.delegate = new FileBackedWebStorage(root);
+  }
+
+  getItem(key: string): string | null {
+    return this.delegate.getItem(key);
+  }
+
+  setItem(_key: string, _value: string): void {
+    throw this.failure;
+  }
+}
+
+/**
+ * Issue 14: `commitBackupImport` の write-then-verify が、`save()` 自体は成功したが
+ * 読み戻した内容が一致しない場合に `LocalProfileStorageError`（`WRITE_FAILED`）を投げる
+ * ことを検証するための実装。`save()` を実ファイルへ委譲する（Real I/O）一方、`load()` は
+ * 常に `mismatchedProfile` を返す。この不一致は、実際の Storage adapter（Web の
+ * `localStorage.setItem` は単一 key の原子的操作、Native の実ファイル書き込みは
+ * 直後の読み戻しが同一内容になる）では通常発生しないため、Port 契約レベルでだけ
+ * 再現できる。
+ */
+export class VerifyMismatchStorage implements LocalProfileStoragePort {
+  constructor(
+    private readonly delegate: LocalProfileStoragePort,
+    private readonly mismatchedProfile: LocalPrivateProfile
+  ) {}
+
+  async save(profile: LocalPrivateProfile): Promise<void> {
+    await this.delegate.save(profile);
+  }
+
+  load(): Promise<LocalPrivateProfile | null> {
+    return Promise.resolve(this.mismatchedProfile);
   }
 }

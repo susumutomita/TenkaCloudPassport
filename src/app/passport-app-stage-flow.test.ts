@@ -189,14 +189,19 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(discardBody).toContain("setEncounteredPetName('')");
     expect(discardBody).toContain('setEncounteredSelection([])');
 
-    // 4. saveLocalProfile は保存成功後に 'encounter' 画面へ進み、EncounterSetupScreen は
-    //    encounteredPetName / encounteredSelection の state を直接 props として描画する
-    //    （別のキャッシュ値を経由しない）ため、初期化済みの値がそのまま画面へ反映される。
+    // 4. saveLocalProfile は保存成功後に 'encounter' 画面へ進み、`ProfileHomeGate` へ渡す
+    //    `encounter` object は encounteredPetName / encounteredSelection の state を
+    //    shorthand で直接渡す（別のキャッシュ値を経由しない）ため、初期化済みの値が
+    //    そのまま画面へ反映される。
     expect(functionBody(text, 'saveLocalProfile')).toContain(
       "setStage('encounter')"
     );
-    expect(text).toContain('encounteredPetName={encounteredPetName}');
-    expect(text).toContain('selectedIds={encounteredSelection}');
+    const encounterObjectBody = text.slice(
+      text.indexOf('encounter={{'),
+      text.indexOf('privateProfile={privateProfile}')
+    );
+    expect(encounterObjectBody).toContain('encounteredPetName,');
+    expect(encounterObjectBody).toContain('encounteredSelection,');
   });
 
   it('Room の 20 分満了は tick / resume ハンドラの中で即座に破棄する（中間 render を作らない）', async () => {
