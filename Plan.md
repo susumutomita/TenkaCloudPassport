@@ -1244,3 +1244,156 @@ Bridge Evidence へ昇格させない Evidence 規律を、Transport / Storage /
   2 分岐で再設計し、確定済みのケースをどちらも `retireInteraction` へ委譲することで、
   「確定結果を保持する」経路を 1 箇所に集約した。bridging / no-signal それぞれから
   Cancel するテストを個別に追加し、同種の見落としを再発時に検出できるようにした。
+
+---
+
+### [Issue 11 Owner Question と段階的開示・拒否] - 2026-07-17
+
+#### 目的
+
+情報が足りないことを欠陥にせず、人間へ聞けば分かることだけを短く確認する。回答しない権利と、
+回答の共有・削除境界を先に示す。Issue 10 が実装した bounded protocol の `clarifying` を、
+実際に Owner へ提示する UI と Active Lounge の実判定経路へ配線し、段階的開示・3 択・最終
+Consent を備えた Owner Question の Consent Flow をライブの体験として完成させる。
+
+#### 制約
+
+- Issue 10 の `src/domain/pet-interaction.ts`（bounded protocol 本体）を変更しない。App 層
+  （`src/app/pet-interaction-flow.ts`）から Domain の Transition 関数をそのまま呼ぶ。
+- Question は `canOffer` / `lookingFor` / `currentGoal` の許可された目的だけを持つ。
+- 自由記述の質問文を持たず、候補手掛かりも版管理済みカタログだけから選ぶ。人種、宗教、健康、
+  政治、性的指向、正確な住所、連絡先を質問候補にしない。
+- 質問より前に「誰へ共有されるか」「いつ消えるか」「Passport に残らない」を表示する。
+- 自由記述メモは 140 文字以内で検証し、選択肢（答える / 分からない / パス）だけでも回答が
+  完結する。
+- Answer を Peer へ共有する前に最終 Consent を要求する。Answer を Passport へ追加する操作は
+  Lounge 終了後の別 Action とし、既定は追加しない。
+- 新しい npm 依存を追加しない。
+- Git 操作、`rm`、`npx`、型エスケープ、Mock、Stub、フォーカスしたテストを使わない。
+
+#### 設計判断
+
+1. Owner Question の Purpose を候補手掛かりの `PassportField` から機械的に導出する
+   （`offers → canOffer`、`lookingFor → lookingFor`、`goal → currentGoal`、
+   `topics → canOffer`）。自由記述の質問文自体が存在しないため、Sensitive Attribute を
+   尋ねる語彙は構造的に存在しない。
+2. `分からない` / `パス` を `OwnerAnswerValue` の既存 2 値（`'no'` / `'decline'`）へ直接
+   対応させ、`答える` だけをローカルな 2 段階 UI State（`answering` →
+   `confirming-share`）で最終確認を経てから `'yes'` として確定する。ドメインの
+   `OwnerAnswerValue` を拡張しない。
+3. `src/app/pet-interaction-flow.ts` に、bounded protocol を Active Lounge の実判定経路へ
+   配線する 3 つの純粋関数（`beginPetInteraction` / `submitOwnerQuestionAnswer` /
+   `applyPetInteractionTick`）を追加する。`bridging` / `no-signal` は確定した瞬間に
+   `retireInteraction` へ委譲し、`RetiredLounge` へ収束させるため、App 層が保持する
+   `PetInteractionState` は `clarifying` か `null` だけになる。
+4. 自由記述メモは Owner 自身が「答える」を確定する前に見返すためのローカル UI State に
+   留め、`MatchEvidence` / `Bridge` / Peer Envelope（Wire Protocol）へは渡さない。
+   Protocol 層（`protocol/peer-envelope.ts`）の拡張を避け、この Issue の本来の目的
+   （Consent UI の配線）に対して不釣り合いに大きい変更を防ぐ。
+5. Answer の Passport 追加操作は実装せず、Seam（`MatchEvidence.clues` が既存の
+   `createLocalPrivateProfile` の入力形と同じ形であること）だけを用意し、Known
+   follow-ups とする。
+
+詳細は
+[Owner Question の段階的開示・Consent Flow の設計](./docs/design/owner-question-consent-flow.md)
+を正本とする。
+
+#### タスク
+
+1. 設計書、本セクションを先に作成する。
+2. `src/domain/owner-question.ts` に `purpose` / `validateOwnerAnswerNote` を日本語 BDD
+   テスト先行で追加し、`protocol/schema.ts` の `parseOwnerQuestion` を同期させる。
+3. `src/app/owner-question-disclosure.ts`、`src/app/owner-question-answer-flow.ts`、
+   `src/app/pet-interaction-flow.ts` を日本語 BDD テスト先行で実装する。
+4. `src/screens/OwnerQuestionScreen.tsx` と Accessibility 契約テストを追加する。
+5. `PassportApp.tsx` を配線する。「会話の糸を探す」操作、Owner Question 画面への遷移、
+   Active Lounge の tick / Background 復帰への Pet Interaction 締切の合流、退出・Host 終了・
+   新規 Lounge 開始時の `interaction` 破棄を実装する。
+6. `ActiveLoungeScreen.tsx` のボタンを更新し、`passport-app-stage-flow.test.ts` /
+   `lounge-privacy-regression.test.ts` を拡張する。
+7. 指定ゲートを実行し、合格後にコミットする。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test src --coverage` で 100% を確認する。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown（本セクション、設計書、`pet-interaction-protocol.md` の
+  追記）を検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- Question Budget 超過、二重送信、取消、期限切れ、退出、Storage / Backup 非保存のテストが
+  揃っていることを確認する。
+
+#### 進捗ログ
+
+- 2026-07-17: AGENTS.md、CLAUDE.md、Issue 8 / 9 / 10 の Plan.md セクション、
+  `docs/design/pet-interaction-protocol.md`、`docs/design/lounge-lifecycle.md`、
+  `src/domain/pet-interaction.ts`、`src/domain/owner-question.ts`、`PassportApp.tsx`、
+  `lounge-reducer.ts` を確認した。Issue 10 が bounded protocol を意図的に
+  `evaluateLounge` へ未配線のまま残し、Owner Question UI を Issue 11 の Known
+  follow-ups としていたことを確認した。
+- 2026-07-17: 設計書とタスク分解を先に作成し、Purpose の機械導出、`分からない` / `パス` の
+  既存 `OwnerAnswerValue` への直接対応、Protocol 層を拡張しないメモの扱い、Passport 追加は
+  Seam のみという 4 判断を確定した。
+- 2026-07-17: `src/domain/owner-question.ts`（`purpose` / `validateOwnerAnswerNote`）、
+  `protocol/schema.ts` の `parseOwnerQuestion` 同期、`src/app/owner-question-disclosure.ts`、
+  `src/app/owner-question-answer-flow.ts`、`src/app/pet-interaction-flow.ts` を日本語 BDD
+  テスト先行で実装した。
+- 2026-07-17: `src/screens/OwnerQuestionScreen.tsx` と
+  `src/screens/owner-question-accessibility.test.ts` を追加した。`PassportApp.tsx` を配線し、
+  `evaluate()` を `startPetInteraction()` / `submitOwnerAnswer()` へ置き換え、Active Lounge の
+  1 秒 tick と Background 復帰を単一の `applyLoungeAdvance` 関数へ集約した
+  （Issue 9 の `applyRoomAdvance` と同じ設計原則）。`ActiveLoungeScreen.tsx` のボタンを
+  「会話の糸を探す」へ更新した。`evaluateLounge` / `RULES_PROVIDER` はドメイン API として
+  残し、削除しなかった。
+- 2026-07-17: `passport-app-stage-flow.test.ts` に Issue 11 の配線契約（interaction の破棄、
+  Owner Question 画面への遷移順序）を追加し、`lounge-privacy-regression.test.ts` に
+  `clarifying` を経由した Bridge 確定シナリオと `Backup` 型・回答画面の Storage 非依存を
+  固定するテストを追加した。
+- 2026-07-17: `bun test src --coverage` は 347 テスト、対象ファイル 100% を維持した。
+  `bun run typecheck`、`bun biome check .`、変更 Markdown への `bunx textlint` を実行し、
+  Green を確認した。
+- 2026-07-17: 独立した Correctness / Security 系統と Reuse / Simplification / Efficiency /
+  Altitude 系統の 2 レビューを並列実行した。Medium 3 件、Low 3 件、Nit 1 件を検出した。
+  1. **[Medium, Correctness]** `OwnerQuestionScreen` の `changeNote` が
+     `validateOwnerAnswerNote`（trim 済み）の戻り値をそのまま `note` state へ書き戻して
+     おり、単語の間に空白を打つたびに直前の空白が消え、続けて文字を打つと単語同士が
+     くっつく回帰があった。生の入力値を `note` へ保持し、`validateOwnerAnswerNote` は
+     140 文字超過検出だけに使うよう修正し、表示・最終確認用の trim 済み値は別変数
+     （`trimmedNote`）に分離した。
+  2. **[Medium, Correctness]** `applyLoungeAdvance` の末尾 `setLounge(reduceLounge(...))` が
+     `'active'` から他の状態（Active Lounge 自体の 20 分満了）へ落ちた場合に
+     `interaction` を破棄していなかった。`current.status === 'active' && advanced.status
+     !== 'active'` の分岐で `setInteraction(null)` を追加した。同じ関数内にあった
+     `if (step.interaction !== interaction)` は、`applyPetInteractionTick` が変化なしの
+     場合は同一参照を返す契約のため到達不能な分岐だったので削除した。
+  3. **[Medium, Reuse]** `lounge-reducer.ts` の `'evaluate'` Action は、`PassportApp.tsx` の
+     旧 `evaluate()` を削除した時点で本番コードからの呼び出し元がなくなり、自分自身の
+     テストだけが dispatch する孤立コードになっていた。Action と実装を削除し、
+     `lounge-reducer.test.ts` の該当テストは `evaluateLounge`（`src/domain/lounge.ts` の
+     公開 API、他のテストが引き続き使う 100% カバレッジ済み関数）を直接呼んで retired
+     な fixture を作る形へ書き換えた。
+  4. **[Low, Altitude]** `collapseToRetiredLounge` の引数型を `cancelled` を除いた
+     Union へ narrowing する案を検討したが、`retireInteraction` は `state.phase ===
+     'retired'` を経由すると正当に `'cancelled'` な outcome を返しうるため、広い型は
+     Domain の正しい契約である。呼び出し側で型を狭めても同じ実行時ガードが 3 箇所に
+     分散するだけなので、1 箇所に集約した現状の設計を維持し、design doc に判断根拠を
+     追記した。
+  5. **[Low, Accessibility]** `OwnerQuestionScreen` の「退出して破棄」「Host として終了」
+     ボタンに `accessibilityHint` がなく、design doc の「全 7 操作に hint を付ける」という
+     記述と実装が食い違っていたため、両ボタンに具体的な hint を追加した。
+  6. **[Low, Reuse]** `lounge-privacy-regression.test.ts` の 2 つの Lifecycle 関数
+     （Bridge 確定 / clarifying 経由）が Room forming から双方 Ready までの手順を
+     丸ごと重複させていたため、共通手順を `startActiveLounge()` として抽出した。
+  7. **[Low, Optional]** `OwnerQuestionScreen` に `submitted` state を追加し、
+     答える/分からない/パス/確定して共有する/やめるの全ボタンを回答確定後に
+     disabled にする、UI 層での二重送信防止を追加した（Domain / App 層の冪等性に
+     加えた多層防御）。
+  8. **[Nit]** `OwnerQuestion` は `schemaVersion: 1` のまま必須 `purpose` を追加した。
+     現時点で Wire へ実際に乗せる経路がないため安全だが、将来 Peer 間で送受信する
+     ようになった場合の再検討事項を design doc の Known follow-ups へ追記した。
+  修正後に `bun run typecheck`、`bun test src --coverage`（351 テスト、対象ファイル
+  100%）、`bunx textlint`、`make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error`
+  （harness・harness_test・pre_release_check・lint_text・lint・typecheck・
+  test_coverage・Web Export の全段階）を再実行し、すべて Green を確認した。

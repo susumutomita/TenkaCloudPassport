@@ -398,6 +398,7 @@ export function parseOwnerQuestion(value: unknown): OwnerQuestion {
     'schemaVersion',
     'questionId',
     'displayText',
+    'purpose',
   ]);
   const questionId = assertLiteral(
     record.questionId,
@@ -411,6 +412,11 @@ export function parseOwnerQuestion(value: unknown): OwnerQuestion {
       record.displayText,
       OWNER_QUESTION_CATALOG[questionId],
       `${path}.displayText`
+    ),
+    purpose: assertOneOf(
+      record.purpose,
+      ['canOffer', 'lookingFor', 'currentGoal'],
+      `${path}.purpose`
     ),
   };
 }

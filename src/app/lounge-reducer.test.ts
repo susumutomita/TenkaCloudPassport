@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'bun:test';
-import { LOUNGE_TTL_MS, startLounge } from '../domain/lounge';
+import {
+  type ActiveLounge,
+  evaluateLounge,
+  LOUNGE_TTL_MS,
+  type RetiredLounge,
+  startLounge,
+} from '../domain/lounge';
 import {
   createLocalPrivateProfile,
   projectPublicPassport,
 } from '../domain/passport';
+import { RULES_PROVIDER } from '../domain/rules-provider';
 import { reduceLounge } from './lounge-reducer';
 
 function activeLounge() {
@@ -35,25 +42,27 @@ const EXPIRY_CLOCK = {
   monotonicMs: 2_100,
 };
 
-describe('Lounge reducer の競合処理', () => {
-  it('期限切れの後に判定操作が並んでも Bridge を復元しない', () => {
-    const expired = reduceLounge(activeLounge(), {
-      type: 'clock-tick',
-      clock: EXPIRY_CLOCK,
-    });
-    const evaluated = reduceLounge(expired, {
-      type: 'evaluate',
-      clock: EXPIRY_CLOCK,
-    });
-
-    expect(evaluated).toEqual({ status: 'destroyed', reason: 'expired' });
+/**
+ * Issue 11 で reducer の `'evaluate'` Action を削除した（Rules Provider への直接判定は
+ * `pet-interaction-flow.ts` の bounded protocol へ置き換わり、reducer からは呼ばれなく
+ * なったため）。この reducer の競合テストが必要とするのは「すでに retired な Lounge」
+ * という fixture であり、その retired 状態を作る手段は reducer 経由である必要はない。
+ * `evaluateLounge`（`src/domain/lounge.ts` の公開 API、100% カバレッジのまま残る）を
+ * 直接呼んで fixture を作り、reducer 自体（`clock-tick` / `complete`）の競合処理だけを
+ * 検証対象にする。
+ */
+function retiredLounge(active: ActiveLounge): RetiredLounge {
+  const retired = evaluateLounge(active, RULES_PROVIDER, {
+    wallClockMs: 1_100,
+    monotonicMs: 2_100,
   });
+  if (retired.status !== 'retired') throw new Error('retired が必要です。');
+  return retired;
+}
 
-  it('判定操作の後に期限切れが並んでも結果を完全破棄する', () => {
-    const retired = reduceLounge(activeLounge(), {
-      type: 'evaluate',
-      clock: { wallClockMs: 1_100, monotonicMs: 2_100 },
-    });
+describe('Lounge reducer の競合処理', () => {
+  it('判定確定の後に期限切れが並んでも結果を完全破棄する', () => {
+    const retired = retiredLounge(activeLounge());
     const expired = reduceLounge(retired, {
       type: 'clock-tick',
       clock: EXPIRY_CLOCK,
@@ -70,11 +79,8 @@ describe('Lounge reducer の競合処理', () => {
     expect(completed).toEqual({ status: 'destroyed', reason: 'owner-exit' });
   });
 
-  it('判定済み Lounge を完了すると Bridge と Passport を完全破棄する', () => {
-    const retired = reduceLounge(activeLounge(), {
-      type: 'evaluate',
-      clock: { wallClockMs: 1_100, monotonicMs: 2_100 },
-    });
+  it('判定確定済み Lounge を完了すると Bridge と Passport を完全破棄する', () => {
+    const retired = retiredLounge(activeLounge());
     const completed = reduceLounge(retired, { type: 'complete' });
 
     expect(completed).toEqual({ status: 'destroyed', reason: 'completed' });

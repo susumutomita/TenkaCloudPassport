@@ -55,7 +55,7 @@ export const RULES_INTERACTION_PROVIDER: RulesInteractionDiscoveryProvider = {
     return {
       kind: 'candidate',
       candidateClue,
-      question: ownerQuestion('confirm-shared-clue'),
+      question: ownerQuestion('confirm-shared-clue', candidateClue),
     };
   },
 };

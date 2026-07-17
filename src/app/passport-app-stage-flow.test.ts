@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { readSourceFile } from '../screens/accessibility-test-kit';
+import {
+  expectInOrder,
+  readSourceFile,
+} from '../screens/accessibility-test-kit';
 
 /**
  * PassportApp.tsx はレンダリング用の統合テスト基盤（React Testing Library 相当）を
@@ -22,8 +25,13 @@ const FUNCTION_NAMES = [
   'guestReady',
   'discardInviteFlow',
   'applyRoomAdvance',
+  'applyLoungeAdvance',
+  'startPetInteraction',
+  'submitOwnerAnswer',
   'endInvite',
   'cancelInvite',
+  'leave',
+  'endAsHost',
   'restartEncounter',
   'editLocalProfile',
 ] as const;
@@ -224,5 +232,117 @@ describe('PassportApp の Stage 遷移契約', () => {
     );
     const guestPreviewBlock = text.slice(guestPreviewIndex, sharePreviewIndex);
     expect(guestPreviewBlock).not.toContain("setStage('guest-scan')");
+  });
+
+  describe('Issue 11: Owner Question の Consent Flow を Active Lounge の実判定経路へ配線する', () => {
+    it('「会話の糸を探す」操作は beginPetInteraction の結果で interaction と lounge の両方を更新する', async () => {
+      const text = await source();
+      const body = functionBody(text, 'startPetInteraction');
+
+      expect(body).toContain('beginPetInteraction(');
+      expect(body).toContain('RULES_INTERACTION_PROVIDER');
+      expect(body).toContain('setInteraction(step.interaction)');
+      expect(body).toContain('setLounge(step.lounge)');
+    });
+
+    it('Owner Question への回答は submitOwnerQuestionAnswer の結果で interaction と lounge の両方を更新する', async () => {
+      const text = await source();
+      const body = functionBody(text, 'submitOwnerAnswer');
+
+      expect(body).toContain('submitOwnerQuestionAnswer(');
+      expect(body).toContain('setInteraction(step.interaction)');
+      expect(body).toContain('setLounge(step.lounge)');
+    });
+
+    it('Active Lounge の tick / Background 復帰は Pet Interaction の 45 秒締切も同じ関数でまとめて評価する', async () => {
+      const text = await source();
+      const body = functionBody(text, 'applyLoungeAdvance');
+
+      expect(body).toContain('applyPetInteractionTick(');
+      expect(body).toContain("step.lounge.status !== 'active'");
+      expect(body).toContain('setInteraction(step.interaction)');
+
+      // Active Lounge の 1 秒 tick と Background 復帰（resume）の両方が、この単一の関数へ
+      // 委譲していることを固定する（Room 側の applyRoomAdvance と同じ設計原則）。
+      const callSites = text.match(/applyLoungeAdvance\(lounge,/g) ?? [];
+      expect(callSites.length).toBe(2);
+    });
+
+    it('Active Lounge 自体が 20 分満了した場合、clarifying 中の interaction も確実に破棄する', async () => {
+      const text = await source();
+      const body = functionBody(text, 'applyLoungeAdvance');
+
+      // Pet Interaction の 45 秒締切ではなく、Lounge 本体の期限（reduceLounge）が
+      // 'active' から他の状態へ落としたケースでも interaction を null に戻す。
+      expect(body).toContain(
+        "current.status === 'active' && advanced.status !== 'active'"
+      );
+      expect(body).toContain('setInteraction(null)');
+    });
+
+    it('applyLoungeAdvance は締切内で変化がない場合の再設定という到達しない分岐を持たない', async () => {
+      const text = await source();
+      const body = functionBody(text, 'applyLoungeAdvance');
+
+      // applyPetInteractionTick は変化がなければ同じ interaction 参照を返す契約
+      // のため、`step.interaction !== interaction` を確認する分岐は常に false にしか
+      // ならない到達不能コードだった。この分岐を削除したことを固定する。
+      expect(body).not.toContain('step.interaction !== interaction');
+    });
+
+    it('clarifying 中に退出・Host 終了しても interaction を確実に破棄する', async () => {
+      const text = await source();
+
+      for (const name of ['leave', 'endAsHost'] as const) {
+        expect(functionBody(text, name)).toContain('setInteraction(null)');
+      }
+    });
+
+    it('新しい Active Lounge 開始（Ready 到達）は必ず interaction を初期化する', async () => {
+      const text = await source();
+
+      for (const name of ['markHostReady', 'guestReady'] as const) {
+        const body = functionBody(text, name);
+        expect(body).toContain('setInteraction(null)');
+        expect(body).toContain('startLoungeFromRoom(');
+      }
+    });
+
+    it('Encounter の再開も Lounge 由来の一時データと同様に interaction を破棄する', async () => {
+      const text = await source();
+
+      expect(functionBody(text, 'restartEncounter')).toContain(
+        'setInteraction(null)'
+      );
+    });
+
+    it('clarifying 中は Active Lounge Screen ではなく Owner Question Screen を表示する', async () => {
+      const text = await source();
+
+      expectInOrder(text, [
+        "lounge?.status === 'active' && interaction?.phase === 'clarifying'",
+        '<OwnerQuestionScreen',
+        'onAnswer={submitOwnerAnswer}',
+        "if (lounge?.status === 'active') {",
+        '<ActiveLoungeScreen',
+        'onBeginInteraction={startPetInteraction}',
+      ]);
+    });
+
+    it('Owner Question Screen も他の Lounge 段階と同じ退出・Host 終了の Terminal Event を持つ', async () => {
+      const text = await source();
+      const ownerQuestionBlockStart = text.indexOf('<OwnerQuestionScreen');
+      const activeLoungeBlockStart = text.indexOf(
+        '<ActiveLoungeScreen',
+        ownerQuestionBlockStart
+      );
+      const ownerQuestionBlock = text.slice(
+        ownerQuestionBlockStart,
+        activeLoungeBlockStart
+      );
+
+      expect(ownerQuestionBlock).toContain('onExit={leave}');
+      expect(ownerQuestionBlock).toContain('onHostEnd={endAsHost}');
+    });
   });
 });
