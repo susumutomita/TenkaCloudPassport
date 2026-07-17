@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { CLUE_IDS } from './clue-catalog';
 import {
   createLocalPrivateProfile,
   PassportValidationError,
@@ -75,6 +76,28 @@ describe('Local Private Profile', () => {
           selectedForPassportClueIds: [OPEN_SOURCE],
         }),
       'CLUE_NOT_IN_PROFILE'
+    );
+  });
+
+  it('候補がカタログ上限を超える場合は拒否する', () => {
+    const firstClue = CLUE_IDS[0];
+    if (!firstClue)
+      throw new Error('カタログに 1 件以上の手掛かりが必要です。');
+
+    expect(
+      createLocalPrivateProfile({
+        candidateClueIds: CLUE_IDS,
+        selectedForPassportClueIds: [],
+      }).candidateClues
+    ).toHaveLength(CLUE_IDS.length);
+
+    expectPassportError(
+      () =>
+        createLocalPrivateProfile({
+          candidateClueIds: [...CLUE_IDS, firstClue],
+          selectedForPassportClueIds: [],
+        }),
+      'PROFILE_CLUE_COUNT'
     );
   });
 });
@@ -175,5 +198,35 @@ describe('Public Passport', () => {
         }),
       'CLUE_NOT_SELECTED'
     );
+  });
+
+  it('Local 専用 field が増えても公開 allowlist だけを投影する', () => {
+    const privateProfileWithLocalOnlyFields = {
+      ...profile,
+      localId: 'local-only-id',
+      updatedAt: '2026-07-17T00:00:00.000Z',
+      deviceInfo: 'local-device',
+      contact: 'owner@example.invalid',
+      storagePath: '/private/profile.json',
+    };
+
+    const passport = projectPublicPassport(privateProfileWithLocalOnlyFields, {
+      clueIds: [EVENT_OPERATIONS],
+      ownerConfirmed: true,
+    });
+
+    expect(Object.keys(passport).sort()).toEqual([
+      'catalogVersion',
+      'clues',
+      'schemaVersion',
+    ]);
+    expect(Object.keys(passport.clues[0] ?? {}).sort()).toEqual([
+      'category',
+      'source',
+      'value',
+    ]);
+    expect(JSON.stringify(passport)).not.toContain('local-only-id');
+    expect(JSON.stringify(passport)).not.toContain('owner@example.invalid');
+    expect(JSON.stringify(passport)).not.toContain('/private/profile.json');
   });
 });

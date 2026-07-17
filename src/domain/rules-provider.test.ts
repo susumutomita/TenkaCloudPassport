@@ -26,7 +26,9 @@ describe('Rules Provider', () => {
 
     expect(outcome.kind).toBe('bridge');
     if (outcome.kind === 'bridge') {
-      expect(outcome.bridge.evidence).toEqual(['open-source']);
+      expect(outcome.bridge.evidence.clues.map((clue) => clue.value)).toEqual([
+        'open-source',
+      ]);
     }
   });
 
@@ -41,8 +43,10 @@ describe('Rules Provider', () => {
 
     expect(outcome.kind).toBe('bridge');
     if (outcome.kind === 'bridge') {
-      expect(outcome.bridge.evidence).toHaveLength(1);
-      expect(outcome.bridge.evidence[0]).toBe('regional-event-operations');
+      expect(outcome.bridge.evidence.clues).toHaveLength(1);
+      expect(outcome.bridge.evidence.clues[0]?.value).toBe(
+        'regional-event-operations'
+      );
     }
   });
 

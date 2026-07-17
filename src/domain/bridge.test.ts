@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createBridge } from './bridge';
+import { createBridge, createBridgeFromEvidence } from './bridge';
 import { createLocalPrivateProfile, projectPublicPassport } from './passport';
 
 describe('Bridge 生成', () => {
@@ -17,8 +17,16 @@ describe('Bridge 生成', () => {
 
     const bridge = createBridge(clue);
 
-    expect(bridge.evidence).toEqual(['regional-event-operations']);
+    expect(bridge.evidence.clues.map((item) => item.value)).toEqual([
+      'regional-event-operations',
+    ]);
     expect(bridge.message).toContain('地域イベントの運営');
     expect(bridge.message).toContain('話してみませんか');
+  });
+
+  it('Match Evidence が空の場合は Bridge を生成しない', () => {
+    expect(() =>
+      createBridgeFromEvidence({ schemaVersion: 1, clues: [] })
+    ).toThrow('1 件以上');
   });
 });
