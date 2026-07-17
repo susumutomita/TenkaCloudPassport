@@ -336,7 +336,7 @@ export function parsePublicPassport(value: unknown): PublicPassport {
   };
 }
 
-function loungeId(value: unknown, path: string): LoungeId {
+export function loungeId(value: unknown, path: string): LoungeId {
   const candidate = stringValue(value, path, 36);
   if (!isLoungeId(candidate)) {
     return schemaError(

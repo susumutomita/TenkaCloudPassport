@@ -139,6 +139,17 @@ web-build/
 ios/
 android/
 
+# Native Artifact staging and build outputs
+.native-artifacts/
+*.xcarchive
+*.dSYM
+*.ipa
+*.apk
+*.aab
+.cxx/
+DerivedData/
+Pods/
+
 # Owner-provided model weights
 models/
 model-weights/
@@ -146,6 +157,22 @@ model-weights/
 *.ggml
 *.safetensors
 *.onnx
+
+# Native signing material and tokens
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.der
+*.pem
+*.key
+*.p12
+*.p8
+*.keystore
+*.jks
+*.token
+*.tokens
+credentials/
+secrets/
 
 # Claude harness runtime state (per-developer; not committed)
 # 生成元: /follow-up スキル (詳細: .claude/skills/follow-up/SKILL.md)

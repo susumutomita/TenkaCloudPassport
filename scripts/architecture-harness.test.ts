@@ -3,13 +3,75 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseFrontmatter, RULES } from './architecture-harness';
+import { parseFrontmatter, REPO_CHECKS, RULES } from './architecture-harness';
 
 function rule(id: string) {
   const found = RULES.find((r) => r.id === id);
   if (!found) throw new Error(`rule not found: ${id}`);
   return found;
 }
+
+function repoCheck(id: string) {
+  const found = REPO_CHECKS.find((check) => check.id === id);
+  if (!found) throw new Error(`repo check not found: ${id}`);
+  return found;
+}
+
+describe('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT', () => {
+  const check = repoCheck('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT');
+  const roots: string[] = [];
+
+  afterAll(() => {
+    for (const root of roots) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  function createRoot(packageTrustedDependencies: unknown): string {
+    const root = mkdtempSync(path.join(tmpdir(), 'supply-chain-config-'));
+    roots.push(root);
+    writeFileSync(
+      path.join(root, 'bunfig.toml'),
+      '[install]\ntrustedDependencies = []\n'
+    );
+    writeFileSync(
+      path.join(root, 'package.json'),
+      JSON.stringify({ trustedDependencies: packageTrustedDependencies })
+    );
+    return root;
+  }
+
+  it('bunfig.toml と package.json の信頼対象が両方空なら通す', async () => {
+    const findings = await check.check(createRoot([]));
+
+    expect(findings).toHaveLength(0);
+  });
+
+  it('package.json が llama.rn を信頼するとき error にする', async () => {
+    const findings = await check.check(createRoot(['llama.rn']));
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        severity: 'error',
+        file: 'package.json',
+      })
+    );
+  });
+
+  it('package.json に trustedDependencies が無いとき error にする', async () => {
+    const root = createRoot([]);
+    writeFileSync(path.join(root, 'package.json'), '{}\n');
+
+    const findings = await check.check(root);
+
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        severity: 'error',
+        file: 'package.json',
+      })
+    );
+  });
+});
 
 const SKILL_PATH = '.claude/skills/sample-skill/SKILL.md';
 
@@ -828,6 +890,7 @@ describe('ローカル worktree の除外 (CLI 統合)', () => {
         ].join('\n'),
       ],
       ['bunfig.toml', 'trustedDependencies = []\n'],
+      ['package.json', '{"trustedDependencies":[]}\n'],
       [
         '.claude/worktrees/agent/.github/template.md',
         '<!-- worktree 内だけにある警告対象 -->\n',

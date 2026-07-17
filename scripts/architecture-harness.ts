@@ -747,7 +747,7 @@ const REPO_CHECKS: RepoCheck[] = [
   {
     id: 'INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT',
     description:
-      'bunfig.toml に trustedDependencies = [] が明示されている (Bun の暗黙信頼を空にする)',
+      'bunfig.toml と package.json に trustedDependencies = [] が明示されている (Bun の暗黙信頼を空にする)',
     check: async (root) => {
       const findings: Finding[] = [];
       const bunfigPath = path.join(root, 'bunfig.toml');
@@ -769,6 +769,34 @@ const REPO_CHECKS: RepoCheck[] = [
           file: 'bunfig.toml',
           message:
             'bunfig.toml が存在しない。Bun の trustedDependencies = [] を明示する正本として置く',
+        });
+      }
+      const packagePath = path.join(root, 'package.json');
+      try {
+        const parsed: unknown = JSON.parse(await readFile(packagePath, 'utf8'));
+        const trustedDependencies =
+          typeof parsed === 'object' && parsed !== null
+            ? Reflect.get(parsed, 'trustedDependencies')
+            : undefined;
+        if (
+          !Array.isArray(trustedDependencies) ||
+          trustedDependencies.length !== 0
+        ) {
+          findings.push({
+            rule: 'INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT',
+            severity: 'error',
+            file: 'package.json',
+            message:
+              'package.json に trustedDependencies: [] が無い。Native Artifact は lifecycle ではなく専用 opt-in command で取得する',
+          });
+        }
+      } catch {
+        findings.push({
+          rule: 'INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT',
+          severity: 'error',
+          file: 'package.json',
+          message:
+            'package.json が存在しないか JSON として読めない。trustedDependencies: [] を明示する',
         });
       }
       return findings;
