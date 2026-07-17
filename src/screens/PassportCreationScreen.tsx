@@ -28,6 +28,7 @@ interface PassportCreationScreenProps {
   readonly onToggleClue: (id: ClueId) => void;
   readonly onToggleLanguage: (code: LanguageCode) => void;
   readonly onSave: () => void;
+  readonly onOpenBackup: () => void;
 }
 
 const NOTICE_TITLES: Record<ProfileNotice['kind'], string> = {
@@ -70,6 +71,7 @@ export default function PassportCreationScreen({
   onToggleClue,
   onToggleLanguage,
   onSave,
+  onOpenBackup,
 }: PassportCreationScreenProps) {
   return (
     <AppScreen
@@ -149,6 +151,12 @@ export default function PassportCreationScreen({
         disabled={saving}
         label={saving ? '端末内に保存中' : 'Local Profile を端末内に明示保存'}
         onPress={onSave}
+      />
+      <ActionButton
+        accessibilityHint="端末内の設定を JSON として書き出す、または JSON バックアップから復元します。"
+        label="Backup（JSON の書き出し・復元）"
+        onPress={onOpenBackup}
+        variant="secondary"
       />
     </AppScreen>
   );

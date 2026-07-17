@@ -38,6 +38,10 @@ import {
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
+import BackupExportScreen from '../screens/BackupExportScreen';
+import BackupImportScreen, {
+  type BackupImportValidationView,
+} from '../screens/BackupImportScreen';
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
@@ -47,6 +51,8 @@ import PassportCreationScreen from '../screens/PassportCreationScreen';
 import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
+import type { BackupImportParseResult } from './backup-import';
+import type { BackupSharePort } from './backup-share-port';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -75,9 +81,12 @@ import {
   type CameraPermissionState,
   createInProcessQrScannerPort,
 } from './qr-scanner-port';
+import { readableError } from './readable-error';
+import { type BackupFlow, useBackupFlow } from './use-backup-flow';
 
 interface PassportAppProps {
   readonly localProfileStorage: LocalProfileStoragePort;
+  readonly backupSharePort: BackupSharePort;
 }
 
 type SetupStage =
@@ -86,7 +95,9 @@ type SetupStage =
   | 'share-preview'
   | 'host-invite'
   | 'guest-scan'
-  | 'guest-share-preview';
+  | 'guest-share-preview'
+  | 'backup-export'
+  | 'backup-import';
 
 function currentClock(): ClockSnapshot {
   return {
@@ -95,9 +106,183 @@ function currentClock(): ClockSnapshot {
   };
 }
 
-function readableError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return '入力を確認して、もう一度実行してください。';
+const VALIDATION_ERROR_FALLBACK = '入力を確認して、もう一度実行してください。';
+
+/**
+ * `BackupImportParseResult`（app 層、`backup` 本体まで持つ）を、`BackupImportScreen` が
+ * 表示に必要な最小の形（`BackupImportValidationView`）へ変換する。ネストした三項演算子を
+ * PassportApp 本体から追い出し、Cognitive Complexity を抑える。
+ */
+function backupImportValidationView(
+  result: BackupImportParseResult | null
+): BackupImportValidationView {
+  if (result === null) return null;
+  if (result.kind === 'rejected') {
+    return { kind: 'rejected', message: result.message };
+  }
+  return { kind: 'parsed', items: result.items };
+}
+
+function isBackupStage(
+  stage: SetupStage
+): stage is 'backup-export' | 'backup-import' {
+  return stage === 'backup-export' || stage === 'backup-import';
+}
+
+/**
+ * `EncounterSetupScreen` が要求する Prop のうち、`privateProfile` から導出できる
+ * `privateClueCount` / `privatePetName` 以外をまとめる。`PassportCreationScreenBranch`
+ * と分けることで、`ProfileHomeGate` の呼び出し側は「相手の入力」と「自分の Profile」を
+ * 混同せずに 1 つの object として渡せる（Reuse/Simplification レビュー指摘の反映）。
+ */
+interface EncounterBranchProps {
+  readonly errorMessage: string | null;
+  readonly encounteredPetName: string;
+  readonly encounteredPetEmoji: PetEmoji;
+  readonly encounteredSelection: readonly ClueId[];
+  readonly encounteredConfirmed: boolean;
+  readonly onChangePetName: (value: string) => void;
+  readonly onSelectPetEmoji: (emoji: PetEmoji) => void;
+  readonly onToggleClue: (id: ClueId) => void;
+  readonly onToggleConfirmed: () => void;
+  readonly onContinue: () => void;
+  readonly onBack: () => void;
+}
+
+/** `PassportCreationScreen`（Step 1）が要求する Prop のうち `onOpenBackup` 以外をまとめる。 */
+interface PassportCreationBranchProps {
+  readonly petName: string;
+  readonly petEmoji: PetEmoji;
+  readonly ownerAlias: string;
+  readonly ownerSelection: readonly ClueId[];
+  readonly languageSelection: readonly LanguageCode[];
+  readonly notice: ProfileNotice;
+  readonly saving: boolean;
+  readonly onChangePetName: (value: string) => void;
+  readonly onSelectPetEmoji: (emoji: PetEmoji) => void;
+  readonly onChangeOwnerAlias: (value: string) => void;
+  readonly onToggleClue: (id: ClueId) => void;
+  readonly onToggleLanguage: (code: LanguageCode) => void;
+  readonly onSave: () => void;
+}
+
+interface ProfileHomeGateProps {
+  readonly stage: SetupStage;
+  readonly privateProfile: LocalPrivateProfile | null;
+  readonly backupFlow: BackupFlow;
+  readonly encounter: EncounterBranchProps;
+  readonly creation: PassportCreationBranchProps;
+}
+
+/**
+ * Room 作成前（Lounge Data が存在しない）段階の 3 つの Stage（Backup Export・Import・
+ * Encounter）と、その既定の着地点（Profile 作成）を 1 つの Component へ集約する。
+ * `PassportApp` 本体に 3 つ目・4 つ目の `if` を追加すると Cognitive Complexity が
+ * 上限を超えるため、`SharePreviewGate` と同じ「複数 Stage を子 Component へ集約する」
+ * 方針をここにも適用する。呼び出し側の Prop は `EncounterSetupScreen` /
+ * `PassportCreationScreen` それぞれの Prop 形をそのまま反映した `encounter` /
+ * `creation` の 2 object にまとめ、無関係な 2 画面分の Prop を平坦に並べない。
+ */
+function ProfileHomeGate({
+  stage,
+  privateProfile,
+  backupFlow,
+  encounter,
+  creation,
+}: ProfileHomeGateProps) {
+  if (isBackupStage(stage)) {
+    return (
+      <BackupStageGate
+        backupFlow={backupFlow}
+        hasExistingProfile={privateProfile !== null}
+        stage={stage}
+      />
+    );
+  }
+  if (stage === 'encounter' && privateProfile) {
+    return (
+      <EncounterSetupScreen
+        confirmed={encounter.encounteredConfirmed}
+        encounteredPetEmoji={encounter.encounteredPetEmoji}
+        encounteredPetName={encounter.encounteredPetName}
+        errorMessage={encounter.errorMessage}
+        onBack={encounter.onBack}
+        onChangePetName={encounter.onChangePetName}
+        onContinue={encounter.onContinue}
+        onSelectPetEmoji={encounter.onSelectPetEmoji}
+        onToggle={encounter.onToggleClue}
+        onToggleConfirmed={encounter.onToggleConfirmed}
+        privateClueCount={privateProfile.candidateClues.length}
+        privatePetName={privateProfile.petName}
+        selectedIds={encounter.encounteredSelection}
+      />
+    );
+  }
+  return (
+    <PassportCreationScreen
+      languageCodes={creation.languageSelection}
+      notice={creation.notice}
+      onChangeOwnerAlias={creation.onChangeOwnerAlias}
+      onChangePetName={creation.onChangePetName}
+      onOpenBackup={backupFlow.open}
+      onSave={creation.onSave}
+      onSelectPetEmoji={creation.onSelectPetEmoji}
+      onToggleClue={creation.onToggleClue}
+      onToggleLanguage={creation.onToggleLanguage}
+      ownerAlias={creation.ownerAlias}
+      petEmoji={creation.petEmoji}
+      petName={creation.petName}
+      saving={creation.saving}
+      selectedIds={creation.ownerSelection}
+    />
+  );
+}
+
+interface BackupStageGateProps {
+  readonly stage: 'backup-export' | 'backup-import';
+  readonly backupFlow: BackupFlow;
+  readonly hasExistingProfile: boolean;
+}
+
+/**
+ * Export・Import は Lounge / Room のどの state とも独立した機能であり、
+ * `PassportApp` 本体に 2 つの `if` として直接展開すると Cognitive Complexity が
+ * 上限を超える。`SharePreviewGate` と同じ「複数 Stage を 1 つの子 Component へ
+ * 集約する」方針で、判定自体をこの Component 側へ移す。
+ */
+function BackupStageGate({
+  stage,
+  backupFlow,
+  hasExistingProfile,
+}: BackupStageGateProps) {
+  if (stage === 'backup-export') {
+    return (
+      <BackupExportScreen
+        notice={backupFlow.exportNotice}
+        onBack={backupFlow.close}
+        onOpenImport={backupFlow.openImport}
+        onShare={() => void backupFlow.share()}
+        preview={backupFlow.exportPreview}
+        sharing={backupFlow.sharing}
+      />
+    );
+  }
+  return (
+    <BackupImportScreen
+      choice={backupFlow.importChoice}
+      committing={backupFlow.committing}
+      hasExistingProfile={hasExistingProfile}
+      notice={backupFlow.importNotice}
+      onBack={backupFlow.close}
+      onChangeChoice={backupFlow.setImportChoice}
+      onChangeRawInput={backupFlow.changeRawInput}
+      onCommit={() => void backupFlow.commit()}
+      onOpenExport={backupFlow.open}
+      onValidate={backupFlow.validate}
+      rawInput={backupFlow.rawInput}
+      validation={backupImportValidationView(backupFlow.importResult)}
+    />
+  );
 }
 
 function resolveGuestProfile(
@@ -139,7 +324,7 @@ function SharePreviewGate({
   try {
     previewItems = createPassportShare(profile, selection).preview.items;
   } catch (error: unknown) {
-    validationMessage = readableError(error);
+    validationMessage = readableError(error, VALIDATION_ERROR_FALLBACK);
   }
   function dispatch(
     action: Parameters<typeof reducePassportShareSelection>[1]
@@ -165,7 +350,10 @@ function SharePreviewGate({
   );
 }
 
-export default function PassportApp({ localProfileStorage }: PassportAppProps) {
+export default function PassportApp({
+  localProfileStorage,
+  backupSharePort,
+}: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
   // 完走させる（docs/design/qr-invite-and-ready-flow.md）。5 状態すべての UI 分岐は
   // src/app/qr-scanner-port.test.ts と src/app/camera-permission-notice.test.ts が
@@ -219,6 +407,22 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     useState<CameraPermissionState>('not-determined');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const handleBackupImportCommitted = useCallback(
+    (committed: LocalPrivateProfile): void => {
+      setPrivateProfile(committed);
+      setShareSelection(createDefaultPassportShareSelection(committed));
+    },
+    []
+  );
+  const closeBackupStage = useCallback(() => setStage('profile'), []);
+  const backupFlow = useBackupFlow({
+    localProfileStorage,
+    backupSharePort,
+    privateProfile,
+    onImportCommitted: handleBackupImportCommitted,
+    onOpenStage: setStage,
+    onCloseStage: closeBackupStage,
+  });
 
   // invite は loungeRoom（forming / ready）から一意に導出できるため、独立した state に
   // せず同期の取り忘れを構造的に防ぐ。expired / null では QR に表示するものがない。
@@ -434,7 +638,10 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
       setNotice(
         error instanceof LocalProfileStorageError
           ? profileNoticeFromStorageError(error, 'save')
-          : { kind: 'validation-error', message: readableError(error) }
+          : {
+              kind: 'validation-error',
+              message: readableError(error, VALIDATION_ERROR_FALLBACK),
+            }
       );
     } finally {
       setSaving(false);
@@ -458,7 +665,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
       setErrorMessage(null);
       setStage('share-preview');
     } catch (error: unknown) {
-      setErrorMessage(readableError(error));
+      setErrorMessage(readableError(error, VALIDATION_ERROR_FALLBACK));
     }
   }
 
@@ -809,53 +1016,48 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     );
   }
 
-  if (stage === 'encounter' && privateProfile) {
-    return (
-      <EncounterSetupScreen
-        confirmed={encounteredConfirmed}
-        encounteredPetEmoji={encounteredPetEmoji}
-        encounteredPetName={encounteredPetName}
-        errorMessage={errorMessage}
-        onBack={editLocalProfile}
-        onChangePetName={setEncounteredPetName}
-        onContinue={continueToPreview}
-        onSelectPetEmoji={setEncounteredPetEmoji}
-        onToggle={(id) =>
+  return (
+    <ProfileHomeGate
+      backupFlow={backupFlow}
+      creation={{
+        languageSelection,
+        notice,
+        onChangeOwnerAlias: setOwnerAlias,
+        onChangePetName: setPetName,
+        onSave: () => void saveLocalProfile(),
+        onSelectPetEmoji: setPetEmoji,
+        onToggleClue: (id) =>
+          setOwnerSelection((current) =>
+            toggleClueId(current, id, PROFILE_MAX_CLUES)
+          ),
+        onToggleLanguage: (code) =>
+          setLanguageSelection((current) =>
+            toggleLanguageCode(current, code, PROFILE_MAX_LANGUAGES)
+          ),
+        ownerAlias,
+        ownerSelection,
+        petEmoji,
+        petName,
+        saving,
+      }}
+      encounter={{
+        encounteredConfirmed,
+        encounteredPetEmoji,
+        encounteredPetName,
+        encounteredSelection,
+        errorMessage,
+        onBack: editLocalProfile,
+        onChangePetName: setEncounteredPetName,
+        onContinue: continueToPreview,
+        onSelectPetEmoji: setEncounteredPetEmoji,
+        onToggleClue: (id) =>
           setEncounteredSelection((current) =>
             toggleClueId(current, id, PUBLIC_PASSPORT_MAX_CLUES)
-          )
-        }
-        onToggleConfirmed={() => setEncounteredConfirmed((current) => !current)}
-        privateClueCount={privateProfile.candidateClues.length}
-        privatePetName={privateProfile.petName}
-        selectedIds={encounteredSelection}
-      />
-    );
-  }
-
-  return (
-    <PassportCreationScreen
-      languageCodes={languageSelection}
-      notice={notice}
-      onChangeOwnerAlias={setOwnerAlias}
-      onChangePetName={setPetName}
-      onSave={() => void saveLocalProfile()}
-      onSelectPetEmoji={setPetEmoji}
-      onToggleClue={(id) =>
-        setOwnerSelection((current) =>
-          toggleClueId(current, id, PROFILE_MAX_CLUES)
-        )
-      }
-      onToggleLanguage={(code) =>
-        setLanguageSelection((current) =>
-          toggleLanguageCode(current, code, PROFILE_MAX_LANGUAGES)
-        )
-      }
-      ownerAlias={ownerAlias}
-      petEmoji={petEmoji}
-      petName={petName}
-      saving={saving}
-      selectedIds={ownerSelection}
+          ),
+        onToggleConfirmed: () => setEncounteredConfirmed((current) => !current),
+      }}
+      privateProfile={privateProfile}
+      stage={stage}
     />
   );
 }

@@ -1749,3 +1749,207 @@ Local Agent（`llama.rn`, Issue 17）が共有する単一の Provider Contract 
 - **予防策**: 型を分離する設計判断をするときは、その型に付随するロジックのうちどの部分が
   型の構造（この場合は `ParticipantId` の有無）に本当に依存し、どの部分が値の内容
   （`kind` フィールド）だけで完結するかを分けて検討し、後者は共有関数へ切り出す。
+
+---
+
+### [Issue 14 Lounge 境界を守る JSON Backup・復元を完成する] - 2026-07-17
+
+#### 目的
+
+利用者が自分の少量の設定（Local Passport、Pet 設定、Model 設定のうち秘匿値でないもの）を、
+自分の Private GitHub Repository や暗号化 Storage へ手動で退避できるようにする。アプリは
+GitHub API と接続せず、Token を扱わない。バックアップ Schema（Versioned strict schema と
+Migration）は Issue 5・7 ですでに実装済みであり、この Issue は Export・Import の UX と
+Share Sheet Port だけを完成させる。
+
+#### 制約
+
+- 既存の `src/domain/backup.ts`・`src/protocol/schema.ts`（`parseBackup`）・
+  `src/protocol/migration.ts`（`migrateBackupToCurrent`）を重複実装しない。
+- 新しい npm 依存を追加しない。Share Sheet は React Native 同梱の `Share` モジュールと
+  Web の `navigator.share` / Blob ダウンロードだけで賄う。
+- Export は Owner の明示操作だけが OS Share Sheet を開く。自動 Export・自動 Upload を
+  行わない。
+- Import は Preview・Validation・Conflict 選択・Commit の順で行い、不正 JSON・未知 Major
+  Version・欠落 Field・64 KiB を超える File では既存の Local Profile を一切変更しない。
+- Import Commit は Atomic とし、失敗時に元の Profile を保つ。
+- アプリに GitHub Token 入力欄・GitHub API 接続・OAuth を一切追加しない。
+- Git 操作、`rm`、`npx`、型エスケープ、Mock、Stub、フォーカスしたテストを使わない。
+
+#### 設計判断
+
+1. Export の共有手段を `react-native-share` 等の追加依存にする案は、QR 表示（Issue 8）の
+   「新規依存を追加しない」方針に反するため採用しない。React Native 同梱の `Share` と
+   Web の `navigator.share` / Blob ダウンロードだけで賄う `BackupSharePort` を新設し、
+   Native・Web 実装のどちらも実際の OS API・ブラウザ API を直接 import せず、小さな
+   環境 interface（`NativeShareEnvironment` / `WebShareEnvironment`）を注入する形にした。
+2. Import の入力手段を Native 専用のファイル選択 Dialog にする案は `expo-document-picker`
+   等の新規依存を要するため見送り、Native・Web 共通で使える「JSON を貼り付ける」
+   `TextInput` へ統一した。
+3. Device Settings・Model Verification 用の専用 Storage Port を新設して Import 時に
+   永続化する案は、専用設定画面がまだどの Issue でも実装されていない現状に対して
+   不釣り合いに大きい変更になるため見送り、Preview には全項目を表示しつつ、実際の
+   Import Commit は既存の `LocalProfileStoragePort` が持つ `localPrivateProfile` だけに
+   絞った。Device Settings・Model Verification の永続化・Import 適用は Known follow-ups
+   とする。
+4. Conflict 選択は architect guidance の「per-profile granularity is fine」に従い、
+   Local Private Profile の中の field 単位ではなく Profile 全体を「既存を残す」か
+   「読み込んだ内容に置き換える」かの 2 択にとどめた。
+
+詳細は [JSON バックアップ Export・Import の設計](./docs/design/backup-export-import.md) と
+[JSON バックアップの手動配置ガイド](./docs/guides/backup.md) を正本とする。
+
+#### タスク
+
+1. 設計書、本セクション、手動配置ガイドを先に作成する。
+2. `src/app/lounge-privacy-regression.test.ts`（Issue 9）が使っていた Lounge フル行程
+   ヘルパーと禁止語彙一覧を `src/app/lounge-lifecycle-test-kit.ts` へ切り出すリファクタを
+   先に行う（作業順序: ドキュメント → リファクタ → 機能追加）。
+3. `src/app/backup-export.ts`（Preview・Export Backup 組み立て）、
+   `src/app/backup-import.ts`（Preview・Validation・Conflict・Atomic Commit）、
+   `src/app/backup-notice.ts`（結果通知）を日本語 BDD テスト先行で実装する。
+4. `src/app/backup-share-port.ts` + `web-backup-share.ts` / `native-backup-share.ts` /
+   `default-backup-share.ts`（Share Sheet Port と Native・Web 実装、Composition Root）を
+   実装する。
+5. `src/app/storage-test-kit.ts` に `WriteFailingProfileDocument` /
+   `WriteFailingWebStorage`（読み込みは実 I/O、書き込みだけ確実に失敗する実装）を追加し、
+   Import Atomic Commit の失敗時テストに使う。
+6. `src/screens/BackupExportScreen.tsx` / `BackupImportScreen.tsx` と共有 Component
+   （`BackupPreviewList` / `BackupNoticeBanner`）を実装する。
+7. `src/app/use-backup-flow.ts`（Backup Export・Import の状態と Use Case をまとめた
+   専用 Hook）を実装し、`PassportApp.tsx` へ配線する。
+8. Export に除外対象が 1 Byte も含まれない Snapshot Test（Lounge 進行中・Bridge 確定直後・
+   完全破棄直後の 3 タイミング）を追加する。
+9. GitHub Token 入力欄が無いことを固定するソーステキスト検査を追加する。
+10. 指定ゲートを実行し、独立レビュー（正確性・Privacy／Reuse・Simplification）を経て
+    指摘を解消し、合格後にコミットする。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test src --coverage` で 100% を確認する。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown を検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error`。
+- Export Preview の全項目表示、Share Sheet の明示操作、Import の
+  Preview→Validation→Conflict→Commit 順序、Atomic Commit の失敗時非破壊、Snapshot 除外、
+  GitHub Token 不在の Test が揃っていることを確認する。
+
+#### 進捗ログ
+
+- 2026-07-17: AGENTS.md、CLAUDE.md、Issue 5/7/9 の Plan.md セクション、Privacy データ台帳・
+  保持ポリシー、既存の `src/domain/backup.ts`・`src/protocol/schema.ts`・
+  `src/protocol/migration.ts`（Backup Schema Version 2、Migration 0→1→2 実装済み）、
+  `src/app/local-profile-storage.ts`・`storage-test-kit.ts`・
+  `lounge-privacy-regression.test.ts`、`src/app/PassportApp.tsx` を確認した。Backup Schema
+  自体は実装済みで、Export・Import の UX と Share Sheet だけが未実装であることを把握した。
+- 2026-07-17: 設計書を作成し、追加依存を避ける Share Sheet Port 設計、Native 専用ファイル
+  選択を見送る判断、Device Settings・Model Verification の永続化を Known follow-ups へ
+  送る判断、Conflict 選択を Profile 単位にする判断の 4 点を確定した。
+- 2026-07-17: リファクタとして、`lounge-privacy-regression.test.ts` が持っていた Lounge
+  フル行程ヘルパー（`startActiveLounge` / `runFullLoungeLifecycleWithBridge` /
+  `runFullLoungeLifecycleWithClarifyingQuestion`）と禁止語彙・allowlist 定数を
+  `src/app/lounge-lifecycle-test-kit.ts` へ切り出した。既存テストは無変更のまま Green を
+  維持した。
+- 2026-07-17: `backup-export.ts`・`backup-import.ts`・`backup-notice.ts`・
+  `backup-share-port.ts`・`web-backup-share.ts`・`native-backup-share.ts`・
+  `default-backup-share.ts` を日本語 BDD テスト先行で実装した。Import の
+  `parseBackupImportCandidate` は、内部で呼ぶ `parseBoundedJson` /
+  `migrateBackupToCurrent` / `backupPreviewItems` が `SchemaValidationError` 以外を
+  投げないことを確認したうえで、catch 節を「型ガード + 到達しない rethrow」ではなく
+  単一段の型 assertion にして「例外を投げない」契約を守りつつ 100% カバレッジを保った。
+- 2026-07-17: `storage-test-kit.ts` に `WriteFailingProfileDocument` /
+  `WriteFailingWebStorage`（読み込みは実 I/O、書き込みだけ確実に失敗する実装、
+  `UnavailableLocalProfileStorageAdapter` と同じ「本物の別実装を注入する」方針）を追加し、
+  Import Atomic Commit の失敗時テストで、書き込みに失敗しないアダプタを持つ別インスタンスで
+  同じファイルを読み直し、既存 Profile が変更されていないことを確認した。
+- 2026-07-17: `BackupExportScreen.tsx` / `BackupImportScreen.tsx` と共有 Component
+  （`BackupPreviewList` / `BackupNoticeBanner`）、`use-backup-flow.ts`（専用 Hook）を実装し、
+  `PassportApp.tsx` / `App.tsx` へ配線した。`PassportCreationScreen.tsx` に Backup 画面への
+  導線を追加した。
+- 2026-07-17: `use-backup-flow.ts` を経由せず直接 `PassportApp.tsx` へ State・Handler を
+  展開した初版は Biome の Cognitive Complexity 上限（15）を 24 まで超過した。原因を
+  `isBackupStage` 判定・`stage === 'encounter'` 判定・最終 fallback の 3 つがそれぞれ
+  `PassportApp` 本体の独立した `if` として並んでいたことに切り分け、既存の
+  `SharePreviewGate` と同じ「複数 Stage を子 Component へ集約する」方針で `BackupStageGate`
+  と `ProfileHomeGate` を新設し、`PassportApp` の tail を単一の委譲呼び出しへ置き換えて
+  複雑度を上限内へ収めた。
+- 2026-07-17: Export の Snapshot 除外契約（Active Lounge 進行中・Bridge 確定直後・
+  Owner Question 経由の完全破棄直後の 3 タイミング）を
+  `backup-export-privacy-regression.test.ts` に追加し、共有ヘルパーで実際にフル行程を
+  動かしたうえで禁止語彙を含まないことと `toMatchSnapshot()` を固定した。GitHub Token
+  入力欄が無いことを `no-github-token-input.test.ts`（`src/` 全走査 + `TextInput` 属性の
+  個別検査）で固定した。
+- 2026-07-17: `bun test src --coverage`（508 テスト、対象ファイル 100%）、`bun run
+  typecheck`、`bun biome check .`、`bunx textlint`（設計書・手動配置ガイド・本セクション）、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`、
+  `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error`（harness・
+  pre_release_check・lint_text・lint・typecheck・test_coverage・Web Export の全段階）を
+  実行し、すべて Green を確認した。
+- 2026-07-17: 独立した 2 レビュー（正確性・Privacy／Reuse・Simplification）を並列実行した。
+  Reuse・Simplification 系統は、`ProfileHomeGate` が呼び出し元 1 箇所しか持たず
+  `EncounterSetupScreen` / `PassportCreationScreen` 2 画面分の Prop を平坦に 27 個並べた
+  だけの中継であり、Cognitive Complexity を下げる目的が呼び出し側の可読性を犠牲にしている
+  Blocker 級の指摘、Import 系テストと `web-backup-share.test.ts` が使い捨てディレクトリの
+  `afterEach` 登録パターンを重複実装している指摘、`readableError` が `PassportApp.tsx` と
+  `backup-notice.ts` に重複定義されている指摘、`notice.kind` によるエラー判定が
+  `BackupExportScreen` / `BackupImportScreen` にそれぞれ複製されている指摘の 4 件を検出した。
+  正確性・Privacy 系統は、`commitBackupImport` の JSDoc と設計書が「失敗時は必ず元の
+  Profile を保つ」と書いていたが、write-then-verify の不一致経路（`save()` は成功したが
+  読み戻した内容が一致しない場合）はすでに書き込みが完了しているためロールバックしておらず、
+  保証の記述が実装より強いという Medium 指摘を検出した（型エスケープの安全性・除外契約・
+  Share Sheet の単一呼び出し・GitHub Token 不在・`PassportApp` 配線の挙動保存・実 I/O
+  テストの正しさは検証済みで問題なしと判定された）。
+- 2026-07-17: 両指摘系統を反映した。`ProfileHomeGate` の Prop を平坦な 27 個から、
+  `EncounterSetupScreen` / `PassportCreationScreen` それぞれの Prop 形をそのまま反映した
+  `encounter` / `creation` の 2 object へ再構成し、呼び出し側の可読性を保ったまま
+  Cognitive Complexity の抑制も維持した。`storage-test-kit.ts` に
+  `trackTemporaryDirectories()`（使い捨てディレクトリの生成と `afterEach` 削除を一括する
+  helper）を追加し、`backup-import.test.ts` / `web-backup-share.test.ts` /
+  `lounge-privacy-regression.test.ts` の重複実装を置き換えた。`readableError` を
+  `src/app/readable-error.ts` へ切り出し、`PassportApp.tsx` と `backup-notice.ts` の
+  両方がここへ委譲するよう統合した。`backupNoticeIsError()` を `backup-notice.ts` へ追加し、
+  `BackupNoticeBanner` 自身がこれを呼ぶことで呼び出し側の 2 画面から `isError` 判定を
+  削除した。`commitBackupImport` の JSDoc・設計書の Atomic Commit 節を、`save()` 自体が
+  reject する経路（実 I/O で失敗時の非破壊を検証済み）と、write-then-verify が不一致を
+  検出する経路（現在の実装では実質的に発生しないが、ロールバックはしない防御であることを
+  明記）とを分けて正確に記述する形へ修正し、`storage-test-kit.ts` の
+  `VerifyMismatchStorage`（`save()` は実 I/O へ委譲、`load()` は常に別 Profile を返す）で
+  この経路を検証するテストへ置き換えた。ロールバック未実装と、Native の Share Sheet が
+  JSON をテキストとして渡す（実ファイル添付ではない）ことの 2 件を Known follow-ups へ
+  追記し、`.claude/state/follow-ups.jsonl` にも記録した。
+- 2026-07-17: 修正後に `bun run typecheck`、`bun test src --coverage`（512 テスト、対象
+  ファイル 100%）、`bun biome check .`、`bunx textlint`（設計書・本セクション）、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`、
+  `make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error` を再実行し、すべて
+  Green を確認した。
+
+#### 振り返り
+
+- **問題**: `use-backup-flow.ts` への Hook 抽出だけでは Biome の Cognitive Complexity
+  超過を解消しきれず、初版の `ProfileHomeGate` は「複雑度を下げるためだけに、無関係な
+  2 画面分の Prop を 27 個平坦に並べる」という、Reuse の裏付けが無いまま `SharePreviewGate`
+  の形だけを模倣した抽出になっていた。
+- **根本原因**: 「Cognitive Complexity を上限内に収める」という機械的な制約を満たす手段を
+  先に決め、「この抽出が本当に呼び出し側の可読性を上げるか」という設計判断を後回しにした。
+  `SharePreviewGate` は 2 箇所から呼ばれ、Preview 組み立てという実処理を共有するために
+  存在するが、`ProfileHomeGate` は呼び出し箇所が 1 つしかなく、実処理を何も共有していない
+  ため、同じ形を踏襲する前提が成立していなかった。
+- **予防策**: 複雑度超過を解消する抽出を行うときは、既存の抽出パターン（`SharePreviewGate`）
+  が成立している理由（複数呼び出し元・実処理の共有）を確認し、その理由が当てはまらない
+  場合は Prop を平坦に並べず、呼び出し元の画面ごとに Prop を object へ分けて意味の単位を
+  保つ。独立レビューでの指摘を鵜呑みにせず、`ProfileHomeGate` と `BackupStageGate` の
+  呼び出し回数を実際に `git diff` で数えて指摘の妥当性を確認したうえで修正した。
+- **問題**: `commitBackupImport` の Atomic Commit 契約を実装したとき、`save()` の reject と
+  write-then-verify の不一致という性質の異なる 2 つの失敗経路を「どちらも元の Profile を
+  変更しない」という 1 つの文で説明していたため、実際には後者がロールバックを行わない
+  ことが JSDoc・設計書のどちらにも正確に書かれていなかった。
+- **根本原因**: write-then-verify という防御を追加した動機（書き込みが中途半端に終わった
+  可能性を検知する）と、「失敗時に元の Profile を保つ」という Issue の受け入れ条件を
+  混同し、検知できることと復元できることを区別せずに文章化した。
+- **予防策**: 複数の失敗経路を持つ関数の契約を書くときは、経路ごとに「何が起きた後か」
+  「何を保証できるか」を分けて記述する。現在の Storage 実装（Web の `localStorage.setItem`
+  の原子性、Native の実ファイル書き込みの決定的なラウンドトリップ）が特定の失敗経路を
+  実質的に発生させないという前提に依存する保証は、その前提ごと明記し、実装を差し替えた
+  場合の再検討事項として Known follow-ups に残す。
