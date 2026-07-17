@@ -1,0 +1,19 @@
+{
+  "name": "language-only-possible",
+  "input": {
+    "ownerClueIds": ["regional-event-operations"],
+    "encounteredClueIds": ["accessibility"],
+    "ownerLanguageCodes": ["ja"],
+    "encounteredLanguageCodes": ["ja"],
+    "ownerAnswer": null,
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "possible",
+    "evidenceIds": ["language:ja"],
+    "reason": "共通して使える言語「日本語」があります。",
+    "opener": "「日本語」で話しかけてみましょう。"
+  }
+}

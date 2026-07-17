@@ -7,6 +7,7 @@ import {
   LANGUAGE_CODES,
   type LanguageCode,
 } from './clue-catalog';
+import { confidenceFromEvidence } from './evidence-confidence';
 import type { ConfirmedClue, PublicPassport } from './passport';
 import type { ParticipantId } from './session-identifiers';
 import { findFirstSharedConfirmedClue } from './shared-clue-match';
@@ -288,21 +289,21 @@ function buildPairEvidence(
   return evidence;
 }
 
+/** 単独でも `promising` になる Evidence 種別。Offer/Need 相互補完（双方が動ける具体的な
+ * 理由）だけが該当し、Topic 共通・共通 Language 単独は `possible` に留める。 */
+const PROMISING_SOLO_EVIDENCE_KINDS = new Set<BridgeEvidence['kind']>([
+  'offer-need-complement',
+]);
+
 /**
  * Evidence 種別と件数から `promising | possible` の定性的 Confidence を導く。数値の
- * 人物 Score は一切扱わない。2 件以上の独立した Evidence があれば `promising`。1 件だけの
- * 場合は、Offer/Need 相互補完（双方が動ける具体的な理由）だけを `promising` とし、
- * Topic 共通・共通 Language 単独は `possible` とする。
+ * 人物 Score は一切扱わない。規則本体は `agent-model-provider.ts`（Issue 13）と共有する
+ * `evidence-confidence.ts` の `confidenceFromEvidence` に集約する。
  */
 export function bridgeConfidence(
   evidence: readonly BridgeEvidence[]
 ): BridgeConfidence {
-  const [only] = evidence;
-  if (!only) {
-    throw new Error('Confidence の判定には 1 件以上の Evidence が必要です。');
-  }
-  if (evidence.length >= 2) return 'promising';
-  return only.kind === 'offer-need-complement' ? 'promising' : 'possible';
+  return confidenceFromEvidence(evidence, PROMISING_SOLO_EVIDENCE_KINDS);
 }
 
 function evidenceNarrative(evidence: BridgeEvidence): {

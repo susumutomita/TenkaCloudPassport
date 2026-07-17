@@ -1,0 +1,19 @@
+{
+  "name": "offer-need-only-promising",
+  "input": {
+    "ownerClueIds": ["information-security"],
+    "encounteredClueIds": ["product-design"],
+    "ownerLanguageCodes": [],
+    "encounteredLanguageCodes": [],
+    "ownerAnswer": null,
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "promising",
+    "evidenceIds": ["complement:skill:information-security:product-design"],
+    "reason": "一方が提供できる「情報セキュリティ」と、もう一方が探している「プロダクトデザイン」が結び付きます。",
+    "opener": "「情報セキュリティ」を手掛かりに話しかけてみましょう。"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "no-evidence-no-signal",
+  "input": {
+    "ownerClueIds": ["regional-event-operations"],
+    "encounteredClueIds": ["accessibility"],
+    "ownerLanguageCodes": [],
+    "encounteredLanguageCodes": [],
+    "ownerAnswer": null,
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "no-signal"
+  }
+}

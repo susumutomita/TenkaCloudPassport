@@ -210,3 +210,10 @@ Owner Rejection・境界値・決定性を対象にする。
   `PeerEnvelope` の Wire 型を拡張する Issue で改めて判断する。
 - 5 名で Pair が 1 組しか成立しない等、未確定の参加者が 2 名以上残る場合の 3 人 Bridge
   探索は行わない設計判断（前述の代替案）を、実際の利用状況を見て再検討するかどうか。
+- 追記（Issue 13）: `rules-provider.ts` / `interaction-discovery-provider.ts` という
+  2 者間 Live 経路自体は変更していないが、Issue 13 は共通 Language を含めて
+  Topic・Offer/Need・Owner Answer を組み合わせる並行の Contract
+  `src/domain/agent-model-provider.ts` を新設した。`MatchEvidence` / `PeerEnvelope` の
+  Wire 型は拡張せず、この Contract 専用の新しい出力型 `AgentModelDecision` を使うことで、
+  Wire 型を触らずに共通 Language を評価対象へ含めている。詳細は
+  [Agent Model Provider Contract の設計](./agent-model-provider-contract.md) を参照する。

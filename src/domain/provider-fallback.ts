@@ -1,0 +1,109 @@
+import {
+  type AgentModelDecision,
+  type AgentModelFailureCode,
+  type AgentModelInput,
+  type AgentModelProvider,
+  AgentModelProviderError,
+} from './agent-model-provider';
+
+/**
+ * Issue 13: Local Agent の Timeout / Schema Error / Load Error 後、重複 Bridge を出さず
+ * Rules へ 1 回だけ切り替える Fallback-once semantics。`docs/design/agent-model-provider-contract.md`
+ * の「失敗の 3 種類と Fallback-once」を正本とする。
+ */
+
+/** Provider 切替理由。内容を持たない閉じた enum で、UI（`provider-switch-notice.ts`）は
+ * この値だけを表示し、Evidence や Chain of Thought を一切表示しない。 */
+export type ProviderSwitchReason = 'timeout' | 'schema-error' | 'load-error';
+
+/**
+ * 網羅的な switch にすることで、`AgentModelFailureCode` へ将来 4 つ目の値が増えた場合に
+ * このマッピングの更新漏れをコンパイルエラーとして検出する。
+ */
+function switchReasonFromFailureCode(
+  code: AgentModelFailureCode
+): ProviderSwitchReason {
+  switch (code) {
+    case 'TIMEOUT':
+      return 'timeout';
+    case 'SCHEMA_ERROR':
+      return 'schema-error';
+    case 'LOAD_ERROR':
+      return 'load-error';
+  }
+}
+
+export type ProviderAttemptResult =
+  | { readonly kind: 'success'; readonly decision: AgentModelDecision }
+  | { readonly kind: 'failure'; readonly reason: ProviderSwitchReason };
+
+/**
+ * Primary Provider（将来の Local Agent）を 1 回呼び出し、成功か型付き失敗かへ正規化する
+ * 非同期境界。`AgentModelProviderError` だけを Fallback 対象の型付き失敗として扱い、
+ * それ以外の未知の例外は無言で握り潰さず再送出する（fail loudly）。
+ */
+export async function attemptProvider(
+  provider: AgentModelProvider,
+  input: AgentModelInput
+): Promise<ProviderAttemptResult> {
+  try {
+    const decision = await provider.provide(input);
+    return { kind: 'success', decision };
+  } catch (error) {
+    if (error instanceof AgentModelProviderError) {
+      return {
+        kind: 'failure',
+        reason: switchReasonFromFailureCode(error.code),
+      };
+    }
+    throw error;
+  }
+}
+
+export interface ProviderRunOutcome {
+  readonly decision: AgentModelDecision;
+  readonly settledBy: 'primary' | 'rules-fallback';
+  /** `null` は Primary がそのまま採用されたことを示す（切替なし）。 */
+  readonly switchReason: ProviderSwitchReason | null;
+}
+
+/** `encounterKey`（Lounge / Encounter を一意に指す文字列）ごとに確定済みの Outcome を持つ。 */
+export type ProviderRunLedger = ReadonlyMap<string, ProviderRunOutcome>;
+
+export const EMPTY_PROVIDER_RUN_LEDGER: ProviderRunLedger = new Map();
+
+export interface ProviderRunStep {
+  readonly ledger: ProviderRunLedger;
+  readonly outcome: ProviderRunOutcome;
+}
+
+/**
+ * Fallback-once の純粋な Runner（同期・副作用なし）。同じ `encounterKey` に対しては、
+ * 一度確定した Outcome を二度と再計算・上書きしない。Local Agent の Timeout / Schema
+ * Error / Load Error 後に届く遅延イベントや、Lounge の Cancel 後に届く重複イベントが、
+ * 確定済みの Bridge / `no-signal` を上書きしたり Rules Provider を再度呼び出したりしない
+ * （`pet-interaction.ts` の「最も早い Event が理由を決める」原則と同じ idempotency）。
+ * `computeRulesFallback` は thunk のため、Primary が成功した経路では一度も呼ばれない。
+ */
+export function runProviderOnce(
+  ledger: ProviderRunLedger,
+  encounterKey: string,
+  attempt: ProviderAttemptResult,
+  computeRulesFallback: () => AgentModelDecision
+): ProviderRunStep {
+  const existing = ledger.get(encounterKey);
+  if (existing) {
+    return { ledger, outcome: existing };
+  }
+  const outcome: ProviderRunOutcome =
+    attempt.kind === 'success'
+      ? { decision: attempt.decision, settledBy: 'primary', switchReason: null }
+      : {
+          decision: computeRulesFallback(),
+          settledBy: 'rules-fallback',
+          switchReason: attempt.reason,
+        };
+  const nextLedger = new Map(ledger);
+  nextLedger.set(encounterKey, outcome);
+  return { ledger: nextLedger, outcome };
+}

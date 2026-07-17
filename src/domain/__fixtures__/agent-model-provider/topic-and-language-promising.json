@@ -1,0 +1,19 @@
+{
+  "name": "topic-and-language-promising",
+  "input": {
+    "ownerClueIds": ["open-source"],
+    "encounteredClueIds": ["open-source"],
+    "ownerLanguageCodes": ["ja", "en"],
+    "encounteredLanguageCodes": ["en"],
+    "ownerAnswer": null,
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "promising",
+    "evidenceIds": ["topic:open-source", "language:en"],
+    "reason": "お互いが「オープンソース」という確認済みの共通点を公開しています。共通して使える言語「English」があります。",
+    "opener": "「オープンソース」について話しかけてみましょう。"
+  }
+}

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { expiryNotice } from '../app/expiry-notice';
 import { interactionStatusNotice } from '../app/interaction-status-notice';
+import { providerSwitchNotice } from '../app/provider-switch-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import { type ClueId, clueById } from '../domain/clue-catalog';
@@ -83,6 +84,15 @@ export default function ActiveLoungeScreen({
       <Text style={styles.interactionStatus}>
         {interactionStatusNotice('discovering').message}
       </Text>
+      {/*
+        Issue 13: Provider 切替理由を内容を含まない Status として表示する。この画面は
+        まだ Local Agent 接続後の実際の Provider Runner（`src/domain/provider-fallback.ts`）を
+        保持しないため（Issue 17 の Known follow-up）、常に「切替なし（null）」を渡す固定表示
+        であり、live な per-session readout ではない。
+      */}
+      <Text style={styles.providerStatus}>
+        {providerSwitchNotice(null).message}
+      </Text>
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>使い捨て Lounge</Text>
         <Text style={styles.noticeText}>
@@ -118,6 +128,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     fontWeight: '700',
+  },
+  providerStatus: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   passport: {
     backgroundColor: colors.surface,

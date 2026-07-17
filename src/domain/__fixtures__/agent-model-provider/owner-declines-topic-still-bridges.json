@@ -1,0 +1,26 @@
+{
+  "name": "owner-declines-topic-still-bridges",
+  "input": {
+    "ownerClueIds": ["open-source"],
+    "encounteredClueIds": ["open-source"],
+    "ownerLanguageCodes": [],
+    "encounteredLanguageCodes": [],
+    "ownerAnswer": {
+      "candidateClue": {
+        "value": "community-operations",
+        "category": "activity",
+        "source": "owner-selected"
+      },
+      "answer": "no"
+    },
+    "language": "ja",
+    "deadlineAtWallClockMs": 45000
+  },
+  "expected": {
+    "kind": "bridge",
+    "confidence": "possible",
+    "evidenceIds": ["topic:open-source"],
+    "reason": "お互いが「オープンソース」という確認済みの共通点を公開しています。",
+    "opener": "「オープンソース」について話しかけてみましょう。"
+  }
+}
