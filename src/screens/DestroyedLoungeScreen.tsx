@@ -26,7 +26,7 @@ export default function DestroyedLoungeScreen({
   return (
     <AppScreen
       eyebrow="Lounge Destroyed"
-      title="この Encounter のデータを破棄しました。"
+      title="この Lounge のデータを端末から破棄しました。"
       description="Passport、相手の手掛かり、判定入力、Bridge または no-signal は履歴へ保存していません。"
     >
       <View style={styles.receipt}>

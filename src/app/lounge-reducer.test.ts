@@ -80,3 +80,37 @@ describe('Lounge reducer の競合処理', () => {
     expect(completed).toEqual({ status: 'destroyed', reason: 'completed' });
   });
 });
+
+describe('Background / Foreground 復帰時の app-resumed イベント', () => {
+  it('単調増加時計がほぼ進まず壁時計だけが 20 分先へ進んでいても、停止時間を延長扱いにせず破棄する', () => {
+    // 端末の Suspend 中は monotonic（uptime）が実質停止する一方、壁時計は現実の
+    // 経過時間どおりに進む。Foreground 復帰直後に届く app-resumed イベントが、
+    // この差を「期限延長」に扱わないことを固定する。
+    const resumed = reduceLounge(activeLounge(), {
+      type: 'app-resumed',
+      clock: { wallClockMs: 1_000 + LOUNGE_TTL_MS, monotonicMs: 2_001 },
+    });
+
+    expect(resumed).toEqual({ status: 'destroyed', reason: 'expired' });
+  });
+
+  it('期限前に復帰した場合は active 状態を変更しない', () => {
+    const active = activeLounge();
+    const resumed = reduceLounge(active, {
+      type: 'app-resumed',
+      clock: { wallClockMs: 1_500, monotonicMs: 2_500 },
+    });
+
+    expect(resumed).toBe(active);
+  });
+
+  it('破棄済みの Lounge に app-resumed が届いても同じ終端状態を維持する', () => {
+    const destroyed = reduceLounge(activeLounge(), { type: 'owner-exit' });
+    const resumed = reduceLounge(destroyed, {
+      type: 'app-resumed',
+      clock: { wallClockMs: 1_000 + LOUNGE_TTL_MS, monotonicMs: 999_999 },
+    });
+
+    expect(resumed).toBe(destroyed);
+  });
+});

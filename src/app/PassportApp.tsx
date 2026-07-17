@@ -1,18 +1,22 @@
 import {
   type Dispatch,
   type SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
   useState,
 } from 'react';
+import { AppState } from 'react-native';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
 import {
   advanceLoungeRoom,
   createLoungeRoom,
+  destroyLoungeRoom,
   inviteForRoom,
   joinLoungeRoom,
   type LoungeRoomState,
+  type LoungeRoomTerminationReason,
   markParticipantReady,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
@@ -221,6 +225,32 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     return loungeRoom.participants[0]?.participantId ?? null;
   }, [loungeRoom]);
 
+  /**
+   * Room（Lounge 由来データ）を、退出・Host 終了・20 分満了と同じ「最も早い時点で破棄する」
+   * 対象として扱う。Host のキャンセル操作だけでなく、Guest / Owner が Scan・Encounter
+   * 画面から Profile 編集へ戻るなど、フローを離脱するあらゆる経路で呼ぶ。20 分満了を検出する
+   * useEffect からも参照するため、`qrScannerPort` だけに依存する安定した参照として保つ。
+   *
+   * `encounteredPetName` / `encounteredPetEmoji` / `encounteredSelection` /
+   * `encounteredConfirmed` は「対面の相手が今回の Lounge で declare した内容」であり、
+   * Guest 役の共有内容（`guestProfile`）の元データでもある Lounge 由来データそのものだ。
+   * ここで一緒に破棄しないと、Lounge を離脱・破棄した後も EncounterSetupScreen に
+   * 前回の相手の入力が残り続け、新しい Encounter へ古い Peer 情報が紛れ込む
+   * （`'lounge-discarded'` Notice が「参加者、共有内容、Invite QR は残っていません」と
+   * 案内する内容と矛盾する）。
+   */
+  const discardInviteFlow = useCallback((): void => {
+    qrScannerPort.publish(null);
+    setLoungeRoom(null);
+    setGuestProfile(null);
+    setGuestShareSelection(null);
+    setSeenRawPayloads(new Set());
+    setEncounteredPetName('');
+    setEncounteredPetEmoji('🐶');
+    setEncounteredSelection([]);
+    setEncounteredConfirmed(false);
+  }, [qrScannerPort]);
+
   useEffect(() => {
     let active = true;
     void localProfileStorage
@@ -264,28 +294,69 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
   useEffect(() => {
     if (!lounge || lounge.status === 'destroyed') return undefined;
     const timer = setInterval(() => {
+      const clock = currentClock();
+      setNowMs(clock.wallClockMs);
       setLounge((current) =>
-        current
-          ? reduceLounge(current, {
-              type: 'clock-tick',
-              clock: currentClock(),
-            })
-          : current
+        current ? reduceLounge(current, { type: 'clock-tick', clock }) : current
       );
     }, 1_000);
     return () => clearInterval(timer);
   }, [lounge]);
 
+  /**
+   * Room の 20 分満了を、Active Lounge の満了（`reduceLounge` の `'clock-tick'` /
+   * `'app-resumed'` が `DestroyedLounge` を直接返す経路）と同じ「この Lounge のデータを
+   * 端末から破棄した」画面へ収束させる。`advanceLoungeRoom` が返した `'expired'` を
+   * 一度 `loungeRoom` state へ保持してから、別の useEffect で検出して `lounge` を
+   * 設定する 2 段構えにすると、その間の 1 render だけ `invite` / `hostParticipantId` が
+   * `null` になって画面条件が崩れ、`PassportCreationScreen`（Step 1）へ一瞬
+   * フォールバックしてしまう。tick / resume ハンドラ自身がこの関数の中で
+   * `discardInviteFlow()` と `setLounge(...)` を同期的に呼ぶことで、React 19 の
+   * automatic batching により `loungeRoom` と `lounge` の更新が同じ commit にまとまり、
+   * 満了を検出した瞬間に `DestroyedLoungeScreen` へ直接遷移する（中間 render を作らない）。
+   */
+  const applyRoomAdvance = useCallback(
+    (current: LoungeRoomState, clock: ClockSnapshot): void => {
+      const advanced = advanceLoungeRoom(current, clock);
+      if (advanced.status === 'expired') {
+        discardInviteFlow();
+        setLounge({ status: 'destroyed', reason: 'expired' });
+        return;
+      }
+      setLoungeRoom(advanced);
+    },
+    [discardInviteFlow]
+  );
+
   useEffect(() => {
     if (!loungeRoom || loungeRoom.status === 'expired') return undefined;
     const timer = setInterval(() => {
       setNowMs(Date.now());
-      setLoungeRoom((current) =>
-        current ? advanceLoungeRoom(current, currentClock()) : current
-      );
+      applyRoomAdvance(loungeRoom, currentClock());
     }, 1_000);
     return () => clearInterval(timer);
-  }, [loungeRoom]);
+  }, [loungeRoom, applyRoomAdvance]);
+
+  // Background から Foreground へ復帰した瞬間に、壁時計基準で Room / Lounge の期限を
+  // 再評価する。Suspend 中に単調増加時計がほぼ進まなくても、壁時計は現実の経過時間を
+  // 反映しているため、この専用イベントが「停止していた時間」を期限延長として扱わない
+  // ことを保証する（Background 復帰時の Wall Clock 再評価、Issue 9 の要件）。
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+      const clock = currentClock();
+      setNowMs(clock.wallClockMs);
+      setLounge((current) =>
+        current
+          ? reduceLounge(current, { type: 'app-resumed', clock })
+          : current
+      );
+      if (loungeRoom && loungeRoom.status !== 'expired') {
+        applyRoomAdvance(loungeRoom, clock);
+      }
+    });
+    return () => subscription.remove();
+  }, [loungeRoom, applyRoomAdvance]);
 
   async function saveLocalProfile(): Promise<void> {
     if (saving) return;
@@ -466,22 +537,21 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
   }
 
   /**
-   * Room（Lounge 由来データ）を、退出・Host 終了・20 分満了と同じ「最も早い時点で破棄する」
-   * 対象として扱う。Host のキャンセル操作だけでなく、Guest / Owner が Scan・Encounter
-   * 画面から Profile 編集へ戻るなど、フローを離脱するあらゆる経路で呼ぶ。
+   * Room（waiting / ready）段階に割り込む個人退出・Host 終了の Terminal Event。20 分満了
+   * （Room の tick effect）と同じ `DestroyedLounge` へ収束させることで、Active Lounge
+   * 以降の終了と同じ DestroyedLoungeScreen で「この Lounge のデータを端末から破棄した」
+   * ことを表示する（同じ Domain State Machine で扱う、Issue 9 の要件）。
    */
-  function discardInviteFlow(): void {
-    qrScannerPort.publish(null);
-    setLoungeRoom(null);
-    setGuestProfile(null);
-    setGuestShareSelection(null);
-    setSeenRawPayloads(new Set());
+  function endInvite(reason: LoungeRoomTerminationReason): void {
+    if (!loungeRoom) return;
+    const destroyed = destroyLoungeRoom(loungeRoom, reason);
+    discardInviteFlow();
+    setLounge(destroyed);
+    setErrorMessage(null);
   }
 
   function cancelInvite(): void {
-    discardInviteFlow();
-    setErrorMessage(null);
-    setStage('share-preview');
+    endInvite('host-ended');
   }
 
   function evaluate(): void {
@@ -515,20 +585,32 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
   }
 
   function restartEncounter(): void {
-    setEncounteredPetName('');
-    setEncounteredPetEmoji('🐶');
-    setEncounteredSelection([]);
-    setEncounteredConfirmed(false);
+    // discardInviteFlow() が相手の宣言内容（encounteredPetName 等）も含めて
+    // Lounge 由来の一時データを一括破棄する。
     discardInviteFlow();
     setLounge(null);
     setErrorMessage(null);
     setStage('encounter');
   }
 
+  /**
+   * QR Scan 画面から Passport 編集へ戻る操作は、Lounge をキャンセルする操作ほど重い
+   * 確認画面を挟まず 1 タップで編集画面へ戻す（既存の UX を保つ）。一方、Room に
+   * すでに参加者データがあった場合はそれを破棄しているため、Profile 画面へ着地した
+   * 直後に「この Lounge のデータを端末から破棄した」ことを Notice で明示する。
+   */
   function editLocalProfile(): void {
+    const hadInviteInProgress = loungeRoom !== null;
     discardInviteFlow();
     setErrorMessage(null);
     setStage('profile');
+    if (hadInviteInProgress) {
+      setNotice({
+        kind: 'lounge-discarded',
+        message:
+          'この Lounge のデータを端末から破棄しました。参加者、共有内容、Invite QR は残っていません。',
+      });
+    }
   }
 
   if (lounge?.status === 'active') {
@@ -539,6 +621,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
         onEvaluate={evaluate}
         onExit={leave}
         onHostEnd={endAsHost}
+        remainingMs={lounge.expiresAtWallClockMs - nowMs}
       />
     );
   }
@@ -549,6 +632,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
         onComplete={complete}
         onExit={leave}
         onHostEnd={endAsHost}
+        remainingMs={lounge.expiresAtWallClockMs - nowMs}
       />
     );
   }

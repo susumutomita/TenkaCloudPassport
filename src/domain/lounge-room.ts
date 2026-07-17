@@ -1,6 +1,6 @@
 import type { ClockSnapshot } from './clock-guard';
 import { hasElapsedTtl, isValidClock } from './clock-guard';
-import type { ActiveLounge } from './lounge';
+import type { ActiveLounge, DestroyedLounge } from './lounge';
 import { LOUNGE_TTL_MS } from './lounge';
 import {
   LOUNGE_INVITE_SCHEMA_VERSION,
@@ -115,6 +115,26 @@ export function advanceLoungeRoom(
     return { status: 'expired', loungeId: state.loungeId };
   }
   return state;
+}
+
+/**
+ * `forming` / `ready` の Room に割り込む個人退出・Host 終了の Terminal Event。Agent State
+ * Machine（`ActiveLounge` 以降）が開始する前の Room 段階でも、`DestroyedLounge` という
+ * 同じ終端型へ収束させることで、破棄後の画面と「この Lounge のデータを端末から破棄した」
+ * 表示を Lounge 本体の終了処理（`leaveLounge` / `endHostedLounge`）と共有する。20 分満了が
+ * すでに Room を `expired` にしていた場合は、後から届く個人退出・Host 終了より満了を
+ * 優先する（最も早い Event が終了理由を決める）。
+ */
+export type LoungeRoomTerminationReason = 'owner-exit' | 'host-ended';
+
+export function destroyLoungeRoom(
+  state: LoungeRoomState,
+  reason: LoungeRoomTerminationReason
+): DestroyedLounge {
+  if (state.status === 'expired') {
+    return { status: 'destroyed', reason: 'expired' };
+  }
+  return { status: 'destroyed', reason };
 }
 
 function assertForming(

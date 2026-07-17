@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { expiryNotice } from '../app/expiry-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import QrCodeView from '../components/QrCodeView';
@@ -36,6 +37,7 @@ export default function HostInviteScreen({
     (participant) => participant.participantId === hostParticipantId
   );
   const hostIsReady = hostParticipant?.ready ?? false;
+  const notice = expiryNotice(remainingMs);
   const isExpired = room.status === 'expired';
 
   return (
@@ -70,6 +72,11 @@ export default function HostInviteScreen({
               あります。期限内に、対面の相手にだけ見せてください。
             </Text>
           </View>
+          {notice.level === 'warning' ? (
+            <View accessibilityRole="alert" style={styles.expiryWarning}>
+              <Text style={styles.expiryWarningText}>{notice.message}</Text>
+            </View>
+          ) : null}
           <View accessibilityRole="summary" style={styles.participants}>
             <Text style={styles.participantsTitle}>
               参加者 {participants.length} / {ROOM_CAPACITY}
@@ -152,6 +159,19 @@ const styles = StyleSheet.create({
   participantRow: {
     color: colors.ink,
     fontSize: 14,
+    lineHeight: 21,
+  },
+  expiryWarning: {
+    backgroundColor: colors.surface,
+    borderColor: colors.danger,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  expiryWarningText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: '700',
     lineHeight: 21,
   },
   errorBox: {

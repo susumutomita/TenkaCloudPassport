@@ -7,7 +7,11 @@ export type ProfileNotice =
   | { readonly kind: 'save-error'; readonly message: string }
   | { readonly kind: 'storage-unavailable'; readonly message: string }
   | { readonly kind: 'invalid-data'; readonly message: string }
-  | { readonly kind: 'read-error'; readonly message: string };
+  | { readonly kind: 'read-error'; readonly message: string }
+  // Room 段階（waiting / ready）から Passport 編集へ戻る操作で Lounge 由来データを
+  // 破棄したときに使う。Active Lounge 以降の破棄は DestroyedLoungeScreen が専任するため、
+  // この kind は Room 段階からの離脱経路（`editLocalProfile`）専用にする。
+  | { readonly kind: 'lounge-discarded'; readonly message: string };
 
 export function profileNoticeFromStorageError(
   error: unknown,

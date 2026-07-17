@@ -23,11 +23,19 @@ describe('QR 招待・共有確認・Ready フローの Accessibility 契約', (
       '<QrCodeView',
       '残り',
       'Screenshot',
+      "notice.level === 'warning'",
       '参加者 {participants.length}',
       '自分も Ready にする',
       'ゲストとして QR を読み取る',
       'キャンセル',
     ]);
+  });
+
+  it('Host Invite 画面は満了 1 分前の content-free 通知を expiry-notice から取得する', async () => {
+    const text = await source('HostInviteScreen.tsx');
+
+    expect(text).toContain("from '../app/expiry-notice'");
+    expect(text).toContain('expiryNotice(remainingMs)');
   });
 
   it('Host Invite 画面は Native Camera / SVG Package を直接 import しない', async () => {
