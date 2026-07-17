@@ -8,6 +8,7 @@ import {
   type LocalPrivateProfile,
   type ProjectPassportInput,
   PUBLIC_PASSPORT_MAX_CLUES,
+  PUBLIC_PASSPORT_MAX_LANGUAGES,
   type PublicPassport,
   projectPublicPassport,
 } from '../domain/passport';
@@ -80,6 +81,76 @@ function previewItems(passport: PublicPassport): PassportPreviewItem[] {
       value: LANGUAGE_CATALOG[language].label,
     })),
   ];
+}
+
+export function toggleClueId(
+  selectedIds: readonly ClueId[],
+  id: ClueId,
+  maximum: number
+): ClueId[] {
+  if (selectedIds.includes(id)) {
+    return selectedIds.filter((selectedId) => selectedId !== id);
+  }
+  if (selectedIds.length >= maximum) return [...selectedIds];
+  return [...selectedIds, id];
+}
+
+export function toggleLanguageCode(
+  selectedCodes: readonly LanguageCode[],
+  code: LanguageCode,
+  maximum: number
+): LanguageCode[] {
+  if (selectedCodes.includes(code)) {
+    return selectedCodes.filter((selectedCode) => selectedCode !== code);
+  }
+  if (selectedCodes.length >= maximum) return [...selectedCodes];
+  return [...selectedCodes, code];
+}
+
+export type PassportShareSelectionAction =
+  | { readonly type: 'toggle-pet-name' }
+  | { readonly type: 'toggle-pet-emoji' }
+  | { readonly type: 'toggle-owner-alias' }
+  | { readonly type: 'toggle-clue'; readonly id: ClueId }
+  | { readonly type: 'toggle-language'; readonly code: LanguageCode };
+
+/**
+ * Owner（Host）と Guest、どちらの共有 Preview 画面でも同じ ON / OFF 操作を扱うための
+ * 純粋 reducer。PassportSharePreviewScreen は誰の Selection かを問わず同じ形で使える。
+ */
+export function reducePassportShareSelection(
+  selection: PassportShareSelection,
+  action: PassportShareSelectionAction
+): PassportShareSelection {
+  switch (action.type) {
+    case 'toggle-pet-name':
+      return { ...selection, includePetName: !selection.includePetName };
+    case 'toggle-pet-emoji':
+      return { ...selection, includePetEmoji: !selection.includePetEmoji };
+    case 'toggle-owner-alias':
+      return {
+        ...selection,
+        includeOwnerAlias: !selection.includeOwnerAlias,
+      };
+    case 'toggle-clue':
+      return {
+        ...selection,
+        clueIds: toggleClueId(
+          selection.clueIds,
+          action.id,
+          PUBLIC_PASSPORT_MAX_CLUES
+        ),
+      };
+    case 'toggle-language':
+      return {
+        ...selection,
+        languageCodes: toggleLanguageCode(
+          selection.languageCodes,
+          action.code,
+          PUBLIC_PASSPORT_MAX_LANGUAGES
+        ),
+      };
+  }
 }
 
 export function createPassportShare(

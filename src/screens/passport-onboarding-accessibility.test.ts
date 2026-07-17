@@ -1,16 +1,8 @@
 import { describe, expect, it } from 'bun:test';
+import { expectInOrder, readSourceFile } from './accessibility-test-kit';
 
-async function source(fileName: string): Promise<string> {
-  return Bun.file(new URL(fileName, import.meta.url)).text();
-}
-
-function expectInOrder(text: string, labels: readonly string[]): void {
-  let previous = -1;
-  for (const label of labels) {
-    const position = text.indexOf(label);
-    expect(position).toBeGreaterThan(previous);
-    previous = position;
-  }
+function source(fileName: string): Promise<string> {
+  return readSourceFile(import.meta.url, fileName);
 }
 
 describe('Passport Onboarding の Accessibility 契約', () => {

@@ -1,15 +1,13 @@
+import { type ClockSnapshot, hasElapsedTtl, isValidClock } from './clock-guard';
 import type { PublicPassport } from './passport';
 import type {
   EncounterDecisionProvider,
   ParticipantOutcome,
 } from './rules-provider';
 
-export const LOUNGE_TTL_MS = 20 * 60 * 1_000;
+export type { ClockSnapshot };
 
-export interface ClockSnapshot {
-  readonly wallClockMs: number;
-  readonly monotonicMs: number;
-}
+export const LOUNGE_TTL_MS = 20 * 60 * 1_000;
 
 export interface ActiveLounge {
   readonly status: 'active';
@@ -62,10 +60,7 @@ interface StartLoungeInput {
 }
 
 function assertValidClock(clock: ClockSnapshot): void {
-  if (
-    !Number.isFinite(clock.wallClockMs) ||
-    !Number.isFinite(clock.monotonicMs)
-  ) {
+  if (!isValidClock(clock)) {
     throw new LoungeTransitionError(
       'INVALID_CLOCK',
       'Lounge の時計は有限値である必要があります。'
@@ -88,13 +83,11 @@ function hasExpired(
   state: ActiveLounge | RetiredLounge,
   clock: ClockSnapshot
 ): boolean {
-  const monotonicElapsed = Math.max(
-    0,
-    clock.monotonicMs - state.startedAtMonotonicMs
-  );
-  return (
-    clock.wallClockMs >= state.expiresAtWallClockMs ||
-    monotonicElapsed >= LOUNGE_TTL_MS
+  return hasElapsedTtl(
+    state.startedAtMonotonicMs,
+    state.expiresAtWallClockMs,
+    clock,
+    LOUNGE_TTL_MS
   );
 }
 
