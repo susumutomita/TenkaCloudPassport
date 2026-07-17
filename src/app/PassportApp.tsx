@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { AppState } from 'react-native';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
+import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
 import {
   advanceLoungeRoom,
@@ -20,6 +21,7 @@ import {
   markParticipantReady,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
+import type { OwnerAnswerValue } from '../domain/match-evidence';
 import {
   createLocalPrivateProfile,
   type LocalPrivateProfile,
@@ -28,6 +30,7 @@ import {
   PROFILE_MAX_LANGUAGES,
   PUBLIC_PASSPORT_MAX_CLUES,
 } from '../domain/passport';
+import type { PetInteractionState } from '../domain/pet-interaction';
 import {
   createSessionIdentifiers,
   type ParticipantId,
@@ -39,6 +42,7 @@ import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
 import OutcomeScreen from '../screens/OutcomeScreen';
+import OwnerQuestionScreen from '../screens/OwnerQuestionScreen';
 import PassportCreationScreen from '../screens/PassportCreationScreen';
 import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
@@ -56,6 +60,11 @@ import {
   toggleClueId,
   toggleLanguageCode,
 } from './passport-share';
+import {
+  applyPetInteractionTick,
+  beginPetInteraction,
+  submitOwnerQuestionAnswer,
+} from './pet-interaction-flow';
 import {
   type ProfileNotice,
   profileNoticeFromStorageError,
@@ -192,6 +201,13 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
   const [guestShareSelection, setGuestShareSelection] =
     useState<PassportShareSelection | null>(null);
   const [lounge, setLounge] = useState<LoungeState | null>(null);
+  // Issue 11: Pet Interaction の bounded protocol（`clarifying` の Owner Question）を
+  // 保持する。`discovering` / `bridging` / `no-signal` は `pet-interaction-flow.ts` が
+  // 呼び出しの中だけで一瞬経由し、確定した瞬間に Lounge 本体（`RetiredLounge`）へ収束させる
+  // ため、この state に現れるのは `clarifying` か `null`（未着手・確定済み）だけである。
+  const [interaction, setInteraction] = useState<PetInteractionState | null>(
+    null
+  );
   const [loungeRoom, setLoungeRoom] = useState<LoungeRoomState | null>(null);
   const [guestProfile, setGuestProfile] = useState<LocalPrivateProfile | null>(
     null
@@ -291,17 +307,56 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     };
   }, [localProfileStorage]);
 
+  /**
+   * Issue 11: Active Lounge の 1 秒 tick / Background 復帰の両方が、Lounge 本体の期限
+   * （`reduceLounge`）と Pet Interaction の 45 秒締切（`applyPetInteractionTick`）を
+   * 同じ関数呼び出しの中でまとめて評価する。`applyRoomAdvance`（Issue 9）と同じ理由で、
+   * 2 つの state（`interaction` と `lounge`）を別の render にまたがず同期的に更新することで、
+   * 中間 render を作らない。Pet Interaction が締切超過で `no-signal` へ収束した場合は、
+   * その場で `RetiredLounge` へ収束させ、Lounge 本体の `'clock-tick'` 判定は行わない
+   * （Pet Interaction 側の確定が Lounge 自体の 20 分満了より早いため）。
+   */
+  const applyLoungeAdvance = useCallback(
+    (
+      current: LoungeState,
+      clock: ClockSnapshot,
+      actionType: 'clock-tick' | 'app-resumed'
+    ): void => {
+      if (current.status === 'active' && interaction) {
+        // `applyPetInteractionTick` は締切超過のときだけ `interaction` を書き換えて
+        // 別参照を返す（変化がなければ同じ参照をそのまま返す契約）ため、締切内の
+        // 「変化なし」を検出する分岐は不要である。締切超過（`step.lounge.status !==
+        // 'active'`）だけを見て Pet Interaction 側の確定を Lounge 本体の期限確認より
+        // 優先する。
+        const step = applyPetInteractionTick(interaction, current, clock);
+        if (step.lounge.status !== 'active') {
+          setInteraction(step.interaction);
+          setLounge(step.lounge);
+          return;
+        }
+      }
+      const advanced = reduceLounge(current, { type: actionType, clock });
+      // Active Lounge 自体の 20 分満了（`clarifying` 中に Lounge 本体の期限が先に
+      // 尽きた場合）でも、`interaction` を確実に破棄する。破棄済み Lounge の画面
+      // （`DestroyedLoungeScreen`）は `interaction` を参照しないため実害はないが、
+      // 「Lounge が終われば Pet Interaction も終わる」契約を状態としても保つ。
+      if (current.status === 'active' && advanced.status !== 'active') {
+        setInteraction(null);
+      }
+      setLounge(advanced);
+    },
+    [interaction]
+  );
+
   useEffect(() => {
     if (!lounge || lounge.status === 'destroyed') return undefined;
     const timer = setInterval(() => {
       const clock = currentClock();
       setNowMs(clock.wallClockMs);
-      setLounge((current) =>
-        current ? reduceLounge(current, { type: 'clock-tick', clock }) : current
-      );
+      applyLoungeAdvance(lounge, clock, 'clock-tick');
     }, 1_000);
     return () => clearInterval(timer);
-  }, [lounge]);
+  }, [lounge, applyLoungeAdvance]);
 
   /**
    * Room の 20 分満了を、Active Lounge の満了（`reduceLounge` の `'clock-tick'` /
@@ -346,17 +401,13 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
       if (nextState !== 'active') return;
       const clock = currentClock();
       setNowMs(clock.wallClockMs);
-      setLounge((current) =>
-        current
-          ? reduceLounge(current, { type: 'app-resumed', clock })
-          : current
-      );
+      if (lounge) applyLoungeAdvance(lounge, clock, 'app-resumed');
       if (loungeRoom && loungeRoom.status !== 'expired') {
         applyRoomAdvance(loungeRoom, clock);
       }
     });
     return () => subscription.remove();
-  }, [loungeRoom, applyRoomAdvance]);
+  }, [lounge, loungeRoom, applyRoomAdvance, applyLoungeAdvance]);
 
   async function saveLocalProfile(): Promise<void> {
     if (saving) return;
@@ -451,6 +502,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
         // 不要なので破棄し、20 分の TTL が尽きるまで無駄に動き続けさせない。
         qrScannerPort.publish(null);
         setLoungeRoom(null);
+        setInteraction(null);
         setLounge(startLoungeFromRoom(updated));
       } else {
         setLoungeRoom(updated);
@@ -526,6 +578,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
       if (readied.status === 'ready') {
         qrScannerPort.publish(null);
         setLoungeRoom(null);
+        setInteraction(null);
         setLounge(startLoungeFromRoom(readied));
       } else {
         setLoungeRoom(readied);
@@ -554,16 +607,43 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     endInvite('host-ended');
   }
 
-  function evaluate(): void {
-    setLounge((current) =>
-      current
-        ? reduceLounge(current, { type: 'evaluate', clock: currentClock() })
-        : current
+  /**
+   * Issue 11: 「会話の糸を探す」操作 1 回で、Pet Interaction の bounded protocol を
+   * discovering → clarifying（Owner Question 表示）/ no-signal（即 retired）まで進める。
+   * Rules Provider は同期関数のため discovering は観測可能な状態として現れない。
+   */
+  function startPetInteraction(): void {
+    if (lounge?.status !== 'active') return;
+    const step = beginPetInteraction(
+      lounge,
+      RULES_INTERACTION_PROVIDER,
+      currentClock()
     );
+    setInteraction(step.interaction);
+    setLounge(step.lounge);
+    setErrorMessage(null);
+  }
+
+  /**
+   * Owner Question への回答（答える(yes) / 分からない(no) / パス(decline)）を適用する。
+   * `submitOwnerQuestionAnswer` が `clarifying` 以外では no-op を返すため、二重送信や
+   * 締切超過後の遅延送信は安全に無視される（Question Budget を超えない）。
+   */
+  function submitOwnerAnswer(value: OwnerAnswerValue): void {
+    if (lounge?.status !== 'active') return;
+    const step = submitOwnerQuestionAnswer(
+      interaction,
+      lounge,
+      value,
+      currentClock()
+    );
+    setInteraction(step.interaction);
+    setLounge(step.lounge);
     setErrorMessage(null);
   }
 
   function leave(): void {
+    setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'owner-exit' }) : current
     );
@@ -571,6 +651,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
   }
 
   function endAsHost(): void {
+    setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'host-ended' }) : current
     );
@@ -588,6 +669,7 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     // discardInviteFlow() が相手の宣言内容（encounteredPetName 等）も含めて
     // Lounge 由来の一時データを一括破棄する。
     discardInviteFlow();
+    setInteraction(null);
     setLounge(null);
     setErrorMessage(null);
     setStage('encounter');
@@ -613,12 +695,24 @@ export default function PassportApp({ localProfileStorage }: PassportAppProps) {
     }
   }
 
+  if (lounge?.status === 'active' && interaction?.phase === 'clarifying') {
+    return (
+      <OwnerQuestionScreen
+        errorMessage={errorMessage}
+        onAnswer={submitOwnerAnswer}
+        onExit={leave}
+        onHostEnd={endAsHost}
+        question={interaction.question}
+        remainingMs={interaction.deadlineAtWallClockMs - nowMs}
+      />
+    );
+  }
   if (lounge?.status === 'active') {
     return (
       <ActiveLoungeScreen
         errorMessage={errorMessage}
         lounge={lounge}
-        onEvaluate={evaluate}
+        onBeginInteraction={startPetInteraction}
         onExit={leave}
         onHostEnd={endAsHost}
         remainingMs={lounge.expiresAtWallClockMs - nowMs}

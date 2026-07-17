@@ -58,6 +58,7 @@ const QUESTION = {
   schemaVersion: 1,
   questionId: 'confirm-shared-clue',
   displayText: 'この手掛かりを今回の Lounge で利用してよいですか。',
+  purpose: 'canOffer',
 } as const;
 
 const EVIDENCE = {
@@ -306,6 +307,13 @@ describe('Versioned Domain Schema', () => {
           ...PASSPORT,
           clues: [{ ...CLUE, value: 'free-text-clue' }],
         }),
+      'INVALID_VALUE'
+    );
+  });
+
+  it('Owner Question の purpose は canOffer / lookingFor / currentGoal 以外を拒否する', () => {
+    expectSchemaError(
+      () => parseOwnerQuestion({ ...QUESTION, purpose: 'sensitiveTopic' }),
       'INVALID_VALUE'
     );
   });

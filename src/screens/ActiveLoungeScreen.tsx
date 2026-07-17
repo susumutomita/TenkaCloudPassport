@@ -10,7 +10,7 @@ import { colors, spacing } from '../ui/theme';
 interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
   readonly remainingMs: number;
-  readonly onEvaluate: () => void;
+  readonly onBeginInteraction: () => void;
   readonly onExit: () => void;
   readonly onHostEnd: () => void;
   readonly errorMessage: string | null;
@@ -46,7 +46,7 @@ function PassportSummary({
 export default function ActiveLoungeScreen({
   lounge,
   remainingMs,
-  onEvaluate,
+  onBeginInteraction,
   onExit,
   onHostEnd,
   errorMessage,
@@ -56,7 +56,7 @@ export default function ActiveLoungeScreen({
     <AppScreen
       eyebrow="Step 4 / Lounge"
       title="確認済みの手掛かりだけで判定する。"
-      description="Rules Provider は端末外へ通信せず、共通項目がなければ推測せずに no-signal を返します。"
+      description="Local Agent は端末外へ通信せず、共通項目がなければ推測せずに no-signal を返します。必要な場合は Owner へ 1 問だけ確認します。"
     >
       <View style={styles.grid}>
         <PassportSummary
@@ -99,7 +99,7 @@ export default function ActiveLoungeScreen({
           {errorMessage}
         </Text>
       ) : null}
-      <ActionButton label="Rules Provider で判定" onPress={onEvaluate} />
+      <ActionButton label="会話の糸を探す" onPress={onBeginInteraction} />
       <ActionButton label="退出して破棄" onPress={onExit} variant="secondary" />
       <ActionButton
         label="Host として終了"

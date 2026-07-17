@@ -16,6 +16,7 @@ describe('Rules Interaction Provider の Discovery', () => {
         schemaVersion: 1,
         questionId: 'confirm-shared-clue',
         displayText: 'この手掛かりを今回の Lounge で利用してよいですか。',
+        purpose: 'canOffer',
       });
     }
   });
