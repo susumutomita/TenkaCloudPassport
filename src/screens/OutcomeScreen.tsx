@@ -45,7 +45,7 @@ export default function OutcomeScreen({
 
   return (
     <AppScreen
-      eyebrow="Step 4 / Retired"
+      eyebrow="Step 5 / Retired"
       title={hasBridge ? '人間の会話へ。' : 'no-signal も正常な結果。'}
       description="結果の確定直後に Pet は retired になりました。追加説明、再判定、継続チャットは行いません。"
     >

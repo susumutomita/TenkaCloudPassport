@@ -521,3 +521,65 @@ Migration の互換性契約を固定する。
   持ち込まない。Public Passport の受信回数を人物 ID へ変換する状態も持たない。
 - Bridge の表示文は版管理済み手掛かりから Domain 内で導出し、Agent Decision の外部 schema へ
   自由記述やモデルの思考過程を追加しない。
+
+---
+
+### [Issue 7 Passport 初回設定] - 2026-07-17
+
+#### 目的
+
+氏名、メール、電話、OAuth を要求せず、Pet Name、Emoji、任意の Owner Alias、版管理済みの
+会話材料、Languages を明示保存し、Lounge 参加直前に今回の Public Passport を項目単位で
+確認できる初回体験を完成する。
+
+#### 制約
+
+- 新しい npm 依存を追加せず、Web は `localStorage`、Native は既存の `expo-file-system` を使う。
+- Domain は React Native、Storage、Transport、LLM を import しない。
+- Draft を自動保存せず、Owner が明示保存した Local Private Profile だけを再起動後に復元する。
+- Pet Name と Owner Alias 以外は版管理済みカタログ選択とし、機密情報を入力しない案内を表示する。
+- Makefile、`.github/workflows/ci.yml`、`.claude/settings.local.json` を変更しない。
+- Git 操作、`rm`、`npx`、型エスケープ、Mock、Stub、フォーカスしたテストを使わない。
+
+#### 設計判断
+
+1. 入力ごとの自動保存は復元性が高いが、明示保存前の Draft を永続化するため採用しない。
+2. Domain が Storage を直接扱う案は呼び出しが短いが、純粋性と依存方向を壊すため採用しない。
+3. app 層の Storage Port と Web / Native adapter、Domain の純粋 validation、単一の共有 builder に
+   分ける案は境界コードが増えるが、保存と共有を別の明示操作にできるため採用する。
+
+Schema Version 1 の必須 field を黙って変えず、Local / Public Profile と Backup を Version 2、Peer
+Protocol を Version 1.1 にする。旧 Backup は strict validation 後に純粋 Migration し、手掛かりが
+ない旧 Profile は会話材料を捏造せず拒否する。
+
+#### エッジケース
+
+- 空白だけまたは上限超過の表示名、未許可 Emoji、重複または件数超過のカタログ値を拒否する。
+- 空の Owner Alias は許可し、Public Passport へ field を作らない。
+- Storage 利用不可、読込失敗、不正保存データ、保存失敗を区別して表示する。
+- 保存失敗時は Draft を維持し、保存済み Profile として画面遷移しない。
+- Preview で Pet Name または全手掛かりを OFF にした場合は Lounge 参加を無効にする。
+- Preview、QR Projection、Peer Payload は同じ Public Passport object から作り、Snapshot で固定する。
+- 再起動時に Draft、Preview、Public Passport、Lounge を復元しない。
+
+#### タスク
+
+1. 設計書、Privacy データ台帳、Data Model、用語集、ADR-0011、本セクションを先に更新する。
+2. Domain validation、Schema Version、Migration、Projection の日本語 BDD テストを Red で追加する。
+3. Storage Port、Web / Native adapter、実ファイル I/O の adapter test を追加する。
+4. 初回設定、空と失敗の固有 UI、共有 Preview、Accessibility を既存 `PassportApp` へ統合する。
+5. 指定ゲート、review、security review、simplify を実行し、指摘を解消する。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test`。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown を検査する。
+- `bun scripts/architecture-harness.ts`。
+- `make before-commit`。
+- Domain import 検査と Preview / Payload Snapshot を確認する。
+
+#### 人間検証
+
+初見利用者 5 名中 4 名以上が 90 秒以内に完了できるかは人間検証待ちである。

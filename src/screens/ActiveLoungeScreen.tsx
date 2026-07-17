@@ -15,14 +15,22 @@ interface ActiveLoungeScreenProps {
 
 function PassportSummary({
   title,
+  petName,
+  petEmoji,
   values,
 }: {
   readonly title: string;
+  readonly petName: string;
+  readonly petEmoji: string | undefined;
   readonly values: readonly ClueId[];
 }) {
   return (
     <View style={styles.passport}>
       <Text style={styles.passportTitle}>{title}</Text>
+      <Text style={styles.petName}>
+        {petEmoji ? `${petEmoji} ` : ''}
+        {petName}
+      </Text>
       {values.map((value) => (
         <Text key={value} style={styles.clue}>
           {clueById(value).label}
@@ -41,16 +49,20 @@ export default function ActiveLoungeScreen({
 }: ActiveLoungeScreenProps) {
   return (
     <AppScreen
-      eyebrow="Step 3 / Lounge"
+      eyebrow="Step 4 / Lounge"
       title="確認済みの手掛かりだけで判定する。"
       description="Rules Provider は端末外へ通信せず、共通項目がなければ推測せずに no-signal を返します。"
     >
       <View style={styles.grid}>
         <PassportSummary
+          petEmoji={lounge.ownerPassport.petEmoji}
+          petName={lounge.ownerPassport.petName}
           title="この端末"
           values={lounge.ownerPassport.clues.map((clue) => clue.value)}
         />
         <PassportSummary
+          petEmoji={lounge.encounteredPassport.petEmoji}
+          petName={lounge.encounteredPassport.petName}
           title="Encounter"
           values={lounge.encounteredPassport.clues.map((clue) => clue.value)}
         />
@@ -101,6 +113,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
     fontWeight: '700',
+  },
+  petName: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: spacing.xs,
   },
   notice: {
     backgroundColor: colors.primarySoft,

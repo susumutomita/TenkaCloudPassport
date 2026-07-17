@@ -8,6 +8,7 @@ interface ActionButtonProps {
   readonly onPress: () => void;
   readonly disabled?: boolean;
   readonly variant?: ButtonVariant;
+  readonly accessibilityHint?: string;
 }
 
 export default function ActionButton({
@@ -15,11 +16,15 @@ export default function ActionButton({
   onPress,
   disabled = false,
   variant = 'primary',
+  accessibilityHint,
 }: ActionButtonProps) {
   const isPrimary = variant === 'primary';
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [

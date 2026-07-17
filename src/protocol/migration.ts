@@ -1,12 +1,134 @@
 import type { Backup } from '../domain/backup';
-import { CATALOG_VERSION } from '../domain/clue-catalog';
-import { parseBackup, parseLocalPrivateProfile } from './schema';
 import {
+  CATALOG_VERSION,
+  type ClueId,
+  clueById,
+  isClueId,
+} from '../domain/clue-catalog';
+import {
+  createLocalPrivateProfile,
+  PROFILE_MAX_CLUES,
+} from '../domain/passport';
+import { parseBackup } from './schema';
+import {
+  arrayValue,
   assertLiteral,
-  assertOneOf,
+  assertUniqueStrings,
+  booleanValue,
   schemaError,
   strictRecord,
+  stringValue,
 } from './validation';
+
+interface LegacyProfileValues {
+  readonly candidateClueIds: readonly ClueId[];
+  readonly selectedClueIds: readonly ClueId[];
+  readonly excludedTopicIds: readonly ClueId[];
+}
+
+function legacyClueId(value: unknown, path: string): ClueId {
+  const candidate = stringValue(value, path);
+  if (!isClueId(candidate)) {
+    return schemaError(
+      'INVALID_VALUE',
+      path,
+      `${path} は版管理済みカタログにありません。`
+    );
+  }
+  return candidate;
+}
+
+function legacyCandidateClue(
+  value: unknown,
+  path: string
+): { readonly id: ClueId; readonly selected: boolean } {
+  const record = strictRecord(value, path, [
+    'value',
+    'category',
+    'selectedForPassport',
+  ]);
+  const id = legacyClueId(record.value, `${path}.value`);
+  assertLiteral(record.category, clueById(id).category, `${path}.category`);
+  return {
+    id,
+    selected: booleanValue(
+      record.selectedForPassport,
+      `${path}.selectedForPassport`
+    ),
+  };
+}
+
+function legacyProfile(
+  value: unknown,
+  schema: 0 | 1,
+  path: string
+): LegacyProfileValues {
+  const requiredKeys =
+    schema === 0
+      ? (['schemaVersion', 'catalogVersion', 'candidateClues'] as const)
+      : ([
+          'schemaVersion',
+          'catalogVersion',
+          'candidateClues',
+          'excludedTopics',
+        ] as const);
+  const record = strictRecord(value, path, requiredKeys);
+  assertLiteral(record.schemaVersion, schema, `${path}.schemaVersion`);
+  assertLiteral(
+    record.catalogVersion,
+    CATALOG_VERSION,
+    `${path}.catalogVersion`
+  );
+  const candidates = arrayValue(
+    record.candidateClues,
+    `${path}.candidateClues`,
+    0,
+    PROFILE_MAX_CLUES
+  ).map((item, index) =>
+    legacyCandidateClue(item, `${path}.candidateClues[${index}]`)
+  );
+  const candidateClueIds = candidates.map((candidate) => candidate.id);
+  assertUniqueStrings(candidateClueIds, `${path}.candidateClues`);
+  const excludedTopicIds =
+    schema === 1
+      ? arrayValue(
+          record.excludedTopics,
+          `${path}.excludedTopics`,
+          0,
+          PROFILE_MAX_CLUES
+        ).map((item, index) =>
+          legacyClueId(item, `${path}.excludedTopics[${index}]`)
+        )
+      : [];
+  assertUniqueStrings(excludedTopicIds, `${path}.excludedTopics`);
+  return {
+    candidateClueIds,
+    selectedClueIds: candidates
+      .filter((candidate) => candidate.selected)
+      .map((candidate) => candidate.id),
+    excludedTopicIds,
+  };
+}
+
+function migratedProfile(values: LegacyProfileValues) {
+  try {
+    return createLocalPrivateProfile({
+      petName: 'マイペット',
+      petEmoji: '🐾',
+      ownerAlias: '',
+      candidateClueIds: values.candidateClueIds,
+      selectedForPassportClueIds: values.selectedClueIds,
+      excludedTopicIds: values.excludedTopicIds,
+      languageCodes: [],
+    });
+  } catch (error: unknown) {
+    return schemaError(
+      'INVALID_VALUE',
+      '$.legacyBackup.localPrivateProfile',
+      String(error)
+    );
+  }
+}
 
 function migrateVersionZero(value: unknown): Backup {
   const path = '$.legacyBackup';
@@ -18,58 +140,54 @@ function migrateVersionZero(value: unknown): Backup {
     'modelVerification',
   ]);
   assertLiteral(record.backupSchemaVersion, 0, `${path}.backupSchemaVersion`);
+  const profile = migratedProfile(
+    legacyProfile(record.localPrivateProfile, 0, `${path}.localPrivateProfile`)
+  );
 
-  const legacyProfilePath = `${path}.localPrivateProfile`;
-  const legacyProfile = strictRecord(
-    record.localPrivateProfile,
-    legacyProfilePath,
-    ['schemaVersion', 'catalogVersion', 'candidateClues']
-  );
+  const settingsPath = `${path}.deviceSettings`;
+  const settings = strictRecord(record.deviceSettings, settingsPath, [
+    'language',
+    'catalogVersion',
+  ]);
   assertLiteral(
-    legacyProfile.schemaVersion,
-    0,
-    `${legacyProfilePath}.schemaVersion`
-  );
-  assertLiteral(
-    legacyProfile.catalogVersion,
+    settings.catalogVersion,
     CATALOG_VERSION,
-    `${legacyProfilePath}.catalogVersion`
+    `${settingsPath}.catalogVersion`
   );
-
-  const legacySettingsPath = `${path}.deviceSettings`;
-  const legacySettings = strictRecord(
-    record.deviceSettings,
-    legacySettingsPath,
-    ['language', 'catalogVersion']
-  );
-  const language = assertOneOf(
-    legacySettings.language,
-    ['ja', 'en'],
-    `${legacySettingsPath}.language`
-  );
-  assertLiteral(
-    legacySettings.catalogVersion,
-    CATALOG_VERSION,
-    `${legacySettingsPath}.catalogVersion`
-  );
-
-  const localPrivateProfile = parseLocalPrivateProfile({
-    schemaVersion: 1,
-    catalogVersion: legacyProfile.catalogVersion,
-    candidateClues: legacyProfile.candidateClues,
-    excludedTopics: [],
-  });
 
   return parseBackup({
-    backupSchemaVersion: 1,
+    backupSchemaVersion: 2,
     exportedAt: record.exportedAt,
-    localPrivateProfile,
+    localPrivateProfile: profile,
     deviceSettings: {
-      language,
+      language: settings.language,
       reduceMotion: false,
       selectedModelDigest: null,
-      catalogVersion: legacySettings.catalogVersion,
+      catalogVersion: settings.catalogVersion,
     },
+    modelVerification: record.modelVerification,
+  });
+}
+
+function migrateVersionOne(value: unknown): Backup {
+  const path = '$.legacyBackup';
+  const record = strictRecord(value, path, [
+    'backupSchemaVersion',
+    'exportedAt',
+    'localPrivateProfile',
+    'deviceSettings',
+    'modelVerification',
+  ]);
+  assertLiteral(record.backupSchemaVersion, 1, `${path}.backupSchemaVersion`);
+  const profile = migratedProfile(
+    legacyProfile(record.localPrivateProfile, 1, `${path}.localPrivateProfile`)
+  );
+
+  return parseBackup({
+    backupSchemaVersion: 2,
+    exportedAt: record.exportedAt,
+    localPrivateProfile: profile,
+    deviceSettings: record.deviceSettings,
     modelVerification: record.modelVerification,
   });
 }
@@ -82,7 +200,8 @@ export function migrateBackupToCurrent(value: unknown): Backup {
     ['exportedAt', 'localPrivateProfile', 'deviceSettings', 'modelVerification']
   );
   if (record.backupSchemaVersion === 0) return migrateVersionZero(value);
-  if (record.backupSchemaVersion === 1) return parseBackup(value);
+  if (record.backupSchemaVersion === 1) return migrateVersionOne(value);
+  if (record.backupSchemaVersion === 2) return parseBackup(value);
   return schemaError(
     'UNSUPPORTED_VERSION',
     '$.backupMigration.backupSchemaVersion',

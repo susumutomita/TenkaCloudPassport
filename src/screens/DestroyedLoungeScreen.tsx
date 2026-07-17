@@ -33,7 +33,10 @@ export default function DestroyedLoungeScreen({
         <Text style={styles.receiptLabel}>終了理由</Text>
         <Text style={styles.receiptValue}>{REASON_LABELS[lounge.reason]}</Text>
       </View>
-      <ActionButton label="新しい Passport を作る" onPress={onRestart} />
+      <ActionButton
+        label="保存済み Profile で新しい Encounter"
+        onPress={onRestart}
+      />
     </AppScreen>
   );
 }

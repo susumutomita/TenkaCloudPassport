@@ -32,16 +32,22 @@ const PROFILE_CLUE = {
 } as const;
 
 const PROFILE = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   catalogVersion: CATALOG_VERSION,
+  petName: 'こむぎ',
+  petEmoji: '🐾',
   candidateClues: [PROFILE_CLUE],
   excludedTopics: [],
+  languages: ['ja'],
 } as const;
 
 const PASSPORT = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   catalogVersion: CATALOG_VERSION,
+  petName: 'こむぎ',
+  petEmoji: '🐾',
   clues: [CLUE],
+  languages: ['ja'],
 } as const;
 
 const LOUNGE_ID: `lng_${string}` = `lng_${'11'.repeat(16)}`;
@@ -72,7 +78,7 @@ const DECISION = {
 } as const;
 
 const PEER_ENVELOPE = {
-  protocolVersion: { major: 1, minor: 0 },
+  protocolVersion: { major: 1, minor: 1 },
   loungeId: LOUNGE_ID,
   senderParticipantId: PARTICIPANT_ID,
   sequence: 0,
@@ -81,7 +87,7 @@ const PEER_ENVELOPE = {
 } as const;
 
 const BACKUP = {
-  backupSchemaVersion: 1,
+  backupSchemaVersion: 2,
   exportedAt: '2026-07-17T00:00:00.000Z',
   localPrivateProfile: PROFILE,
   deviceSettings: {
@@ -188,10 +194,13 @@ describe('Versioned Domain Schema', () => {
 
   it('JSON object ではない class instance を拒否する', () => {
     class ProfileInput {
-      readonly schemaVersion = 1;
+      readonly schemaVersion = 2;
       readonly catalogVersion = CATALOG_VERSION;
+      readonly petName = 'こむぎ';
+      readonly petEmoji = '🐾';
       readonly candidateClues = [PROFILE_CLUE];
       readonly excludedTopics: readonly string[] = [];
+      readonly languages: readonly string[] = ['ja'];
     }
 
     expectSchemaError(
@@ -204,13 +213,13 @@ describe('Versioned Domain Schema', () => {
     const values: readonly (() => void)[] = [
       () =>
         parseLocalPrivateProfile({
-          schemaVersion: 1,
+          schemaVersion: 2,
           catalogVersion: CATALOG_VERSION,
           candidateClues: [PROFILE_CLUE],
         }),
       () =>
         parsePublicPassport({
-          schemaVersion: 1,
+          schemaVersion: 2,
           catalogVersion: CATALOG_VERSION,
         }),
       () =>
@@ -234,7 +243,7 @@ describe('Versioned Domain Schema', () => {
       () => parseAgentDecision({ schemaVersion: 1, kind: 'bridge' }),
       () =>
         parsePeerEnvelope({
-          protocolVersion: { major: 1, minor: 0 },
+          protocolVersion: { major: 1, minor: 1 },
           loungeId: LOUNGE_ID,
           senderParticipantId: PARTICIPANT_ID,
           sequence: 0,
@@ -242,7 +251,7 @@ describe('Versioned Domain Schema', () => {
         }),
       () =>
         parseBackup({
-          backupSchemaVersion: 1,
+          backupSchemaVersion: 2,
           exportedAt: '2026-07-17T00:00:00.000Z',
         }),
     ];
@@ -261,6 +270,9 @@ describe('Versioned Domain Schema', () => {
     expect(Object.keys(first).sort()).toEqual([
       'catalogVersion',
       'clues',
+      'languages',
+      'petEmoji',
+      'petName',
       'schemaVersion',
     ]);
     expect(JSON.stringify(first)).not.toMatch(
@@ -285,7 +297,7 @@ describe('Versioned Domain Schema', () => {
 
   it('未知の Schema Version とカタログ外の手掛かりを拒否する', () => {
     expectSchemaError(
-      () => parsePublicPassport({ ...PASSPORT, schemaVersion: 2 }),
+      () => parsePublicPassport({ ...PASSPORT, schemaVersion: 3 }),
       'UNSUPPORTED_VERSION'
     );
     expectSchemaError(
@@ -388,6 +400,10 @@ describe('Versioned Domain Schema', () => {
     expectSchemaError(
       () => parseLounge({ ...input, participantIds: ['ptc_invalid'] }),
       'INVALID_VALUE'
+    );
+    expectSchemaError(
+      () => parseLounge({ ...input, schemaVersion: 2 }),
+      'UNSUPPORTED_VERSION'
     );
   });
 
@@ -496,7 +512,7 @@ describe('Versioned Domain Schema', () => {
       'INVALID_VALUE'
     );
     expectSchemaError(
-      () => parseBackup({ ...BACKUP, backupSchemaVersion: 2 }),
+      () => parseBackup({ ...BACKUP, backupSchemaVersion: 3 }),
       'UNSUPPORTED_VERSION'
     );
   });
@@ -514,16 +530,16 @@ describe('Versioned Domain Schema', () => {
 });
 
 describe('Peer Protocol Version と入力上限', () => {
-  it('Version 1.0 を受理し、未知 Major と未対応 Minor を拒否する', () => {
+  it('Version 1.1 を受理し、未知 Major と未対応 Minor を拒否する', () => {
     expect(parsePeerEnvelope(PEER_ENVELOPE).protocolVersion).toEqual({
       major: 1,
-      minor: 0,
+      minor: 1,
     });
     expectSchemaError(
       () =>
         parsePeerEnvelope({
           ...PEER_ENVELOPE,
-          protocolVersion: { major: 2, minor: 0 },
+          protocolVersion: { major: 2, minor: 1 },
         }),
       'UNSUPPORTED_VERSION'
     );
@@ -531,7 +547,7 @@ describe('Peer Protocol Version と入力上限', () => {
       () =>
         parsePeerEnvelope({
           ...PEER_ENVELOPE,
-          protocolVersion: { major: 1, minor: 1 },
+          protocolVersion: { major: 1, minor: 0 },
         }),
       'UNSUPPORTED_VERSION'
     );
@@ -550,7 +566,7 @@ describe('Peer Protocol Version と入力上限', () => {
       () =>
         parsePeerEnvelope({
           ...PEER_ENVELOPE,
-          protocolVersion: { major: 1, minor: 0, patch: 0 },
+          protocolVersion: { major: 1, minor: 1, patch: 0 },
         }),
       'UNKNOWN_FIELD'
     );

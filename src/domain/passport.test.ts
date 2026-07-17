@@ -1,15 +1,50 @@
 import { describe, expect, it } from 'bun:test';
 import { CLUE_IDS } from './clue-catalog';
 import {
-  createLocalPrivateProfile,
+  createLocalPrivateProfile as createDomainProfile,
+  type LocalPrivateProfile,
   PassportValidationError,
-  projectPublicPassport,
+  projectPublicPassport as projectDomainPassport,
 } from './passport';
 
 const EVENT_OPERATIONS = 'regional-event-operations';
 const LOCAL_TOURNAMENT = 'local-tournament';
 const OPEN_SOURCE = 'open-source';
 const ACCESSIBILITY = 'accessibility';
+
+interface ClueProfileInput {
+  readonly candidateClueIds: readonly string[];
+  readonly selectedForPassportClueIds: readonly string[];
+  readonly excludedTopicIds?: readonly string[];
+}
+
+function createLocalPrivateProfile(
+  input: ClueProfileInput
+): LocalPrivateProfile {
+  return createDomainProfile({
+    petName: 'こむぎ',
+    petEmoji: '🐾',
+    ownerAlias: '',
+    ...input,
+    languageCodes: [],
+  });
+}
+
+function projectPublicPassport(
+  profile: LocalPrivateProfile,
+  input: {
+    readonly clueIds: readonly string[];
+    readonly ownerConfirmed: boolean;
+  }
+) {
+  return projectDomainPassport(profile, {
+    includePetName: true,
+    includePetEmoji: true,
+    includeOwnerAlias: false,
+    ...input,
+    languageCodes: [],
+  });
+}
 
 function expectPassportError(
   action: () => void,
@@ -79,22 +114,23 @@ describe('Local Private Profile', () => {
     );
   });
 
-  it('候補がカタログ上限を超える場合は拒否する', () => {
-    const firstClue = CLUE_IDS[0];
+  it('候補が Local Profile 上限を超える場合は拒否する', () => {
+    const allowedClues = CLUE_IDS.slice(0, 10);
+    const firstClue = allowedClues[0];
     if (!firstClue)
       throw new Error('カタログに 1 件以上の手掛かりが必要です。');
 
     expect(
       createLocalPrivateProfile({
-        candidateClueIds: CLUE_IDS,
+        candidateClueIds: allowedClues,
         selectedForPassportClueIds: [],
       }).candidateClues
-    ).toHaveLength(CLUE_IDS.length);
+    ).toHaveLength(10);
 
     expectPassportError(
       () =>
         createLocalPrivateProfile({
-          candidateClueIds: [...CLUE_IDS, firstClue],
+          candidateClueIds: [...allowedClues, firstClue],
           selectedForPassportClueIds: [],
         }),
       'PROFILE_CLUE_COUNT'
@@ -218,6 +254,9 @@ describe('Public Passport', () => {
     expect(Object.keys(passport).sort()).toEqual([
       'catalogVersion',
       'clues',
+      'languages',
+      'petEmoji',
+      'petName',
       'schemaVersion',
     ]);
     expect(Object.keys(passport.clues[0] ?? {}).sort()).toEqual([

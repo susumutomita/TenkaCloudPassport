@@ -16,7 +16,7 @@ export interface ModelVerification {
 }
 
 export interface Backup {
-  readonly backupSchemaVersion: 1;
+  readonly backupSchemaVersion: 2;
   readonly exportedAt: string;
   readonly localPrivateProfile: LocalPrivateProfile;
   readonly deviceSettings: DeviceSettings;
