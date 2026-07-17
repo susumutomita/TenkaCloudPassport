@@ -6,19 +6,35 @@ import { RULES_PROVIDER } from './rules-provider';
 describe('Passport 作成から単一端末 Lounge 終了まで', () => {
   it('公開確認、Rules 判定、retired、完全破棄を一気通貫で完了する', () => {
     const ownerProfile = createLocalPrivateProfile({
+      petName: 'こむぎ',
+      petEmoji: '🐾',
+      ownerAlias: '',
       candidateClueIds: ['open-source', 'accessibility'],
       selectedForPassportClueIds: ['open-source'],
+      languageCodes: [],
     });
     const encounteredProfile = createLocalPrivateProfile({
+      petName: 'あずき',
+      petEmoji: '🐶',
+      ownerAlias: '',
       candidateClueIds: ['open-source', 'local-tournament'],
       selectedForPassportClueIds: ['open-source'],
+      languageCodes: [],
     });
     const ownerPassport = projectPublicPassport(ownerProfile, {
+      includePetName: true,
+      includePetEmoji: true,
+      includeOwnerAlias: false,
       clueIds: ['open-source'],
+      languageCodes: [],
       ownerConfirmed: true,
     });
     const encounteredPassport = projectPublicPassport(encounteredProfile, {
+      includePetName: true,
+      includePetEmoji: true,
+      includeOwnerAlias: false,
       clueIds: ['open-source'],
+      languageCodes: [],
       ownerConfirmed: true,
     });
     const active = startLounge({

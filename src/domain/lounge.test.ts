@@ -19,11 +19,19 @@ import { RULES_PROVIDER } from './rules-provider';
 
 function passport(clueIds: readonly string[]): PublicPassport {
   const profile = createLocalPrivateProfile({
+    petName: 'こむぎ',
+    petEmoji: '🐾',
+    ownerAlias: '',
     candidateClueIds: clueIds,
     selectedForPassportClueIds: clueIds,
+    languageCodes: [],
   });
   return projectPublicPassport(profile, {
+    includePetName: true,
+    includePetEmoji: true,
+    includeOwnerAlias: false,
     clueIds,
+    languageCodes: [],
     ownerConfirmed: true,
   });
 }

@@ -1,0 +1,101 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Public Passport の共有 Preview Preview、QR Projection、Peer Payload を同じ Snapshot に固定する 1`] = `
+{
+  "peerPayload": {
+    "kind": "public-passport",
+    "publicPassport": {
+      "catalogVersion": "2026-07-17",
+      "clues": [
+        {
+          "category": "activity",
+          "source": "owner-selected",
+          "value": "local-tournament",
+        },
+        {
+          "category": "activity",
+          "source": "owner-selected",
+          "value": "community-operations",
+        },
+      ],
+      "languages": [
+        "en",
+      ],
+      "ownerAlias": "オーナー A",
+      "petName": "こむぎ",
+      "schemaVersion": 2,
+    },
+  },
+  "preview": {
+    "items": [
+      {
+        "key": "petName",
+        "label": "Pet Name",
+        "value": "こむぎ",
+      },
+      {
+        "key": "ownerAlias",
+        "label": "Owner Alias",
+        "value": "オーナー A",
+      },
+      {
+        "key": "clue:local-tournament",
+        "label": "lookingFor",
+        "value": "ローカル大会",
+      },
+      {
+        "key": "clue:community-operations",
+        "label": "goal",
+        "value": "コミュニティの共同運営",
+      },
+      {
+        "key": "language:en",
+        "label": "Language",
+        "value": "English",
+      },
+    ],
+    "publicPassport": {
+      "catalogVersion": "2026-07-17",
+      "clues": [
+        {
+          "category": "activity",
+          "source": "owner-selected",
+          "value": "local-tournament",
+        },
+        {
+          "category": "activity",
+          "source": "owner-selected",
+          "value": "community-operations",
+        },
+      ],
+      "languages": [
+        "en",
+      ],
+      "ownerAlias": "オーナー A",
+      "petName": "こむぎ",
+      "schemaVersion": 2,
+    },
+  },
+  "qrProjection": {
+    "catalogVersion": "2026-07-17",
+    "clues": [
+      {
+        "category": "activity",
+        "source": "owner-selected",
+        "value": "local-tournament",
+      },
+      {
+        "category": "activity",
+        "source": "owner-selected",
+        "value": "community-operations",
+      },
+    ],
+    "languages": [
+      "en",
+    ],
+    "ownerAlias": "オーナー A",
+    "petName": "こむぎ",
+    "schemaVersion": 2,
+  },
+}
+`;

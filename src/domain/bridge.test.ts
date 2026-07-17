@@ -5,11 +5,19 @@ import { createLocalPrivateProfile, projectPublicPassport } from './passport';
 describe('Bridge 生成', () => {
   it('確認済みの共通手掛かり 1 件から口頭会話の理由を生成する', () => {
     const profile = createLocalPrivateProfile({
+      petName: 'こむぎ',
+      petEmoji: '🐾',
+      ownerAlias: '',
       candidateClueIds: ['regional-event-operations'],
       selectedForPassportClueIds: ['regional-event-operations'],
+      languageCodes: [],
     });
     const passport = projectPublicPassport(profile, {
+      includePetName: true,
+      includePetEmoji: true,
+      includeOwnerAlias: false,
       clueIds: ['regional-event-operations'],
+      languageCodes: [],
       ownerConfirmed: true,
     });
     const clue = passport.clues[0];

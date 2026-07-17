@@ -1,11 +1,11 @@
 import type { PublicPassport } from '../domain/passport';
 import type { LoungeId, ParticipantId } from '../domain/session-identifiers';
 
-export const PROTOCOL_VERSION = { major: 1, minor: 0 } as const;
+export const PROTOCOL_VERSION = { major: 1, minor: 1 } as const;
 
 export interface ProtocolVersion {
   readonly major: 1;
-  readonly minor: 0;
+  readonly minor: 1;
 }
 
 export type MessageNonce = `msg_${string}`;

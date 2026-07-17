@@ -7,10 +7,11 @@ import type {
 import { type Bridge, createBridgeFromEvidence } from '../domain/bridge';
 import {
   CATALOG_VERSION,
-  CLUE_IDS,
   type ClueId,
   clueById,
   isClueId,
+  isLanguageCode,
+  type LanguageCode,
 } from '../domain/clue-catalog';
 import type { Lounge } from '../domain/lounge-session';
 import type {
@@ -21,11 +22,20 @@ import {
   OWNER_QUESTION_CATALOG,
   type OwnerQuestion,
 } from '../domain/owner-question';
-import type {
-  ConfirmedClue,
-  LocalPrivateProfile,
-  ProfileClue,
-  PublicPassport,
+import {
+  type ConfirmedClue,
+  createLocalPrivateProfile,
+  isPetEmoji,
+  type LocalPrivateProfile,
+  OWNER_ALIAS_MAX_LENGTH,
+  PET_NAME_MAX_LENGTH,
+  type PetEmoji,
+  PROFILE_MAX_CLUES,
+  PROFILE_MAX_LANGUAGES,
+  type ProfileClue,
+  PUBLIC_PASSPORT_MAX_CLUES,
+  PUBLIC_PASSPORT_MAX_LANGUAGES,
+  type PublicPassport,
 } from '../domain/passport';
 import {
   isLoungeId,
@@ -56,12 +66,19 @@ import {
 
 export { SchemaValidationError } from './validation';
 
-export const PROFILE_MAX_CLUES = CLUE_IDS.length;
-export const PUBLIC_PASSPORT_MAX_CLUES = 3;
+export {
+  OWNER_ALIAS_MAX_LENGTH,
+  PET_NAME_MAX_LENGTH,
+  PROFILE_MAX_CLUES,
+  PROFILE_MAX_LANGUAGES,
+  PUBLIC_PASSPORT_MAX_CLUES,
+  PUBLIC_PASSPORT_MAX_LANGUAGES,
+};
 export const LOUNGE_MAX_PARTICIPANTS = 8;
 export const MATCH_EVIDENCE_MAX_CLUES = 3;
 export const PEER_ENVELOPE_MAX_BYTES = 4 * 1024;
 export const BACKUP_MAX_BYTES = 64 * 1024;
+export const LOCAL_PROFILE_MAX_BYTES = 8 * 1024;
 export const EXTERNAL_JSON_MAX_DEPTH = 8;
 export const MAX_SEQUENCE = 2_147_483_647;
 export const MAX_MODEL_BYTES = 8 * 1024 * 1024 * 1024;
@@ -78,6 +95,20 @@ function schemaVersion(
     );
   }
   return 1;
+}
+
+function passportSchemaVersion(
+  record: { readonly schemaVersion: unknown },
+  path: string
+): 2 {
+  if (record.schemaVersion !== 2) {
+    return schemaError(
+      'UNSUPPORTED_VERSION',
+      `${path}.schemaVersion`,
+      `${path} の Schema Version は対応していません。`
+    );
+  }
+  return 2;
 }
 
 function catalogVersion(value: unknown, path: string): typeof CATALOG_VERSION {
@@ -134,18 +165,92 @@ function confirmedClue(value: unknown, path: string): ConfirmedClue {
   };
 }
 
+function displayLabel(
+  value: unknown,
+  path: string,
+  maximumLength: number
+): string {
+  const candidate = stringValue(value, path, maximumLength);
+  if (candidate.trim() !== candidate) {
+    return schemaError(
+      'INVALID_VALUE',
+      path,
+      `${path} の前後に空白は指定できません。`
+    );
+  }
+  return candidate;
+}
+
+function petEmoji(value: unknown, path: string): PetEmoji {
+  const candidate = stringValue(value, path, 2);
+  if (!isPetEmoji(candidate)) {
+    return schemaError(
+      'INVALID_VALUE',
+      path,
+      `${path} は同梱された Pet Emoji ではありません。`
+    );
+  }
+  return candidate;
+}
+
+function languageCode(value: unknown, path: string): LanguageCode {
+  const candidate = stringValue(value, path, 8);
+  if (!isLanguageCode(candidate)) {
+    return schemaError(
+      'INVALID_VALUE',
+      path,
+      `${path} は版管理済み Language カタログにありません。`
+    );
+  }
+  return candidate;
+}
+
+function languageCodes(
+  value: unknown,
+  path: string,
+  maximumLength: number
+): LanguageCode[] {
+  const languages = arrayValue(value, path, 0, maximumLength).map(
+    (item, index) => languageCode(item, `${path}[${index}]`)
+  );
+  assertUniqueStrings(languages, path);
+  return languages;
+}
+
 export function parseLocalPrivateProfile(value: unknown): LocalPrivateProfile {
   const path = '$.localPrivateProfile';
-  const record = strictRecord(value, path, [
-    'schemaVersion',
-    'catalogVersion',
-    'candidateClues',
-    'excludedTopics',
-  ]);
+  const record = strictRecord(
+    value,
+    path,
+    [
+      'schemaVersion',
+      'catalogVersion',
+      'petName',
+      'petEmoji',
+      'candidateClues',
+      'excludedTopics',
+      'languages',
+    ],
+    ['ownerAlias']
+  );
+  passportSchemaVersion(record, path);
+  const petName = displayLabel(
+    record.petName,
+    `${path}.petName`,
+    PET_NAME_MAX_LENGTH
+  );
+  const parsedPetEmoji = petEmoji(record.petEmoji, `${path}.petEmoji`);
+  const ownerAlias = Object.hasOwn(record, 'ownerAlias')
+    ? displayLabel(
+        record.ownerAlias,
+        `${path}.ownerAlias`,
+        OWNER_ALIAS_MAX_LENGTH
+      )
+    : '';
   const candidates = arrayValue(
     record.candidateClues,
     `${path}.candidateClues`,
-    0,
+    1,
     PROFILE_MAX_CLUES
   ).map((item, index) => profileClue(item, `${path}.candidateClues[${index}]`));
   const excludedTopics = arrayValue(
@@ -159,24 +264,36 @@ export function parseLocalPrivateProfile(value: unknown): LocalPrivateProfile {
     `${path}.candidateClues`
   );
   assertUniqueStrings(excludedTopics, `${path}.excludedTopics`);
-  return {
-    schemaVersion: schemaVersion(record, path),
-    catalogVersion: catalogVersion(
-      record.catalogVersion,
-      `${path}.catalogVersion`
-    ),
-    candidateClues: candidates,
-    excludedTopics,
-  };
+  catalogVersion(record.catalogVersion, `${path}.catalogVersion`);
+  try {
+    return createLocalPrivateProfile({
+      petName,
+      petEmoji: parsedPetEmoji,
+      ownerAlias,
+      candidateClueIds: candidates.map((candidate) => candidate.value),
+      selectedForPassportClueIds: candidates
+        .filter((candidate) => candidate.selectedForPassport)
+        .map((candidate) => candidate.value),
+      excludedTopicIds: excludedTopics,
+      languageCodes: languageCodes(
+        record.languages,
+        `${path}.languages`,
+        PROFILE_MAX_LANGUAGES
+      ),
+    });
+  } catch (error: unknown) {
+    return schemaError('INVALID_VALUE', path, String(error));
+  }
 }
 
 export function parsePublicPassport(value: unknown): PublicPassport {
   const path = '$.publicPassport';
-  const record = strictRecord(value, path, [
-    'schemaVersion',
-    'catalogVersion',
-    'clues',
-  ]);
+  const record = strictRecord(
+    value,
+    path,
+    ['schemaVersion', 'catalogVersion', 'petName', 'clues', 'languages'],
+    ['petEmoji', 'ownerAlias']
+  );
   const clues = arrayValue(
     record.clues,
     `${path}.clues`,
@@ -187,13 +304,35 @@ export function parsePublicPassport(value: unknown): PublicPassport {
     clues.map((clue) => clue.value),
     `${path}.clues`
   );
+  const parsedPetEmoji = Object.hasOwn(record, 'petEmoji')
+    ? petEmoji(record.petEmoji, `${path}.petEmoji`)
+    : undefined;
+  const ownerAlias = Object.hasOwn(record, 'ownerAlias')
+    ? displayLabel(
+        record.ownerAlias,
+        `${path}.ownerAlias`,
+        OWNER_ALIAS_MAX_LENGTH
+      )
+    : undefined;
   return {
-    schemaVersion: schemaVersion(record, path),
+    schemaVersion: passportSchemaVersion(record, path),
     catalogVersion: catalogVersion(
       record.catalogVersion,
       `${path}.catalogVersion`
     ),
+    petName: displayLabel(
+      record.petName,
+      `${path}.petName`,
+      PET_NAME_MAX_LENGTH
+    ),
+    ...(parsedPetEmoji ? { petEmoji: parsedPetEmoji } : {}),
+    ...(ownerAlias ? { ownerAlias } : {}),
     clues,
+    languages: languageCodes(
+      record.languages,
+      `${path}.languages`,
+      PUBLIC_PASSPORT_MAX_LANGUAGES
+    ),
   };
 }
 
@@ -388,7 +527,7 @@ function protocolVersion(value: unknown): ProtocolVersion {
       'Peer Protocol Version は対応していません。'
     );
   }
-  return { major: 1, minor: 0 };
+  return { major: 1, minor: 1 };
 }
 
 function messageNonce(value: unknown, path: string): MessageNonce {
@@ -568,7 +707,7 @@ export function parseBackup(value: unknown): Backup {
     'deviceSettings',
     'modelVerification',
   ]);
-  if (record.backupSchemaVersion !== 1) {
+  if (record.backupSchemaVersion !== 2) {
     return schemaError(
       'UNSUPPORTED_VERSION',
       `${path}.backupSchemaVersion`,
@@ -576,7 +715,7 @@ export function parseBackup(value: unknown): Backup {
     );
   }
   return {
-    backupSchemaVersion: 1,
+    backupSchemaVersion: 2,
     exportedAt: exportedAt(record.exportedAt, `${path}.exportedAt`),
     localPrivateProfile: parseLocalPrivateProfile(record.localPrivateProfile),
     deviceSettings: deviceSettings(record.deviceSettings),
@@ -593,6 +732,12 @@ export function parsePeerEnvelopeJson(raw: string): PeerEnvelope {
 export function parseBackupJson(raw: string): Backup {
   return parseBackup(
     parseBoundedJson(raw, BACKUP_MAX_BYTES, EXTERNAL_JSON_MAX_DEPTH)
+  );
+}
+
+export function parseLocalPrivateProfileJson(raw: string): LocalPrivateProfile {
+  return parseLocalPrivateProfile(
+    parseBoundedJson(raw, LOCAL_PROFILE_MAX_BYTES, EXTERNAL_JSON_MAX_DEPTH)
   );
 }
 

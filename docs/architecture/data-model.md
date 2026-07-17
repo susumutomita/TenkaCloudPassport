@@ -13,22 +13,22 @@ LLM package を import しない。乱数、時計、保存、送受信、モデ
 内部へ持ち込まない。
 
 Local Private Profile と Public Passport は別型です。Public Passport は Owner が QR 生成ごとに
-再確認した最大 3 件だけを `projectPublicPassport` で投影し、Local Private Profile の追加 field を
-spread、直列化、暗黙 copy しない。
+再確認した Pet Name、今回 ON にした任意表示項目と Languages、最大 3 件の手掛かりだけを
+`projectPublicPassport` で投影し、Local Private Profile の追加 field を spread、直列化、暗黙 copy しない。
 
 ## Schema 一覧
 
 | Schema | 区分 | 必須 Version | 主な field | 外部共有 |
 | --- | --- | --- | --- | --- |
-| Local Private Profile | `L1` | `schemaVersion: 1` | カタログ版、候補、公開選択、除外トピックである。 | 共有しない。 |
-| Public Passport | `L2` | `schemaVersion: 1` | カタログ版と最大 3 件の Owner 選択済み手掛かりである。 | QR と認証済み Pet だけである。 |
+| Local Private Profile | `L1` | `schemaVersion: 2` | Pet 表示情報、任意 Alias、カタログ版、候補、Languages である。 | 共有しない。 |
+| Public Passport | `L2` | `schemaVersion: 2` | Pet Name と今回 ON にした表示情報、Languages、最大 3 件の手掛かりである。 | QR と認証済み Pet だけである。 |
 | Lounge | `L3` | `schemaVersion: 1` | 使い捨て Lounge ID、Participant ID、期限、状態である。 | 認証済み Pet だけである。 |
 | Owner Question | `L3` | `schemaVersion: 1` | 版管理済み質問 ID と表示 key である。 | 自分の Owner だけである。 |
 | Match Evidence | `L3` | `schemaVersion: 1` | 確認済み手掛かりと同意済み回答の参照である。 | Agent Decision 内だけである。 |
 | Bridge | `L3` | `schemaVersion: 1` | 表示 template key と Match Evidence である。 | 自分の Owner だけである。 |
 | Agent Decision | `L3` | `schemaVersion: 1` | Bridge または `no-signal` の終端判断である。 | 必要な終了同期以外は共有しない。 |
-| Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 0 }` | Lounge ID、送信 Participant ID、sequence、nonce、許可済み payload である。 | 認証済み Pet だけである。 |
-| Backup | `L4` | `backupSchemaVersion: 1` | Local Private Profile、端末設定、モデル検証記録である。 | Owner が選んだ保存先だけである。 |
+| Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 1 }` | Lounge ID、送信 Participant ID、sequence、nonce、許可済み payload である。 | 認証済み Pet だけである。 |
+| Backup | `L4` | `backupSchemaVersion: 2` | Local Private Profile、端末設定、モデル検証記録である。 | Owner が選んだ保存先だけである。 |
 
 Public Passport、Peer Envelope、バックアップに Local ID、更新日時、端末 ID、連絡先、位置情報、URL、
 保存先パスを設けない。Peer Envelope の payload に Raw LLM Prompt、system prompt、Chain of Thought、
@@ -39,7 +39,10 @@ token buffer、任意の自由記述を設けない。strict schema はこの al
 | 対象 | 上限 | 理由 |
 | --- | --- | --- |
 | Public Passport の手掛かり | 3 件である。 | Privacy データ台帳の公開最小化契約である。 |
-| Local Private Profile の候補と除外トピック | 各 10 件である。 | 現行カタログ全件を上限とし、無制限配列を許可しない。 |
+| Local Private Profile の候補と除外トピック | 各 10 件である。 | 無制限配列を許可しない。 |
+| Topics、Offer、Looking For、Goal | 順に 3 件、3 件、3 件、1 件である。 | Local 候補の分類別上限を固定する。 |
+| Pet Name と Owner Alias | 各 24 UTF-16 code unit である。 | 連絡先や詳細 Profile ではない短い表示名へ限定する。 |
+| Languages | 3 件である。 | 版管理済み Language カタログへ限定する。 |
 | Lounge の Participant | 8 人である。 | 近距離の一時セッションへ用途を限定し、状態と送信量を bounded にする。 |
 | Owner Question | 1 回である。 | 用語集と Privacy データ台帳の契約である。 |
 | Match Evidence の手掛かり | 3 件である。 | Public Passport より根拠を増やさない。 |
@@ -65,7 +68,7 @@ ID を持たせないため、同じ内容を 2 回受信しても parser が横
 
 ## Version と互換性
 
-Peer Envelope は Major と Minor の両方を必須にする。現行実装は `1.0` だけを受理し、未知の
+Peer Envelope は Major と Minor の両方を必須にする。現行実装は `1.1` だけを受理し、未知の
 Major Version と未対応の Minor Version を拒否する。互換性を確認せず未知 field を無視する方式は
 strict schema と両立しないため採用しない。
 

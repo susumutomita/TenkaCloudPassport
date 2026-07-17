@@ -25,18 +25,21 @@ const LEGACY_BACKUP = {
 } as const;
 
 describe('Backup Version Migration', () => {
-  it('Version 0 を新しい object の Version 1 へ移行する', () => {
+  it('Version 0 を新しい object の Version 2 へ移行する', () => {
     const migrated = migrateBackupToCurrent(LEGACY_BACKUP);
 
-    expect(migrated.backupSchemaVersion).toBe(1);
-    expect(migrated.localPrivateProfile.schemaVersion).toBe(1);
+    expect(migrated.backupSchemaVersion).toBe(2);
+    expect(migrated.localPrivateProfile.schemaVersion).toBe(2);
+    expect(migrated.localPrivateProfile.petName).toBe('マイペット');
+    expect(migrated.localPrivateProfile.petEmoji).toBe('🐾');
+    expect(migrated.localPrivateProfile.languages).toEqual([]);
     expect(migrated.localPrivateProfile.excludedTopics).toEqual([]);
     expect(migrated.deviceSettings.reduceMotion).toBe(false);
     expect(migrated.deviceSettings.selectedModelDigest).toBeNull();
     expect(migrated).not.toBe(LEGACY_BACKUP);
   });
 
-  it('現行 Version 1 も検証して新しい object として返す', () => {
+  it('現行 Version 2 も検証して新しい object として返す', () => {
     const current = migrateBackupToCurrent(LEGACY_BACKUP);
     const reparsed = migrateBackupToCurrent(current);
 
@@ -64,7 +67,7 @@ describe('Backup Version Migration', () => {
 
   it('未知の Backup Version を拒否する', () => {
     try {
-      migrateBackupToCurrent({ ...LEGACY_BACKUP, backupSchemaVersion: 2 });
+      migrateBackupToCurrent({ ...LEGACY_BACKUP, backupSchemaVersion: 3 });
       throw new Error('SchemaValidationError が必要です。');
     } catch (error: unknown) {
       expect(error).toBeInstanceOf(SchemaValidationError);

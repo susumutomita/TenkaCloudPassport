@@ -8,11 +8,19 @@ import { createLazyLocalAgent, LocalAgentError } from './lazy-local-agent';
 
 function passport(clueId: string) {
   const profile = createLocalPrivateProfile({
+    petName: 'こむぎ',
+    petEmoji: '🐾',
+    ownerAlias: '',
     candidateClueIds: [clueId],
     selectedForPassportClueIds: [clueId],
+    languageCodes: [],
   });
   return projectPublicPassport(profile, {
+    includePetName: true,
+    includePetEmoji: true,
+    includeOwnerAlias: false,
     clueIds: [clueId],
+    languageCodes: [],
     ownerConfirmed: true,
   });
 }

@@ -8,11 +8,19 @@ import { reduceLounge } from './lounge-reducer';
 
 function activeLounge() {
   const profile = createLocalPrivateProfile({
+    petName: 'こむぎ',
+    petEmoji: '🐾',
+    ownerAlias: '',
     candidateClueIds: ['open-source'],
     selectedForPassportClueIds: ['open-source'],
+    languageCodes: [],
   });
   const passport = projectPublicPassport(profile, {
+    includePetName: true,
+    includePetEmoji: true,
+    includeOwnerAlias: false,
     clueIds: ['open-source'],
+    languageCodes: [],
     ownerConfirmed: true,
   });
   return startLounge({
