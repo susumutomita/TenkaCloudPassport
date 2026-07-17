@@ -1,6 +1,6 @@
 import { type Bridge, createBridge } from './bridge';
-import { CLUE_IDS } from './clue-catalog';
 import type { PublicPassport } from './passport';
+import { findFirstSharedConfirmedClue } from './shared-clue-match';
 
 export type ParticipantOutcome =
   | { readonly kind: 'bridge'; readonly bridge: Bridge }
@@ -19,17 +19,9 @@ export interface EncounterDecisionProvider {
 export const RULES_PROVIDER: EncounterDecisionProvider = {
   kind: 'rules',
   decide(input) {
-    for (const clueId of CLUE_IDS) {
-      const ownerClue = input.ownerPassport.clues.find(
-        (clue) => clue.value === clueId
-      );
-      const encounteredHasClue = input.encounteredPassport.clues.some(
-        (clue) => clue.value === clueId
-      );
-      if (ownerClue && encounteredHasClue) {
-        return { kind: 'bridge', bridge: createBridge(ownerClue) };
-      }
-    }
-    return { kind: 'no-signal' };
+    const clue = findFirstSharedConfirmedClue(input);
+    return clue
+      ? { kind: 'bridge', bridge: createBridge(clue) }
+      : { kind: 'no-signal' };
   },
 };
