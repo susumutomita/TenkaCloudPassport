@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { expiryNotice } from '../app/expiry-notice';
+import { interactionStatusNotice } from '../app/interaction-status-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import { type ClueId, clueById } from '../domain/clue-catalog';
@@ -71,6 +72,17 @@ export default function ActiveLoungeScreen({
           values={lounge.encounteredPassport.clues.map((clue) => clue.value)}
         />
       </View>
+      {/*
+        Rules Provider 判定前の Active Lounge は、bounded protocol
+        （`src/domain/pet-interaction.ts`）でいう discovering フェーズに常に対応する
+        固定の説明文であり、実行中の Pet Interaction Session を逐次追跡する live な
+        readout ではない（そのような Session はまだこの画面に配線していない。
+        Known follow-ups 参照）。逐次更新される値であるかのように読める
+        accessibilityLabel は付けない。
+      */}
+      <Text style={styles.interactionStatus}>
+        {interactionStatusNotice('discovering').message}
+      </Text>
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>使い捨て Lounge</Text>
         <Text style={styles.noticeText}>
@@ -101,6 +113,11 @@ export default function ActiveLoungeScreen({
 const styles = StyleSheet.create({
   grid: {
     gap: spacing.sm,
+  },
+  interactionStatus: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
   },
   passport: {
     backgroundColor: colors.surface,

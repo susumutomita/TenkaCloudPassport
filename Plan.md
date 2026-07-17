@@ -1060,3 +1060,187 @@ Application Background、再起動を同じ Domain State Machine で扱い、Hos
   集約し、複数の state 更新を同じ同期的な関数呼び出しの中で完結させた。React 19 の
   automatic batching に委ねることで、`loungeRoom` が `'expired'` という値を一度も
   観測可能な state として持たない構造にした。
+
+### [Issue 10 Pet の短時間・制限付き交流 State Machine] - 2026-07-17
+
+#### 目的
+
+Pet が自由会話を続けるのではなく、共有済みの情報から 1 本の会話の糸を探し、必要なら
+Owner に尋ね、Bridge または `no-signal` を返して退く bounded protocol を実装する。
+`waiting → discovering → clarifying → bridging | no-signal → retired` を純粋な
+discriminated union と Transition 関数で表現し、最大 45 秒・最大 2 Round・Owner Question
+1 人 1 問・主要 Bridge 1 つという上限、Lounge の Expire / Exit による Cancel、未確認情報を
+Bridge Evidence へ昇格させない Evidence 規律を、Transport / Storage / React /
+`llama.rn` に依存しない Domain Test で固定する。
+
+#### 制約
+
+- Issue 9 の `ActiveLounge` / `RetiredLounge` / `DestroyedLounge`（`lounge.ts`）と、その
+  同期の `evaluateLounge` 契約は変更しない。bounded protocol は既存の状態機械を
+  重複実装せず、Active Lounge の中の 1 回の Encounter を表す別モジュールとして追加する。
+- Agent は今回の Public Passport と Lounge 内で同意された Answer だけを参照する。Chain of
+  Thought、Raw Prompt、自由形式の Pet Chat は交換・表示・保存しない。
+- Agent は Tool、URL Open、Message Send、Contact 操作、人物特定機能を持たない。
+- 締切（45 秒）と Turn Budget（2 Round）は Transition 関数への入力（壁時計 / 単調増加時計）
+  として渡し、Domain の中で `setTimeout` を使わない（`clock-guard.ts` と同じ規律）。
+- 新しい npm 依存を追加しない。
+- Git 操作、`rm`、`npx`、型エスケープ、Mock、Stub、フォーカスしたテストを使わない。
+
+#### 設計判断
+
+1. Issue 9 の状態機械（`ActiveLounge` の `evaluateLounge`）自体を非同期化し、
+   `clarifying` をその内部状態として持たせる案は、100% カバレッジ済みの同期契約と
+   `PassportApp.tsx` の呼び出し規約を破壊的に書き換える必要があり、この Issue の本来の
+   目的に対して不釣り合いに大きいため見送った。
+2. bounded protocol を独立した discriminated union（`src/domain/pet-interaction.ts`）
+   として実装し、Discovery Provider（`src/domain/interaction-discovery-provider.ts`）を
+   経由して `discovering` → `clarifying` → `bridging` | `no-signal` → `retired` を
+   駆動する案を採用した。Rules Provider（`rules-provider.ts`）と同じ一致判定を
+   `src/domain/shared-clue-match.ts` へ抽出して共有し、判定ロジックを重複させない。
+3. Round は「Provider 呼び出し回数」ではなく「discovering（Round 1）→ clarifying
+   （Round 2）という状態機械の形そのもの」で表現し、`clarifying` から `discovering` へ
+   戻る遷移や `clarifying` を 2 回経由する遷移を型として存在させないことで、Turn Budget
+   の超過を構造的に起こり得なくした。
+4. 未確認の候補手掛かりを Bridge Evidence へ昇格できる経路を `buildConsentedEvidence`
+   （Owner の回答が厳密に `'yes'` のときだけ `MatchEvidence` を組み立てる）1 つに絞り、
+   `'no'` / `'decline'` を渡すと型付きエラーになることをテストで固定した。
+5. Cancel（Lounge Expire / Exit）後に届く Provider / Owner の遅延 Output は、
+   `receiveDiscoveryResult` / `receiveOwnerAnswer` が現在のフェーズと不一致のときに
+   `{ state, applied: false }` を返すことで破棄する。無言の握り潰しにせず、
+   呼び出し側が「反映されなかった」ことを観測できる形にした。
+
+詳細は
+[Pet の短時間・制限付き交流 State Machine の設計](./docs/design/pet-interaction-protocol.md)
+を正本とする。
+
+#### タスク
+
+1. 設計書、本セクションを先に作成する。
+2. `src/domain/shared-clue-match.ts` を追加し、`rules-provider.ts` の一致判定ロジックを
+   そこへ抽出する（既存 `rules-provider.test.ts` の振る舞いは変えない、日本語 BDD テスト
+   先行）。
+3. `src/domain/owner-question.ts` に `ownerQuestion()` 組み立て関数を追加する。
+4. `src/domain/interaction-discovery-provider.ts` に `InteractionDiscoveryProvider` の
+   Port と、決定的な `RULES_INTERACTION_PROVIDER` を日本語 BDD テスト先行で実装する。
+5. `src/domain/pet-interaction.ts` に bounded protocol の状態機械本体
+   （`PetInteractionState` / `PetInteractionAction` / `reducePetInteraction` /
+   個別の純粋関数）を、正常・情報不足・根拠不足・Provider Timeout・Cancel・
+   Invalid Transition・決定性の日本語 BDD テストを先に書いてから実装する。
+6. `src/app/interaction-status-notice.ts` に UI 向けの状態文言だけを返す純粋関数を
+   追加する。
+7. `ActiveLoungeScreen.tsx` へ `interactionStatusNotice('discovering')` を最小限
+   配線し、既存の画面遷移・操作導線は変更しない。ソーステキスト検査による
+   Accessibility 契約テストを追加する。
+8. 指定ゲートを実行し、合格後にコミットする。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test src --coverage` で 100% を確認する。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown（本セクション、設計書、`lounge-lifecycle.md` の追記）を
+  検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- 正常系、情報不足、根拠不足、Provider Timeout、Cancel、Invalid Transition、決定性の
+  テストが揃っていることを確認する。
+
+#### 進捗ログ
+
+- 2026-07-17: AGENTS.md、CLAUDE.md、Issue 4 / 8 / 9 の Plan.md セクション、
+  `docs/design/lounge-lifecycle.md`、`docs/design/qr-invite-and-ready-flow.md` を確認した。
+  `src/domain/agent-decision.ts` / `owner-question.ts` / `match-evidence.ts` /
+  `bridge.ts` / `rules-provider.ts` / `src/local-agent/lazy-local-agent.ts` が
+  すでに存在するが、`owner-question.ts` / `match-evidence.ts` を消費する状態機械が
+  まだ存在せず、`clarifying` を独立した状態として実装する土台だけが用意されている
+  ことを確認した。`bun test src --coverage` は `agent-decision.ts` /
+  `match-evidence.ts` が実行可能なコードを持たない（型定義だけ）ためカバレッジ集計に
+  現れないことも確認した。
+- 2026-07-17: 設計書とタスク分解を先に作成し、既存の `ActiveLounge` /
+  `evaluateLounge` を変更せず、bounded protocol を独立モジュールとして追加する案
+  （案 2）を確定した。
+- 2026-07-17: `shared-clue-match.ts`（Rules Provider と共有する一致判定の抽出）、
+  `owner-question.ts` の `ownerQuestion()`、`interaction-discovery-provider.ts`
+  （`RULES_INTERACTION_PROVIDER`）を日本語 BDD テスト先行で実装した。
+  `rules-provider.test.ts` は無変更のまま Green を維持した。
+- 2026-07-17: `src/domain/pet-interaction.ts` の状態機械本体を実装した。正常系
+  （waiting → discovering → clarifying → bridging → retired）、情報不足
+  （discovering から直接 no-signal）、根拠不足（Owner の no / decline で
+  no-signal、`buildConsentedEvidence` の型付きエラー）、Provider Timeout
+  （discovering / clarifying それぞれで 45 秒超過を検出、遅延 Output の破棄）、
+  Cancel（どのフェーズからも即座に retired、遅延 Output の破棄、確定済み結果の
+  終了理由維持）、Invalid Transition（waiting 以外からの begin、bridging /
+  no-signal 以外からの retire、無効な時計）、決定性（同じ入力を 2 回実行して同じ
+  retired 結果になること）の全パターンをテストで固定した。
+- 2026-07-17: `src/app/interaction-status-notice.ts` を追加し、
+  `ActiveLoungeScreen.tsx` へ `interactionStatusNotice('discovering')` を
+  最小限配線した。既存の画面遷移・操作導線・スタイル構成は変更していない。
+  ソーステキスト検査で配線と内部推論の語彙不使用を固定するテストを追加した。
+- 2026-07-17: `bun test src --coverage` は 292 テスト、対象ファイル 100% を維持した。
+  `bun run typecheck`、`bun biome check .`（`organizeImports` / format の自動修正を
+  適用）、変更 Markdown（本セクション、`pet-interaction-protocol.md`、
+  `lounge-lifecycle.md` の追記）への `bunx textlint`
+  を実行し、Green を確認した。
+
+#### 振り返り
+
+- **問題**: `InteractionDiscoveryProvider.discover()` を Port の型どおり
+  `InteractionDiscoveryResult | Promise<InteractionDiscoveryResult>` として
+  そのまま `RULES_INTERACTION_PROVIDER` に注釈すると、テストコードが同期的に
+  `.kind` へアクセスできず型エラーになった。
+- **根本原因**: Port（`InteractionDiscoveryProvider`）は Local Agent 版（非同期）も
+  受け入れられるよう意図的に union で広く定義したが、Rules 実装自体は本来同期的に
+  確定するにもかかわらず、実装側の定数を Port の型で直接注釈したため、Rules 実装の
+  同期性という情報が型から失われていた。
+- **予防策**: Rules 実装専用の狭い型 `RulesInteractionDiscoveryProvider`
+  （`discover()` が `Promise` を含まない）を追加し、`RULES_INTERACTION_PROVIDER`
+  はそちらで注釈した。構造的部分型のため、Port を受け取る箇所へはそのまま渡せる
+  一方、Rules Provider を直接呼ぶテストコードは `await` を書かずに済む。
+
+- 2026-07-17: 独立した Correctness / Security（1 系統）と Simplify（Reuse / Simplification /
+  Efficiency / Altitude の 4 角度）のレビューを並列実行した。Efficiency と Simplification /
+  Reuse の一部は指摘なしだったが、次の 3 件を確認した。
+  1. **[High, Correctness]** `cancelInteraction` が `bridging` / `no-signal`
+     （まだ `retire` されていない確定済みの結果）に対しても無条件に
+     `{ kind: 'cancelled' }` で上書きしていた。Lounge の Expire / Exit が Bridge 確定の
+     直後に届くと、すでに見つかっていた Bridge や no-signal の理由が失われ、
+     「最も早い Event が理由を決める」という設計原則（本来は Bridge/no-signal の確定の
+     方が Cancel より早い Event）に反していた。
+  2. **[Altitude]** `ActiveLoungeScreen.tsx` の `interactionStatusNotice('discovering')`
+     に付けた `accessibilityLabel="Pet Interaction の現在の状態"` が、実際には常に
+     同じ固定文言しか返さないにもかかわらず、逐次追跡される live な状態であるかのように
+     読める文言だった。
+  3. **[Minor, Reuse]** `passport(clueIds)` という Public Passport 組み立てヘルパーが
+     `shared-clue-match.test.ts` / `interaction-discovery-provider.test.ts` /
+     `pet-interaction.test.ts` の 3 ファイルへ丸ごとコピーされていた。
+- 2026-07-17: 3 件すべてを修正した。(1) `cancelInteraction` は `bridging` /
+  `no-signal` のときは `retireInteraction` を呼んで同じ確定結果のまま `retired` にし、
+  `waiting` / `discovering` / `clarifying` のときだけ `cancelled` にするよう変更した。
+  「bridging 中の Cancel は確定済みの Bridge を上書きしない」「no-signal 中の Cancel は
+  確定済みの理由を上書きしない」の 2 件を追加した。(2) `ActiveLoungeScreen.tsx` から
+  `accessibilityLabel` を外し、この 1 行が特定の Session を追跡する live な readout では
+  ないことを示すコードコメントを追加し、「現在の状態を名乗るラベルを付けない」ことを
+  固定する新しいテストを追加した。(3) `src/domain/domain-test-kit.ts` を新設し、
+  `publicPassportWithClues()` を新規 3 テストファイルから使うよう統一した（既存テスト
+  ファイルの重複は指摘どおり対象外のままとした）。
+- 2026-07-17: 修正後に `bun biome check --write .`、`bun run typecheck`、
+  `bun test src --coverage`（295 テスト、対象ファイル 100%）、変更 Markdown への
+  `bunx textlint` を再実行し、すべて Green を確認した。
+
+#### 振り返り（レビュー起因）
+
+- **問題**: `cancelInteraction` を最初に実装したとき、「Cancel はどのフェーズからも
+  直ちに retired へ収束する」という受け入れ条件の文言をそのまま素直に実装し、
+  `bridging` / `no-signal` という「すでに結果が確定しているが、まだ明示的に
+  `retire` されていない」中間状態を「まだ何も確定していない状態」と同列に扱ってしまった。
+- **根本原因**: 受け入れ条件の「Cancel は実行中 Provider を Cancel し、新規 Output を
+  破棄する」という文は、discovering / clarifying という「Provider の応答待ち」状態を
+  念頭に置いた記述であり、bridging / no-signal という「Provider の応答はすでに届いて
+  確定済みだが retire 前」の状態には本来当てはまらない。状態機械の 6 フェーズを
+  「未確定」と「確定済み」の 2 グループに分けて考える設計レビューをテスト実装前に
+  行わなかったため、この区別を見落とした。
+- **予防策**: `cancelInteraction` を「未確定（waiting/discovering/clarifying）なら
+  cancelled、確定済み（bridging/no-signal/retired）なら既存の結果を保つ」という
+  2 分岐で再設計し、確定済みのケースをどちらも `retireInteraction` へ委譲することで、
+  「確定結果を保持する」経路を 1 箇所に集約した。bridging / no-signal それぞれから
+  Cancel するテストを個別に追加し、同種の見落としを再発時に検出できるようにした。
