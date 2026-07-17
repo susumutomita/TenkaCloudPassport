@@ -247,3 +247,83 @@ review-only スキルを標準搭載する。
 - **問題**: harness.md の `INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT` 記述が PR #104 の `.npmrc` 削除に追随しておらず stale だった。`.claude/scripts/check-test-style.sh` の日本語検出は macOS で常に誤検知していた。
 - **根本原因**: 実装と正本ドキュメントの同期を機械検証する仕組みが invariant 本文には無い。hook スクリプトは GNU 前提で書かれ、BSD 環境でテストされていなかった。
 - **予防策**: スキル・フックを harness の検査対象に含めた（本 PR の invariant 3 件）。hook スクリプトの環境差異はポータブルな構文（C ロケール + POSIX 文字クラス）に寄せた。description 等の宣言と実装の整合は `/skill-audit` のチェックリストでレビュー時に確認する。
+
+---
+
+### [Issue 3 Privacy データ契約] - 2026-07-17
+
+#### 目的
+
+「個人情報を扱わない」「Lounge は消える」というプロダクト上の約束を、実装とテストが
+判定できるデータ分類、共有範囲、保持期間、削除契機、信頼境界へ落とす。Local Private
+Profile と Public Passport を分離し、QR、近距離通信、端末内推論、手動 JSON Backup の
+各境界で持ち出せるデータを限定する。
+
+#### 制約
+
+- 日本語を正本とし、指定用語は `docs/product/glossary.md` の語義を変更せずに使う。
+- 安定 ID、端末 ID、広告 ID、位置情報、連絡先を QR と Pet Message に含めない。
+- Lounge 由来データは退出、Host 終了、生成から 20 分満了の最も早い時点で破棄する。
+- Lounge 会話、Owner Answer、Bridge を Passport や Backup へ暗黙に昇格させない。
+- GitHub Token を要求または保存せず、Analytics SDK と外部推論 API を導入しない。
+- architecture harness の文書と検出ロジックは変更せず、自動検査の追加計画だけを ADR に残す。
+- Git 操作、設定ファイル変更、Issue 3 の範囲外の実装を行わない。
+
+#### 設計判断
+
+1. すべてを 1 つの Privacy 文書へ集約する案は入口が少ないが、データ台帳、保持、攻撃と
+   対策の責務が混ざり、実装時に参照すべき契約を特定しにくい。
+2. Lounge 履歴を暗号化して端末へ保存する案は障害調査に使えるが、使い捨てという契約と
+   再起動後に復元しない要件に反する。
+3. データ台帳、保持ポリシー、脅威モデルを分け、判断と将来の機械検査を ADR で固定する案は
+   文書間の参照が必要になるが、各責務と更新理由を一意にできる。
+
+案 3 を採用する。Owner が選んだ非識別の手掛かりは Local Private Profile から明示操作で
+Public Passport へ投影し、QR は短命な参加情報だけを運ぶ。Lounge 内の Owner Answer と
+Pet Message はメモリ内だけで扱い、Bridge または `no-signal` の確定、退出、Host 終了、
+20 分満了の状態遷移に応じて破棄する。手動 JSON Backup は端末内の永続データだけを
+allowlist 方式で Export する。
+
+悪意ある入力、時刻ずれ、終了通知の欠落、アプリ強制終了、端末再起動、同一 LAN 上の盗聴、
+改ざん済み GGUF、Backup の誤公開をエッジケースとして扱う。通知に依存せず各端末が独立して
+TTL と再起動時の非復元を強制し、外部入力は命令ではなくデータとして検証する。
+
+#### タスク
+
+1. `docs/privacy/data-inventory.md` に全データ種別と Public Passport の投影契約を記載する。
+2. `docs/privacy/retention-policy.md` に TTL、削除順序、非復元対象、Backup 契約を記載する。
+3. `docs/security/threat-model.md` に信頼境界と指定された 9 脅威の評価、対策、残余リスクを記載する。
+4. `docs/adr/0007-privacy-data-contract.md` に Privacy invariant と harness 追加計画を記載する。
+5. 受け入れ条件、用語、文体、相互参照をレビューし、指摘を解消する。
+
+#### 検証手順
+
+- `bunx textlint Plan.md docs/privacy/data-inventory.md docs/privacy/retention-policy.md docs/security/threat-model.md docs/adr/0007-privacy-data-contract.md`。
+- `make before-commit`。
+- `git diff --check` と禁止表現、必須脅威、必須表列、Privacy invariant ID の機械的な語句検査。
+- `.claude/agents/code-reviewer.md` に従った read-only レビューと Security、簡潔性の目視レビュー。
+
+#### 進捗ログ
+
+- 2026-07-17: 指定された正本、文体規則、既存 ADR、harness、Definition of Done を確認した。
+- 2026-07-17: ADR 番号を `0007` とし、永続データと Lounge 由来の短命データを保存方式で
+  分離する方針を選んだ。
+- 2026-07-17: データ台帳、保持ポリシー、脅威モデル、ADR-0007 を作成し、新規文書と
+  本セクションの `bunx textlint` を通した。
+- 2026-07-17: read-only レビューで見つかった参加 capability の保持境界、再起動後の Replay、
+  Owner Question と Owner Answer の削除契機、受動的脅威の検出可否を修正した。再レビューは
+  blocker、high、medium の指摘なしだった。
+- 2026-07-17: `make before-commit` は Git 管理外の `.claude/settings.local.json` の既存整形差分で
+  一度停止した。このローカル専用ファイルを一時退避して再実行し、全段階を通した。退避前後の
+  SHA-256 が一致することを確認し、設定ファイルを原状復帰した。
+
+#### 振り返り
+
+- 「保存しない」だけでは異常終了、再起動、Export 経路からの復元を防げないため、保存先、
+  削除契機、再起動時の扱いを同じ契約で定義する。
+- QR と近距離通信を同じ公開境界として扱わず、QR の参加情報と通信層の一時メタデータを
+  分離することで、アプリケーションメッセージへの端末情報の混入を防ぐ。
+- 参加 capability の raw token と使用済み digest を別区分にすることで、raw token の早期破棄と
+  Replay 検出に必要な最小状態の保持を両立する。
+- 肩越し閲覧、受動的なパケット盗聴、Export 後のバックアップ誤公開はアプリから検出できない。
+  検出不能と補助シグナルを分けて記載し、検出できたように扱わない。
