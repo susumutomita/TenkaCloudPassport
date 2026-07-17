@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { expiryNotice } from '../app/expiry-notice';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import QrCodeView from '../components/QrCodeView';
@@ -13,6 +15,7 @@ interface HostInviteScreenProps {
   readonly inviteQrPayload: string;
   readonly remainingMs: number;
   readonly errorMessage: string | null;
+  readonly locale?: Locale;
   readonly onMarkHostReady: () => void;
   readonly onProceedToGuestScan: () => void;
   readonly onCancel: () => void;
@@ -28,49 +31,43 @@ export default function HostInviteScreen({
   inviteQrPayload,
   remainingMs,
   errorMessage,
+  locale = DEFAULT_LOCALE,
   onMarkHostReady,
   onProceedToGuestScan,
   onCancel,
 }: HostInviteScreenProps) {
+  const t = MESSAGES[locale].hostInvite;
   const participants = room.status === 'expired' ? [] : room.participants;
   const hostParticipant = participants.find(
     (participant) => participant.participantId === hostParticipantId
   );
   const hostIsReady = hostParticipant?.ready ?? false;
-  const notice = expiryNotice(remainingMs);
+  const notice = expiryNotice(remainingMs, locale);
   const isExpired = room.status === 'expired';
+  const remainingMinutes = formatRemainingMinutes(remainingMs);
 
   return (
     <AppScreen
-      description="Invite QR を対面の相手に見せてください。参加者 2 名がそれぞれ Ready になるまで、判定は開始しません。"
+      description={t.description}
       eyebrow="Step 4 / Host Invite"
-      title="Lounge への Invite QR を表示する。"
+      title={t.title}
     >
       {isExpired ? (
         <View accessibilityRole="alert" style={styles.errorBox}>
-          <Text style={styles.errorTitle}>
-            この Lounge の招待は期限切れです。
-          </Text>
-          <Text style={styles.errorText}>
-            もう一度、最初から Lounge を作り直してください。
-          </Text>
+          <Text style={styles.errorTitle}>{t.expiredTitle}</Text>
+          <Text style={styles.errorText}>{t.expiredText}</Text>
         </View>
       ) : (
         <>
           <QrCodeView
-            accessibilityLabel={`Invite QR。残り ${formatRemainingMinutes(remainingMs)} 分で期限切れになります。`}
+            accessibilityLabel={t.qrAccessibilityLabel(remainingMinutes)}
             payload={inviteQrPayload}
           />
           <View accessibilityRole="summary" style={styles.notice}>
             <Text style={styles.noticeTitle}>
-              残り {formatRemainingMinutes(remainingMs)}{' '}
-              分で期限切れになります。
+              {t.remainingMinutesTitle(remainingMinutes)}
             </Text>
-            <Text style={styles.noticeText}>
-              Screenshot や画面共有で、この QR
-              が対面以外の相手に見られるリスクが
-              あります。期限内に、対面の相手にだけ見せてください。
-            </Text>
+            <Text style={styles.noticeText}>{t.screenshotRiskNotice}</Text>
           </View>
           {notice.level === 'warning' ? (
             <View accessibilityRole="alert" style={styles.expiryWarning}>
@@ -79,23 +76,23 @@ export default function HostInviteScreen({
           ) : null}
           <View accessibilityRole="summary" style={styles.participants}>
             <Text style={styles.participantsTitle}>
-              参加者 {participants.length} / {ROOM_CAPACITY}
+              {t.participantsTitle(participants.length, ROOM_CAPACITY)}
             </Text>
             {participants.map((participant) => (
               <Text
                 key={participant.participantId}
                 style={styles.participantRow}
               >
-                {participant.participantId === hostParticipantId
-                  ? 'あなた（Host）'
-                  : 'ゲスト'}
-                ：{participant.ready ? 'Ready' : '未 Ready'}
+                {t.participantRow(
+                  participant.participantId === hostParticipantId
+                    ? t.participantYou
+                    : t.participantGuest,
+                  participant.ready ? t.participantReady : t.participantNotReady
+                )}
               </Text>
             ))}
             {participants.length < ROOM_CAPACITY ? (
-              <Text style={styles.participantRow}>
-                ゲストの参加を待っています。
-              </Text>
+              <Text style={styles.participantRow}>{t.waitingForGuest}</Text>
             ) : null}
           </View>
           {errorMessage ? (
@@ -104,21 +101,21 @@ export default function HostInviteScreen({
             </Text>
           ) : null}
           <ActionButton
-            accessibilityHint="あなた自身の Public Passport 共有を確定し、Ready にします。"
+            accessibilityHint={t.markHostReadyHint}
             disabled={hostIsReady}
-            label={hostIsReady ? 'あなたは Ready 済み' : '自分も Ready にする'}
+            label={t.markHostReadyButton(hostIsReady)}
             onPress={onMarkHostReady}
           />
           <ActionButton
-            accessibilityHint="単一端末デモ用に、この QR をゲストとして読み取る画面へ切り替えます。"
-            label="同じ端末でゲストとして QR を読み取る"
+            accessibilityHint={t.proceedToGuestScanHint}
+            label={t.proceedToGuestScanButton}
             onPress={onProceedToGuestScan}
             variant="secondary"
           />
         </>
       )}
       <ActionButton
-        label="Lounge をキャンセルする"
+        label={t.cancelButton}
         onPress={onCancel}
         variant="danger"
       />

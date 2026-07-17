@@ -1,4 +1,6 @@
 import type { BackupShareOutcome } from './backup-share-port';
+import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
+import { MESSAGES } from './i18n/messages';
 import { readableError } from './readable-error';
 
 export type BackupNotice =
@@ -24,45 +26,56 @@ export function backupNoticeIsError(notice: BackupNotice): boolean {
 
 /** Share Sheet（または Web fallback）が返した結果を、Owner 向け通知へ変換する。 */
 export function backupNoticeFromShareOutcome(
-  outcome: BackupShareOutcome
+  outcome: BackupShareOutcome,
+  locale: Locale = DEFAULT_LOCALE
 ): BackupNotice {
+  const messages = MESSAGES[locale].backupNotice;
   if (outcome.kind === 'shared') {
-    return { kind: 'share-succeeded', message: '共有しました。' };
+    return { kind: 'share-succeeded', message: messages.shareSucceeded };
   }
   if (outcome.kind === 'dismissed') {
     return {
       kind: 'share-dismissed',
-      message: 'Share Sheet を閉じました。共有は行われていません。',
+      message: messages.shareDismissed,
     };
   }
   return {
     kind: 'share-saved-to-file',
-    message: `ファイルとして保存しました（${outcome.destination}）。`,
+    message: messages.shareSavedToFile(outcome.destination),
   };
 }
 
-export function backupNoticeFromShareFailure(error: unknown): BackupNotice {
+export function backupNoticeFromShareFailure(
+  error: unknown,
+  locale: Locale = DEFAULT_LOCALE
+): BackupNotice {
   return {
     kind: 'share-failed',
-    message: readableError(error, 'Share Sheet を開けませんでした。'),
+    message: readableError(
+      error,
+      MESSAGES[locale].backupNotice.shareFailedFallback
+    ),
   };
 }
 
-export function backupNoticeFromImportCommitSuccess(): BackupNotice {
+export function backupNoticeFromImportCommitSuccess(
+  locale: Locale = DEFAULT_LOCALE
+): BackupNotice {
   return {
     kind: 'import-committed',
-    message: 'Import した内容を端末内へ保存しました。',
+    message: MESSAGES[locale].backupNotice.importCommittedSucceeded,
   };
 }
 
 export function backupNoticeFromImportCommitFailure(
-  error: unknown
+  error: unknown,
+  locale: Locale = DEFAULT_LOCALE
 ): BackupNotice {
   return {
     kind: 'import-commit-failed',
     message: readableError(
       error,
-      'Import の Commit に失敗したため、既存の Profile を保ちました。'
+      MESSAGES[locale].backupNotice.importCommitFailedFallback
     ),
   };
 }

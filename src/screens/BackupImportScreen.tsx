@@ -2,6 +2,8 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { BackupPreviewItem } from '../app/backup-export';
 import type { BackupImportConflictChoice } from '../app/backup-import';
 import type { BackupNotice } from '../app/backup-notice';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import BackupNoticeBanner from '../components/BackupNoticeBanner';
@@ -26,34 +28,29 @@ export type BackupImportValidationView =
 
 interface ConflictChoiceSectionProps {
   readonly choice: BackupImportConflictChoice;
+  readonly locale: Locale;
   readonly onChangeChoice: (choice: BackupImportConflictChoice) => void;
 }
 
 /** 既存 Profile がある場合だけ表示する、Profile 単位（per-profile granularity）の Conflict 選択。 */
 function ConflictChoiceSection({
   choice,
+  locale,
   onChangeChoice,
 }: ConflictChoiceSectionProps) {
+  const t = MESSAGES[locale].backupImport;
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>
-        すでに Local Profile があります。どちらを使いますか。
-      </Text>
+      <Text style={styles.label}>{t.conflictQuestion}</Text>
       <ActionButton
-        accessibilityHint="既存の Local Profile をそのまま残し、読み込んだ内容を採用しません。"
-        label={
-          choice === 'keep-existing' ? '既存を残す（選択中）' : '既存を残す'
-        }
+        accessibilityHint={t.keepExistingHint}
+        label={t.keepExistingButton(choice === 'keep-existing')}
         onPress={() => onChangeChoice('keep-existing')}
         variant={choice === 'keep-existing' ? 'primary' : 'secondary'}
       />
       <ActionButton
-        accessibilityHint="既存の Local Profile を、読み込んだ内容で置き換えます。"
-        label={
-          choice === 'use-imported'
-            ? '読み込んだ内容に置き換える（選択中）'
-            : '読み込んだ内容に置き換える'
-        }
+        accessibilityHint={t.useImportedHint}
+        label={t.useImportedButton(choice === 'use-imported')}
         onPress={() => onChangeChoice('use-imported')}
         variant={choice === 'use-imported' ? 'primary' : 'secondary'}
       />
@@ -65,6 +62,7 @@ interface ParsedCandidateSectionProps {
   readonly validation: BackupImportParsedView;
   readonly hasExistingProfile: boolean;
   readonly choice: BackupImportConflictChoice;
+  readonly locale: Locale;
   readonly onChangeChoice: (choice: BackupImportConflictChoice) => void;
   readonly committing: boolean;
   readonly notice: BackupNotice;
@@ -76,26 +74,29 @@ function ParsedCandidateSection({
   validation,
   hasExistingProfile,
   choice,
+  locale,
   onChangeChoice,
   committing,
   notice,
   onCommit,
 }: ParsedCandidateSectionProps) {
+  const t = MESSAGES[locale].backupImport;
   return (
     <>
-      <Text style={styles.sectionTitle}>読み込む内容（Preview）</Text>
+      <Text style={styles.sectionTitle}>{t.parsedSectionTitle}</Text>
       <BackupPreviewList items={validation.items} />
       {hasExistingProfile ? (
         <ConflictChoiceSection
           choice={choice}
+          locale={locale}
           onChangeChoice={onChangeChoice}
         />
       ) : null}
       <BackupNoticeBanner notice={notice} />
       <ActionButton
-        accessibilityHint="選択した内容を端末内 Storage へ Atomic に Commit します。失敗時は既存の Profile を保ちます。"
+        accessibilityHint={t.commitButtonHint}
         disabled={committing}
-        label={committing ? 'Commit 中' : 'この内容を Commit する'}
+        label={t.commitButton(committing)}
         onPress={onCommit}
       />
     </>
@@ -109,6 +110,7 @@ interface BackupImportScreenProps {
   readonly validation: BackupImportValidationView;
   readonly hasExistingProfile: boolean;
   readonly choice: BackupImportConflictChoice;
+  readonly locale?: Locale;
   readonly onChangeChoice: (choice: BackupImportConflictChoice) => void;
   readonly committing: boolean;
   readonly notice: BackupNotice;
@@ -124,6 +126,7 @@ export default function BackupImportScreen({
   validation,
   hasExistingProfile,
   choice,
+  locale = DEFAULT_LOCALE,
   onChangeChoice,
   committing,
   notice,
@@ -131,38 +134,37 @@ export default function BackupImportScreen({
   onOpenExport,
   onBack,
 }: BackupImportScreenProps) {
+  const t = MESSAGES[locale].backupImport;
   return (
     <AppScreen
-      description="Export した JSON を貼り付けてください。GitHub Token など認証情報の入力欄はありません。"
+      description={t.description}
       eyebrow="Backup / Import"
-      title="JSON バックアップを読み込む。"
+      title={t.title}
     >
       <View style={styles.field}>
-        <Text style={styles.label}>バックアップ JSON（貼り付け）</Text>
+        <Text style={styles.label}>{t.rawInputLabel}</Text>
         <TextInput
-          accessibilityHint={`最大 ${BACKUP_MAX_BYTES} byte までの JSON を貼り付けます。`}
-          accessibilityLabel="バックアップ JSON"
+          accessibilityHint={t.rawInputHint(BACKUP_MAX_BYTES)}
+          accessibilityLabel={t.rawInputAccessibilityLabel}
           multiline
           onChangeText={onChangeRawInput}
-          placeholder='{"backupSchemaVersion": 2, ...}'
+          placeholder={t.rawInputPlaceholder}
           style={styles.input}
           value={rawInput}
         />
       </View>
       <ActionButton
-        accessibilityHint="貼り付けた JSON を strict schema で検証し、Preview を表示します。"
+        accessibilityHint={t.validateButtonHint}
         disabled={rawInput.length === 0}
-        label="内容を確認する（Preview / Validation）"
+        label={t.validateButton}
         onPress={onValidate}
       />
 
       {validation?.kind === 'rejected' ? (
         <View accessibilityRole="alert" style={styles.errorBox}>
-          <Text style={styles.errorTitle}>読み込めませんでした。</Text>
+          <Text style={styles.errorTitle}>{t.rejectedTitle}</Text>
           <Text style={styles.errorText}>{validation.message}</Text>
-          <Text style={styles.errorText}>
-            既存の Local Profile は変更していません。
-          </Text>
+          <Text style={styles.errorText}>{t.rejectedUnchangedNotice}</Text>
         </View>
       ) : null}
 
@@ -171,6 +173,7 @@ export default function BackupImportScreen({
           choice={choice}
           committing={committing}
           hasExistingProfile={hasExistingProfile}
+          locale={locale}
           notice={notice}
           onChangeChoice={onChangeChoice}
           onCommit={onCommit}
@@ -179,15 +182,11 @@ export default function BackupImportScreen({
       ) : null}
 
       <ActionButton
-        label="Export 画面へ戻る"
+        label={t.openExportButton}
         onPress={onOpenExport}
         variant="secondary"
       />
-      <ActionButton
-        label="Profile 編集へ戻る"
-        onPress={onBack}
-        variant="secondary"
-      />
+      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
     </AppScreen>
   );
 }

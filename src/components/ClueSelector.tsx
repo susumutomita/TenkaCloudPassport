@@ -1,4 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import { CLUE_IDS, type ClueId, clueById } from '../domain/clue-catalog';
 import { PASSPORT_FIELD_LIMITS } from '../domain/passport';
 import { colors, spacing } from '../ui/theme';
@@ -8,26 +10,23 @@ interface ClueSelectorProps {
   readonly onToggle: (id: ClueId) => void;
   readonly maximum: number;
   readonly enforceFieldLimits?: boolean;
+  readonly locale?: Locale;
 }
-
-const FIELD_LABELS = {
-  topics: 'Topics',
-  offers: 'Offer',
-  lookingFor: 'Looking For',
-  goal: 'Goal',
-} as const;
 
 export default function ClueSelector({
   selectedIds,
   onToggle,
   maximum,
   enforceFieldLimits = false,
+  locale = DEFAULT_LOCALE,
 }: ClueSelectorProps) {
   const reachedMaximum = selectedIds.length >= maximum;
+  const messages = MESSAGES[locale].clueSelector;
   return (
     <View style={styles.list}>
       {CLUE_IDS.map((id) => {
         const clue = clueById(id);
+        const fieldLabel = messages.fieldLabels[clue.passportField];
         const selected = selectedIds.includes(id);
         const selectedInField = selectedIds.filter(
           (selectedId) =>
@@ -39,7 +38,10 @@ export default function ClueSelector({
         const disabled = (reachedMaximum || reachedFieldMaximum) && !selected;
         return (
           <Pressable
-            accessibilityLabel={`${FIELD_LABELS[clue.passportField]}、${clue.label}`}
+            accessibilityLabel={messages.optionAccessibilityLabel(
+              fieldLabel,
+              clue.label
+            )}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: selected, disabled }}
             disabled={disabled}
@@ -59,9 +61,7 @@ export default function ClueSelector({
             </View>
             <View style={styles.optionText}>
               <Text style={styles.label}>{clue.label}</Text>
-              <Text style={styles.category}>
-                {FIELD_LABELS[clue.passportField]}
-              </Text>
+              <Text style={styles.category}>{fieldLabel}</Text>
             </View>
           </Pressable>
         );

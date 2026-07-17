@@ -1,17 +1,26 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import AppScreen from '../components/AppScreen';
 import { colors, spacing } from '../ui/theme';
 
-export default function ProfileLoadingScreen() {
+interface ProfileLoadingScreenProps {
+  readonly locale?: Locale;
+}
+
+export default function ProfileLoadingScreen({
+  locale = DEFAULT_LOCALE,
+}: ProfileLoadingScreenProps) {
+  const t = MESSAGES[locale].profileLoading;
   return (
     <AppScreen
       eyebrow="Local Profile"
-      title="端末内の保存状態を確認しています。"
-      description="明示保存済みの Local Profile だけを読み込みます。Draft や Lounge の履歴は復元しません。"
+      title={t.title}
+      description={t.description}
     >
       <View accessibilityRole="progressbar" style={styles.loading}>
         <ActivityIndicator color={colors.primary} size="large" />
-        <Text style={styles.text}>読込中です。</Text>
+        <Text style={styles.text}>{t.loading}</Text>
       </View>
     </AppScreen>
   );

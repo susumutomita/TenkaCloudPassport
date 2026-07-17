@@ -45,11 +45,13 @@ describe('Backup Export・Import の配線契約（Issue 14）', () => {
     );
     const mainBody = text.slice(mainStart);
 
+    // Issue 15: 文言は Message Catalog（`src/app/i18n/messages.ts`）へ集約したため、
+    // 配置順序は Catalog の Key 参照で固定し、正確な JA/EN 文言は messages.test.ts が担う。
     expectInOrder(mainBody, [
-      'バックアップ JSON（貼り付け）',
-      '内容を確認する（Preview / Validation）',
+      't.rawInputLabel',
+      't.validateButton',
       "validation?.kind === 'rejected'",
-      '読み込めませんでした。',
+      't.rejectedTitle',
       "validation?.kind === 'parsed'",
       '<ParsedCandidateSection',
     ]);
@@ -61,9 +63,7 @@ describe('Backup Export・Import の配線契約（Issue 14）', () => {
     const sectionEnd = text.indexOf('interface ParsedCandidateSectionProps');
     const sectionBody = text.slice(sectionStart, sectionEnd);
 
-    expect(sectionBody).toContain(
-      'すでに Local Profile があります。どちらを使いますか。'
-    );
+    expect(sectionBody).toContain('t.conflictQuestion');
     expect(sectionBody).toContain("onChangeChoice('keep-existing')");
     expect(sectionBody).toContain("onChangeChoice('use-imported')");
   });
@@ -75,11 +75,11 @@ describe('Backup Export・Import の配線契約（Issue 14）', () => {
     const sectionBody = text.slice(sectionStart, sectionEnd);
 
     expectInOrder(sectionBody, [
-      '読み込む内容（Preview）',
+      't.parsedSectionTitle',
       '<BackupPreviewList',
       '<ConflictChoiceSection',
       '<BackupNoticeBanner',
-      'この内容を Commit する',
+      't.commitButton(committing)',
     ]);
   });
 
@@ -114,9 +114,9 @@ describe('Backup Export・Import の配線契約（Issue 14）', () => {
     expectInOrder(body, [
       'await commitBackupImport(localProfileStorage, resolved)',
       'onImportCommitted(committed)',
-      'setImportNotice(backupNoticeFromImportCommitSuccess())',
+      'setImportNotice(backupNoticeFromImportCommitSuccess(locale))',
       '} catch (error: unknown) {',
-      'setImportNotice(backupNoticeFromImportCommitFailure(error))',
+      'setImportNotice(backupNoticeFromImportCommitFailure(error, locale))',
       '} finally {',
     ]);
     const catchBlockStart = body.indexOf('} catch (error: unknown) {');

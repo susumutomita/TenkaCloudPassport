@@ -1,4 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import {
   LANGUAGE_CATALOG,
   LANGUAGE_CODES,
@@ -9,19 +11,24 @@ import { colors, spacing } from '../ui/theme';
 interface LanguageSelectorProps {
   readonly selectedCodes: readonly LanguageCode[];
   readonly onToggle: (code: LanguageCode) => void;
+  readonly locale?: Locale;
 }
 
 export default function LanguageSelector({
   selectedCodes,
   onToggle,
+  locale = DEFAULT_LOCALE,
 }: LanguageSelectorProps) {
+  const messages = MESSAGES[locale].languageSelector;
   return (
     <View style={styles.list}>
       {LANGUAGE_CODES.map((code) => {
         const selected = selectedCodes.includes(code);
         return (
           <Pressable
-            accessibilityLabel={`Language ${LANGUAGE_CATALOG[code].label}`}
+            accessibilityLabel={messages.optionAccessibilityLabel(
+              LANGUAGE_CATALOG[code].label
+            )}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: selected }}
             key={code}
@@ -33,7 +40,9 @@ export default function LanguageSelector({
             ]}
           >
             <Text style={styles.label}>{LANGUAGE_CATALOG[code].label}</Text>
-            <Text style={styles.state}>{selected ? 'ON' : 'OFF'}</Text>
+            <Text style={styles.state}>
+              {selected ? messages.stateOn : messages.stateOff}
+            </Text>
           </Pressable>
         );
       })}

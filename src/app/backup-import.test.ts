@@ -118,6 +118,7 @@ describe('parseBackupImportCandidate', () => {
 
   it('欠落 Field は rejected（MISSING_FIELD）を返す', () => {
     const backup = JSON.parse(validBackupJson()) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature が bracket notation を要求する
     delete backup['localPrivateProfile'];
 
     const result = parseBackupImportCandidate(JSON.stringify(backup));
@@ -133,6 +134,7 @@ describe('parseBackupImportCandidate', () => {
     const oversized = {
       ...backup,
       localPrivateProfile: {
+        // biome-ignore lint/complexity/useLiteralKeys: 上記と同じ noPropertyAccessFromIndexSignature の制約。
         ...(backup['localPrivateProfile'] as Record<string, unknown>),
         ownerAlias: oversizedAlias,
       },

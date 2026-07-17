@@ -1,4 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import type {
   PassportPreviewItem,
   PassportShareSelection,
@@ -20,6 +22,7 @@ interface PassportSharePreviewScreenProps {
   readonly selection: PassportShareSelection;
   readonly previewItems: readonly PassportPreviewItem[] | null;
   readonly validationMessage: string | null;
+  readonly locale?: Locale;
   readonly onTogglePetName: () => void;
   readonly onTogglePetEmoji: () => void;
   readonly onToggleOwnerAlias: () => void;
@@ -35,6 +38,8 @@ interface ToggleRowProps {
   readonly enabled: boolean;
   readonly disabled?: boolean;
   readonly onToggle: () => void;
+  readonly accessibilityLabel: string;
+  readonly stateText: string;
 }
 
 function ToggleRow({
@@ -43,10 +48,12 @@ function ToggleRow({
   enabled,
   disabled = false,
   onToggle,
+  accessibilityLabel,
+  stateText,
 }: ToggleRowProps) {
   return (
     <Pressable
-      accessibilityLabel={`${label}、${value}、今回の共有 ${enabled ? 'ON' : 'OFF'}`}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="switch"
       accessibilityState={{ checked: enabled, disabled }}
       disabled={disabled}
@@ -62,7 +69,7 @@ function ToggleRow({
         <Text style={styles.toggleLabel}>{label}</Text>
         <Text style={styles.toggleValue}>{value}</Text>
       </View>
-      <Text style={styles.toggleState}>{enabled ? 'ON' : 'OFF'}</Text>
+      <Text style={styles.toggleState}>{stateText}</Text>
     </Pressable>
   );
 }
@@ -72,6 +79,7 @@ export default function PassportSharePreviewScreen({
   selection,
   previewItems,
   validationMessage,
+  locale = DEFAULT_LOCALE,
   onTogglePetName,
   onTogglePetEmoji,
   onToggleOwnerAlias,
@@ -80,78 +88,113 @@ export default function PassportSharePreviewScreen({
   onStart,
   onBack,
 }: PassportSharePreviewScreenProps) {
+  const t = MESSAGES[locale].sharePreview;
+  const fieldLabels = MESSAGES[locale].clueSelector.fieldLabels;
   const clueMaximumReached =
     selection.clueIds.length >= PUBLIC_PASSPORT_MAX_CLUES;
+  function toggleState(enabled: boolean): string {
+    return enabled ? t.toggleStateOn : t.toggleStateOff;
+  }
   return (
     <AppScreen
       eyebrow="Step 3 / Share Preview"
-      title="今回だけ共有する内容を確認する。"
-      description="ON の項目だけが同じ Public Passport として QR / Peer Payload に入ります。Local Profile 全体は共有しません。"
+      title={t.title}
+      description={t.description}
     >
       <View accessibilityRole="summary" style={styles.warning}>
-        <Text style={styles.warningTitle}>
-          機密情報を共有しないでください。
-        </Text>
-        <Text style={styles.warningText}>
-          Pet Name と会話材料 1 件以上が必須です。その他は項目単位で OFF
-          にできます。
-        </Text>
+        <Text style={styles.warningTitle}>{t.warningTitle}</Text>
+        <Text style={styles.warningText}>{t.warningText}</Text>
       </View>
-      <Text style={styles.sectionTitle}>今回の共有 ON / OFF</Text>
+      <Text style={styles.sectionTitle}>{t.toggleSectionTitle}</Text>
       <ToggleRow
+        accessibilityLabel={t.toggleAccessibilityLabel(
+          t.petNameFieldLabel,
+          profile.petName,
+          selection.includePetName
+        )}
         enabled={selection.includePetName}
-        label="Pet Name"
+        label={t.petNameFieldLabel}
         onToggle={onTogglePetName}
+        stateText={toggleState(selection.includePetName)}
         value={profile.petName}
       />
       <ToggleRow
+        accessibilityLabel={t.toggleAccessibilityLabel(
+          t.petEmojiFieldLabel,
+          profile.petEmoji,
+          selection.includePetEmoji
+        )}
         enabled={selection.includePetEmoji}
-        label="Pet Emoji"
+        label={t.petEmojiFieldLabel}
         onToggle={onTogglePetEmoji}
+        stateText={toggleState(selection.includePetEmoji)}
         value={profile.petEmoji}
       />
       {profile.ownerAlias ? (
         <ToggleRow
+          accessibilityLabel={t.toggleAccessibilityLabel(
+            t.ownerAliasFieldLabel,
+            profile.ownerAlias,
+            selection.includeOwnerAlias
+          )}
           enabled={selection.includeOwnerAlias}
-          label="Owner Alias"
+          label={t.ownerAliasFieldLabel}
           onToggle={onToggleOwnerAlias}
+          stateText={toggleState(selection.includeOwnerAlias)}
           value={profile.ownerAlias}
         />
       ) : null}
       {profile.candidateClues.map((clue) => {
         const definition = clueById(clue.value);
+        const fieldLabel = fieldLabels[definition.passportField];
         const enabled = selection.clueIds.includes(clue.value);
         return (
           <ToggleRow
+            accessibilityLabel={t.toggleAccessibilityLabel(
+              fieldLabel,
+              definition.label,
+              enabled
+            )}
             disabled={
               !clue.selectedForPassport || (clueMaximumReached && !enabled)
             }
             enabled={enabled}
             key={clue.value}
-            label={definition.passportField}
+            label={fieldLabel}
             onToggle={() => onToggleClue(clue.value)}
+            stateText={toggleState(enabled)}
             value={definition.label}
           />
         );
       })}
-      {profile.languages.map((language) => (
-        <ToggleRow
-          enabled={selection.languageCodes.includes(language)}
-          key={language}
-          label="Language"
-          onToggle={() => onToggleLanguage(language)}
-          value={LANGUAGE_CATALOG[language].label}
-        />
-      ))}
+      {profile.languages.map((language) => {
+        const enabled = selection.languageCodes.includes(language);
+        const value = LANGUAGE_CATALOG[language].label;
+        return (
+          <ToggleRow
+            accessibilityLabel={t.toggleAccessibilityLabel(
+              t.languageFieldLabel,
+              value,
+              enabled
+            )}
+            enabled={enabled}
+            key={language}
+            label={t.languageFieldLabel}
+            onToggle={() => onToggleLanguage(language)}
+            stateText={toggleState(enabled)}
+            value={value}
+          />
+        );
+      })}
       {validationMessage ? (
         <View accessibilityRole="alert" style={styles.errorBox}>
-          <Text style={styles.errorTitle}>Validation Error</Text>
+          <Text style={styles.errorTitle}>{t.validationErrorTitle}</Text>
           <Text style={styles.errorText}>{validationMessage}</Text>
         </View>
       ) : null}
       {previewItems ? (
         <View accessibilityRole="summary" style={styles.preview}>
-          <Text style={styles.previewTitle}>QR / Peer Payload Preview</Text>
+          <Text style={styles.previewTitle}>{t.previewTitle}</Text>
           {previewItems.map((item) => (
             <View key={item.key} style={styles.previewRow}>
               <Text style={styles.previewLabel}>{item.label}</Text>
@@ -161,16 +204,12 @@ export default function PassportSharePreviewScreen({
         </View>
       ) : null}
       <ActionButton
-        accessibilityHint="Preview と同じ Public Passport を投影して Lounge を開始します。"
+        accessibilityHint={t.startButtonHint}
         disabled={!previewItems}
-        label="この Public Passport で Lounge に参加"
+        label={t.startButton}
         onPress={onStart}
       />
-      <ActionButton
-        label="相手の公開内容へ戻る"
-        onPress={onBack}
-        variant="secondary"
-      />
+      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
     </AppScreen>
   );
 }

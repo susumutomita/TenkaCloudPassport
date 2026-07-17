@@ -1,4 +1,5 @@
 import type { ClockSnapshot } from '../domain/clock-guard';
+import type { LanguageCode } from '../domain/clue-catalog';
 import type { RulesInteractionDiscoveryProvider } from '../domain/interaction-discovery-provider';
 import type { ActiveLounge, LoungeState } from '../domain/lounge';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
@@ -87,17 +88,22 @@ export function beginPetInteraction(
  * 呼んだ場合、`receiveOwnerAnswer` は必ず `bridging` か `no-signal`（timeout を含む）へ
  * 確定させる契約（`src/domain/pet-interaction.ts`）のため、この関数はその結果を
  * 直ちに `retireInteraction` で `retired` へ収束させ、Lounge 本体へ委譲する。
+ *
+ * `language`（既定 `ja`）は Bridge が確定する場合だけ `receiveOwnerAnswer` を経由して
+ * Bridge 文言へ反映される。App の表示言語（`src/app/i18n/locale.ts`）をそのまま渡せるよう、
+ * 型は Domain の `LanguageCode` を再輸出せずそのまま使う（Issue 15）。
  */
 export function submitOwnerQuestionAnswer(
   interaction: PetInteractionState | null,
   active: ActiveLounge,
   answer: OwnerAnswerValue,
-  clock: ClockSnapshot
+  clock: ClockSnapshot,
+  language: LanguageCode = 'ja'
 ): PetInteractionStep {
   if (interaction?.phase !== 'clarifying') {
     return { interaction, lounge: active };
   }
-  const { state } = receiveOwnerAnswer(interaction, answer, clock);
+  const { state } = receiveOwnerAnswer(interaction, answer, clock, language);
   const retired = retireInteraction(state);
   return {
     interaction: null,

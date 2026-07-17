@@ -1,4 +1,6 @@
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import type { ProfileNotice } from '../app/profile-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
@@ -22,6 +24,7 @@ interface PassportCreationScreenProps {
   readonly languageCodes: readonly LanguageCode[];
   readonly notice: ProfileNotice;
   readonly saving: boolean;
+  readonly locale?: Locale;
   readonly onChangePetName: (value: string) => void;
   readonly onSelectPetEmoji: (emoji: PetEmoji) => void;
   readonly onChangeOwnerAlias: (value: string) => void;
@@ -29,29 +32,26 @@ interface PassportCreationScreenProps {
   readonly onToggleLanguage: (code: LanguageCode) => void;
   readonly onSave: () => void;
   readonly onOpenBackup: () => void;
+  readonly onOpenSettings: () => void;
 }
 
-const NOTICE_TITLES: Record<ProfileNotice['kind'], string> = {
-  empty: '保存済み Profile はありません。',
-  restored: 'Local Profile を復元しました。',
-  'validation-error': '入力を確認してください。',
-  'save-error': '保存に失敗しました。',
-  'storage-unavailable': '端末内 Storage を利用できません。',
-  'invalid-data': '端末内の保存データが不正です。',
-  'read-error': '保存済み Profile を読み込めません。',
-  'lounge-discarded': 'この Lounge のデータを端末から破棄しました。',
-};
-
-function Notice({ notice }: { readonly notice: ProfileNotice }) {
+function Notice({
+  notice,
+  locale,
+}: {
+  readonly notice: ProfileNotice;
+  readonly locale: Locale;
+}) {
   const isError = !['empty', 'restored', 'lounge-discarded'].includes(
     notice.kind
   );
+  const title = MESSAGES[locale].passportCreation.noticeTitles[notice.kind];
   return (
     <View
       accessibilityRole={isError ? 'alert' : 'summary'}
       style={[styles.notice, isError ? styles.errorNotice : undefined]}
     >
-      <Text style={styles.noticeTitle}>{NOTICE_TITLES[notice.kind]}</Text>
+      <Text style={styles.noticeTitle}>{title}</Text>
       <Text style={styles.noticeText}>{notice.message}</Text>
     </View>
   );
@@ -65,6 +65,7 @@ export default function PassportCreationScreen({
   languageCodes,
   notice,
   saving,
+  locale = DEFAULT_LOCALE,
   onChangePetName,
   onSelectPetEmoji,
   onChangeOwnerAlias,
@@ -72,90 +73,98 @@ export default function PassportCreationScreen({
   onToggleLanguage,
   onSave,
   onOpenBackup,
+  onOpenSettings,
 }: PassportCreationScreenProps) {
+  const t = MESSAGES[locale].passportCreation;
+  const common = MESSAGES[locale].common;
   return (
     <AppScreen
       eyebrow="Step 1 / Local Profile"
-      title="アカウントなしで Pet を準備する。"
-      description="入力は明示保存するまで端末へ残りません。氏名、メール、電話、住所、会社名、機密情報は入力しないでください。"
+      title={t.title}
+      description={t.description}
     >
-      <Notice notice={notice} />
+      <Notice locale={locale} notice={notice} />
       <View style={styles.field}>
         <Text nativeID="pet-name-label" style={styles.label}>
-          Pet Name（必須）
+          {t.petNameLabel}
         </Text>
         <TextInput
-          accessibilityLabel="Pet Name"
-          accessibilityHint={`${PET_NAME_MAX_LENGTH} 文字以下の Pet の表示名を入力します。`}
+          accessibilityLabel={t.petNameAccessibilityLabel}
+          accessibilityHint={t.petNameHint(PET_NAME_MAX_LENGTH)}
           maxLength={PET_NAME_MAX_LENGTH}
           onChangeText={onChangePetName}
-          placeholder="例: こむぎ"
+          placeholder={t.petNamePlaceholder}
           style={styles.input}
           value={petName}
         />
         <Text style={styles.limit}>
-          {petName.length} / {PET_NAME_MAX_LENGTH}
-          。機密情報を入力しないでください。
+          {t.petNameCounter(petName.length, PET_NAME_MAX_LENGTH)}
         </Text>
       </View>
       <View style={styles.field}>
-        <Text style={styles.label}>Pet Emoji（6 種類から 1 件）</Text>
-        <PetEmojiSelector selected={petEmoji} onSelect={onSelectPetEmoji} />
+        <Text style={styles.label}>{t.petEmojiLabel}</Text>
+        <PetEmojiSelector
+          locale={locale}
+          onSelect={onSelectPetEmoji}
+          selected={petEmoji}
+        />
       </View>
       <View style={styles.field}>
         <Text nativeID="owner-alias-label" style={styles.label}>
-          Owner Alias（任意、本名不要）
+          {t.ownerAliasLabel}
         </Text>
         <TextInput
-          accessibilityLabel="Owner Alias、任意"
-          accessibilityHint={`${OWNER_ALIAS_MAX_LENGTH} 文字以下の呼び名を入力します。空でも保存できます。`}
+          accessibilityLabel={t.ownerAliasAccessibilityLabel}
+          accessibilityHint={t.ownerAliasHint(OWNER_ALIAS_MAX_LENGTH)}
           maxLength={OWNER_ALIAS_MAX_LENGTH}
           onChangeText={onChangeOwnerAlias}
-          placeholder="空のままで構いません"
+          placeholder={t.ownerAliasPlaceholder}
           style={styles.input}
           value={ownerAlias}
         />
         <Text style={styles.limit}>
-          {ownerAlias.length} / {OWNER_ALIAS_MAX_LENGTH}
-          。本名や連絡先を入力しないでください。
+          {t.ownerAliasCounter(ownerAlias.length, OWNER_ALIAS_MAX_LENGTH)}
         </Text>
       </View>
       <View style={styles.counterRow}>
-        <Text style={styles.sectionTitle}>会話の材料</Text>
+        <Text style={styles.sectionTitle}>{t.cluesSectionTitle}</Text>
         <Text style={styles.counter}>
-          {selectedIds.length} / {PROFILE_MAX_CLUES}
+          {t.cluesCounter(selectedIds.length, PROFILE_MAX_CLUES)}
         </Text>
       </View>
-      <Text style={styles.limit}>
-        Topics 3 件、Offer 3 件、Looking For 3 件、Goal 1
-        件までです。カタログ外の機密情報は入力できません。
-      </Text>
+      <Text style={styles.limit}>{t.cluesLimitNote}</Text>
       <ClueSelector
         enforceFieldLimits
+        locale={locale}
         maximum={PROFILE_MAX_CLUES}
         onToggle={onToggleClue}
         selectedIds={selectedIds}
       />
       <View style={styles.field}>
-        <Text style={styles.sectionTitle}>Languages（3 件まで）</Text>
-        <Text style={styles.limit}>
-          同梱カタログから選びます。機密情報を入力する欄ではありません。
-        </Text>
+        <Text style={styles.sectionTitle}>{t.languagesSectionTitle}</Text>
+        <Text style={styles.limit}>{t.languagesNote}</Text>
         <LanguageSelector
+          locale={locale}
           onToggle={onToggleLanguage}
           selectedCodes={languageCodes}
         />
       </View>
       <ActionButton
-        accessibilityHint="検証済みの Local Profile をこの端末だけに保存します。"
+        accessibilityHint={t.saveButtonHint}
         disabled={saving}
-        label={saving ? '端末内に保存中' : 'Local Profile を端末内に明示保存'}
+        label={t.saveButton(saving)}
         onPress={onSave}
       />
       <ActionButton
-        accessibilityHint="端末内の設定を JSON として書き出す、または JSON バックアップから復元します。"
-        label="Backup（JSON の書き出し・復元）"
+        accessibilityHint={t.backupButtonHint}
+        label={t.backupButton}
         onPress={onOpenBackup}
+        variant="secondary"
+      />
+      <ActionButton
+        accessibilityHint={common.settingsButtonHint}
+        label={common.settingsButton}
+        onPress={onOpenSettings}
         variant="secondary"
       />
     </AppScreen>

@@ -17,7 +17,7 @@ describe('Owner Question 画面の段階的開示・Consent 契約', () => {
 
     expect(text).toContain("from '../app/owner-question-disclosure'");
     expectInOrder(text, [
-      'ownerQuestionDisclosure()',
+      'ownerQuestionDisclosure(locale)',
       'sharedWithMessage',
       'deletedWhenMessage',
       'notSavedToPassportMessage',
@@ -28,8 +28,11 @@ describe('Owner Question 画面の段階的開示・Consent 契約', () => {
   it('答える・分からない・パスの 3 択を常に用意する', async () => {
     const text = await source();
 
-    for (const label of ['答える', '分からない', 'パス']) {
-      expect(text).toContain(`label="${label}"`);
+    // Issue 15: 文言は Message Catalog（`src/app/i18n/messages.ts`）へ集約したため、
+    // 正確な JA/EN 文言のピン留めは `messages.test.ts` の
+    // 「Owner Question の 3 択ラベルは JA/EN それぞれ存在する」が担う。
+    for (const label of ['t.answerButton', 't.noButton', 't.declineButton']) {
+      expect(text).toContain(`label={${label}}`);
     }
   });
 
@@ -87,15 +90,15 @@ describe('Owner Question 画面の段階的開示・Consent 契約', () => {
   it('退出して破棄・Host として終了の Terminal Event を常に提供し、それぞれ内容を持つ accessibilityHint を持つ', async () => {
     const text = await source();
 
-    expect(text).toContain('label="退出して破棄"');
-    expect(text).toContain('label="Host として終了"');
+    expect(text).toContain('label={t.exitButton}');
+    expect(text).toContain('label={t.hostEndButton}');
     expectInOrder(text, [
-      'accessibilityHint="この Lounge から退出し、この端末のデータを破棄します。"',
-      'label="退出して破棄"',
+      'accessibilityHint={t.exitButtonHint}',
+      'label={t.exitButton}',
     ]);
     expectInOrder(text, [
-      'accessibilityHint="Host としてこの Lounge を終了し、全参加者のデータを破棄します。"',
-      'label="Host として終了"',
+      'accessibilityHint={t.hostEndButtonHint}',
+      'label={t.hostEndButton}',
     ]);
   });
 

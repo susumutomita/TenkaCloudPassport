@@ -92,6 +92,42 @@ describe('Pet Interaction の bounded protocol', () => {
         outcome: { kind: 'bridge', bridge: bridging.bridge },
       });
     });
+
+    it('Issue 15: language に en を渡すと receiveOwnerAnswer が英語の Bridge 文言を確定する', () => {
+      const discovering = beginInteraction(CLOCK);
+      const discoveryResult = RULES_INTERACTION_PROVIDER.discover({
+        ownerPassport: passport(['open-source']),
+        encounteredPassport: passport(['open-source']),
+      });
+      const clarifying = receiveDiscoveryResult(
+        discovering,
+        discoveryResult,
+        CLOCK
+      ).state;
+
+      const { state } = receiveOwnerAnswer(clarifying, 'yes', CLOCK, 'en');
+
+      if (state.phase !== 'bridging') throw new Error('unreachable');
+      expect(state.bridge.message).not.toContain('話してみませんか');
+    });
+
+    it('receiveOwnerAnswer は language を省略すると日本語の Bridge 文言のまま（後方互換）', () => {
+      const discovering = beginInteraction(CLOCK);
+      const discoveryResult = RULES_INTERACTION_PROVIDER.discover({
+        ownerPassport: passport(['open-source']),
+        encounteredPassport: passport(['open-source']),
+      });
+      const clarifying = receiveDiscoveryResult(
+        discovering,
+        discoveryResult,
+        CLOCK
+      ).state;
+
+      const { state } = receiveOwnerAnswer(clarifying, 'yes', CLOCK);
+
+      if (state.phase !== 'bridging') throw new Error('unreachable');
+      expect(state.bridge.message).toContain('話してみませんか');
+    });
   });
 
   describe('情報不足: 共有手掛かりがないとき discovering から直接 no-signal になる', () => {

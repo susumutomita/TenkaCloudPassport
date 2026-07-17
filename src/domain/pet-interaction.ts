@@ -1,5 +1,6 @@
 import { type Bridge, createBridgeFromEvidence } from './bridge';
 import { type ClockSnapshot, hasElapsedTtl, isValidClock } from './clock-guard';
+import type { LanguageCode } from './clue-catalog';
 import type { InteractionDiscoveryResult } from './interaction-discovery-provider';
 import type { MatchEvidence, OwnerAnswerValue } from './match-evidence';
 import type { OwnerQuestion } from './owner-question';
@@ -190,11 +191,17 @@ export function receiveDiscoveryResult(
   };
 }
 
-/** `clarifying` が Owner の回答（1 人 1 問の唯一の回答）を適用する。 */
+/**
+ * `clarifying` が Owner の回答（1 人 1 問の唯一の回答）を適用する。`language`（既定 `ja`）は
+ * Bridge 確定（`answer === 'yes'`）のときだけ `createBridgeFromEvidence` へそのまま渡し、
+ * UI の表示言語（`src/app/i18n/locale.ts` の `Locale`）に Bridge 文言を追従させる
+ * （Issue 15、`docs/design/i18n-and-accessibility.md` の設計判断 4）。
+ */
 export function receiveOwnerAnswer(
   state: PetInteractionState,
   answer: OwnerAnswerValue,
-  clock: ClockSnapshot
+  clock: ClockSnapshot,
+  language: LanguageCode = 'ja'
 ): InteractionApplication {
   if (state.phase !== 'clarifying') {
     return { state, applied: false };
@@ -209,7 +216,10 @@ export function receiveOwnerAnswer(
   if (answer === 'yes') {
     const evidence = buildConsentedEvidence(state.candidateClue, answer);
     return {
-      state: { phase: 'bridging', bridge: createBridgeFromEvidence(evidence) },
+      state: {
+        phase: 'bridging',
+        bridge: createBridgeFromEvidence(evidence, language),
+      },
       applied: true,
     };
   }

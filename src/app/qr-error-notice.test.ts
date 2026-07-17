@@ -57,4 +57,28 @@ describe('QR フローの Error メッセージ変換', () => {
       '読み取りに失敗しました。もう一度実行してください。'
     );
   });
+
+  it('locale が en のとき、型付きコードそれぞれに固有の英語文言を返す', () => {
+    const payloadMessages = (
+      [
+        'NOT_PASSPORT_QR',
+        'INVALID_PREFIX',
+        'OVERSIZED_PAYLOAD',
+        'INVALID_JSON',
+        'UNKNOWN_VERSION',
+        'DUPLICATE_SCAN',
+      ] as const
+    ).map((code) => qrFlowErrorMessage(new QrPayloadError(code, 'x'), 'en'));
+    expect(new Set(payloadMessages).size).toBe(payloadMessages.length);
+
+    expect(
+      qrFlowErrorMessage(new QrScanError('PERMISSION_NOT_GRANTED', 'x'), 'en')
+    ).toContain('Camera');
+  });
+
+  it('locale が en のとき、Error ではない例外には英語の既定案内文を返す', () => {
+    expect(qrFlowErrorMessage('文字列の例外', 'en')).toBe(
+      'The scan failed. Please try again.'
+    );
+  });
 });

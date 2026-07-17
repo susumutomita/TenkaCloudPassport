@@ -246,5 +246,10 @@ Golden Fixture・Platform 非依存を対象にする。
   判断する。2 系統の Rules 判定を 1 つへ統合するかもここで合わせて判断する。
 - `AgentModelDecision` と既存の `Bridge` / `MatchEvidence` / `AgentDecision`（Wire 型）を
   統合するかどうかは、M3 で実際に Peer 間へ送信する配線をする Issue で判断する。
-- カタログ label 自体の英語翻訳（Issue 15）が完了すれば、`language: 'en'` の出力から
-  日本語 label の混入が無くなる。
+- カタログ label 自体の英語翻訳は Issue 15 でも対象外のまま据え置いた
+ （[日本語・英語 i18n と主要フローの Accessibility の設計](./i18n-and-accessibility.md)
+  の設計判断 5）。Issue 15 は 2 者間 Live 経路（`src/domain/bridge.ts`）に
+  `sourceLabels`（Clue Label そのものの原文）と `language` ごとの定型文を分離して
+  持たせ、UI が原文と生成文を区別して提示できるようにしたが、`clue.label` 自体は
+  日本語のままとする。カタログ label 自体の翻訳が実現すれば、`language: 'en'` の
+  出力から日本語 label の混入が無くなる。

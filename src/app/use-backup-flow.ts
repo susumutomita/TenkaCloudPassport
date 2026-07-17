@@ -23,6 +23,7 @@ import {
   backupNoticeFromShareOutcome,
 } from './backup-notice';
 import type { BackupSharePort } from './backup-share-port';
+import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import type { LocalProfileStoragePort } from './local-profile-storage';
 
 export type BackupStage = 'backup-export' | 'backup-import';
@@ -50,6 +51,10 @@ interface UseBackupFlowParams {
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
   readonly privateProfile: LocalPrivateProfile | null;
+  /** Issue 15: 現在の UI 表示言語。Backup Notice と Export の Device Settings へ反映する。 */
+  readonly locale?: Locale;
+  /** Issue 15: OS の Reduce Motion 設定。Export の Device Settings へ反映する。 */
+  readonly reduceMotion?: boolean;
   readonly onImportCommitted: (profile: LocalPrivateProfile) => void;
   readonly onOpenStage: (stage: BackupStage) => void;
   readonly onCloseStage: () => void;
@@ -66,6 +71,8 @@ export function useBackupFlow({
   localProfileStorage,
   backupSharePort,
   privateProfile,
+  locale = DEFAULT_LOCALE,
+  reduceMotion = false,
   onImportCommitted,
   onOpenStage,
   onCloseStage,
@@ -88,14 +95,14 @@ export function useBackupFlow({
     try {
       return createBackupExportPreview({
         localPrivateProfile: privateProfile,
-        deviceSettings: createDefaultDeviceSettings(),
+        deviceSettings: createDefaultDeviceSettings(locale, reduceMotion),
         modelVerification: null,
         exportedAt,
       });
     } catch {
       return null;
     }
-  }, [privateProfile, exportedAt]);
+  }, [privateProfile, exportedAt, locale, reduceMotion]);
 
   const openImport = useCallback((): void => {
     setRawInput('');
@@ -132,13 +139,13 @@ export function useBackupFlow({
         fileName: backupExportFileName(exportPreview.backup.exportedAt),
         json: exportPreview.json,
       });
-      setExportNotice(backupNoticeFromShareOutcome(outcome));
+      setExportNotice(backupNoticeFromShareOutcome(outcome, locale));
     } catch (error: unknown) {
-      setExportNotice(backupNoticeFromShareFailure(error));
+      setExportNotice(backupNoticeFromShareFailure(error, locale));
     } finally {
       setSharing(false);
     }
-  }, [exportPreview, sharing, backupSharePort]);
+  }, [exportPreview, sharing, backupSharePort, locale]);
 
   const changeRawInput = useCallback((value: string): void => {
     setRawInput(value);
@@ -173,9 +180,9 @@ export function useBackupFlow({
       );
       const committed = await commitBackupImport(localProfileStorage, resolved);
       onImportCommitted(committed);
-      setImportNotice(backupNoticeFromImportCommitSuccess());
+      setImportNotice(backupNoticeFromImportCommitSuccess(locale));
     } catch (error: unknown) {
-      setImportNotice(backupNoticeFromImportCommitFailure(error));
+      setImportNotice(backupNoticeFromImportCommitFailure(error, locale));
     } finally {
       setCommitting(false);
     }
@@ -186,6 +193,7 @@ export function useBackupFlow({
     importChoice,
     localProfileStorage,
     onImportCommitted,
+    locale,
   ]);
 
   return {

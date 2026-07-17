@@ -30,6 +30,15 @@ describe('createDefaultDeviceSettings', () => {
       catalogVersion: CATALOG_VERSION,
     });
   });
+
+  it('Issue 15: 現在の UI 表示言語と Reduce Motion 設定を Backup へそのまま反映する', () => {
+    expect(createDefaultDeviceSettings('en', true)).toEqual({
+      language: 'en',
+      reduceMotion: true,
+      selectedModelDigest: null,
+      catalogVersion: CATALOG_VERSION,
+    });
+  });
 });
 
 describe('createBackupExportPreview', () => {

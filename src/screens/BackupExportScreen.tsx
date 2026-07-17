@@ -1,6 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { BackupExportPreview } from '../app/backup-export';
 import type { BackupNotice } from '../app/backup-notice';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import BackupNoticeBanner from '../components/BackupNoticeBanner';
@@ -11,6 +13,7 @@ interface BackupExportScreenProps {
   readonly preview: BackupExportPreview | null;
   readonly sharing: boolean;
   readonly notice: BackupNotice;
+  readonly locale?: Locale;
   readonly onShare: () => void;
   readonly onOpenImport: () => void;
   readonly onBack: () => void;
@@ -20,45 +23,40 @@ export default function BackupExportScreen({
   preview,
   sharing,
   notice,
+  locale = DEFAULT_LOCALE,
   onShare,
   onOpenImport,
   onBack,
 }: BackupExportScreenProps) {
+  const t = MESSAGES[locale].backupExport;
   return (
     <AppScreen
-      description="Local Passport、Pet 設定、Model 設定のうち秘匿値でないものだけを書き出します。アプリは GitHub API と接続せず、Token を扱いません。"
+      description={t.description}
       eyebrow="Backup / Export"
-      title="端末内の設定を JSON として書き出す。"
+      title={t.title}
     >
       <View accessibilityRole="alert" style={styles.warning}>
-        <Text style={styles.warningTitle}>この JSON は暗号化されません。</Text>
-        <Text style={styles.warningText}>
-          保存先の同期・共有範囲・版管理・削除は Owner 自身の責任です。アプリは
-          保存先のファイルを一切追跡しません。
-        </Text>
+        <Text style={styles.warningTitle}>{t.warningTitle}</Text>
+        <Text style={styles.warningText}>{t.warningText}</Text>
       </View>
-      <Text style={styles.sectionTitle}>Export される全項目（Preview）</Text>
+      <Text style={styles.sectionTitle}>{t.previewSectionTitle}</Text>
       <BackupPreviewList items={preview ? preview.items : []} />
       <Text style={styles.byteLength}>
-        {preview ? preview.byteLength : 0} bytes
+        {t.byteLength(preview ? preview.byteLength : 0)}
       </Text>
       <BackupNoticeBanner notice={notice} />
       <ActionButton
-        accessibilityHint="Export した JSON を OS の Share Sheet（または Web の場合はファイル保存）で共有します。"
+        accessibilityHint={t.shareButtonHint}
         disabled={sharing}
-        label={sharing ? '共有中' : 'Share Sheet で共有する'}
+        label={t.shareButton(sharing)}
         onPress={onShare}
       />
       <ActionButton
-        label="バックアップを復元する（Import）"
+        label={t.openImportButton}
         onPress={onOpenImport}
         variant="secondary"
       />
-      <ActionButton
-        label="Profile 編集へ戻る"
-        onPress={onBack}
-        variant="secondary"
-      />
+      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
     </AppScreen>
   );
 }

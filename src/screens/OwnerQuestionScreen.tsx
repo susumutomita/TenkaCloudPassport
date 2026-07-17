@@ -1,5 +1,7 @@
 import { useReducer, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import {
   INITIAL_OWNER_QUESTION_ANSWER_STAGE,
   reduceOwnerQuestionAnswerStage,
@@ -19,6 +21,7 @@ interface OwnerQuestionScreenProps {
   readonly question: OwnerQuestion;
   readonly remainingMs: number;
   readonly errorMessage: string | null;
+  readonly locale?: Locale;
   readonly onAnswer: (value: OwnerAnswerValue) => void;
   readonly onExit: () => void;
   readonly onHostEnd: () => void;
@@ -32,17 +35,19 @@ export default function OwnerQuestionScreen({
   question,
   remainingMs,
   errorMessage,
+  locale = DEFAULT_LOCALE,
   onAnswer,
   onExit,
   onHostEnd,
 }: OwnerQuestionScreenProps) {
+  const t = MESSAGES[locale].ownerQuestion;
   const [stage, dispatchStage] = useReducer(
     reduceOwnerQuestionAnswerStage,
     INITIAL_OWNER_QUESTION_ANSWER_STAGE
   );
   const [note, setNote] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
-  const disclosure = ownerQuestionDisclosure();
+  const disclosure = ownerQuestionDisclosure(locale);
   // note state は changeNote が検証済みの値だけを書き込むため、ここでの
   // validateOwnerAnswerNote は表示用の前後空白除去だけを行い、例外は発生しない。
   const trimmedNote = validateOwnerAnswerNote(note);
@@ -72,16 +77,16 @@ export default function OwnerQuestionScreen({
       setNoteError(null);
     } catch (error: unknown) {
       setNoteError(
-        error instanceof Error ? error.message : 'メモを確認してください。'
+        error instanceof Error ? error.message : t.noteInvalidFallback
       );
     }
   }
 
   return (
     <AppScreen
-      description="この Lounge に限って使ってよいかを、あなた自身が決めます。回答しない権利があります。"
+      description={t.description}
       eyebrow="Step 4 / Owner Question"
-      title="Pet があなたに 1 問だけ確認します。"
+      title={t.title}
     >
       <View accessibilityRole="summary" style={styles.disclosure}>
         <Text style={styles.disclosureText}>
@@ -96,24 +101,24 @@ export default function OwnerQuestionScreen({
       </View>
       <Text style={styles.question}>{question.displayText}</Text>
       <Text style={styles.countdown}>
-        残り {formatRemainingSeconds(remainingMs)} 秒で自動的に終了します。
+        {t.countdown(formatRemainingSeconds(remainingMs))}
       </Text>
       <View style={styles.field}>
         <Text nativeID="owner-answer-note-label" style={styles.label}>
-          メモ（任意、相手には送りません）
+          {t.noteLabel}
         </Text>
         <TextInput
-          accessibilityHint={`${OWNER_ANSWER_NOTE_MAX_LENGTH} 文字以内。入力しなくても回答できます。`}
-          accessibilityLabel="Owner Question への任意のメモ"
+          accessibilityHint={t.noteHint(OWNER_ANSWER_NOTE_MAX_LENGTH)}
+          accessibilityLabel={t.noteAccessibilityLabel}
           editable={stage === 'answering'}
           maxLength={OWNER_ANSWER_NOTE_MAX_LENGTH}
           onChangeText={changeNote}
-          placeholder="空のままでも回答できます"
+          placeholder={t.notePlaceholder}
           style={styles.input}
           value={note}
         />
         <Text style={styles.limit}>
-          {note.length} / {OWNER_ANSWER_NOTE_MAX_LENGTH}
+          {t.noteCounter(note.length, OWNER_ANSWER_NOTE_MAX_LENGTH)}
         </Text>
         {noteError ? (
           <Text accessibilityRole="alert" style={styles.error}>
@@ -129,59 +134,60 @@ export default function OwnerQuestionScreen({
       {stage === 'answering' ? (
         <>
           <ActionButton
-            accessibilityHint="この手掛かりを今回の Lounge で使ってよいと答えます。最終確認の画面へ進みます。"
+            accessibilityHint={t.answerButtonHint}
             disabled={submitted}
-            label="答える"
+            label={t.answerButton}
             onPress={() => dispatchStage({ type: 'choose-share' })}
           />
           <ActionButton
-            accessibilityHint="判断できない場合の回答です。この手掛かりは今回使いません。"
+            accessibilityHint={t.noButtonHint}
             disabled={submitted}
-            label="分からない"
+            label={t.noButton}
             onPress={() => answerOnce('no')}
             variant="secondary"
           />
           <ActionButton
-            accessibilityHint="この質問には答えません。この手掛かりは今回使いません。"
+            accessibilityHint={t.declineButtonHint}
             disabled={submitted}
-            label="パス"
+            label={t.declineButton}
             onPress={() => answerOnce('decline')}
             variant="secondary"
           />
         </>
       ) : (
         <View accessibilityRole="summary" style={styles.confirm}>
-          <Text style={styles.confirmTitle}>最終確認</Text>
-          <Text style={styles.confirmText}>
-            この手掛かりを今回の Lounge の相手にも見える Bridge として使います。
-          </Text>
+          <Text style={styles.confirmTitle}>{t.confirmTitle}</Text>
+          <Text style={styles.confirmText}>{t.confirmText}</Text>
           {trimmedNote ? (
-            <Text style={styles.confirmNote}>あなたのメモ: {trimmedNote}</Text>
+            <Text style={styles.confirmNote}>
+              {t.confirmNotePrefix}
+              {trimmedNote}
+            </Text>
           ) : null}
           <ActionButton
-            accessibilityHint="この回答を確定し、相手にも見える Bridge の判定に使います。"
+            accessibilityHint={t.confirmShareButtonHint}
             disabled={submitted}
-            label="確定して共有する"
+            label={t.confirmShareButton}
             onPress={() => answerOnce('yes')}
           />
           <ActionButton
-            accessibilityHint="確定せずに選び直します。"
+            accessibilityHint={t.cancelShareButtonHint}
             disabled={submitted}
-            label="やめる"
+            label={t.cancelShareButton}
             onPress={() => dispatchStage({ type: 'cancel-share' })}
             variant="secondary"
           />
         </View>
       )}
       <ActionButton
-        accessibilityHint="この Lounge から退出し、この端末のデータを破棄します。"
-        label="退出して破棄"
+        accessibilityHint={t.exitButtonHint}
+        label={t.exitButton}
         onPress={onExit}
         variant="secondary"
       />
       <ActionButton
-        accessibilityHint="Host としてこの Lounge を終了し、全参加者のデータを破棄します。"
-        label="Host として終了"
+        accessibilityHint={t.hostEndButtonHint}
+        label={t.hostEndButton}
         onPress={onHostEnd}
         variant="danger"
       />

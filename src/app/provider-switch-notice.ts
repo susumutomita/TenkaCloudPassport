@@ -1,4 +1,6 @@
 import type { ProviderSwitchReason } from '../domain/provider-fallback';
+import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
+import { MESSAGES } from './i18n/messages';
 
 /**
  * Issue 13: Provider 切替理由を内容を含まない Status として UI に表示する。
@@ -10,26 +12,17 @@ export interface ProviderSwitchNotice {
   readonly message: string;
 }
 
-const NO_SWITCH_MESSAGE = 'Rules Provider（基準実装）で判定しています。';
-
-const PROVIDER_SWITCH_MESSAGES: Record<ProviderSwitchReason, string> = {
-  timeout:
-    'Local Agent の応答がなかったため、Rules Provider へ切り替えました。',
-  'schema-error':
-    'Local Agent の出力を検証できなかったため、Rules Provider へ切り替えました。',
-  'load-error':
-    'Local Agent を読み込めなかったため、Rules Provider へ切り替えました。',
-};
-
 /**
  * `reason` が `null` のとき（切替が発生していない、または Local Agent 未接続の既定状態）は
  * 固定の「基準実装で判定中」文言を返す。
  */
 export function providerSwitchNotice(
-  reason: ProviderSwitchReason | null
+  reason: ProviderSwitchReason | null,
+  locale: Locale = DEFAULT_LOCALE
 ): ProviderSwitchNotice {
+  const messages = MESSAGES[locale].providerSwitchNotice;
   if (!reason) {
-    return { message: NO_SWITCH_MESSAGE };
+    return { message: messages.noSwitch };
   }
-  return { message: PROVIDER_SWITCH_MESSAGES[reason] };
+  return { message: messages[reason] };
 }
