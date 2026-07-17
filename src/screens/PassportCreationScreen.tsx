@@ -38,10 +38,13 @@ const NOTICE_TITLES: Record<ProfileNotice['kind'], string> = {
   'storage-unavailable': '端末内 Storage を利用できません。',
   'invalid-data': '端末内の保存データが不正です。',
   'read-error': '保存済み Profile を読み込めません。',
+  'lounge-discarded': 'この Lounge のデータを端末から破棄しました。',
 };
 
 function Notice({ notice }: { readonly notice: ProfileNotice }) {
-  const isError = !['empty', 'restored'].includes(notice.kind);
+  const isError = !['empty', 'restored', 'lounge-discarded'].includes(
+    notice.kind
+  );
   return (
     <View
       accessibilityRole={isError ? 'alert' : 'summary'}

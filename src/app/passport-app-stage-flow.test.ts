@@ -21,6 +21,8 @@ const FUNCTION_NAMES = [
   'performScan',
   'guestReady',
   'discardInviteFlow',
+  'applyRoomAdvance',
+  'endInvite',
   'cancelInvite',
   'restartEncounter',
   'editLocalProfile',
@@ -29,11 +31,14 @@ const FUNCTION_NAMES = [
 /**
  * `{` / `}` の対応だけで関数本体を切り出す。対象関数（PassportApp.tsx の Stage 遷移
  * 関数）は文字列 / テンプレートリテラルの中に `{` や `}` を含まないため、この単純な
- * 深さ計測で正しく切り出せる。将来、対象関数の本文にそのような文字を含む文字列
- * リテラルを足す場合は、この前提が崩れないことを確認すること。
+ * 深さ計測で正しく切り出せる。`function NAME(...) {` 宣言と、`useCallback` で包んだ
+ * `const NAME = ... => {` 宣言の両方に対応する。将来、対象関数の本文にそのような文字を
+ * 含む文字列リテラルを足す場合は、この前提が崩れないことを確認すること。
  */
 function functionBody(text: string, name: string): string {
-  const declarationPattern = new RegExp(`function ${name}\\([^)]*\\)[^{]*\\{`);
+  const declarationPattern = new RegExp(
+    `(?:function ${name}\\([^)]*\\)[^{]*|const ${name}\\s*=[^{]*)\\{`
+  );
   const match = declarationPattern.exec(text);
   if (!match || match.index === undefined) {
     throw new Error(`関数 ${name} が見つかりません。`);
@@ -111,16 +116,100 @@ describe('PassportApp の Stage 遷移契約', () => {
     }
   });
 
-  it('Invite フローからの離脱経路（キャンセル・再開・Profile 編集）はすべて discardInviteFlow を呼ぶ', async () => {
+  it('Invite フローからの離脱経路（再開・Profile 編集）は discardInviteFlow を直接呼ぶ', async () => {
     const text = await source();
 
-    for (const name of [
-      'cancelInvite',
-      'restartEncounter',
-      'editLocalProfile',
-    ]) {
+    for (const name of ['restartEncounter', 'editLocalProfile']) {
       expect(functionBody(text, name)).toContain('discardInviteFlow()');
     }
+  });
+
+  it('Lounge をキャンセルする操作は Room の Terminal Event 共通処理（endInvite）経由で discardInviteFlow を呼ぶ', async () => {
+    const text = await source();
+
+    expect(functionBody(text, 'cancelInvite')).toContain(
+      "endInvite('host-ended')"
+    );
+    expect(functionBody(text, 'endInvite')).toContain('discardInviteFlow()');
+  });
+
+  it('QR Scan 画面から Passport 編集へ戻る操作は、Room データがあった場合だけ破棄済み Notice を表示する', async () => {
+    const text = await source();
+    const body = functionBody(text, 'editLocalProfile');
+
+    expect(body).toContain('hadInviteInProgress');
+    expect(body).toContain("kind: 'lounge-discarded'");
+  });
+
+  it('discardInviteFlow は相手の宣言内容（encountered*）も含めて Lounge 由来の一時データを破棄する', async () => {
+    const text = await source();
+    const body = functionBody(text, 'discardInviteFlow');
+
+    // guestProfile / guestShareSelection の「元データ」である encountered* を
+    // 一緒に初期化しない限り、'lounge-discarded' Notice が案内する
+    // 「参加者、共有内容、Invite QR は残っていません」が事実と矛盾する
+    // （相手が declare した Pet Name / 手掛かりが次の Encounter 画面に残ってしまう）。
+    for (const resetCall of [
+      'setEncounteredPetName(',
+      'setEncounteredPetEmoji(',
+      'setEncounteredSelection(',
+      'setEncounteredConfirmed(',
+    ]) {
+      expect(body).toContain(resetCall);
+    }
+  });
+
+  it('QR Scan 画面から離脱して Profile を保存し直しても、相手の宣言内容が次の Encounter 画面へ残らない', async () => {
+    // シナリオ: Guest として QR を読み取る（guest-scan）→ Passport 編集へ戻る
+    // （onBackToProfile が editLocalProfile を呼ぶ）→ Local Profile を明示保存し直す
+    // （saveLocalProfile が stage を 'encounter' へ進める）→ EncounterSetupScreen が
+    // 再び表示される、という一連の経路で、相手の宣言内容（encountered*）が
+    // 前回の Lounge のまま残っていないことを固定する。
+    const text = await source();
+
+    // 1. QrScanScreen の「Passport の編集へ戻る」は editLocalProfile を呼ぶ。
+    expect(text).toContain('onBackToProfile={editLocalProfile}');
+
+    // 2. editLocalProfile は discardInviteFlow を呼ぶ（Room データの有無に関わらず）。
+    expect(functionBody(text, 'editLocalProfile')).toContain(
+      'discardInviteFlow()'
+    );
+
+    // 3. discardInviteFlow が encountered* を初期値へ戻す（前段のテストで確認済みの
+    //    契約を、このシナリオの一部として改めて固定する）。
+    const discardBody = functionBody(text, 'discardInviteFlow');
+    expect(discardBody).toContain("setEncounteredPetName('')");
+    expect(discardBody).toContain('setEncounteredSelection([])');
+
+    // 4. saveLocalProfile は保存成功後に 'encounter' 画面へ進み、EncounterSetupScreen は
+    //    encounteredPetName / encounteredSelection の state を直接 props として描画する
+    //    （別のキャッシュ値を経由しない）ため、初期化済みの値がそのまま画面へ反映される。
+    expect(functionBody(text, 'saveLocalProfile')).toContain(
+      "setStage('encounter')"
+    );
+    expect(text).toContain('encounteredPetName={encounteredPetName}');
+    expect(text).toContain('selectedIds={encounteredSelection}');
+  });
+
+  it('Room の 20 分満了は tick / resume ハンドラの中で即座に破棄する（中間 render を作らない）', async () => {
+    const text = await source();
+    const body = functionBody(text, 'applyRoomAdvance');
+
+    // Room の 'expired' を一度 state へ保持してから別の useEffect で検出する 2 段構えに
+    // 戻すと、その間の 1 render だけ画面条件が崩れて Step 1 （PassportCreationScreen）へ
+    // 一瞬フォールバックする回帰が起こるため、同じ関数の中で discardInviteFlow() と
+    // setLounge(...) を同期的に呼ぶ実装を固定する。
+    expect(body).toContain("advanced.status === 'expired'");
+    expect(body).toContain('discardInviteFlow()');
+    expect(body).toContain(
+      "setLounge({ status: 'destroyed', reason: 'expired' })"
+    );
+    expect(body).toContain('setLoungeRoom(advanced)');
+
+    // Room の tick と Background 復帰（resume）ハンドラの両方が、Room を直接
+    // advanceLoungeRoom で更新するのではなく、この単一の関数へ委譲していることを固定する。
+    const callSites = text.match(/applyRoomAdvance\(loungeRoom/g) ?? [];
+    expect(callSites.length).toBe(2);
   });
 
   it('Guest の共有 Preview からの Back は再走査を強制する画面へ戻さない', async () => {

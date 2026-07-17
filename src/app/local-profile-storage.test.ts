@@ -1,93 +1,34 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmdirSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createLocalPrivateProfile } from '../domain/passport';
-import {
-  ExpoFileSystemLocalProfileStorageAdapter,
-  type ProfileDocument,
-} from './expo-file-system-local-profile-storage';
+import { ExpoFileSystemLocalProfileStorageAdapter } from './expo-file-system-local-profile-storage';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
   UnavailableLocalProfileStorageAdapter,
 } from './local-profile-storage';
 import {
-  type WebKeyValueStorage,
-  WebLocalProfileStorageAdapter,
-} from './web-local-profile-storage';
+  BunProfileDocument,
+  FileBackedWebStorage,
+  temporaryDirectory as newTemporaryDirectory,
+  removeTemporaryDirectory,
+} from './storage-test-kit';
+import { WebLocalProfileStorageAdapter } from './web-local-profile-storage';
 
 const temporaryRoots: string[] = [];
 
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(path.join(tmpdir(), 'passport-storage-'));
+  const directory = newTemporaryDirectory();
   temporaryRoots.push(directory);
   return directory;
 }
 
-function clearDirectory(directory: string): void {
-  for (const entry of readdirSync(directory)) {
-    const target = path.join(directory, entry);
-    if (lstatSync(target).isDirectory()) {
-      clearDirectory(target);
-      rmdirSync(target);
-    } else {
-      unlinkSync(target);
-    }
-  }
-}
-
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
-    if (!existsSync(root)) continue;
-    clearDirectory(root);
-    rmdirSync(root);
+    removeTemporaryDirectory(root);
   }
 });
-
-class FileBackedWebStorage implements WebKeyValueStorage {
-  constructor(private readonly root: string) {}
-
-  private filePath(key: string): string {
-    return path.join(this.root, encodeURIComponent(key));
-  }
-
-  getItem(key: string): string | null {
-    const target = this.filePath(key);
-    return existsSync(target) ? readFileSync(target, 'utf8') : null;
-  }
-
-  setItem(key: string, value: string): void {
-    writeFileSync(this.filePath(key), value, 'utf8');
-  }
-}
-
-class BunProfileDocument implements ProfileDocument {
-  constructor(private readonly filePath: string) {}
-
-  get exists(): boolean {
-    return existsSync(this.filePath);
-  }
-
-  text(): Promise<string> {
-    return readFile(this.filePath, 'utf8');
-  }
-
-  write(content: string): Promise<void> {
-    return writeFile(this.filePath, content, 'utf8');
-  }
-}
 
 function profile() {
   return createLocalPrivateProfile({

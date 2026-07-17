@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { expiryNotice } from '../app/expiry-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import { type ClueId, clueById } from '../domain/clue-catalog';
@@ -7,6 +8,7 @@ import { colors, spacing } from '../ui/theme';
 
 interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
+  readonly remainingMs: number;
   readonly onEvaluate: () => void;
   readonly onExit: () => void;
   readonly onHostEnd: () => void;
@@ -42,11 +44,13 @@ function PassportSummary({
 
 export default function ActiveLoungeScreen({
   lounge,
+  remainingMs,
   onEvaluate,
   onExit,
   onHostEnd,
   errorMessage,
 }: ActiveLoungeScreenProps) {
+  const notice = expiryNotice(remainingMs);
   return (
     <AppScreen
       eyebrow="Step 4 / Lounge"
@@ -73,6 +77,11 @@ export default function ActiveLoungeScreen({
           20 分満了、退出、Host 終了の最早契機で、現在のデータを破棄します。
         </Text>
       </View>
+      {notice.level === 'warning' ? (
+        <View accessibilityRole="alert" style={styles.expiryWarning}>
+          <Text style={styles.expiryWarningText}>{notice.message}</Text>
+        </View>
+      ) : null}
       {errorMessage ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {errorMessage}
@@ -134,6 +143,19 @@ const styles = StyleSheet.create({
   noticeText: {
     color: colors.ink,
     fontSize: 14,
+    lineHeight: 21,
+  },
+  expiryWarning: {
+    backgroundColor: colors.surface,
+    borderColor: colors.danger,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  expiryWarningText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: '700',
     lineHeight: 21,
   },
   error: {

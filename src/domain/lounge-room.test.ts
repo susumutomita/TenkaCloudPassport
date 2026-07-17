@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { LOUNGE_TTL_MS } from './lounge';
+import { endHostedLounge, LOUNGE_TTL_MS, leaveLounge } from './lounge';
 import { LOUNGE_INVITE_SCHEMA_VERSION } from './lounge-invite';
 import {
   advanceLoungeRoom,
   createLoungeRoom,
+  destroyLoungeRoom,
   type FormingLoungeRoom,
   inviteForRoom,
   joinLoungeRoom,
@@ -417,5 +418,82 @@ describe('Lounge Room の Ready gating', () => {
       loungeId: LOUNGE_ID,
       expiresAtEpochMs: ready.expiresAtWallClockMs,
     });
+  });
+
+  it('作成直後（0 秒経過）の期限確認では forming 状態を変更しない', () => {
+    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
+    const advanced = advanceLoungeRoom(room, CLOCK);
+
+    expect(advanced).toBe(room);
+  });
+});
+
+describe('Lounge Room の Terminal Event（個人退出・Host 終了）', () => {
+  it('参加者を待っている forming の Room を個人退出で破棄する', () => {
+    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
+    const joined = joinLoungeRoom(room, {
+      participantId: HOST_ID,
+      publicPassport: passport(),
+      clock: CLOCK,
+    });
+
+    expect(destroyLoungeRoom(joined, 'owner-exit')).toEqual({
+      status: 'destroyed',
+      reason: 'owner-exit',
+    });
+  });
+
+  it('双方 Ready で ready へ遷移した Room も Host 終了で破棄する', () => {
+    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
+    const joinedHost = joinLoungeRoom(room, {
+      participantId: HOST_ID,
+      publicPassport: passport(),
+      clock: CLOCK,
+    });
+    const joinedGuest = joinLoungeRoom(joinedHost, {
+      participantId: GUEST_ID,
+      publicPassport: passport(),
+      clock: CLOCK,
+    });
+    const hostReady = markParticipantReady(joinedGuest, {
+      participantId: HOST_ID,
+      clock: CLOCK,
+    });
+    const ready = markParticipantReady(hostReady, {
+      participantId: GUEST_ID,
+      clock: CLOCK,
+    });
+
+    expect(destroyLoungeRoom(ready, 'host-ended')).toEqual({
+      status: 'destroyed',
+      reason: 'host-ended',
+    });
+  });
+
+  it('20 分満了ですでに expired だった Room では、後から届く個人退出・Host 終了より満了を優先する', () => {
+    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
+    const expired = advanceLoungeRoom(room, {
+      wallClockMs: CLOCK.wallClockMs + LOUNGE_TTL_MS,
+      monotonicMs: CLOCK.monotonicMs,
+    });
+
+    expect(destroyLoungeRoom(expired, 'owner-exit')).toEqual({
+      status: 'destroyed',
+      reason: 'expired',
+    });
+    expect(destroyLoungeRoom(expired, 'host-ended')).toEqual({
+      status: 'destroyed',
+      reason: 'expired',
+    });
+  });
+
+  it('連続する終了 Event（Room の破棄 → Lounge 側の終了処理の重ね掛け）でも最初の終了理由を維持する', () => {
+    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
+    const destroyed = destroyLoungeRoom(room, 'owner-exit');
+
+    // Room の DestroyedLounge へ、Lounge 本体の終了処理（endHostedLounge）を
+    // 重ねて呼んでも同じ終端状態が維持されることを確認する（二重退出・連続終了の回帰）。
+    expect(endHostedLounge(destroyed)).toEqual(destroyed);
+    expect(leaveLounge(destroyed)).toEqual(destroyed);
   });
 });

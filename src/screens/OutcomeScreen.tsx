@@ -4,6 +4,7 @@ import {
   INITIAL_BRIDGE_DISCLOSURE_STATE,
   reduceBridgeDisclosure,
 } from '../app/bridge-disclosure';
+import { expiryNotice } from '../app/expiry-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import type { RetiredLounge } from '../domain/lounge';
@@ -11,6 +12,7 @@ import { colors, spacing } from '../ui/theme';
 
 interface OutcomeScreenProps {
   readonly lounge: RetiredLounge;
+  readonly remainingMs: number;
   readonly onComplete: () => void;
   readonly onExit: () => void;
   readonly onHostEnd: () => void;
@@ -18,6 +20,7 @@ interface OutcomeScreenProps {
 
 export default function OutcomeScreen({
   lounge,
+  remainingMs,
   onComplete,
   onExit,
   onHostEnd,
@@ -26,6 +29,7 @@ export default function OutcomeScreen({
     reduceBridgeDisclosure,
     INITIAL_BRIDGE_DISCLOSURE_STATE
   );
+  const notice = expiryNotice(remainingMs);
   const hasBridge = lounge.outcome.kind === 'bridge';
   const bridgeIsVisible = hasBridge && disclosure === 'visible';
   const message = bridgeIsVisible
@@ -55,6 +59,11 @@ export default function OutcomeScreen({
         </Text>
         <Text style={styles.message}>{message}</Text>
       </View>
+      {notice.level === 'warning' ? (
+        <View accessibilityRole="alert" style={styles.expiryWarning}>
+          <Text style={styles.expiryWarningText}>{notice.message}</Text>
+        </View>
+      ) : null}
       {hasBridge ? (
         <ActionButton
           label={bridgeIsVisible ? 'Bridge を隠す' : 'Bridge を表示'}
@@ -97,5 +106,18 @@ const styles = StyleSheet.create({
     fontSize: 23,
     fontWeight: '800',
     lineHeight: 34,
+  },
+  expiryWarning: {
+    backgroundColor: colors.surface,
+    borderColor: colors.danger,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  expiryWarningText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 21,
   },
 });

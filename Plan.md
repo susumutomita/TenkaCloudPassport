@@ -887,3 +887,176 @@ manifest の SHA-256 と取得 byte が一致した場合だけ展開と marker 
   取得後 marker を再照合する。通常 install はどちらの実行経路も持たない。
 - JavaScript、Web、Native の証拠を能力表と CI step で分離し、Linux CI Green を code signing、権限、ABI、
   実機 runtime の代替にしない完了境界を明示した。
+
+---
+
+### [Issue 9 Lounge の状態機械・退出・完全破棄] - 2026-07-17
+
+#### 目的
+
+Lounge を「使い捨て」と言える削除動作まで含めて実装する。終了、退出、期限切れ、
+Application Background、再起動を同じ Domain State Machine で扱い、Host 終了・個人退出・
+20 分満了のうち最も早い Event で該当 Lounge Data を破棄する。全主要画面から 2 操作以内に
+「退出して忘れる」を実行でき、終了後は「この Lounge のデータを端末から破棄した」と表示する。
+
+#### 制約
+
+- Issue 8 の `src/domain/lounge.ts`（Active Lounge 以降）と `src/domain/lounge-room.ts`
+  （Room、Ready gating）を拡張し、重複する状態機械を新設しない。
+- Lounge Transcript、Owner Answer、Bridge、Peer Message を永続 Storage へ書き込まない。
+- 期限は作成時刻から 20 分固定とし、Ready 化や画面遷移で延長しない。
+- 終了後の Back Navigation で状態を復元しない。
+- 新しい npm 依存を追加せず、`react-native` の `AppState` など既存 API だけを使う。
+- Git 操作、`rm`、`npx`、型エスケープ、Mock、Stub、フォーカスしたテストを使わない。
+
+#### 設計判断
+
+1. Issue 9 の抽象的な状態列（`waiting → ready → discovering → clarifying → bridging |
+   no-signal → retired → expired`）をそのまま体現する新しい discriminated union を
+   `src/domain` に追加する案は、既存の `LoungeState` / `LoungeRoomState` と機能が重複し、
+   `clarifying` のような実装が到達しない状態を UI 上にでっち上げる必要が生じるため
+   採用しない。
+2. 既存 throw-style の `LoungeTransitionError` / `LoungeRoomError` をすべて
+   Result 型（return-not-throw）へ書き換える案は、100% カバレッジ済みの既存テストと
+   `PassportApp.tsx` の try/catch 規約を広範囲に書き換える必要があり、この Issue の
+   本来の目的に対して不釣り合いに大きい変更になるため見送る。
+3. 既存の型をそのまま使い、Room 段階（`forming` / `ready`）に欠けていた個人退出・
+   Host 終了の Domain 関数（`destroyLoungeRoom`）を追加し、Room の 20 分満了検出、
+   Background 復帰（`app-resumed`）、満了 1 分前の content-free 通知、Storage Privacy
+   Regression Test を `PassportApp.tsx` の配線として実装する案を採用する。既存の
+   `DestroyedLounge` 型へ Room 由来の終了も収束させることで、Active Lounge 以降の終了と
+   同じ画面・同じ表示文言を共有する。
+
+詳細は [`docs/design/lounge-lifecycle.md`](./docs/design/lounge-lifecycle.md) を正本とする。
+
+#### タスク
+
+1. 設計書、本セクションを先に作成する。
+2. `lounge-room.ts` に `destroyLoungeRoom` と `LoungeRoomTerminationReason` を
+   日本語 BDD テストを先に追加してから実装する（0 秒、境界、連続する終了 Event、
+   二重退出を含む）。
+3. `lounge-reducer.ts` に `'app-resumed'` Action を追加し、Suspend 中に単調増加時計が
+   ほぼ進まず壁時計だけが進む Clock Change のテストを固定する。
+4. `src/app/expiry-notice.ts` に満了 1 分前の content-free 通知の純粋関数を追加する。
+5. `src/app/storage-test-kit.ts` へ実ファイル I/O ヘルパーを集約し、
+   `src/app/lounge-privacy-regression.test.ts` で Storage 全 Key を検査する。
+6. `PassportApp.tsx` を配線する。Room の 20 分満了検出、個人退出・Host 終了の
+   Terminal Event、Background 復帰、満了 1 分前バナーの表示、Room 段階からの
+   離脱時の Notice 表示を実装し、`HostInviteScreen` / `ActiveLoungeScreen` /
+   `OutcomeScreen` / `DestroyedLoungeScreen` / `PassportCreationScreen` を更新する。
+7. 既存の `passport-app-stage-flow.test.ts` / `qr-invite-accessibility.test.ts` を
+   新しい配線に合わせて更新する。
+8. 指定ゲートを実行し、合格後にコミットする。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test src --coverage` で 100% を確認する。
+- `bun biome check .`。
+- `bunx textlint` で変更 Markdown（本セクション、設計書）を検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- 0 秒、期限境界、連続する終了 Event、二重退出、Clock Change のテストが揃っていることを
+  確認する。
+
+#### 進捗ログ
+
+- 2026-07-17: Issue 8 の Room（Ready gating）と Lounge（Active/Retired/Destroyed）の
+  実装、既存の Privacy 保持ポリシー、初回 Encounter の設計を確認した。Room 段階に
+  個人退出・Host 終了の Domain 関数が存在せず、`PassportApp.tsx` が `setLoungeRoom(null)`
+  を直接呼んで Room データを消していたため、Room の 20 分満了と個人退出・Host 終了が
+  `DestroyedLoungeScreen`（「この Lounge のデータを端末から破棄した」表示）を経由しない
+  欠落を特定した。
+- 2026-07-17: 設計書とタスク分解を先に作成し、既存の throw-style を維持したまま Room 段階の
+  欠落を埋める案（案 3）を確定した。
+- 2026-07-17: `destroyLoungeRoom`、`'app-resumed'` Action、`expiry-notice.ts`、
+  `storage-test-kit.ts`（`local-profile-storage.test.ts` の実ファイル I/O ヘルパーを
+  集約）、`lounge-privacy-regression.test.ts` を日本語 BDD テスト先行で実装した。
+- 2026-07-17: `PassportApp.tsx` を配線した。Room の 20 分満了を検出する専用 `useEffect`、
+  Host のキャンセル操作を Room の Terminal Event（`endInvite`）へ統一する変更、
+  QR Scan 画面から Profile 編集へ戻る操作に Lounge 破棄 Notice を追加する変更、
+  Background 復帰時に Room / Lounge 双方の期限を再評価する `AppState` リスナーを追加した。
+  `discardInviteFlow` を `useCallback` 化し、新しい `useEffect` の依存配列を安定させた。
+  `HostInviteScreen` / `ActiveLoungeScreen` / `OutcomeScreen` に満了 1 分前の
+  content-free 警告バナーを追加し、`DestroyedLoungeScreen` の見出し文言を受け入れ条件の
+  表現へ揃えた。
+- 2026-07-17: 既存の `passport-app-stage-flow.test.ts`（Stage 遷移契約）と
+  `qr-invite-accessibility.test.ts`（Host Invite 画面の表示順序）を新しい配線に合わせて
+  更新した。`bun test src --coverage` は 256 テスト、対象ファイル 100% を維持した。
+- 2026-07-17: `bun run typecheck`、`bun biome check .`、変更 Markdown への `bunx textlint`、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`、`make before-commit`
+  （harness・harness_test・pre_release_check・lint_text・lint・typecheck・test_coverage・
+  Web Export の全段階）を実行し、Green を確認した。
+- 2026-07-17: 独立した Correctness / Security の 2 系統レビューを並列実行した。
+  Security 系統は、`discardInviteFlow()` が Room・Guest 共有内容・既読 QR 集合は破棄する
+  一方、対面の相手が declare した `encounteredPetName` / `encounteredPetEmoji` /
+  `encounteredSelection` / `encounteredConfirmed` を破棄していないため、`'lounge-discarded'`
+  Notice の「参加者、共有内容、Invite QR は残っていません」という文言が事実と矛盾する
+  Blocker を検出した。Correctness 系統は、Room の 20 分満了を検出する専用 `useEffect` が
+  `loungeRoom` の更新と `lounge` の更新を別の render に分けてしまい、その間の 1 render だけ
+  `PassportCreationScreen`（Step 1）へフォールバックする回帰（直そうとしていた問題と
+  同じ形の問題）を指摘した。
+- 2026-07-17: 両指摘を修正した。`discardInviteFlow` へ `encountered*` の初期化を統合し、
+  重複していた `restartEncounter` 側の手動リセットを削除した。Room の満了検出は
+  `applyRoomAdvance` という単一の関数へ集約し、Room の tick effect と `app-resumed`
+  ハンドラの両方がそこへ委譲するよう再設計した。`advanceLoungeRoom` の結果が `expired` の
+  場合、同じ関数内で `discardInviteFlow()` と `setLounge(destroyed)` を同期的に呼ぶことで、
+  React 19 の automatic batching により 2 つの state 更新が同じ commit にまとまり、
+  `loungeRoom` が `'expired'` という値を一度も観測可能な state として持たない構造にした。
+- 2026-07-17: 修正内容を検証する 3 件のテストを `passport-app-stage-flow.test.ts` へ
+  追加した。`discardInviteFlow` が `encountered*` を初期化することを固定するテスト、
+  Guest Scan 画面から離脱して Profile を保存し直しても相手の宣言内容が次の Encounter 画面へ
+  残らないシナリオを固定するテスト、`applyRoomAdvance` が同一関数内で `discardInviteFlow`
+  と `setLounge` を呼ぶ（tick / resume の両方がこの関数へ委譲する）ことを固定するテストの
+  3 件である。`bun test src --coverage` は 259 テスト、対象ファイル 100% を維持した。
+  `bun biome check .`、`bun run typecheck`、`bunx textlint`（設計書・本セクション）、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`、`make before-commit`
+  を再実行し、すべて Green を確認した。
+
+#### 振り返り
+
+- **問題**: Issue 8 で Room（Ready gating）を追加した際、Room 段階の個人退出・Host 終了は
+  `PassportApp.tsx` が state を直接 `null` にするだけで、Domain 関数を経由していなかった。
+- **根本原因**: Active Lounge 以降の終了（`leaveLounge` / `endHostedLounge`）を実装した
+  時点では、まだ Room（Ready gating）という前段の状態機械自体が存在せず、Issue 8 で
+  Room を追加した際にも同種の Terminal Event を Room 側へ揃える作業が範囲外のまま
+  残っていた。
+- **予防策**: Room の終了も Active Lounge 本体の `DestroyedLounge` 型へ収束させることで、
+  新しい終了経路が増えるたびに新しい終了画面を作る必要がない構造にした。Room の 20 分満了も
+  `applyRoomAdvance` という単一の関数で拾い、`PassportCreationScreen` へ無言で戻る回帰を
+  防いだ（この関数の設計に至った経緯は下記の Correctness レビュー指摘を参照）。
+- **問題**: QR Scan 画面から Passport 編集へ戻る操作を、他の終了操作と同じ
+  `DestroyedLoungeScreen` へ統一する案も検討したが、Profile を編集したいだけの利用者に
+  1 手余分な確認画面を強制する退行になりかねなかった。
+- **根本原因**: 「終了後にデータを破棄したと表示する」という受け入れ条件と、
+  「2 操作以内に元の作業へ戻れる」という既存 UX の良さを、同じ画面遷移の中で
+  両立させる設計を最初に決めていなかった。
+- **予防策**: 「Lounge を終わらせる意思がある操作」（Lounge をキャンセルする、退出して破棄、
+  Host として終了）はフルスクリーンの `DestroyedLoungeScreen` へ、「別画面へ移動するだけの
+  操作」（QR Scan 画面から Profile 編集へ戻る）は軽量な `ProfileNotice` へ、という
+  使い分けを設計判断として固定した。
+- **問題**: `discardInviteFlow()` が Room・Guest 共有内容・既読 QR 集合は破棄する一方、
+  対面の相手が declare した `encounteredPetName` 等の 4 つの state を破棄しておらず、
+  `'lounge-discarded'` Notice の文言と実態が矛盾していた。
+- **根本原因**: `encounteredPetName` 等は「Owner 自身の入力補助 state」として Issue 4 で
+  導入されたが、Issue 8 で Guest 役の共有内容（`guestProfile`）の元データとしても再利用
+  されるようになった時点で、この state の性質が「単なる下書き」から「Lounge 由来の
+  Peer データ」へ変わっていた。Issue 9 で「Lounge 由来データを完全に破棄する」という
+  契約を書いた際、この性質変化を追わずに `discardInviteFlow` の対象範囲を決めていた。
+- **予防策**: `discardInviteFlow` を「Lounge 由来の一時 state を破棄する唯一の関数」として
+  再定義し、`encountered*` の初期化もここへ統合した。QR Scan 画面から離脱して Profile を
+  保存し直しても相手の宣言内容が残らないシナリオを、Stage 遷移契約のテストとして固定した。
+- **問題**: Room の 20 分満了を検出する専用 `useEffect` を追加した初版は、`loungeRoom` を
+  `expired` へ更新する render と、`lounge` を `destroyed` へ更新する render を分けてしまい、
+  その間の 1 render だけ `PassportCreationScreen`（Step 1）へフォールバックしていた。
+- **根本原因**: 「別の state 変数（`loungeRoom`）の変化を、別の `useEffect` で検出して
+  もう一方の state 変数（`lounge`）を更新する」という 2 段構えの設計が、React の
+  render 単位の粒度では原子的ではないことを見落としていた。Active Lounge 本体の
+  `reduceLounge`（`lounge` という単一の state 変数だけで完結する）と、Room 由来の
+  満了検出（`loungeRoom` から `lounge` という別の state 変数へまたがる）は、見た目は
+  似ていても原子性の保証されやすさが違う。
+- **予防策**: Room の tick と `app-resumed` の両方が呼ぶ単一の関数 `applyRoomAdvance` へ
+  「`advanceLoungeRoom` の呼び出しと、満了時の `discardInviteFlow` + `setLounge` 呼び出し」を
+  集約し、複数の state 更新を同じ同期的な関数呼び出しの中で完結させた。React 19 の
+  automatic batching に委ねることで、`loungeRoom` が `'expired'` という値を一度も
+  観測可能な state として持たない構造にした。
