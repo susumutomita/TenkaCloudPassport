@@ -521,3 +521,108 @@ Migration の互換性契約を固定する。
   持ち込まない。Public Passport の受信回数を人物 ID へ変換する状態も持たない。
 - Bridge の表示文は版管理済み手掛かりから Domain 内で導出し、Agent Decision の外部 schema へ
   自由記述やモデルの思考過程を追加しない。
+
+---
+
+### [Issue 6 Delivery 品質ゲート] - 2026-07-17
+
+#### 目的
+
+JavaScript、Rules Provider、Web Export の Green と、Native module を含む Development Build の
+実機動作を別の証拠として扱う。通常 install では lifecycle script と Native Artifact 取得を
+実行せず、明示的な opt-in、取得元の可視化、SHA-256 検証を通した場合だけ取得する。
+
+#### 制約
+
+- `bun install --ignore-scripts`、`bun install --frozen-lockfile --ignore-scripts`、
+  `trustedDependencies = []` を維持する。
+- `llama.rn` と新しい npm 依存は追加せず、Native Artifact 取得経路だけを将来の導入へ備える。
+- Expo Go と Web は Native module を解決せず、Rules Provider で Encounter を完走する。
+- iOS 実機検証は有料 Apple Developer Program を前提にせず、Xcode Personal Team を使う。
+- ネットワーク取得、CI、iOS 実機、Android 実機は本サンドボックス外の検証として分離する。
+
+#### 設計判断
+
+1. `llama.rn` を `trustedDependencies` へ追加して `postinstall` に取得させる案は導入が短いが、通常
+   install と Native Artifact 取得の監査境界が混ざるため採用しない。
+2. Native Artifact の URL と SHA-256 を Makefile へ先行固定する案は 1 コマンドで取得できるが、
+   未導入の `llama.rn` Version と Artifact を誤って組み合わせるため採用しない。
+3. `make setup-llama-native` だけが、将来 install 済みになる `llama.rn` の Version 固定 manifest を
+   検証し、取得元と期待値を表示して公式 downloader を強制再実行し、完了 marker を純 TypeScript で
+   再照合する案は、通常 install と opt-in 取得を分離しながら package と Artifact を同じ Version に
+   固定できる。
+
+案 3 を採用する。shell wrapper は `set -euo pipefail` で失敗を伝播し、`llama.rn` が未導入なら通信前に
+非 0 終了する。純 TypeScript 境界は package metadata、Artifact manifest、64 桁の SHA-256、相対 path、
+完了 marker を fail-closed で検証する。公式 downloader は `--force` で cache marker による省略を許さず、
+manifest の SHA-256 と取得 byte が一致した場合だけ展開と marker 作成を完了する。
+
+#### データの流れと責務
+
+- `make install` と `make install_ci` は依存と `bun.lock` だけを扱い、lifecycle script を実行しない。
+- `make setup-llama-native` は install 済み package の metadata を TypeScript 検証へ渡し、検証済みの
+  Release URL と SHA-256 を表示してから downloader を実行し、完了 marker を再検証する。
+- `make before-commit` は architecture harness、harness test、pre-release check、textlint、Biome、
+  typecheck、app test、Web Export を同じ順で実行する。
+- CI は `bun.lock` の frozen install 後、Expo Compatibility を独立 step で検査し、ローカルと同じ
+  `make before-commit` を実行する。
+- Expo Go と Web の composition root は Rules Provider に固定し、Native module は将来の Development
+  Build 専用 composition root だけから遅延ロードする。
+
+#### エッジケース
+
+- `llama.rn` package、manifest、downloader のいずれかが無ければ取得前に非 0 終了する。
+- package 名、Version、repository、Artifact 名、相対 path、SHA-256 が不正なら取得しない。
+- Artifact 取得、SHA-256 検証、展開、marker 作成のいずれかが失敗したら成功表示をしない。
+- Expo Go または Web で Native module が無くても、Rules Provider は Bridge または `no-signal` を返す。
+- Renovate が Expo SDK と React Native の互換範囲を外した場合は、専用 CI step を非 0 にする。
+- Xcode Personal Team の Provisioning Profile が失効した場合は、再 Build と再 install を必要とする。
+
+#### タスク
+
+1. 本セクション、ADR、Native Build 手順を先に記録する。
+2. Native Artifact metadata と SHA-256 marker 検証の日本語 BDD テストを Red で追加する。
+3. 純 TypeScript 検証、`set -euo pipefail` wrapper、Make target を実装する。
+4. install、before-commit、CI、Renovate 検出経路、`.gitignore` を受け入れ条件へ揃える。
+5. Rules Provider の既存 composition と遅延 Local Agent 境界を確認し、必要な保証だけを強化する。
+6. 指定されたオフラインゲートを実行し、結果と外部検証事項を追記する。
+
+#### 検証手順
+
+- `bun run typecheck`。
+- `bun test`。
+- `bun biome check .`。
+- 変更した Markdown を対象にした `bunx textlint`。
+- `bun scripts/architecture-harness.ts`。
+- `make before-commit`。
+- `make setup-llama-native` が未導入の `llama.rn` を通信前に非 0 で拒否すること。
+- CI、実際の Native Artifact 取得、iOS / Android Development Build 実機動作はコーディネータが
+  ネットワークと端末を使って検証すること。
+
+#### 進捗ログ
+
+- 2026-07-17: 指定された規則、Makefile、Bun / CI / Renovate 設定、ADR-0008、Rules Provider と
+  Local Agent の境界、既存 158 テストを確認した。
+- 2026-07-17: 通常 install と Native Artifact 取得を分離し、未導入 package の Version を先行固定しない
+  案 3 を選定した。
+- 2026-07-17: `package.json` の空 `trustedDependencies` を追加し、`bunfig.toml` と両方が空であることを
+  architecture harness の日本語 BDD 3 テストで機械強制した。
+- 2026-07-17: Native Artifact metadata、公式 URL、Version、SHA-256、package 内 path、展開先、完了 marker を
+  fail-closed で検証する純 TypeScript と日本語 BDD 8 テストを追加した。
+- 2026-07-17: `set -euo pipefail` の opt-in wrapper、Make target、CI の frozen install と専用 Expo
+  compatibility step、Renovate group、Native 秘匿値と Build 出力の ignore を接続した。
+- 2026-07-17: Expo Go / Web の App composition が Rules Provider を直接使い、Local Agent loader が App の
+  module graph に含まれない既存保証を確認した。90 app tests と Web Export が Green である。
+- 2026-07-17: `bun run typecheck`、169 件の `bun test`、`bun biome check .`、変更 Markdown の
+  `bunx textlint`、error と warning が 0 件の全件 architecture harness、`make before-commit` を通した。
+- 2026-07-17: `make setup-llama-native` は未導入の `llama.rn` を network 接続前に
+  `PACKAGE_NOT_INSTALLED` の非 0 で拒否した。Artifact 実取得、CI、iOS / Android 実機は外部検証へ残した。
+
+#### 振り返り
+
+- 未導入 package の Artifact URL を repository 側へ先行固定せず、将来 lock された package の Version と
+  manifest から取得計画を作ることで、依存 Version と Native Artifact の drift を防いだ。
+- 公式 downloader は `--force` で取得 byte の SHA-256 を毎回照合し、TypeScript 境界は取得前 metadata と
+  取得後 marker を再照合する。通常 install はどちらの実行経路も持たない。
+- JavaScript、Web、Native の証拠を能力表と CI step で分離し、Linux CI Green を code signing、権限、ABI、
+  実機 runtime の代替にしない完了境界を明示した。

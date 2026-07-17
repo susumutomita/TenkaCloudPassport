@@ -36,7 +36,9 @@ bun run web
 ```
 
 `make dev` は Expo 開発サーバーを起動する。Expo Go では Rules Provider を使う。Native module を
-使う Local Agent は、後続 Issue で Development Build 専用 entry point から接続する。
+使う Local Agent は、後続 Issue で Development Build 専用 entry point から接続する。環境ごとの能力、
+Xcode Personal Team、iOS / Android 実機手順は
+[Native Development Build 手順](./docs/development/native-builds.md)を参照する。
 
 ## 品質ゲート
 
@@ -73,9 +75,12 @@ Biome、型検査、Domain のカバレッジ、Web Export を順に検査する
 ## 供給網防御
 
 - `make install` と `make install_ci` は `--ignore-scripts` を必須にする。
-- `bunfig.toml` は `trustedDependencies = []` を指定する。
+- `bunfig.toml` と `package.json` は `trustedDependencies = []` を指定する。
+- Native Artifact は通常 install から分離し、将来 `llama.rn` を追加した後も
+  `make setup-llama-native` だけで取得する。
 - architecture harness は Git URL 依存、過剰な lifecycle hook、既知 IOC、lockfile の Git 解決を検出する。
-- GitHub Actions は固定 SHA の Action、safe-chain、`bun.lock` の frozen install を使う。
+- GitHub Actions は固定 SHA の Action、safe-chain、`bun.lock` の frozen install、Expo Native
+  compatibility check を使う。
 
 詳細は [ADR-0001](./docs/adr/0001-supply-chain-hardening.md) と
 [architecture harness](./docs/architecture/harness.md) を参照する。

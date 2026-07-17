@@ -51,14 +51,14 @@ jobs:
       # dependencies (e.g. textlint -> @modelcontextprotocol/sdk -> hono) may
       # include recently released packages that have not yet aged out of the
       # safe-chain minimum age check.
-      - name: Install packages via package.json
+      - name: Install packages from frozen bun.lock
         env:
           npm_config_ignore_scripts: "true"
           CI: "true"
         run: make install_ci
 
+      - name: Expo Native compatibility
+        run: bun run expo:check
+
       - name: Run quality gates
-        run: |
-          bun scripts/architecture-harness.ts --fail-on=error
-          bun run expo:check
-          make before-commit
+        run: make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error
