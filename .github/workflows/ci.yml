@@ -47,15 +47,16 @@ jobs:
           safe-chain setup-ci
 
       # Supply Chain Security: Disable lifecycle scripts during install
-      # Note: --safe-chain-skip-minimum-package-age is used because transitive
-      # dependencies (e.g. textlint -> @modelcontextprotocol/sdk -> hono) may
+      # Note: INSTALL_CI_FLAGS passes --safe-chain-skip-minimum-package-age because
+      # direct and transitive dependencies (e.g. the Expo SDK 57 packages) may
       # include recently released packages that have not yet aged out of the
-      # safe-chain minimum age check.
+      # safe-chain minimum age check. The flag is understood only by the
+      # safe-chain shim, so it is injected here instead of the Makefile default.
       - name: Install packages from frozen bun.lock
         env:
           npm_config_ignore_scripts: "true"
           CI: "true"
-        run: make install_ci
+        run: make install_ci INSTALL_CI_FLAGS=--safe-chain-skip-minimum-package-age
 
       - name: Expo Native compatibility
         run: bun run expo:check

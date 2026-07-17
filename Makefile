@@ -10,8 +10,11 @@ install:
 	bun install --ignore-scripts
 
 .PHONY: install_ci
+# INSTALL_CI_FLAGS は CI 専用の seam。GitHub Actions では safe-chain shim 経由の bun に
+# --safe-chain-skip-minimum-package-age を渡すために使う。素の bun はこのフラグを
+# 解釈できないため、ローカル実行ではデフォルトの空のままにする。
 install_ci:
-	bun install --frozen-lockfile --ignore-scripts
+	bun install --frozen-lockfile --ignore-scripts $(INSTALL_CI_FLAGS)
 
 .PHONY: setup-hooks
 # install 時に --ignore-scripts で止めた husky の prepare をここで明示的に走らせる。
