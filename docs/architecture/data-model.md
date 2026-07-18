@@ -27,7 +27,7 @@ Local Private Profile と Public Passport は別型です。Public Passport は 
 | Match Evidence | `L3` | `schemaVersion: 1` | 確認済み手掛かりと同意済み回答の参照である。 | Agent Decision 内だけである。 |
 | Bridge | `L3` | `schemaVersion: 1` | 表示 template key と Match Evidence である。 | 自分の Owner だけである。 |
 | Agent Decision | `L3` | `schemaVersion: 1` | Bridge または `no-signal` の終端判断である。 | 必要な終了同期以外は共有しない。 |
-| Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 1 }` | Lounge ID、送信 Participant ID、sequence、nonce、許可済み payload である。 | 認証済み Pet だけである。 |
+| Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 2 }` | Lounge ID、送信 Participant ID、Message ID、sequence、送信 / 満了時刻、許可済み payload である。 | 認証済み Pet だけである。 |
 | Backup | `L4` | `backupSchemaVersion: 2` | Local Private Profile、端末設定、モデル検証記録である。 | Owner が選んだ保存先だけである。 |
 
 Public Passport、Peer Envelope、バックアップに Local ID、更新日時、端末 ID、連絡先、位置情報、URL、
@@ -68,9 +68,13 @@ ID を持たせないため、同じ内容を 2 回受信しても parser が横
 
 ## Version と互換性
 
-Peer Envelope は Major と Minor の両方を必須にする。現行実装は `1.1` だけを受理し、未知の
+Peer Envelope は Major と Minor の両方を必須にする。現行実装は `1.2` だけを受理し、未知の
 Major Version と未対応の Minor Version を拒否する。互換性を確認せず未知 field を無視する方式は
 strict schema と両立しないため採用しない。
+
+Payload、Capability Negotiation、順序、期限、rate、Late Join の詳細は
+[Peer Protocol Specification](./peer-protocol.md) を正本とする。Transport Authentication は Peer が
+自己申告する Wire field にせず、Adapter の検証結果と Envelope の Lounge / Participant を照合する。
 
 保存データの Migration は、旧 Version の strict schema を検証した後、新しい object を返す純粋関数に
 する。失敗時は入力 object、既存の現行データ、保存先を変更しない。Migration の呼び出し側は成功結果を

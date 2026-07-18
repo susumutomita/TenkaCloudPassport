@@ -48,8 +48,18 @@ import {
   type ParticipantId,
 } from '../domain/session-identifiers';
 import {
-  type MessageNonce,
+  type CapabilityToken,
+  type EvidenceId,
+  isCapabilityToken,
+  type MessageId,
+  PEER_BRIDGE_MAX_EVIDENCE_IDS,
+  PEER_CAPABILITY_MAX_REQUIRED,
+  PEER_CAPABILITY_MAX_SUPPORTED,
+  PEER_MAX_SEQUENCE,
+  PEER_MEMBERSHIP_MAX_PARTICIPANTS,
+  PEER_MESSAGE_MAX_TTL_MS,
   type PeerEnvelope,
+  type PeerFieldReference,
   type PeerPayload,
   PROTOCOL_VERSION,
   type ProtocolVersion,
@@ -84,7 +94,7 @@ export const PEER_ENVELOPE_MAX_BYTES = 4 * 1024;
 export const BACKUP_MAX_BYTES = 64 * 1024;
 export const LOCAL_PROFILE_MAX_BYTES = 8 * 1024;
 export const EXTERNAL_JSON_MAX_DEPTH = 8;
-export const MAX_SEQUENCE = 2_147_483_647;
+export const MAX_SEQUENCE = PEER_MAX_SEQUENCE;
 export const MAX_MODEL_BYTES = 8 * 1024 * 1024 * 1024;
 
 function schemaVersion(
@@ -570,19 +580,100 @@ function protocolVersion(value: unknown): ProtocolVersion {
       'Peer Protocol Version は対応していません。'
     );
   }
-  return { major: 1, minor: 1 };
+  return { major: 1, minor: 2 };
 }
 
-function messageNonce(value: unknown, path: string): MessageNonce {
+function prefixed128BitId<Prefix extends 'mid' | 'rnd' | 'evi'>(
+  value: unknown,
+  path: string,
+  prefix: Prefix
+): `${Prefix}_${string}` {
   const candidate = stringValue(value, path, 36);
-  if (!/^msg_[0-9a-f]{32}$/.test(candidate)) {
+  if (!new RegExp(`^${prefix}_[0-9a-f]{32}$`).test(candidate)) {
     return schemaError(
       'INVALID_VALUE',
       path,
-      `${path} は有効な message nonce ではありません。`
+      `${path} は有効な ${prefix} ID ではありません。`
     );
   }
-  return candidate as MessageNonce;
+  return candidate as `${Prefix}_${string}`;
+}
+
+function messageId(value: unknown, path: string): MessageId {
+  return prefixed128BitId(value, path, 'mid');
+}
+
+function evidenceId(value: unknown, path: string): EvidenceId {
+  return prefixed128BitId(value, path, 'evi');
+}
+
+function capabilityToken(value: unknown, path: string): CapabilityToken {
+  const candidate = stringValue(value, path);
+  if (!isCapabilityToken(candidate)) {
+    return schemaError(
+      'INVALID_VALUE',
+      path,
+      `${path} は有効な Capability token ではありません。`
+    );
+  }
+  return candidate;
+}
+
+function capabilityTokens(
+  value: unknown,
+  path: string,
+  minimumLength: number,
+  maximumLength: number
+): CapabilityToken[] {
+  const tokens = arrayValue(value, path, minimumLength, maximumLength).map(
+    (item, index) => capabilityToken(item, `${path}[${index}]`)
+  );
+  assertUniqueStrings(tokens, path);
+  return tokens;
+}
+
+function participantIds(
+  value: unknown,
+  path: string,
+  minimumLength: number
+): ParticipantId[] {
+  const ids = arrayValue(
+    value,
+    path,
+    minimumLength,
+    PEER_MEMBERSHIP_MAX_PARTICIPANTS
+  ).map((item, index) => participantId(item, `${path}[${index}]`));
+  assertUniqueStrings(ids, path);
+  return ids;
+}
+
+function peerFieldReference(value: unknown, path: string): PeerFieldReference {
+  const discriminator = strictRecord(
+    value,
+    path,
+    ['kind'],
+    ['clueId', 'language']
+  );
+  const kind = stringValue(discriminator.kind, `${path}.kind`);
+  if (kind === 'clue') {
+    const record = strictRecord(value, path, ['kind', 'clueId']);
+    return {
+      kind,
+      clueId: clueId(record.clueId, `${path}.clueId`),
+    };
+  }
+  if (kind === 'language') {
+    const record = strictRecord(value, path, ['kind', 'language']);
+    return {
+      kind,
+      language: languageCode(record.language, `${path}.language`),
+    };
+  }
+  return schemaError(
+    'INVALID_VALUE',
+    `${path}.kind`,
+    'Peer field reference の kind は対応していません。'
+  );
 }
 
 function peerPayload(value: unknown): PeerPayload {
@@ -591,9 +682,61 @@ function peerPayload(value: unknown): PeerPayload {
     value,
     path,
     ['kind'],
-    ['publicPassport', 'questionId', 'answer', 'outcome']
+    [
+      'role',
+      'supported',
+      'required',
+      'roundId',
+      'publicPassport',
+      'evidenceId',
+      'fieldReference',
+      'signalType',
+      'participantIds',
+      'evidenceIds',
+      'revision',
+      'reason',
+      'code',
+      'phase',
+    ]
   );
   const kind = stringValue(discriminatorRecord.kind, `${path}.kind`);
+  if (kind === 'hello') {
+    const record = strictRecord(value, path, ['kind', 'role']);
+    return {
+      kind,
+      role: assertOneOf(record.role, ['host', 'guest'], `${path}.role`),
+    };
+  }
+  if (kind === 'capability') {
+    const record = strictRecord(value, path, ['kind', 'supported', 'required']);
+    const supported = capabilityTokens(
+      record.supported,
+      `${path}.supported`,
+      1,
+      PEER_CAPABILITY_MAX_SUPPORTED
+    );
+    const required = capabilityTokens(
+      record.required,
+      `${path}.required`,
+      1,
+      PEER_CAPABILITY_MAX_REQUIRED
+    );
+    if (required.some((token) => !supported.includes(token))) {
+      return schemaError(
+        'INVALID_VALUE',
+        `${path}.required`,
+        'Required Capability は Supported の部分集合である必要があります。'
+      );
+    }
+    return { kind, supported, required };
+  }
+  if (kind === 'ready') {
+    const record = strictRecord(value, path, ['kind', 'roundId']);
+    return {
+      kind,
+      roundId: prefixed128BitId(record.roundId, `${path}.roundId`, 'rnd'),
+    };
+  }
   if (kind === 'public-passport') {
     const record = strictRecord(value, path, ['kind', 'publicPassport']);
     return {
@@ -601,26 +744,124 @@ function peerPayload(value: unknown): PeerPayload {
       publicPassport: parsePublicPassport(record.publicPassport),
     };
   }
-  if (kind === 'owner-answer') {
-    const record = strictRecord(value, path, ['kind', 'questionId', 'answer']);
+  if (kind === 'pet-signal') {
+    const record = strictRecord(value, path, [
+      'kind',
+      'evidenceId',
+      'fieldReference',
+      'signalType',
+    ]);
+    const fieldReference = peerFieldReference(
+      record.fieldReference,
+      `${path}.fieldReference`
+    );
+    const signalType = assertOneOf(
+      record.signalType,
+      [
+        'shared-topic',
+        'offer-need-complement',
+        'shared-language',
+        'owner-confirmed',
+      ],
+      `${path}.signalType`
+    );
+    if (
+      (fieldReference.kind === 'language') !==
+      (signalType === 'shared-language')
+    ) {
+      return schemaError(
+        'INVALID_VALUE',
+        `${path}.signalType`,
+        'Language 参照は shared-language、Clue 参照はそれ以外の Signal Type が必要です。'
+      );
+    }
     return {
       kind,
-      questionId: assertLiteral(
-        record.questionId,
-        'confirm-shared-clue',
-        `${path}.questionId`
-      ),
-      answer: assertOneOf(record.answer, ['yes', 'no'], `${path}.answer`),
+      evidenceId: evidenceId(record.evidenceId, `${path}.evidenceId`),
+      fieldReference,
+      signalType,
     };
   }
-  if (kind === 'retired') {
-    const record = strictRecord(value, path, ['kind', 'outcome']);
+  if (kind === 'bridge-proposal') {
+    const record = strictRecord(value, path, [
+      'kind',
+      'participantIds',
+      'evidenceIds',
+    ]);
+    const evidenceIds = arrayValue(
+      record.evidenceIds,
+      `${path}.evidenceIds`,
+      1,
+      PEER_BRIDGE_MAX_EVIDENCE_IDS
+    ).map((item, index) => evidenceId(item, `${path}.evidenceIds[${index}]`));
+    assertUniqueStrings(evidenceIds, `${path}.evidenceIds`);
     return {
       kind,
-      outcome: assertOneOf(
-        record.outcome,
-        ['bridge', 'no-signal'],
-        `${path}.outcome`
+      participantIds: participantIds(
+        record.participantIds,
+        `${path}.participantIds`,
+        2
+      ),
+      evidenceIds,
+    };
+  }
+  if (kind === 'membership') {
+    const record = strictRecord(value, path, [
+      'kind',
+      'revision',
+      'participantIds',
+    ]);
+    return {
+      kind,
+      revision: integerValue(
+        record.revision,
+        `${path}.revision`,
+        0,
+        MAX_SEQUENCE
+      ),
+      participantIds: participantIds(
+        record.participantIds,
+        `${path}.participantIds`,
+        2
+      ),
+    };
+  }
+  if (kind === 'leave') {
+    const record = strictRecord(value, path, ['kind', 'reason']);
+    return {
+      kind,
+      reason: assertOneOf(
+        record.reason,
+        ['owner-left', 'network-lost', 'host-ended'],
+        `${path}.reason`
+      ),
+    };
+  }
+  if (kind === 'expire') {
+    const record = strictRecord(value, path, ['kind', 'reason']);
+    return {
+      kind,
+      reason: assertLiteral(record.reason, 'lounge-expired', `${path}.reason`),
+    };
+  }
+  if (kind === 'error') {
+    const record = strictRecord(value, path, ['kind', 'code', 'phase']);
+    return {
+      kind,
+      code: assertOneOf(
+        record.code,
+        [
+          'invalid-message',
+          'unsupported-capability',
+          'rate-limited',
+          'resync-required',
+        ],
+        `${path}.code`
+      ),
+      phase: assertOneOf(
+        record.phase,
+        ['handshake', 'protocol', 'lounge'],
+        `${path}.phase`
       ),
     };
   }
@@ -637,10 +878,38 @@ export function parsePeerEnvelope(value: unknown): PeerEnvelope {
     'protocolVersion',
     'loungeId',
     'senderParticipantId',
+    'messageId',
     'sequence',
-    'messageNonce',
+    'sentAtEpochMs',
+    'expiresAtEpochMs',
     'payload',
   ]);
+  const sentAtEpochMs = integerValue(
+    record.sentAtEpochMs,
+    `${path}.sentAtEpochMs`,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+  const expiresAtEpochMs = integerValue(
+    record.expiresAtEpochMs,
+    `${path}.expiresAtEpochMs`,
+    0,
+    Number.MAX_SAFE_INTEGER
+  );
+  if (expiresAtEpochMs <= sentAtEpochMs) {
+    return schemaError(
+      'INVALID_VALUE',
+      `${path}.expiresAtEpochMs`,
+      'Peer Message の期限は送信時刻より後である必要があります。'
+    );
+  }
+  if (expiresAtEpochMs - sentAtEpochMs > PEER_MESSAGE_MAX_TTL_MS) {
+    return schemaError(
+      'LIMIT_EXCEEDED',
+      `${path}.expiresAtEpochMs`,
+      `Peer Message の TTL は ${PEER_MESSAGE_MAX_TTL_MS} ms 以下にしてください。`
+    );
+  }
   return {
     protocolVersion: protocolVersion(record.protocolVersion),
     loungeId: loungeId(record.loungeId, `${path}.loungeId`),
@@ -648,13 +917,15 @@ export function parsePeerEnvelope(value: unknown): PeerEnvelope {
       record.senderParticipantId,
       `${path}.senderParticipantId`
     ),
+    messageId: messageId(record.messageId, `${path}.messageId`),
     sequence: integerValue(
       record.sequence,
       `${path}.sequence`,
       0,
       MAX_SEQUENCE
     ),
-    messageNonce: messageNonce(record.messageNonce, `${path}.messageNonce`),
+    sentAtEpochMs,
+    expiresAtEpochMs,
     payload: peerPayload(record.payload),
   };
 }

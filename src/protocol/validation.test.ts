@@ -26,6 +26,14 @@ describe('外部 JSON の共通上限', () => {
     );
   });
 
+  it('巨大な外部文字列は全体を UTF-8 encode する前に code unit 下限で拒否する', () => {
+    const raw = 'あ'.repeat(1_000_000);
+
+    expect(() => parseBoundedJson(raw, 4_096, 8)).toThrow(
+      SchemaValidationError
+    );
+  });
+
   it('ネスト深度が上限と同じ JSON を受理する', () => {
     const value = nestedObject(8);
     const raw = JSON.stringify(value);
