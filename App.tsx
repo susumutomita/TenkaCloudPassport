@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { DEFAULT_AGENT_MODEL_PROVIDER } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
 import PassportApp from './src/app/PassportApp';
@@ -11,6 +12,7 @@ export default function App() {
     <>
       <StatusBar style="dark" />
       <PassportApp
+        agentModelProvider={DEFAULT_AGENT_MODEL_PROVIDER}
         backupSharePort={backupSharePort}
         localProfileStorage={localProfileStorage}
       />

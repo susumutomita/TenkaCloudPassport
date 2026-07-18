@@ -4,6 +4,7 @@ import {
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  type AgentModelProviderOptions,
   validateAgentModelProviderOutput,
 } from './agent-model-provider';
 
@@ -59,10 +60,11 @@ export type ProviderAttemptResult =
  */
 export async function attemptProvider(
   provider: AgentModelProvider,
-  input: AgentModelInput
+  input: AgentModelInput,
+  options?: AgentModelProviderOptions
 ): Promise<ProviderAttemptResult> {
   try {
-    const output = await provider.provide(input);
+    const output = await provider.provide(input, options);
     const decision = validateAgentModelProviderOutput(input, output);
     return { kind: 'success', providerKind: provider.kind, decision };
   } catch (error) {

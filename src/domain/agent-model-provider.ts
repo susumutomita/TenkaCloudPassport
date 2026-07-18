@@ -112,10 +112,17 @@ export class AgentModelProviderError extends Error {
   }
 }
 
+export interface AgentModelProviderOptions {
+  readonly signal?: AbortSignal;
+}
+
 export interface AgentModelProvider {
   readonly kind: 'rules' | 'local-agent';
   /** Native 境界の実値は TypeScript の型を信用せず、必ず Runtime Validator へ渡す。 */
-  provide(input: AgentModelInput): unknown | Promise<unknown>;
+  provide(
+    input: AgentModelInput,
+    options?: AgentModelProviderOptions
+  ): unknown | Promise<unknown>;
 }
 
 /**

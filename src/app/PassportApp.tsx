@@ -4,9 +4,15 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
+import {
+  type AgentModelInput,
+  type AgentModelProvider,
+  RULES_MODEL_PROVIDER,
+} from '../domain/agent-model-provider';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
@@ -19,6 +25,7 @@ import {
   type LoungeRoomState,
   type LoungeRoomTerminationReason,
   markParticipantReady,
+  type ReadyLoungeRoom,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
@@ -31,6 +38,7 @@ import {
   PUBLIC_PASSPORT_MAX_CLUES,
 } from '../domain/passport';
 import type { PetInteractionState } from '../domain/pet-interaction';
+import { INTERACTION_DEADLINE_MS } from '../domain/pet-interaction';
 import {
   createSessionIdentifiers,
   type ParticipantId,
@@ -53,6 +61,7 @@ import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import {
+  createAgentProviderSessionRunner,
   INITIAL_PROVIDER_RUNTIME_STATE,
   type ProviderRuntimeState,
 } from './agent-provider-session';
@@ -74,8 +83,8 @@ import {
   toggleLanguageCode,
 } from './passport-share';
 import {
+  applyAgentModelDecision,
   applyPetInteractionTick,
-  beginPetInteraction,
   submitOwnerQuestionAnswer,
 } from './pet-interaction-flow';
 import {
@@ -95,8 +104,8 @@ import { type BackupFlow, useBackupFlow } from './use-backup-flow';
 interface PassportAppProps {
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
-  /** Issue 17 の Native Adapter が接続するまで、未導入は正常な Rules 状態とする。 */
-  readonly providerRuntimeState?: ProviderRuntimeState;
+  /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
+  readonly agentModelProvider?: AgentModelProvider;
 }
 
 type SetupStage =
@@ -379,7 +388,7 @@ function SharePreviewGate({
 export default function PassportApp({
   localProfileStorage,
   backupSharePort,
-  providerRuntimeState = INITIAL_PROVIDER_RUNTIME_STATE,
+  agentModelProvider = RULES_MODEL_PROVIDER,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
   // 完走させる（docs/design/qr-invite-and-ready-flow.md）。5 状態すべての UI 分岐は
@@ -428,6 +437,10 @@ export default function PassportApp({
   const [interaction, setInteraction] = useState<PetInteractionState | null>(
     null
   );
+  const [providerRuntimeState, setProviderRuntimeState] =
+    useState<ProviderRuntimeState>(INITIAL_PROVIDER_RUNTIME_STATE);
+  const [providerRunner] = useState(() => createAgentProviderSessionRunner());
+  const activeEncounterKeyRef = useRef<string | null>(null);
   const [loungeRoom, setLoungeRoom] = useState<LoungeRoomState | null>(null);
   const [guestProfile, setGuestProfile] = useState<LocalPrivateProfile | null>(
     null
@@ -448,6 +461,20 @@ export default function PassportApp({
     })
   );
   const [reduceMotion, setReduceMotion] = useState(false);
+  const cancelActiveProvider = useCallback((): void => {
+    const encounterKey = activeEncounterKeyRef.current;
+    activeEncounterKeyRef.current = null;
+    if (encounterKey) providerRunner.cancel(encounterKey);
+    setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
+  }, [providerRunner]);
+
+  useEffect(() => {
+    return () => {
+      const encounterKey = activeEncounterKeyRef.current;
+      activeEncounterKeyRef.current = null;
+      if (encounterKey) providerRunner.cancel(encounterKey);
+    };
+  }, [providerRunner]);
   const handleBackupImportCommitted = useCallback(
     (committed: LocalPrivateProfile): void => {
       setPrivateProfile(committed);
@@ -591,11 +618,12 @@ export default function PassportApp({
       // （`DestroyedLoungeScreen`）は `interaction` を参照しないため実害はないが、
       // 「Lounge が終われば Pet Interaction も終わる」契約を状態としても保つ。
       if (current.status === 'active' && advanced.status !== 'active') {
+        cancelActiveProvider();
         setInteraction(null);
       }
       setLounge(advanced);
     },
-    [interaction]
+    [interaction, cancelActiveProvider]
   );
 
   useEffect(() => {
@@ -769,12 +797,7 @@ export default function PassportApp({
       });
       setErrorMessage(null);
       if (updated.status === 'ready') {
-        // Agent State Machine（既存 Lounge）を開始したら、Room の 1 秒 tick はもう
-        // 不要なので破棄し、20 分の TTL が尽きるまで無駄に動き続けさせない。
-        qrScannerPort.publish(null);
-        setLoungeRoom(null);
-        setInteraction(null);
-        setLounge(startLoungeFromRoom(updated));
+        activateReadyLounge(updated);
       } else {
         setLoungeRoom(updated);
       }
@@ -845,10 +868,7 @@ export default function PassportApp({
       });
       setErrorMessage(null);
       if (readied.status === 'ready') {
-        qrScannerPort.publish(null);
-        setLoungeRoom(null);
-        setInteraction(null);
-        setLounge(startLoungeFromRoom(readied));
+        activateReadyLounge(readied);
       } else {
         setLoungeRoom(readied);
         setStage('host-invite');
@@ -856,6 +876,16 @@ export default function PassportApp({
     } catch (error: unknown) {
       setErrorMessage(qrFlowErrorMessage(error, locale));
     }
+  }
+
+  /** Ready Room の ID を Provider lifetime の Encounter Key として保持して Lounge を開始する。 */
+  function activateReadyLounge(room: ReadyLoungeRoom): void {
+    cancelActiveProvider();
+    activeEncounterKeyRef.current = room.loungeId;
+    qrScannerPort.publish(null);
+    setLoungeRoom(null);
+    setInteraction(null);
+    setLounge(startLoungeFromRoom(room));
   }
 
   /**
@@ -877,20 +907,57 @@ export default function PassportApp({
   }
 
   /**
-   * Issue 11: 「会話の糸を探す」操作 1 回で、Pet Interaction の bounded protocol を
-   * discovering → clarifying（Owner Question 表示）/ no-signal（即 retired）まで進める。
-   * Rules Provider は同期関数のため discovering は観測可能な状態として現れない。
+   * 「会話の糸を探す」操作 1 回で共通 AgentModelProvider を実行する。検証済み Bridge は
+   * そのまま Retired Lounge へ、保守的な no-signal は既存の bounded Rules Discovery と
+   * Owner Question へ渡す。Runner が二重 Tap、Deadline、Fallback-once を所有する。
    */
   function startPetInteraction(): void {
     if (lounge?.status !== 'active') return;
-    const step = beginPetInteraction(
-      lounge,
-      RULES_INTERACTION_PROVIDER,
-      currentClock()
-    );
-    setInteraction(step.interaction);
-    setLounge(step.lounge);
+    const encounterKey = activeEncounterKeyRef.current;
+    if (!encounterKey) return;
+    const active = lounge;
+    const clock = currentClock();
+    const input: AgentModelInput = {
+      ownerPassport: active.ownerPassport,
+      encounteredPassport: active.encounteredPassport,
+      language: locale,
+      deadlineAtWallClockMs: Math.min(
+        clock.wallClockMs + INTERACTION_DEADLINE_MS,
+        active.expiresAtWallClockMs
+      ),
+    };
+    setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
     setErrorMessage(null);
+    void providerRunner
+      .run({
+        state: INITIAL_PROVIDER_RUNTIME_STATE,
+        encounterKey,
+        provider: agentModelProvider,
+        input,
+        onStateChange(state) {
+          if (activeEncounterKeyRef.current === encounterKey) {
+            setProviderRuntimeState(state);
+          }
+        },
+      })
+      .then((result) => {
+        if (activeEncounterKeyRef.current !== encounterKey) return;
+        setProviderRuntimeState(result.state);
+        const step = applyAgentModelDecision(
+          active,
+          input,
+          result.outcome.decision,
+          RULES_INTERACTION_PROVIDER,
+          clock
+        );
+        setInteraction(step.interaction);
+        setLounge(step.lounge);
+      })
+      .catch(() => {
+        if (activeEncounterKeyRef.current === encounterKey) {
+          setProviderRuntimeState({ status: 'failed' });
+        }
+      });
   }
 
   /**
@@ -915,6 +982,7 @@ export default function PassportApp({
   }
 
   function leave(): void {
+    cancelActiveProvider();
     setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'owner-exit' }) : current
@@ -923,6 +991,7 @@ export default function PassportApp({
   }
 
   function endAsHost(): void {
+    cancelActiveProvider();
     setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'host-ended' }) : current
@@ -931,6 +1000,7 @@ export default function PassportApp({
   }
 
   function complete(): void {
+    cancelActiveProvider();
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'complete' }) : current
     );
@@ -941,6 +1011,7 @@ export default function PassportApp({
     // discardInviteFlow() が相手の宣言内容（encounteredPetName 等）も含めて
     // Lounge 由来の一時データを一括破棄する。
     discardInviteFlow();
+    cancelActiveProvider();
     setInteraction(null);
     setLounge(null);
     setErrorMessage(null);

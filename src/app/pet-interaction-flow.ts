@@ -1,3 +1,7 @@
+import type {
+  AgentModelDecision,
+  AgentModelInput,
+} from '../domain/agent-model-provider';
 import type { ClockSnapshot } from '../domain/clock-guard';
 import type { LanguageCode } from '../domain/clue-catalog';
 import type { RulesInteractionDiscoveryProvider } from '../domain/interaction-discovery-provider';
@@ -12,6 +16,7 @@ import {
   receiveOwnerAnswer,
   retireInteraction,
 } from '../domain/pet-interaction';
+import { materializeAgentModelOutcome } from './agent-model-live-outcome';
 
 /**
  * Issue 11: `src/domain/pet-interaction.ts` の bounded protocol を、Active Lounge の
@@ -27,6 +32,27 @@ import {
 export interface PetInteractionStep {
   readonly interaction: PetInteractionState | null;
   readonly lounge: LoungeState;
+}
+
+/**
+ * 共通 Agent Model Decision を 2 者間 Live Outcome へ具体化する。Bridge を具体化できない
+ * `no-signal` / Language-only は、既存の bounded Rules Discovery と Owner Question を残す。
+ */
+export function applyAgentModelDecision(
+  active: ActiveLounge,
+  input: AgentModelInput,
+  decision: AgentModelDecision,
+  provider: RulesInteractionDiscoveryProvider,
+  clock: ClockSnapshot
+): PetInteractionStep {
+  const outcome = materializeAgentModelOutcome(input, decision);
+  if (outcome.kind === 'no-signal') {
+    return beginPetInteraction(active, provider, clock);
+  }
+  return {
+    interaction: null,
+    lounge: collapseToRetiredLounge(active, outcome),
+  };
 }
 
 /**
