@@ -58,6 +58,8 @@
 | パケット盗聴 | 同一 LAN 利用者が手掛かり、Owner Answer、Bridge、通信相手を観測する。 | 高 | 高 | 高である。 |
 | 改ざん済み GGUF | 改ざんモデルが不正出力、過大消費、runtime の脆弱性悪用を狙う。 | 中 | 高 | 高である。 |
 | バックアップ誤公開 | 平文 JSON バックアップを共有フォルダー、公開リポジトリ、誤った相手へ保存する。 | 中 | 高 | 高である。 |
+| 診断情報の過剰開示 | 障害調査 Report に内容、識別子、Model Path、Network metadata、秘密が混入する。 | 中 | 高 | 高である。 |
+| 全削除の中断 | 複数保存先の削除途中で Process または Storage が失敗し、一部 Data が次回起動で復元される。 | 中 | 高 | 高である。 |
 
 ## 脅威別の対策
 
@@ -72,6 +74,8 @@
 | パケット盗聴 | QR の Join Proof と Transport Fingerprint を、採用 Transport が標準暗号で確立した Channel に結合する。全 Pet Message と終了通知を Transport が暗号化し、平文 fallback、外部 relay、外部推論 API を持たない。 | 改ざんを伴わない受動的な盗聴はアプリから検出できない。Transport の認証 tag、Fingerprint、sequence の検証失敗は能動的な改ざんの補助 Signal として接続を閉じる。 | Lounge を終了し、鍵を破棄して新しい QR で再作成する。 | 通信量、時刻、通信層アドレス、同一 LAN 上に端末がいる事実などのメタデータは OS とネットワーク機器から見える場合がある。 |
 | 改ざん済み GGUF | 対応形式、最大サイズ、digest allowlist を満たすモデルだけを、network、ファイル書き込み、アプリ状態変更の権限を持たない隔離 runtime で開く。 | 読み込み前とアプリ更新後に digest と構造を再検証し、runtime crash、資源上限超過、schema 外出力を失敗として扱う。 | モデルを無効化して隔離し、Owner に削除または既知 digest のモデルへの置換を求める。Lounge は `no-signal` または終了とする。 | GGUF parser と推論 runtime の未知の脆弱性、正規モデルの不適切な出力、入手元の侵害は残る。 |
 | バックアップ誤公開 | Export 対象を allowlist に固定し、Lounge データ、GGUF、端末パス、識別子を除外する。保存前に平文 JSON と保存先の管理責任を表示し、自動同期や自動 upload を行わない。 | Export 後の誤公開はアプリから検出できない。Export 前 preview と件数は誤操作の補助シグナルとし、Owner は保存先の共有状態を確認する。Import は strict schema で未知フィールドと Lounge 由来フィールドを拒否する。 | Owner は保存先の共有を解除してファイルを削除し、必要なら Local Private Profile の内容を変更する。アプリ内一時 copy は直ちに破棄する。 | 保存先の履歴、同期先、受信者の copy、公開済みリポジトリからの回収は困難である。 |
+| 診断情報の過剰開示 | Report は strict allowlist とし、正確な時刻、内容、識別子、Path、IP / SSID / 位置、Key / Token を型で表現しない。 | Snapshot と strict parser で未知 field と禁止語彙を拒否し、Preview で全項目を Owner に示す。 | Preview を破棄し、固定 Error Code と Recovery だけで再生成する。 | Owner が共有した Report の保存先と受信者 copy はアプリから回収できない。 |
+| 全削除の中断 | write-ahead tombstone を物理削除より先に永続化し、以後の復元を閉じる。削除対象の Snapshot は作らない。 | 起動時に tombstone を Profile load より先に確認し、残る Resource 件数を内容なしで検査する。 | 各 Resource の削除を冪等に再開し、全件 0 の確認後だけ tombstone を消す。 | OS 自体の侵害、filesystem snapshot、Owner が外部保存した Backup はアプリ内全削除の対象外である。 |
 
 ## 横断的な検証規則
 

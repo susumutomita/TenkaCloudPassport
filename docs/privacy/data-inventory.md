@@ -47,6 +47,11 @@ Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容
 | `L3` Lounge 限定 | Lounge への参加中だけ必要な通信、推論、結果データである。 | メモリに限る。永続ストレージへ書き込まない。 |
 | `L4` Owner 管理 Export | Owner が明示操作でアプリ外へ複製したバックアップである。 | Owner が選んだ保存先に限る。 |
 
+Diagnostic Report は `L0` の Version と、内容を持たない現在状態・件数だけを Owner の明示操作で
+組み立てる。Report 自体は永続保存せず、Preview 中のメモリだけで扱う。Owner が Share Sheet を確定した
+後の保存先は `L4` と同じく Owner 管理とする。正確な時刻、識別子、内容、Path、Network metadata は
+Diagnostic Schema に存在しない。
+
 ## 全データ種別
 
 `Export 可否` の「可」は、Owner が明示した手動 JSON バックアップに含められることを表す。
@@ -72,10 +77,16 @@ Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容
 | GGUF モデルファイル | `L0` | Owner が信頼できる入手元から手動で端末へ配置する。 | モデル本体、サイズ、検証用 digest である。 | OS のアプリ専用モデル領域である。 | 端末内推論 runtime だけである。 | Owner が置換または削除するまでである。 | モデル削除、検証失敗時の隔離、アプリ削除である。 | 否である。 |
 | モデル検証記録 | `L1` | アプリが GGUF の検証時に生成する。 | digest、サイズ、検証結果、検証したアプリ版である。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | モデルの置換またはアプリ更新後の再検証までである。 | モデル削除、置換、設定初期化、アプリ削除である。 | 可である。 |
 | 手動 JSON バックアップ | `L4` | Owner が Export を明示実行する。 | バックアップ schema 版、Local Private Profile、端末設定、モデル検証記録である。 | Owner がファイル選択画面で指定した保存先である。 | Owner と保存先を扱えるアプリまたはサービスである。 | Export 後は Owner が削除するまでである。 | Owner が保存先から削除する。アプリ内一時データは完了、取消、失敗、再起動で破棄する。 | 対象そのものである。 |
+| Sanitized Diagnostic Report | `L4` | Owner が Preview 後に Share を明示実行する。 | Version、Provider / Transport / Permission 状態、Model の Architecture / Size / digest 先頭 8 桁、固定 Error Code / Phase、Storage 件数 / Byte 数である。 | Preview 中はメモリだけ、Share 後は Owner が選んだ保存先である。 | Owner が選んだ保存先または共有先である。 | Preview 終了まで、Share 後は Owner が削除するまでである。 | Preview 終了または Owner が保存先から削除する。 | 対象そのものである。 |
 | 実行時 Security Signal | `L3` | schema、認証、Replay、モデル出力の検証失敗が生成する。 | 内容を持たない失敗種別と現在の Lounge 内回数である。 | アプリのメモリだけである。 | Owner の警告画面だけである。 | Lounge セッションと同じである。 | 退出、Host 終了、20 分満了、プロセス終了のうち最も早い時点である。 | 否である。 |
 
 通信層アドレスは OS とネットワーク機器から見える場合があるが、QR、Public Passport、
 Pet Message、ログ、バックアップのアプリケーションデータへ複製しない。
+
+全削除 transaction の tombstone は内容を持たない固定 marker であり、`L1` としてアプリ専用領域へ保存
+できる。削除対象の値、件数、Path、識別子を marker に含めない。marker が存在する間は既存の Local Data を
+復元せず、新規 Profile write と Model Context 取得も共有 lease で拒否する。冪等削除を完了して全 Resource
+の不在を確認した後に marker 自体を削除し、lease を解除する。
 
 ## Local Private Profile と Public Passport の差分
 

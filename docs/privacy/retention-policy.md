@@ -13,6 +13,18 @@
 - Public Passport、Owner Answer、Pet Message、Bridge を Local Private Profile またはバックアップへ
   自動保存しない。再利用には Local Private Profile での新しい明示操作を必要とする。
 
+## Owner による全削除
+
+全削除の確認後は内容を持たない tombstone を最初に永続化し、この時点で Profile、Settings、Backup
+Cache、Model を論理的に削除済みとする。以後は Data を画面または起動復元へ戻さず、各保存先の物理削除を
+冪等に実行する。Process 終了や Storage Failure で中断した場合は tombstone を残し、次回起動時に Profile
+読込より先に削除を再開する。全対象が 0 件であることを確認した後だけ tombstone を削除する。
+Profile write と Model Context は同じ排他 lease に参加し、tombstone の commit から削除完了まで新規取得を
+拒否する。marker 書込 API が副作用後に失敗した場合も再読込で commit 済みと判定し、削除へ収束させる。
+
+個別の `Reset Passport` は Local Private Profile だけ、`Remove Model` は Model 本体と検証記録だけ、
+`End and forget Lounge` はメモリ上の Lounge Data だけを対象にする。個別操作を全削除として表示しない。
+
 ## Lounge の期限
 
 Host は Lounge セッションの作成時に、使い捨て Lounge nonce、一時鍵、`issuedAt`、

@@ -13,6 +13,7 @@ import { colors, spacing } from '../ui/theme';
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
+  readonly onOpenDiagnostics: () => void;
   readonly onBack: () => void;
 }
 
@@ -25,6 +26,7 @@ interface SettingsScreenProps {
 export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
   onChangeLocale,
+  onOpenDiagnostics,
   onBack,
 }: SettingsScreenProps) {
   const t = MESSAGES[locale].settings;
@@ -48,6 +50,12 @@ export default function SettingsScreen({
           );
         })}
       </View>
+      <ActionButton
+        accessibilityHint={t.diagnosticsButtonHint}
+        label={t.diagnosticsButton}
+        onPress={onOpenDiagnostics}
+        variant="secondary"
+      />
       <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
     </AppScreen>
   );

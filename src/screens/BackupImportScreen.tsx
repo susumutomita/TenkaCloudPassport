@@ -182,11 +182,17 @@ export default function BackupImportScreen({
       ) : null}
 
       <ActionButton
+        disabled={committing}
         label={t.openExportButton}
         onPress={onOpenExport}
         variant="secondary"
       />
-      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
+      <ActionButton
+        disabled={committing}
+        label={t.backButton}
+        onPress={onBack}
+        variant="secondary"
+      />
     </AppScreen>
   );
 }

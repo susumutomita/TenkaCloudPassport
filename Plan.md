@@ -1,5 +1,67 @@
 # Plan.md
 
+### [Issue 25 Telemetry-free Diagnostics and Local Erasure] - 2026-07-18
+
+#### 目的
+
+Network 送信なしの Sanitized Diagnostic と、中断しても次回起動で完了する端末内 Data 削除を実装する。
+診断と削除で Passport、Answer、Bridge、Prompt、Output、識別子、Path、Network metadata を扱わない。
+
+#### 制約
+
+- Diagnostic Report は strict allowlist とし、Preview 後の明示操作だけが Share Port を呼ぶ。
+- 全削除は write-ahead tombstone を論理 commit とし、rollback 用の秘密 Snapshot を作らない。
+- Lounge、Passport、Model、全 Data の操作を 1 つの曖昧な Reset Button にまとめない。
+- 現在未実装の Settings / Backup Cache / Model 永続化を存在するように表示しない。
+- OS Log の内容検査と実 Model Context は実機証跡が必要であり、Pure Test を代替証跡にしない。
+
+#### 設計判断
+
+順次削除だけの案は中断後の部分復元を許し、削除前 Snapshot rollback は秘密の複製を増やす。固定
+tombstone を先に書き、以降の load を閉じて冪等削除を再開する案を採用する。診断は時刻や ID を持たない
+Report Schema Version 1 とし、既存 Backup Share Port を手動 Export にだけ再利用する。詳細は
+[端末内診断と全削除](./docs/design/local-diagnostics-and-erasure.md) と
+[ADR-0020](./docs/adr/0020-local-diagnostics-and-erasure-transaction.md) を正本とする。
+
+#### タスク
+
+1. ADR、設計、Privacy Data Inventory、Retention、Threat Model、Harness 正本を先に更新する。
+2. Diagnostic strict schema / Snapshot / 禁止 field を Red Test にする。
+3. Profile / Model Resource と deletion journal を合成する `LocalDataControl` を Red Test 先行で実装する。
+4. tombstone 前失敗、削除中断、再起動回復、Model Context 使用中を実 I/O で検証する。
+5. Diagnostic / Local Data Screen、JA / EN Recovery、4 分離操作、Preview / Confirm / Share を配線する。
+6. dependency tree invariant、全ゲート、独立 Review、Security / Simplify Review を完了する。
+
+#### 検証手順
+
+- `bun test src/app/diagnostic-report.test.ts src/app/local-data-control.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（jscpd、全 Test、Functions / Lines 100%、Web Export を含む）。
+- Diagnostic JSON に禁止 key / value、未知 field、正確な時刻、ID、Path が存在しないこと。
+- tombstone 後に Process を作り直しても Profile / Model / Settings / Cache を復元しないこと。
+- 実機 OS Log は内容、Key、Path がない証跡を別 Gate として残すこと。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 25 と既存 Profile / Backup / Lounge / Model foundation を監査した。永続 Data は現在
+  Local Private Profile だけで、Settings は React state、Backup Cache と実 Model は存在しないことを確認。
+  件数 0 を正しく表示し、後続 Port 接続で拡張する設計にした。
+- 2026-07-18: 順次削除、rollback Snapshot、write-ahead tombstone の 3 案を比較し、秘密の複製を作らず
+  中断後も削除へ収束する tombstone 方式を ADR-0020 で採用した。
+- 2026-07-18: strict allowlist の Diagnostic Report、Preview / Confirm / Manual Share、JA / EN Recovery、
+  Lounge / Profile / Model / 全 Data の分離操作を Settings から配線した。保存・Import 中は Settings と
+  Backup 画面の遷移を閉じ、削除 transaction と既存 write が競合しない UI 境界にした。
+- 2026-07-18: 実 file を使う Profile / Journal / Model deletion と Process 再生成後の回復 Test、未知 field・
+  禁止値・依存 SDK を拒否する Test を追加した。OS Log の内容検査、実 Model Context / Storage の証跡は
+  Pure Test で置き換えず、実機 Gate として Issue 25 に残す。
+- 2026-07-18: 独立 Review の副作用後 throw、遅延 Profile write / Model Context、fresh process recovery
+  lock、旧 Preview、主要 Error Signal、同一 Process Recovery UI の指摘をすべて実 file / 配線 Test 付きで
+  解消し、最終判定 `ALLOW` を得た。`make before-commit` は 775 tests、Functions / Lines 100%、Web Export
+  を含めて成功した。手動 Security / Simplify Review でも Network 経路、秘密値の Error 反射、依存追加、
+  baseline 超過の重複がないことを確認した。
+
+---
+
 ### [Issue 19 Local Model Safety Boundary] - 2026-07-18
 
 #### 目的

@@ -387,6 +387,135 @@ function inspectDependencySpec(
   };
 }
 
+const PRIVACY_FORBIDDEN_PACKAGE_FAMILIES: readonly {
+  readonly label: string;
+  readonly pattern: RegExp;
+}[] = [
+  { label: 'Sentry', pattern: /^(?:@sentry\/|sentry(?:-|$))/ },
+  {
+    label: 'Firebase Analytics / Crashlytics',
+    pattern:
+      /^(?:firebase$|firebase-analytics$|@firebase\/analytics$|@react-native-firebase\/(?:analytics|crashlytics|perf)$)/,
+  },
+  { label: 'Amplitude', pattern: /^(?:@amplitude\/|amplitude(?:-|$))/ },
+  { label: 'Mixpanel', pattern: /^(?:@mixpanel\/|mixpanel(?:-|$))/ },
+  { label: 'Segment', pattern: /^(?:@segment\/|segment(?:-|$))/ },
+  {
+    label: 'App Center',
+    pattern: /^(?:appcenter(?:-|$)|@microsoft\/appcenter(?:-|$))/,
+  },
+  { label: 'Bugsnag', pattern: /^(?:@bugsnag\/|bugsnag(?:-|$))/ },
+  {
+    label: 'Datadog',
+    pattern: /^(?:@datadog\/|datadog(?:-|$)|dd-trace$)/,
+  },
+  { label: 'New Relic', pattern: /^(?:@newrelic\/|newrelic(?:-|$))/ },
+  { label: 'PostHog', pattern: /^(?:@posthog\/|posthog(?:-|$))/ },
+  { label: 'LogRocket', pattern: /^(?:@logrocket\/|logrocket$)/ },
+  { label: 'Vercel Analytics', pattern: /^@vercel\/analytics$/ },
+  {
+    label: 'Adjust',
+    pattern: /^(?:@adjust\/|adjust-sdk$|react-native-adjust$)/,
+  },
+  {
+    label: 'AppsFlyer',
+    pattern: /^(?:@appsflyer\/|appsflyer(?:-|$)|react-native-appsflyer$)/,
+  },
+  {
+    label: 'Branch',
+    pattern: /^(?:@branch\/|branch-sdk$|react-native-branch$)/,
+  },
+  {
+    label: 'Google Mobile Ads',
+    pattern:
+      /^(?:@invertase\/react-native-google-mobile-ads$|react-native-google-mobile-ads$|expo-ads-admob$)/,
+  },
+  { label: 'OpenAI', pattern: /^(?:openai$|@openai\/)/ },
+  { label: 'Anthropic', pattern: /^@anthropic-ai\// },
+  {
+    label: 'Remote Inference',
+    pattern:
+      /^(?:@google\/(?:generative-ai|genai)$|cohere-ai$|@mistralai\/mistralai$|groq-sdk$|@huggingface\/inference$|@aws-sdk\/client-bedrock-runtime$|@azure\/openai$|@ai-sdk\/(?:openai|anthropic|google|mistral|cohere|groq|amazon-bedrock|azure)$)/,
+  },
+];
+
+function forbiddenPrivacyPackage(name: string) {
+  const normalized = name.toLowerCase();
+  return PRIVACY_FORBIDDEN_PACKAGE_FAMILIES.find(({ pattern }) =>
+    pattern.test(normalized)
+  );
+}
+
+function lockPackageName(candidate: string): string {
+  if (!candidate.startsWith('@'))
+    return candidate.split('@', 1)[0] ?? candidate;
+  const slash = candidate.indexOf('/');
+  const versionSeparator = slash < 0 ? -1 : candidate.indexOf('@', slash);
+  return versionSeparator < 0
+    ? candidate
+    : candidate.slice(0, versionSeparator);
+}
+
+function privacyFinding(
+  filePath: string,
+  packageName: string,
+  label: string,
+  line?: number
+): Finding {
+  return {
+    rule: 'INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE',
+    severity: 'error',
+    file: filePath,
+    ...(line === undefined ? {} : { line }),
+    message: `${label} SDK (${packageName}) は Telemetry / Remote Inference 禁止境界に反する`,
+  };
+}
+
+function packagePrivacyFindings(filePath: string, content: string): Finding[] {
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(content);
+  } catch {
+    return [];
+  }
+  const findings: Finding[] = [];
+  for (const section of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+  ]) {
+    const dependencies = manifest[section];
+    if (!dependencies || typeof dependencies !== 'object') continue;
+    for (const packageName of Object.keys(
+      dependencies as Record<string, unknown>
+    )) {
+      const family = forbiddenPrivacyPackage(packageName);
+      if (family) {
+        findings.push(privacyFinding(filePath, packageName, family.label));
+      }
+    }
+  }
+  return findings;
+}
+
+function lockPrivacyFindings(filePath: string, content: string): Finding[] {
+  const findings: Finding[] = [];
+  const seen = new Set<string>();
+  for (const [index, line] of content.split('\n').entries()) {
+    for (const match of line.matchAll(/["']([^"']+)["']/g)) {
+      const packageName = lockPackageName(match[1] ?? '');
+      const family = forbiddenPrivacyPackage(packageName);
+      if (!family || seen.has(packageName)) continue;
+      seen.add(packageName);
+      findings.push(
+        privacyFinding(filePath, packageName, family.label, index + 1)
+      );
+    }
+  }
+  return findings;
+}
+
 const RULES: Rule[] = [
   {
     id: 'INVARIANT_NO_NPX',
@@ -441,6 +570,20 @@ const RULES: Rule[] = [
       }
       return findings;
     },
+  },
+  {
+    id: 'INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE',
+    description:
+      'Telemetry / Crash SaaS / Advertising / Remote Log / Remote Inference SDK を dependency と lockfile に入れない',
+    scope: (p) =>
+      p === 'package.json' ||
+      p.endsWith('/package.json') ||
+      p === 'bun.lock' ||
+      p.endsWith('/bun.lock'),
+    check: ({ path: filePath, content }) =>
+      filePath.endsWith('package.json')
+        ? packagePrivacyFindings(filePath, content)
+        : lockPrivacyFindings(filePath, content),
   },
   {
     id: 'INVARIANT_NO_TEST_FOCUS',
