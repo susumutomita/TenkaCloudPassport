@@ -180,3 +180,6 @@ secrets/
 
 # jscpd duplication reports (make dup_check / dup_report)
 .jscpd-report
+
+# Source-only release candidate output
+release-output/

@@ -15,6 +15,8 @@ const kitDocuments = [
   'qr-poster.ja.md',
   'qr-poster.en.md',
   'dry-run-record.md',
+  'walkthrough.ja.md',
+  'walkthrough.en.md',
 ] as const;
 
 const readKit = (fileName: string): Promise<string> =>
@@ -68,7 +70,8 @@ const physicalCapabilities = [
   ['Native Build / Distribution Channel', 2],
   ['iOS / Android の実 Camera QR', 1],
   ['Nearby Transport Adapter', 2],
-  ['Rules Provider / Local Model', 2],
+  ['Rules Provider', 2],
+  ['Local Model', 2],
   ['2〜6 台の Group Lounge', 1],
   ['Host Loss と端末別破棄完了表示', 1],
   ['A4 / Letter 1 Page と QR Poster の出力', 1],
@@ -116,8 +119,8 @@ const supportMatrixViolations = (content: string): readonly string[] => {
       )
   );
   const repositoryRows = [
-    ['Repository 文書と文書契約 Test', 'Verified'],
-    ['Repository documents and document contract test', 'Verified'],
+    ['Repository 文書と文書契約 Test', '`Not run`'],
+    ['Repository documents and document contract test', '`Not run`'],
   ] as const;
   const repositoryViolations = repositoryRows.flatMap(
     ([capability, expectedStatus]) =>
@@ -425,6 +428,7 @@ describe('Facilitator Kit 文書契約', () => {
       ['guide.ja.md', 'guide.en.md'],
       ['one-page-checklist.ja.md', 'one-page-checklist.en.md'],
       ['qr-poster.ja.md', 'qr-poster.en.md'],
+      ['walkthrough.ja.md', 'walkthrough.en.md'],
     ] as const;
 
     for (const pair of pairedDocuments) {
@@ -434,13 +438,47 @@ describe('Facilitator Kit 文書契約', () => {
     }
   });
 
+  it('未検証時の Walkthrough が Product 操作へ進まず JA と EN で安全に完了する', async () => {
+    const [index, japanese, english] = await Promise.all([
+      readKit('README.md'),
+      readKit('walkthrough.ja.md'),
+      readKit('walkthrough.en.md'),
+    ]);
+
+    expectTerms(index, [
+      '[日本語 Walkthrough](./walkthrough.ja.md)',
+      '[English Walkthrough](./walkthrough.en.md)',
+    ]);
+    expectTerms(japanese, [
+      'Product セッションを開始しない',
+      '実参加者の情報を入力しない',
+      '実 QR を生成または読み取らない',
+      'Nearby Transport を開始しない',
+      'すべて `Not run` のまま',
+      'Walkthrough 完了',
+    ]);
+    expectTerms(english, [
+      'Do not start a Product Lounge',
+      'Enter no real participant information',
+      'Do not create or scan a real QR',
+      'Do not start Nearby Transport',
+      'Keep every physical capability `Not run`',
+      'Walkthrough complete',
+    ]);
+    for (const content of [japanese, english]) {
+      expect(content).not.toContain('P6');
+      expect(content).not.toContain('R8');
+    }
+  });
+
   it('Support Matrix が未検証の実機能力と Verified 移行証跡を区別する', async () => {
     const index = await readKit('README.md');
 
     expectTerms(index, [
       'iOS / Android の実 Camera QR',
       'Nearby Transport Adapter',
-      'Rules Provider / Local Model',
+      'Rules Provider',
+      'Local Model',
       '2〜6 台の Group Lounge',
       'Host Loss と端末別破棄完了表示',
       'A4 / Letter 1 Page と QR Poster の出力',

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "@biomejs/biome": { "version": "2.4.16", "license": "MIT OR Apache-2.0" },
+    "@expo/metro-runtime": { "version": "57.0.6", "license": "MIT" },
+    "@noble/hashes": { "version": "2.2.0", "license": "MIT" },
+    "@textlint-ja/textlint-rule-preset-ai-writing": {
+      "version": "1.7.0",
+      "license": "MIT"
+    },
+    "@types/bun": { "version": "1.3.14", "license": "MIT" },
+    "@types/react": { "version": "19.2.17", "license": "MIT" },
+    "expo": { "version": "57.0.7", "license": "MIT" },
+    "expo-status-bar": { "version": "57.0.1", "license": "MIT" },
+    "husky": { "version": "9.1.7", "license": "MIT" },
+    "jscpd": { "version": "5.0.12", "license": "MIT" },
+    "knip": { "version": "6.27.0", "license": "ISC" },
+    "lint-staged": { "version": "17.0.7", "license": "MIT" },
+    "react": { "version": "19.2.3", "license": "MIT" },
+    "react-dom": { "version": "19.2.3", "license": "MIT" },
+    "react-native": { "version": "0.86.0", "license": "MIT" },
+    "react-native-web": { "version": "0.21.2", "license": "MIT" },
+    "rimraf": { "version": "6.1.3", "license": "BlueOak-1.0.0" },
+    "textlint": { "version": "15.7.1", "license": "MIT" },
+    "textlint-rule-ja-no-abusage": { "version": "3.0.0", "license": "MIT" },
+    "textlint-rule-ja-no-inappropriate-words": {
+      "version": "2.0.0",
+      "license": "MIT"
+    },
+    "textlint-rule-no-double-negative-ja": {
+      "version": "2.0.1",
+      "license": "MIT"
+    },
+    "textlint-rule-no-dropping-the-ra": {
+      "version": "3.0.0",
+      "license": "MIT"
+    },
+    "textlint-rule-prefer-tari-tari": { "version": "1.0.3", "license": "MIT" },
+    "textlint-rule-preset-ja-spacing": { "version": "2.4.3", "license": "MIT" },
+    "textlint-rule-preset-ja-technical-writing": {
+      "version": "12.0.2",
+      "license": "MIT"
+    },
+    "textlint-rule-spellcheck-tech-word": {
+      "version": "5.0.0",
+      "license": "MIT"
+    },
+    "typescript": { "version": "6.0.3", "license": "Apache-2.0" }
+  }
+}

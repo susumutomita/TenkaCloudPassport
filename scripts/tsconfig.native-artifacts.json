@@ -1,4 +1,16 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["llama-native-artifacts.ts", "llama-native-artifacts.test.ts"]
+  "include": [
+    "atomic-output-publisher.ts",
+    "atomic-output-publisher-darwin.ts",
+    "atomic-output-publisher-linux.ts",
+    "llama-native-artifacts.ts",
+    "llama-native-artifacts.test.ts",
+    "exclusive-output-writer.ts",
+    "oss-alpha-release-docs.test.ts",
+    "source-release.ts",
+    "source-release-cli.ts",
+    "source-release-verify-cli.ts",
+    "source-release.test.ts"
+  ]
 }

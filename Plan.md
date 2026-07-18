@@ -1,5 +1,120 @@
 # Plan.md
 
+### [Issue 29 再現可能 OSS Alpha Release] - 2026-07-18
+
+#### 目的
+
+外部 Contributor と Local Champion が実装済み、制約、未検証を混同せず、同じ Git ref から Source Release、
+SPDX SBOM、License Notice、SHA-256 record を再現できる OSS Alpha 公開境界を作る。
+
+#### 制約
+
+- Issue 17、18、20、22、28 の実機 / 配布 Gate を Source Release で代替しない。
+- Model Weight、Token、秘密鍵、Certificate、Provisioning Profile、Participant Data を含めない。
+- Source-only Candidate とし、Native / Web Binary、App Store / TestFlight、Hosted Web は公開しない。
+- GitHub Actions の Green を Device / OS / Model / Transport の実機証拠として扱わない。
+- 共有 `main` checkout の未追跡作業を変更せず、`origin/main` 起点の隔離 worktree で作業する。
+
+#### 設計判断
+
+GitHub 自動 Archive だけ、外部 Release / SBOM Action、Repository-native Bun CLI の 3 案を比較した。
+自動 Archive だけでは SBOM と除外規則を固定できず、外部 Action は新しい Supply Chain を増やす。
+検証済み Git ref、追跡 Tree、Bun Lock を入力にする Repository-native CLI と最小 Workflow を採用する。
+詳細は [OSS Alpha Release 設計](./docs/design/oss-alpha-release.md) と
+[ADR-0023](./docs/adr/0023-reproducible-source-release.md) を正本とする。
+
+#### タスク
+
+1. 仕様書、設計、ADR、Plan を実装より先に更新する。
+2. README / Contributor Guide / Architecture Diagram / Canon Link を OSS Alpha 向けに再構成する。
+3. Feature、Device / OS / Model / Transport Matrix を状態と検証日付きで作る。
+4. Version、Changelog、Known Limitations、Release Checklist、Rollback を作る。
+5. Source Archive、SPDX、License Notice、Manifest、checksum を作る Bun CLI を TDD で実装する。
+6. Candidate 2 回生成の byte 一致と品質 Gate を検査し、Draft Release だけを作る Workflow を追加する。
+7. Good First Issue 候補 3 件と Issue Template を Product Boundary 内に用意する。
+8. 全 Gate、独立 Code / Security / Simplify Review を通す。
+
+#### 検証手順
+
+- Release CLI の正常、異常、境界を実 Git / File I/O で検査する。
+- 同じ Commit から別 Directory へ 2 回生成し、全成果物の byte 一致を検査する。
+- Archive entry に未追跡 File、禁止 Artifact、`node_modules`、Build Output がないことを検査する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `/review`、`/security-review`、`/simplify` に相当する独立 Review。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 29、README、Quality Bar、Native Build、既存 Checklist、CI、License を監査した。
+  README の能力記述、Security Policy の旧 Template 表示、Architecture / Device Matrix、再現可能 Candidate、
+  Changelog、Contributor Guide が不足していることを確認した。
+- 2026-07-18: 自動 Archive、外部 Action、Repository-native CLI を比較し、Source-only Candidate と物理 Gate を
+  分離する仕様、設計、ADR を実装前に固定した。
+- 2026-07-18: `/feature` の PM、Designer、QA、User 役レビューを統合した。Public OSS Alpha は実機、第三者、
+  実 Transport の証拠が揃うまで `Blocked` とし、Repository だけで完結する Source-only Draft Candidate を
+  独立した Gate A に限定した。
+- 2026-07-18: JA / EN README、Architecture、Feature / Device / Model / Transport Matrix、Changelog、
+  Release Notes、Checklist、Contributor Guide、Good First Issue 候補、Security Policy を作成した。
+- 2026-07-18: 固定 Commit の Source Archive、SPDX 2.3、直接依存 Notice、Project License、Manifest、
+  SHA-256 record を生成する Bun CLI と Draft-only Workflow を TDD で実装した。同一 Commit の 2 回生成、
+  dirty worktree の License 非混入、禁止 Path、Lock 全 Package、入力異常、symlink / 上書き拒否を実 I/O で
+  検査する 25 Test が Green である。
+- 2026-07-18: Source Candidate の `package.json` と Release 文書を `0.1.0-alpha.1` へ揃え、Expo の
+  user-facing Native Version は iOS の数字 3 組制約に合わせた `0.1.0` として分離した。Lockfile の旧
+  Template 名も Product 名へ修正した。全変更 Markdown の Textlint、Biome、Typecheck、Pre-release Harness、
+  Scripts Test、Duplication Ratchet は Green である。
+- 2026-07-18: Good First Issue は独立 Scope 3 件を文書と Template に準備したが、GitHub 上の実在 Open Issue は
+  まだ作成していない。3 件を Open に保つ受け入れ条件と Open Issue 0 件は同時に成立しないため、Issue 29 の
+  Public 完了条件は Maintainer 判断と Gate B の実証まで `Blocked` とする。
+- 2026-07-18: 3 名の独立 Review は、重複 Lock record で衝突する SPDX ID、禁止対象の抜け、Worktree の
+  License metadata、Output symlink、書込 Token で Repository code を実行する Workflow、証跡のない
+  `Verified`、安全な Walkthrough 不足を `BLOCK` とした。
+- 2026-07-18: SPDX ID を Lock key 込みの digest にし、全 Package / Relationship の構造 Validator を追加した。
+  Release Tree を root / extension allowlist と秘密値内容 Scan で fail-closed にし、直接依存 License は固定
+  Commit の Review 済み Manifest と top-level Lock resolution の完全一致を要求した。
+- 2026-07-18: Output は未作成 Path だけを排他的に作成し、直接 Parent symlink と生成中の inode 変更を拒否する。
+  CLI の Lines / Functions は 47 Test で 100％になり、checksum は独立再計算する。
+- 2026-07-18: Workflow を read-only 検証 Job と Repository を checkout しない write Job に分けた。JA / EN の
+  安全な Walkthrough、Rules Provider / Local Model の別行、固定 Bun 1.3.11、Candidate 証跡がない行の
+  `Not run` への差し戻しを追加した。独立再 Review と固定 Candidate commit の実生成はまだ `Not run` である。
+- 2026-07-18: 再 Review は、checkout のない Job で `gh` の Repository が解決不能、tag 内 Workflow が
+  write Job を改変可能、拡張子 allowlist と text-only scan では偽装 Binary / Participant Data を除外不能、
+  Bundle copy / Download 後の checksum 不足、scripts coverage の必須 Gate 不足を検出し、再び `BLOCK` とした。
+- 2026-07-18: default branch の `workflow_dispatch`、既存 Tag / Candidate SHA / Version の一致、concurrency、
+  `GH_REPO`、copy / Download 後 checksum を Workflow 契約に追加する設計へ更新した。Release Tree は全 Path の
+  Review 済み inventory、Binary Asset hash、全 Blob secret scan、Size 上限で fail-closed にする。
+- 2026-07-18: Release Manifest に `draft-candidate` 状態と strict internal validator を追加した。未知 Field、
+  Payload 集合、Version、Commit、Timestamp、Size、SHA-256 の不整合を生成前に拒否する。
+- 2026-07-18: 3 回目の Code / Security Review は、Archive と Blob の全量 Buffer、path check と write の
+  TOCTOU、partial Output、checksum 外の余分な File、可動 Tag、`main` ancestry 未確認、SPDX validator の
+  false-pass を `BLOCK` とした。Directory descriptor 内への streaming と atomic publish、strict output / Bundle
+  validator、Release control preflight、publish 直前の Tag 再照合へ設計を更新した。
+- 2026-07-18: 再 Review は通常 `rename` の no-replace race、subprocess 境界が coverage 集計外である false-pass、
+  read-only Ruleset API で省略された `bypass_actors`、空でない Tag exclude、npm purl / SPDXID / creator の
+  strict validation 不足を `BLOCK` とした。Output は排他的 `mkdir` 予約と no-clobber link、Manifest-last commit
+  marker へ変更する。Release control は保護 Environment 承認後の checkout-free write Job で Property 存在まで
+  検査し、CLI / Writer は import 可能な関数として直接 coverage を取る設計へ更新した。
+- 2026-07-18: 再々 Review で、通常の `GITHUB_TOKEN` は Ruleset の `Administration: write` を要求できず、
+  fail-closed 検査が常に停止する運用不整合を `BLOCK` とした。保護 Environment の単一 Repository 専用監査 Token を
+  Ruleset GET にだけ使い、空 Secret と通常 Token への fallback も contract test で拒否する設計へ更新した。
+- 2026-07-18: 同じ再々 Review で、排他的 `mkdir` 後の inode 記録前と path-based hardlink 前に directory swap が
+  可能であり、cleanup が未知 File を消し得ることを `BLOCK` とした。予約方式を廃止し、macOS / Linux の OS-native
+  no-replace rename で検証済み staging inode を原子的に確定する。cleanup は記録済み inode 限定、Manifest 優先、
+  unlink ごとの継続検査へ設計を更新した。numeric prerelease leading zero は shared strict SemVer で拒否する。
+
+#### 振り返り
+
+- 問題: 固定 Commit を入力にしても、最初の実装は添付 `LICENSE` だけを現在の作業 Tree から複製していた。
+- 根本原因: Archive と Package metadata の Git ref 境界を固定した一方、Project License を静的 File と見なし、
+  同じ provenance 契約へ含めていなかった。
+- 予防策: Candidate に含む Repository File はすべて固定 Commit から読む。Test では commit 後に Worktree の
+  `LICENSE` を改変し、成果物が commit 版のままであることを検査する。
+- 問題: Source Candidate、Public OSS Alpha、Product セッションを 1 つの Release 状態にすると、Green CI だけで
+  実機対応と公開準備が完了したように読める。
+- 根本原因: Repository Evidence と Physical / Human Evidence の Owner、状態語彙、昇格条件が分離されていなかった。
+- 予防策: Gate A は Draft Source Candidate だけを許可し、Gate B の必須行に `Not run` / `Blocked` が残る間は
+  Workflow から Public Publish できない契約とする。
+
 ### [Issue 27 Facilitator Kit と Local Champion 運用] - 2026-07-18
 
 #### 目的

@@ -44,7 +44,8 @@ returns to `P2`.
 
 ## P0 — Pre-event stop gate
 
-Run only a walkthrough if any of these cannot be confirmed.
+If any item cannot be confirmed, do not use the Product steps below. Use only the
+[safe walkthrough](./walkthrough.en.md).
 
 - The selected build and OS combination is Verified in the [Kit support matrix](./README.md#kit-version-10-support-matrix-english).
 - Native build distribution, per-participant Invite rotation, executable Rules or a Local Model, and per-device

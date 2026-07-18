@@ -95,6 +95,20 @@ app_test:
 web_export:
 	bun run build:web
 
+.PHONY: release_candidate
+# Values remain shell environment variables so untrusted Version / ref text is never expanded as Makefile syntax.
+# source-release-cli.ts delegates validation before Git is invoked with an argv array.
+release_candidate:
+	bun -e 'const cli = await import("./scripts/source-release-cli.ts"); process.exitCode = await cli.executeSourceReleaseCli(Bun.argv.slice(1));' -- "$${RELEASE_VERSION:?RELEASE_VERSION is required}" "$${RELEASE_REF:-HEAD}" "$${RELEASE_OUTPUT:?RELEASE_OUTPUT is required}"
+
+.PHONY: release_verify
+release_verify:
+	bun -e 'const cli = await import("./scripts/source-release-verify-cli.ts"); await cli.verifySourceReleaseCli(Bun.argv.slice(1));' -- "$${RELEASE_VERSION:?RELEASE_VERSION is required}" "$${RELEASE_OUTPUT:?RELEASE_OUTPUT is required}"
+
+.PHONY: release_test_coverage
+release_test_coverage:
+	bun test --coverage scripts/source-release.test.ts
+
 # jscpd ベースライン・ラチェット。重複ゼロは強制しない (意図的な類似は baseline に
 # 焼き込み済み)。baseline を超える新規コピー&ペーストだけ fail させる (ADR-0012)。
 .PHONY: dup_check
@@ -116,7 +130,7 @@ dead_code:
 	bun run dead-code
 
 .PHONY: before-commit
-before-commit: architecture_harness harness_test pre_release_check dup_check lint_text lint typecheck app_test web_export
+before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export
 
 .PHONY: dev
 dev:

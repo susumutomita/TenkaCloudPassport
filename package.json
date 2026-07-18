@@ -1,6 +1,6 @@
 {
   "name": "tenkacloud-passport",
-  "version": "1.0.0",
+  "version": "0.1.0-alpha.1",
   "description": "TenkaCloud のイベントで確認済みの手掛かりから人間同士の会話を始める、アカウント不要の Expo アプリ。",
   "author": "Susumu Tomita <oyster880@gmail.com>",
   "license": "MIT",
