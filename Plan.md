@@ -1,5 +1,85 @@
 # Plan.md
 
+### [Issue 26 Privacy-preserving Pilot Measurement] - 2026-07-18
+
+#### 目的
+
+人間同士の会話開始を、Analytics SDK、安定 ID、内容収集、中央 Server なしで評価する。
+Product Consent と Research Consent を分離し、調査への不参加や Self-report の未回答を即時退出の妨げにしない。
+
+#### 制約
+
+- Event Aggregate は Process 内 Memory の固定 Counter だけであり、Event Log や正確な時刻を保持しない。
+- Research Counter は既定 OFF とし、Research Consent を別に確認した Session だけ明示 ON にする。
+- Ready から Bridge までの時間は単調増加時計から即座に Bucket 化し、元の値を Aggregate へ入れない。
+- Lounge / Participant / Device ID、Passport / Bridge / 会話内容、氏名、場所を Schema で表現しない。
+- Outcome 確定 5 件未満では Aggregate の Preview と Export を生成しない。この閾値は匿名性の保証ではない。
+- Share は固定 JSON Preview 後の明示操作だけとし、自動送信 Endpoint を追加しない。
+- Facilitator 時間と Incident は内容を伴わない Observation Sheet の粗い Bucket / Tally で扱う。
+- 第三者 Dry Run は実施証跡が必要であり、実装 Test を代替証跡にしない。
+
+#### 設計判断
+
+Analytics SDK は中央送信と追跡面を増やし、永続 Event Log は識別子を持たなくても時系列の再識別を招く。
+Lounge の進行点で固定 Counter だけを更新し、Process 終了で消える Memory Store を採用する。Bridge 後の
+Self-report は Lounge 本文を破棄してから別画面で 1 回だけ提示し、「回答しない」と即時 Skip を常に選べる。
+詳細は [実地評価設計](./docs/design/privacy-preserving-pilot-measurement.md) と
+[ADR-0021](./docs/adr/0021-memory-only-pilot-aggregate.md) を正本とする。
+
+#### タスク
+
+1. ADR、設計、Privacy Data Inventory、Retention、Threat Model、Research 文書を先に更新する。
+2. Event Aggregate の strict schema、禁止 field、最低集計単位を Red Test にする。
+3. Start / Ready / Outcome / Provider / Self-report を集計する Memory Store を Red Test 先行で実装する。
+4. Bridge 後の任意 1 Tap 画面と Settings の Preview / Manual Export を配線する。
+5. Analytics SDK と自動 Endpoint がない回帰 Test、全 Gate、独立 Review、Security / Simplify Review を完了する。
+6. 第三者が Observation Sheet を使う Pilot 前 Dry Run を別の物理 Gate として実施する。
+
+#### 検証手順
+
+- `bun test src/app/pilot-measurement.test.ts src/app/pilot-measurement-boundary.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Web Export、重複 baseline を含む）。
+- Aggregate JSON が strict allowlist だけを持ち、未知 field、正確な時刻、ID、内容を拒否すること。
+- 5 件未満、Preview 前、二重 Share、Self-report 未回答のすべてで安全側に停止すること。
+- Pilot 前 Dry Run は実在する第三者の記録を取得するまで未完了として残すこと。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 26、成功指標、Privacy / Retention / Threat Model、既存 Outcome / Settings /
+  Diagnostics の実配線を監査した。既存 Backup Share Port は手動共有境界として再利用できるが、
+  Profile Storage、Backup Schema、Diagnostic Report へ Pilot Counter を混ぜない方針を固定した。
+- 2026-07-18: Analytics SDK、永続 Event Log、Memory Counter の 3 案を比較し、時系列や識別子を
+  後から復元できない Memory Counter と最低 5 Outcome の Export Gate を採用した。
+- 2026-07-18: Counter を既定有効にすると Research 拒否者の Product 利用も数える欠陥を実装配線前に
+  検出した。既定 OFF の Process 内 Switch を追加し、無効化時は進行中 Measurement だけを破棄して
+  Product Flow は変更しない契約へ修正した。
+- 2026-07-18: strict Event Aggregate、4 duration Bucket、Provider / Self-report Counter、5 Outcome Gate、
+  手動 Preview / Share、JA / EN UI、Network / Storage 禁止 invariant を実配線した。Schema の Count 上限後は
+  Product を止めず Research だけを OFF にし、共有前の新 Event は古い Preview を無効化する。
+- 2026-07-18: 独立 Review の Self-report 表示中に Peer / Scan state が残る High と、JA Consent が撤回可能
+  範囲を広く説明する Medium を修正した。結果完了と同じ遷移で Lounge 内容を破棄し、混合後は個別除外
+  できない説明へ揃えた。`make before-commit` は 805 tests、Functions / Lines 100%、Web Export を含め成功し、
+  手動 Security / Simplify Review でも自動送信、永続化、Error 反射、重複 baseline 超過がないことを確認した。
+  第三者 Dry Run は実在する第三者の証跡が得られるまで、コード外の未完了 Gate として残す。
+- 2026-07-18: PR Review の5指摘を反映した。Process 横断 Counter を `L3P` に分離し、Handshake 成立前の
+  Start 漏れを閉じ、成功した Share の Preview を一回で消費する。Share Controller Test は本番
+  `WebBackupSharePort` と実 file I/O へ置き換えた。release marker 待機は OS watch 通知に依存せず、期限付き
+  実 file polling とした。再実行した `make before-commit` は 807 tests、Functions / Lines 100%、Web Export、
+  重複 ratchet を含め成功した。
+
+#### 振り返り
+
+- 問題: Research Consent 後、Handshake 成立前に Start を加算すると、Handshake の失敗や世代交代で破棄した
+  Lounge が未完了 Measurement として残る。また、共有成功後にも同じ Preview を再共有できた。
+- 根本原因: Product Flow の開始要求と、計測上の Session 成立点を同一視していた。一回限り Share の契約も
+  Share Port 呼び出し回数だけに置き、成功後の Preview lifecycle に明示していなかった。
+- 予防策: Handshake 成立と現在世代の確認後だけ Start を加算する順序を source-level 回帰 Test で固定する。
+  `shared` / `saved-to-file` 後は Preview を消費し、取消・失敗時だけ再試行可能にする。Process 横断集計は
+  Lounge 限定の `L3` と分けた `L3P` として台帳に明記する。
+
+---
+
 ### [Issue 25 Telemetry-free Diagnostics and Local Erasure] - 2026-07-18
 
 #### 目的

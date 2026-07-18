@@ -47,6 +47,12 @@
   Branch、LogRocket、Vercel Analytics、Google Mobile Ads、OpenAI、Anthropic、Google GenAI、Cohere、
   Mistral、Groq、Hugging Face Inference、Amazon Bedrock Runtime、Azure OpenAI の SDK とする。一般的な
   Network library 名は誤検知を避けて review 対象に残す。
+- `INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT`
+  `src/app/pilot-measurement.ts`、`src/app/use-pilot-measurement-flow.ts`、
+  `src/screens/PilotMeasurementScreen.tsx`、`src/screens/ConversationSelfReportScreen.tsx` は `fetch`、
+  `XMLHttpRequest`、`WebSocket`、`EventSource`、`sendBeacon`、HTTP URL、Async / Web Storage、Profile
+  Storage を参照しない (error)。Pilot Aggregate は Process Memory と Preview 後の既存 Share Sheet Port
+  だけを使い、自動送信 Endpoint、永続 Queue、Backup / Profile への逆流を実装できない path-scoped 境界にする。
 - `INVARIANT_NO_CLIENT_AUTH_STORAGE`
   `packages/` / `src/` のブラウザ実装で、token / auth / session / credential を示すキーや値を `localStorage` / `sessionStorage` に保存しない (error)。認証情報は JavaScript から読めない HttpOnly Cookie など、脅威モデルに合うサーバー管理方式を使う。
 - `INVARIANT_NO_DANGEROUS_HTML`

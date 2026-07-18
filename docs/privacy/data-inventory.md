@@ -45,12 +45,18 @@ Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容
 | `L1` 端末内限定 | Owner が端末内だけで保持する設定と手掛かり候補である。 | OS のアプリ専用保護領域へ永続保存できる。 |
 | `L2` 公開投影 | Owner が現在の Lounge のために明示的に公開した最小データである。 | メモリ、画面、短命な QR に限る。 |
 | `L3` Lounge 限定 | Lounge への参加中だけ必要な通信、推論、結果データである。 | メモリに限る。永続ストレージへ書き込まない。 |
+| `L3P` Process 限定集計 | 複数の Lounge をまたいで件数だけを集計し、Process 終了までに限って必要な非識別 Aggregate である。 | Process Memory に限る。Event Log や永続ストレージへ書き込まない。 |
 | `L4` Owner 管理 Export | Owner が明示操作でアプリ外へ複製したバックアップである。 | Owner が選んだ保存先に限る。 |
 
 Diagnostic Report は `L0` の Version と、内容を持たない現在状態・件数だけを Owner の明示操作で
 組み立てる。Report 自体は永続保存せず、Preview 中のメモリだけで扱う。Owner が Share Sheet を確定した
 後の保存先は `L4` と同じく Owner 管理とする。正確な時刻、識別子、内容、Path、Network metadata は
 Diagnostic Schema に存在しない。
+
+Pilot Event Aggregate は `L3P` の Process 内 Counter として Start、Ready、Outcome、Provider、任意の
+Self-report を件数だけで集計する。個別 Event、正確な時刻、ID、内容を保持せず、Ready から Bridge までの
+差は即座に粗い Bucket へ変換する。Outcome 確定 5 件以上の場合だけ固定 Schema の Preview を作り、Owner /
+Facilitator の明示 Share 後は Owner 管理の `L4` とする。Research Consent は Product Consent を代替しない。
 
 ## 全データ種別
 
@@ -78,6 +84,7 @@ Diagnostic Schema に存在しない。
 | モデル検証記録 | `L1` | アプリが GGUF の検証時に生成する。 | digest、サイズ、検証結果、検証したアプリ版である。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | モデルの置換またはアプリ更新後の再検証までである。 | モデル削除、置換、設定初期化、アプリ削除である。 | 可である。 |
 | 手動 JSON バックアップ | `L4` | Owner が Export を明示実行する。 | バックアップ schema 版、Local Private Profile、端末設定、モデル検証記録である。 | Owner がファイル選択画面で指定した保存先である。 | Owner と保存先を扱えるアプリまたはサービスである。 | Export 後は Owner が削除するまでである。 | Owner が保存先から削除する。アプリ内一時データは完了、取消、失敗、再起動で破棄する。 | 対象そのものである。 |
 | Sanitized Diagnostic Report | `L4` | Owner が Preview 後に Share を明示実行する。 | Version、Provider / Transport / Permission 状態、Model の Architecture / Size / digest 先頭 8 桁、固定 Error Code / Phase、Storage 件数 / Byte 数である。 | Preview 中はメモリだけ、Share 後は Owner が選んだ保存先である。 | Owner が選んだ保存先または共有先である。 | Preview 終了まで、Share 後は Owner が削除するまでである。 | Preview 終了または Owner が保存先から削除する。 | 対象そのものである。 |
+| Pilot Event Aggregate | `L3P`、手動 Share 後は `L4` | Lounge の固定遷移と任意 Self-report が内容なしの Counter を加算する。 | Schema Version、最低集計単位、Start / Ready、duration Bucket、Bridge / `no-signal`、Rules / Local LLM / Fallback、Self-report 件数である。 | Process Memory だけ、手動 Share 後は Owner が選んだ保存先である。 | Preview は Owner / Facilitator、Share 後は選択した保存先または共有先である。 | Process 終了まで、Share 後は Owner が削除するまでである。 | Process 終了、全 Local Data 削除、または Owner が保存先から削除する。 | Outcome 5 件以上の固定 Aggregate だけが対象である。 |
 | 実行時 Security Signal | `L3` | schema、認証、Replay、モデル出力の検証失敗が生成する。 | 内容を持たない失敗種別と現在の Lounge 内回数である。 | アプリのメモリだけである。 | Owner の警告画面だけである。 | Lounge セッションと同じである。 | 退出、Host 終了、20 分満了、プロセス終了のうち最も早い時点である。 | 否である。 |
 
 通信層アドレスは OS とネットワーク機器から見える場合があるが、QR、Public Passport、
@@ -127,6 +134,13 @@ Field にも昇格させない。
 
 Import は同じ strict schema で未知フィールドを拒否する。バックアップ内のデータから
 Public Passport を自動生成せず、Owner が Import 後に公開候補を確認して QR を生成する。
+
+Pilot Event Aggregate は手動 JSON バックアップと Diagnostic Report の Schema へ混ぜない。
+`aggregateSchemaVersion`、`minimumAggregationUnit`、`startReady`、`readyToBridgeDurationBuckets`、
+`outcomes`、`providerRuns`、`conversationStartSelfReport` だけを直列化する。生成時刻、Event 配列、氏名、
+端末 / Participant / Lounge ID、場所、Passport / Bridge / Prompt / Output / 会話内容、Network metadata を
+含めない。Outcome 5 件未満では JSON 自体を作らず、自動 upload、Background retry、受信確認 Endpoint を
+設けない。
 
 ## データフロー
 

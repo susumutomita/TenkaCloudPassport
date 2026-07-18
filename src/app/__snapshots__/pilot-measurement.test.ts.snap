@@ -1,0 +1,33 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Pilot Event Aggregate の strict JSON と手動 Share 5 Outcome で固定 field の Preview を作り、一回限りの明示 Share だけが同じ JSON を渡す 1`] = `
+{
+  "aggregateSchemaVersion": 1,
+  "conversationStartSelfReport": {
+    "eligible": 4,
+    "notYet": 0,
+    "preferNotToAnswer": 0,
+    "startedConversation": 0,
+  },
+  "minimumAggregationUnit": 5,
+  "outcomes": {
+    "bridge": 4,
+    "noSignal": 1,
+  },
+  "providerRuns": {
+    "fallback": 0,
+    "localLlm": 0,
+    "rules": 5,
+  },
+  "readyToBridgeDurationBuckets": {
+    "atLeast180Seconds": 0,
+    "from30To89Seconds": 0,
+    "from90To179Seconds": 0,
+    "under30Seconds": 4,
+  },
+  "startReady": {
+    "ready": 5,
+    "started": 5,
+  },
+}
+`;

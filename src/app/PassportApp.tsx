@@ -51,6 +51,7 @@ import BackupExportScreen from '../screens/BackupExportScreen';
 import BackupImportScreen, {
   type BackupImportValidationView,
 } from '../screens/BackupImportScreen';
+import ConversationSelfReportScreen from '../screens/ConversationSelfReportScreen';
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
@@ -59,6 +60,7 @@ import OutcomeScreen from '../screens/OutcomeScreen';
 import OwnerQuestionScreen from '../screens/OwnerQuestionScreen';
 import PassportCreationScreen from '../screens/PassportCreationScreen';
 import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
+import PilotMeasurementScreen from '../screens/PilotMeasurementScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -96,6 +98,7 @@ import {
   beginPetInteraction,
   submitOwnerQuestionAnswer,
 } from './pet-interaction-flow';
+import type { ConversationSelfReport } from './pilot-measurement';
 import {
   type ProfileNotice,
   profileNoticeFromStorageError,
@@ -113,6 +116,10 @@ import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
 } from './use-local-diagnostics-flow';
+import {
+  type PilotMeasurementFlow,
+  usePilotMeasurementFlow,
+} from './use-pilot-measurement-flow';
 
 interface PassportAppProps {
   readonly appVersion: string;
@@ -133,7 +140,8 @@ type SetupStage =
   | 'backup-export'
   | 'backup-import'
   | 'settings'
-  | 'diagnostics';
+  | 'diagnostics'
+  | 'pilot-measurement';
 
 interface DiagnosticTransportSnapshot {
   readonly state: DiagnosticTransportState;
@@ -447,11 +455,13 @@ function SharePreviewGate({
 const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
   'settings',
   'diagnostics',
+  'pilot-measurement',
 ]);
 
 interface UtilityStageGateProps {
   readonly stage: SetupStage;
   readonly diagnosticsFlow: LocalDiagnosticsFlow;
+  readonly pilotMeasurementFlow: PilotMeasurementFlow;
   readonly hasLounge: boolean;
   readonly hasProfile: boolean;
   readonly locale: Locale;
@@ -462,6 +472,7 @@ interface UtilityStageGateProps {
 function UtilityStageGate({
   stage,
   diagnosticsFlow,
+  pilotMeasurementFlow,
   hasLounge,
   hasProfile,
   locale,
@@ -478,6 +489,11 @@ function UtilityStageGate({
       />
     );
   }
+  if (stage === 'pilot-measurement') {
+    return (
+      <PilotMeasurementScreen flow={pilotMeasurementFlow} locale={locale} />
+    );
+  }
   if (stage === 'settings') {
     return (
       <SettingsScreen
@@ -485,6 +501,7 @@ function UtilityStageGate({
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
         onOpenDiagnostics={diagnosticsFlow.open}
+        onOpenPilotMeasurement={pilotMeasurementFlow.open}
       />
     );
   }
@@ -538,6 +555,8 @@ export default function PassportApp({
   const [guestShareSelection, setGuestShareSelection] =
     useState<PassportShareSelection | null>(null);
   const [lounge, setLounge] = useState<LoungeState | null>(null);
+  const [showConversationSelfReport, setShowConversationSelfReport] =
+    useState(false);
   // Issue 11: Pet Interaction の bounded protocol（`clarifying` の Owner Question）を
   // 保持する。`discovering` / `bridging` / `no-signal` は `pet-interaction-flow.ts` が
   // 呼び出しの中だけで一瞬経由し、確定した瞬間に Lounge 本体（`RetiredLounge`）へ収束させる
@@ -591,6 +610,24 @@ export default function PassportApp({
     onCloseStage: closeBackupStage,
     onDiagnosticError: setLastDiagnosticError,
   });
+  const pilotMeasurementFlow = usePilotMeasurementFlow({
+    sharePort: backupSharePort,
+    onOpen: () => setStage('pilot-measurement'),
+    onClose: () => setStage('settings'),
+  });
+  const recordPilotOutcome = useCallback(
+    (state: LoungeState, clock: ClockSnapshot): void => {
+      if (state.status !== 'retired') return;
+      // 現在の Live Interaction は RULES_INTERACTION_PROVIDER だけを実行する。Native
+      // Provider 接続後は Runtime 表示状態から推測せず、確定した settledBy を渡す。
+      pilotMeasurementFlow.outcome({
+        kind: state.outcome.kind,
+        provider: 'rules',
+        monotonicMs: clock.monotonicMs,
+      });
+    },
+    [pilotMeasurementFlow.outcome]
+  );
 
   // Invite は 1 回限り Secret の非公開 Buffer を持つ Host Handshake と対で保持する。
   // Room だけから Secret を再導出できないため、期限切れ / 破棄時は両方を同時に解放する。
@@ -646,10 +683,12 @@ export default function PassportApp({
 
   const forgetLoungeForDiagnostics = useCallback((): void => {
     discardInviteFlow();
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge(null);
     setErrorMessage(null);
-  }, [discardInviteFlow]);
+  }, [discardInviteFlow, pilotMeasurementFlow.abandon]);
 
   const resetPassportInMemory = useCallback((): void => {
     setPetName('');
@@ -670,9 +709,15 @@ export default function PassportApp({
       forgetLoungeForDiagnostics();
       resetPassportInMemory();
       backupFlow.reset();
+      pilotMeasurementFlow.reset();
       if (!recoveryRequired) setStage('profile');
     },
-    [backupFlow, forgetLoungeForDiagnostics, resetPassportInMemory]
+    [
+      backupFlow,
+      forgetLoungeForDiagnostics,
+      pilotMeasurementFlow.reset,
+      resetPassportInMemory,
+    ]
   );
 
   const diagnosticsRuntimeSnapshot = useMemo(() => {
@@ -778,6 +823,7 @@ export default function PassportApp({
         // 優先する。
         const step = applyPetInteractionTick(interaction, current, clock);
         if (step.lounge.status !== 'active') {
+          recordPilotOutcome(step.lounge, clock);
           setInteraction(step.interaction);
           setLounge(step.lounge);
           return;
@@ -789,11 +835,12 @@ export default function PassportApp({
       // （`DestroyedLoungeScreen`）は `interaction` を参照しないため実害はないが、
       // 「Lounge が終われば Pet Interaction も終わる」契約を状態としても保つ。
       if (current.status === 'active' && advanced.status !== 'active') {
+        pilotMeasurementFlow.abandon();
         setInteraction(null);
       }
       setLounge(advanced);
     },
-    [interaction]
+    [interaction, pilotMeasurementFlow.abandon, recordPilotOutcome]
   );
 
   useEffect(() => {
@@ -823,12 +870,13 @@ export default function PassportApp({
       const advanced = advanceLoungeRoom(current, clock);
       if (advanced.status === 'expired') {
         discardInviteFlow();
+        pilotMeasurementFlow.abandon();
         setLounge({ status: 'destroyed', reason: 'expired' });
         return;
       }
       setLoungeRoom(advanced);
     },
-    [discardInviteFlow]
+    [discardInviteFlow, pilotMeasurementFlow.abandon]
   );
 
   useEffect(() => {
@@ -975,6 +1023,7 @@ export default function PassportApp({
             handshake.host.dispose();
             return;
           }
+          pilotMeasurementFlow.start();
           qrScannerPort.publish(
             encodeQrPayload({
               kind: 'lounge-invite',
@@ -1010,9 +1059,10 @@ export default function PassportApp({
   function markHostReady(): void {
     if (!loungeRoom || !hostParticipantId) return;
     try {
+      const clock = currentClock();
       const updated = markParticipantReady(loungeRoom, {
         participantId: hostParticipantId,
-        clock: currentClock(),
+        clock,
       });
       setErrorMessage(null);
       if (updated.status === 'ready') {
@@ -1024,6 +1074,7 @@ export default function PassportApp({
         setScannedInvite(null);
         setLoungeRoom(null);
         setInteraction(null);
+        pilotMeasurementFlow.ready(clock.monotonicMs);
         setLounge(startLoungeFromRoom(updated));
       } else {
         setLoungeRoom(updated);
@@ -1177,6 +1228,7 @@ export default function PassportApp({
         if (readied.status === 'ready') {
           setLoungeRoom(null);
           setInteraction(null);
+          pilotMeasurementFlow.ready(clock.monotonicMs);
           setLounge(startLoungeFromRoom(readied));
         } else {
           setLoungeRoom(readied);
@@ -1208,6 +1260,7 @@ export default function PassportApp({
     if (!loungeRoom) return;
     const destroyed = destroyLoungeRoom(loungeRoom, reason);
     discardInviteFlow();
+    pilotMeasurementFlow.abandon();
     setLounge(destroyed);
     setErrorMessage(null);
   }
@@ -1223,11 +1276,9 @@ export default function PassportApp({
    */
   function startPetInteraction(): void {
     if (lounge?.status !== 'active') return;
-    const step = beginPetInteraction(
-      lounge,
-      RULES_INTERACTION_PROVIDER,
-      currentClock()
-    );
+    const clock = currentClock();
+    const step = beginPetInteraction(lounge, RULES_INTERACTION_PROVIDER, clock);
+    recordPilotOutcome(step.lounge, clock);
     setInteraction(step.interaction);
     setLounge(step.lounge);
     setErrorMessage(null);
@@ -1242,19 +1293,23 @@ export default function PassportApp({
    */
   function submitOwnerAnswer(value: OwnerAnswerValue): void {
     if (lounge?.status !== 'active') return;
+    const clock = currentClock();
     const step = submitOwnerQuestionAnswer(
       interaction,
       lounge,
       value,
-      currentClock(),
+      clock,
       locale
     );
+    recordPilotOutcome(step.lounge, clock);
     setInteraction(step.interaction);
     setLounge(step.lounge);
     setErrorMessage(null);
   }
 
   function leave(): void {
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'owner-exit' }) : current
@@ -1263,6 +1318,8 @@ export default function PassportApp({
   }
 
   function endAsHost(): void {
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'host-ended' }) : current
@@ -1271,16 +1328,35 @@ export default function PassportApp({
   }
 
   function complete(): void {
+    const shouldShowSelfReport =
+      lounge?.status === 'retired' && lounge.outcome.kind === 'bridge';
+    const showSelfReport =
+      pilotMeasurementFlow.selfReportPending && shouldShowSelfReport;
+    discardInviteFlow();
+    setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'complete' }) : current
     );
+    setShowConversationSelfReport(showSelfReport);
     setErrorMessage(null);
+  }
+
+  function submitConversationSelfReport(answer: ConversationSelfReport): void {
+    pilotMeasurementFlow.selfReport(answer);
+    setShowConversationSelfReport(false);
+  }
+
+  function skipConversationSelfReport(): void {
+    pilotMeasurementFlow.skipSelfReport();
+    setShowConversationSelfReport(false);
   }
 
   function restartEncounter(): void {
     // discardInviteFlow() が相手の宣言内容（encounteredPetName 等）も含めて
     // Lounge 由来の一時データを一括破棄する。
     discardInviteFlow();
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge(null);
     setErrorMessage(null);
@@ -1296,6 +1372,7 @@ export default function PassportApp({
   function editLocalProfile(): void {
     const hadInviteInProgress = loungeRoom !== null;
     discardInviteFlow();
+    pilotMeasurementFlow.abandon();
     setErrorMessage(null);
     setStage('profile');
     if (hadInviteInProgress) {
@@ -1334,7 +1411,18 @@ export default function PassportApp({
         locale={locale}
         onChangeLocale={setLocale}
         onCloseSettings={closeSettings}
+        pilotMeasurementFlow={pilotMeasurementFlow}
         stage={stage}
+      />
+    );
+  }
+
+  if (showConversationSelfReport) {
+    return (
+      <ConversationSelfReportScreen
+        locale={locale}
+        onAnswer={submitConversationSelfReport}
+        onSkip={skipConversationSelfReport}
       />
     );
   }

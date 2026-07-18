@@ -14,6 +14,7 @@ interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onOpenDiagnostics: () => void;
+  readonly onOpenPilotMeasurement: () => void;
   readonly onBack: () => void;
 }
 
@@ -27,6 +28,7 @@ export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
   onChangeLocale,
   onOpenDiagnostics,
+  onOpenPilotMeasurement,
   onBack,
 }: SettingsScreenProps) {
   const t = MESSAGES[locale].settings;
@@ -54,6 +56,12 @@ export default function SettingsScreen({
         accessibilityHint={t.diagnosticsButtonHint}
         label={t.diagnosticsButton}
         onPress={onOpenDiagnostics}
+        variant="secondary"
+      />
+      <ActionButton
+        accessibilityHint={t.pilotMeasurementButtonHint}
+        label={t.pilotMeasurementButton}
+        onPress={onOpenPilotMeasurement}
         variant="secondary"
       />
       <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />

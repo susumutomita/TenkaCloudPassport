@@ -32,6 +32,7 @@ const FUNCTION_NAMES = [
   'cancelInvite',
   'leave',
   'endAsHost',
+  'complete',
   'restartEncounter',
   'editLocalProfile',
 ] as const;
@@ -185,6 +186,24 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(hostBody).toContain('handshake.host.dispose()');
   });
 
+  it('Pilot Start は現在世代の Handshake 成立後だけ加算し、失敗・破棄済み Lounge を数えない', async () => {
+    const hostBody = functionBody(await source(), 'hostLounge');
+    const handshakeRequest = hostBody.indexOf('issueLoungeHandshake({');
+    const handshakeSuccess = hostBody.indexOf('.then((handshake) =>');
+    const pilotStart = hostBody.indexOf('pilotMeasurementFlow.start()');
+
+    expect(handshakeRequest).toBeGreaterThan(-1);
+    expect(handshakeSuccess).toBeGreaterThan(handshakeRequest);
+    expect(pilotStart).toBeGreaterThan(handshakeSuccess);
+    expectInOrder(hostBody.slice(handshakeSuccess), [
+      'inviteFlowGenerationRef.current !== flowGeneration',
+      'handshake.host.dispose()',
+      'return;',
+      'pilotMeasurementFlow.start()',
+      'qrScannerPort.publish(',
+    ]);
+  });
+
   it('Model 未導入の既定 Provider Status を Active Lounge へ明示的に渡す', async () => {
     const text = await source();
 
@@ -234,6 +253,29 @@ describe('PassportApp の Stage 遷移契約', () => {
       'setEncounteredConfirmed(',
     ]) {
       expect(body).toContain(resetCall);
+    }
+  });
+
+  it('結果完了は Self-report 表示前の同一遷移で Lounge 内容と Interaction を破棄する', async () => {
+    const text = await source();
+    const body = functionBody(text, 'complete');
+
+    expectInOrder(body, [
+      'const showSelfReport',
+      'discardInviteFlow()',
+      'setInteraction(null)',
+      "type: 'complete'",
+      'setShowConversationSelfReport(showSelfReport)',
+    ]);
+    const discardBody = functionBody(text, 'discardInviteFlow');
+    for (const resetCall of [
+      'setGuestProfile(null)',
+      'setGuestShareSelection(null)',
+      "setEncounteredPetName('')",
+      'setEncounteredSelection([])',
+      'setSeenRawPayloads(new Set())',
+    ]) {
+      expect(discardBody).toContain(resetCall);
     }
   });
 
