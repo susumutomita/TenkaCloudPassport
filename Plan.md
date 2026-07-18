@@ -1,5 +1,68 @@
 # Plan.md
 
+### [Issue 21 一時 Lounge Handshake] - 2026-07-18
+
+#### 目的
+
+同一 LAN 上の第三者、撮影された古い QR、同じ Join Secret の同時利用を、Public Passport を
+送る前に拒否する。Lounge ID、Participant ID、Join Secret を Lounge ごとに暗号学的乱数から
+生成し、Transport の標準暗号が検証した Fingerprint と QR の 1 回限り Secret を結合する。
+
+#### 制約
+
+- Transport と暗号化方式の選定は Issue 20 の責務とし、本 Issue で独自暗号や平文 Transport を
+  実装しない。
+- Host の壁時計を参加期限の最終判定に使い、`expiresAt` と等しい時点を期限切れとする。
+- Secret、鍵、Lounge ID、Participant ID をログ、Backup、永続 Storage へ渡さない。
+- 認証完了前の API は Public Passport を受け取らず、認証済み Transport Identity だけを返す。
+- 既存の QR Preview / Ready flow は単一端末の検証経路として維持し、実機 Transport の証跡を
+  代替したと表現しない。
+
+#### 設計判断
+
+1. QR の Secret を Transport 上でそのまま比較する案は単純だが、Host が raw Secret を長く保持し、
+   誤ったログや Error へ混入する面を増やす。
+2. アプリ独自の暗号化 Channel を実装する案は Transport から独立できるが、独自暗号を禁止する
+   契約と Issue 20 の責務に反する。
+3. QR Secret を監査済みの `@noble/hashes` による HMAC-SHA-256 Key とし、Lounge、Participant、
+   期限、Capability、Transport Fingerprint を含む正規 Transcript の証明を検証する案は、
+   Expo Go / Native / Web の共通経路で標準 primitive だけを利用できる。
+
+案 3 を採用する。Host は認証要求を `available` から `verifying` へ同期的に予約して同時二重利用を
+拒否し、成功時は `used`、終了時は `disposed` にする。失敗時は Passport を扱わず、改ざんや
+Fingerprint 不一致の要求だけを型付き Error として返す。
+
+#### タスク
+
+1. Handshake の Protocol、Clock、Replay、Privacy 境界を設計文書と ADR に記録する。
+2. Capability と Session ID の共有型を整理し、個別 Participant ID を生成できるようにする。
+3. Lounge Invite v2 と Join Request の strict schema test を Red にする。
+4. 監査済み HMAC proof、Host の原子的 1 回利用、破棄、Key Rotation を実装する。
+5. QR / Ready flow を認証成功後だけ Public Passport 参加へ進む構造へ接続する。
+6. 正常、改ざん、Replay、同時利用、期限境界、Fingerprint 不一致、Known-answer を検証する。
+7. 必須ゲートと独立レビューを通し、依存関係を明記した PR を作成する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従うコードレビュー。
+- Secret 漏えい、Custom Crypto、認証前 Payload 経路の Security Review。
+- 重複する Validator、Transcript、状態遷移がないことの Simplify Review。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 20、21、22、既存 QR / Peer Protocol、Threat Model、Data Inventory を確認し、
+  Transport 非依存の認証境界だけを本 Issue で実装する方針を固定した。
+- 2026-07-18: Invite v2、HMAC-SHA-256 Join Proof、Host の原子的 1 回利用と Rotation、
+  認証成功後だけ Passport を Room へ渡す App Flow を実装した。Native に存在しない
+  `crypto.subtle` に依存せず、依存を持たない監査済み `@noble/hashes` を採用した。
+- 2026-07-18: Known-answer、改ざん、Replay、同時利用、二重押下、壁時計巻き戻しを含む期限境界、
+  Fingerprint 不一致、Rotation、非同期 Flow 破棄を含む 675 Test と Functions / Lines 100%、
+  Typecheck、Web Export を通過した。Issue 20 の実 Transport 証跡は本変更の完了証拠に含めない。
+
+---
+
 ### [Issue 1 プロダクト契約正本化] - 2026-07-17
 
 #### 目的

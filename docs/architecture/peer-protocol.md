@@ -18,8 +18,10 @@
 | `expiresAtEpochMs` | `sentAtEpochMs` より後、60 秒以内、Lounge 期限以内の safe integer です。 |
 | `payload` | 以下の kind の strict discriminated union です。 |
 
-Transport Authentication は Wire field ではない。Transport Adapter が検証した Lounge ID と
-Participant ID を receiver へ別引数で渡し、Wire の値と一致した場合だけ認証済み Envelope とする。
+Transport Authentication は Wire field ではない。Transport Adapter と
+[一時 Lounge Handshake](../design/secure-lounge-handshake.md)が検証した Lounge ID と Participant ID を
+receiver へ別引数で渡し、Wire の値と一致した場合だけ認証済み Envelope とする。Handshake 成功前に
+`public-passport` を送信しない。
 
 ## Payload
 

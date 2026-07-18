@@ -1,14 +1,20 @@
+import type { CapabilityToken } from '../domain/capability';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import type { PublicPassport } from '../domain/passport';
 import type { LoungeId, ParticipantId } from '../domain/session-identifiers';
 
+export type { CapabilityToken } from '../domain/capability';
+export {
+  CAPABILITY_MAX_REQUIRED as PEER_CAPABILITY_MAX_REQUIRED,
+  CAPABILITY_MAX_SUPPORTED as PEER_CAPABILITY_MAX_SUPPORTED,
+  CAPABILITY_TOKEN_MAX_LENGTH as PEER_CAPABILITY_TOKEN_MAX_LENGTH,
+  isCapabilityToken,
+  LOCAL_LLM_CAPABILITY,
+  RULES_PROVIDER_CAPABILITY,
+} from '../domain/capability';
+
 export const PROTOCOL_VERSION = { major: 1, minor: 2 } as const;
-export const RULES_PROVIDER_CAPABILITY = 'rules-provider-v1' as const;
-export const LOCAL_LLM_CAPABILITY = 'local-llm-v1' as const;
 export const PEER_MESSAGE_MAX_TTL_MS = 60_000;
-export const PEER_CAPABILITY_MAX_SUPPORTED = 8;
-export const PEER_CAPABILITY_MAX_REQUIRED = 4;
-export const PEER_CAPABILITY_TOKEN_MAX_LENGTH = 32;
 export const PEER_MEMBERSHIP_MAX_PARTICIPANTS = 6;
 export const PEER_BRIDGE_MAX_EVIDENCE_IDS = 4;
 export const PEER_MAX_SEQUENCE = 2_147_483_647;
@@ -21,15 +27,6 @@ export interface ProtocolVersion {
 export type MessageId = `mid_${string}`;
 export type RoundId = `rnd_${string}`;
 export type EvidenceId = `evi_${string}`;
-export type CapabilityToken = `${string}-v${number}`;
-
-export function isCapabilityToken(value: string): value is CapabilityToken {
-  return (
-    value.length <= PEER_CAPABILITY_TOKEN_MAX_LENGTH &&
-    /^[a-z][a-z0-9-]*-v[1-9][0-9]*$/.test(value)
-  );
-}
-
 export interface HelloPayload {
   readonly kind: 'hello';
   readonly role: 'host' | 'guest';
