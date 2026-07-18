@@ -121,6 +121,15 @@ capability とする。Local capability は Safety factory だけが生成し、
   AST helpers と preflight helpers は Biome complexity 上限内に分割済みで、削除できる重複は残っていない。
 - 2026-07-18: 最終 `make before-commit` は scripts 96 tests、source 732 tests、4 snapshots、Functions / Lines
   100%、pre-release harness、textlint、Biome、TypeScript、Web export をすべて通過した。
+- 2026-07-18: PR 作成後に merge された PR 55 の jscpd ラチェットを rebase で取り込み、PR event の
+  CI が `src/domain` の baseline 22 行に対して 90 行を検出して Red になることを再現した。最大の
+  68 行は直前に merge 済みの Issue 24 `group-lounge-session.ts` にある Participant 検索・更新処理の
+  重複であり、baseline を緩めず共通 helper へ抽出して PR 56 の CI blocker を解消する。
+- 2026-07-18: Participant 検索と Connection Event の前処理を共通 helper へ抽出し、jscpd は
+  `src/domain` 22 行以下で Green。CI と同じ full-repo harness 引数の `make before-commit` は
+  scripts 113 tests、source 732 tests、Functions / Lines 100%、Web export Green となった。独立再レビューも
+  destroyed、generation、departed、unknown、stale の判定順を確認して APPROVE（Blocker / High / Medium 0）。
+  Security / Simplify 再確認では新規入力・出力・状態を増やさず、固定 Error と既存 helper への集約だけである。
 
 ---
 
