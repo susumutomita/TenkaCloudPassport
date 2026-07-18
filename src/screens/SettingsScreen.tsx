@@ -19,6 +19,8 @@ import { colors, spacing } from '../ui/theme';
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
+  readonly onOpenDiagnostics: () => void;
+  readonly onOpenPilotMeasurement: () => void;
   readonly onBack: () => void;
   readonly modelManagement?: LocalModelManagementView;
 }
@@ -169,6 +171,63 @@ function LocalModelCard({
   );
 }
 
+interface LocalModelCandidateCardProps {
+  readonly candidate: NonNullable<LocalModelManagementView['candidate']>;
+  readonly availableStorageBytes: number | null;
+  readonly busy: boolean;
+  readonly importInProgress: boolean;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+  readonly onConfirm: () => void;
+  readonly onCancel: () => void;
+  readonly onCancelRunning: () => void;
+}
+
+function LocalModelCandidateCard({
+  candidate,
+  availableStorageBytes,
+  busy,
+  importInProgress,
+  t,
+  onConfirm,
+  onCancel,
+  onCancelRunning,
+}: LocalModelCandidateCardProps) {
+  return (
+    <View style={styles.modelCard}>
+      <Text style={styles.modelTitle}>
+        {t.candidateSummary(candidate.name, readableBytes(candidate.sizeBytes))}
+      </Text>
+      {availableStorageBytes !== null ? (
+        <Text style={styles.body}>
+          {t.candidateAvailableStorage(readableBytes(availableStorageBytes))}
+        </Text>
+      ) : null}
+      <Text style={styles.body}>{t.candidateWarning}</Text>
+      {importInProgress ? (
+        <ActionButton
+          label={t.cancelRunningImportButton}
+          onPress={onCancelRunning}
+          variant="danger"
+        />
+      ) : (
+        <>
+          <ActionButton
+            disabled={busy}
+            label={t.confirmImportButton}
+            onPress={onConfirm}
+          />
+          <ActionButton
+            disabled={busy}
+            label={t.cancelImportButton}
+            onPress={onCancel}
+            variant="secondary"
+          />
+        </>
+      )}
+    </View>
+  );
+}
+
 /**
  * Issue 15: 表示言語を切り替える最小の Settings 画面。`onChangeLocale` は `PassportApp.tsx`
  * が保持する `locale` state だけを更新し、進行中の Lounge / Room / Pet Interaction /
@@ -178,6 +237,8 @@ function LocalModelCard({
 export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
   onChangeLocale,
+  onOpenDiagnostics,
+  onOpenPilotMeasurement,
   onBack,
   modelManagement,
 }: SettingsScreenProps) {
@@ -218,42 +279,26 @@ export default function SettingsScreen({
           ) : null}
           <ActionButton
             accessibilityHint={t.selectModelHint}
-            disabled={modelManagement.busy}
+            disabled={
+              modelManagement.busy || modelManagement.candidateSelectionBlocked
+            }
             label={t.selectModelButton}
             onPress={modelManagement.selectCandidate}
             variant="secondary"
           />
           {modelManagement.candidate ? (
-            <View style={styles.modelCard}>
-              <Text style={styles.modelTitle}>
-                {t.candidateSummary(
-                  modelManagement.candidate.name,
-                  readableBytes(modelManagement.candidate.sizeBytes)
-                )}
-              </Text>
-              <Text style={styles.body}>{t.candidateWarning}</Text>
-              {modelManagement.importInProgress ? (
-                <ActionButton
-                  label={t.cancelRunningImportButton}
-                  onPress={modelManagement.cancelImport}
-                  variant="danger"
-                />
-              ) : (
-                <>
-                  <ActionButton
-                    disabled={modelManagement.busy}
-                    label={t.confirmImportButton}
-                    onPress={modelManagement.confirmImport}
-                  />
-                  <ActionButton
-                    disabled={modelManagement.busy}
-                    label={t.cancelImportButton}
-                    onPress={modelManagement.cancelCandidate}
-                    variant="secondary"
-                  />
-                </>
-              )}
-            </View>
+            <LocalModelCandidateCard
+              availableStorageBytes={
+                modelManagement.candidateAvailableStorageBytes
+              }
+              busy={modelManagement.busy}
+              candidate={modelManagement.candidate}
+              importInProgress={modelManagement.importInProgress}
+              onCancel={modelManagement.cancelCandidate}
+              onCancelRunning={modelManagement.cancelImport}
+              onConfirm={modelManagement.confirmImport}
+              t={t}
+            />
           ) : null}
           {modelManagement.manifest?.models.map((model) => {
             const active =
@@ -308,7 +353,26 @@ export default function SettingsScreen({
           ) : null}
         </View>
       ) : null}
-      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
+      <ActionButton
+        accessibilityHint={t.diagnosticsButtonHint}
+        disabled={modelManagement?.busy ?? false}
+        label={t.diagnosticsButton}
+        onPress={onOpenDiagnostics}
+        variant="secondary"
+      />
+      <ActionButton
+        accessibilityHint={t.pilotMeasurementButtonHint}
+        disabled={modelManagement?.busy ?? false}
+        label={t.pilotMeasurementButton}
+        onPress={onOpenPilotMeasurement}
+        variant="secondary"
+      />
+      <ActionButton
+        disabled={modelManagement?.busy ?? false}
+        label={t.backButton}
+        onPress={onBack}
+        variant="secondary"
+      />
     </AppScreen>
   );
 }

@@ -2,10 +2,6 @@ import type { ClockSnapshot } from './clock-guard';
 import { hasElapsedTtl, isValidClock } from './clock-guard';
 import type { ActiveLounge, DestroyedLounge } from './lounge';
 import { LOUNGE_TTL_MS } from './lounge';
-import {
-  LOUNGE_INVITE_SCHEMA_VERSION,
-  type LoungeInvite,
-} from './lounge-invite';
 import type { PublicPassport } from './passport';
 import type { LoungeId, ParticipantId } from './session-identifiers';
 
@@ -245,20 +241,5 @@ export function startLoungeFromRoom(room: ReadyLoungeRoom): ActiveLounge {
     encounteredPassport: encounteredParticipant.publicPassport,
     expiresAtWallClockMs: room.expiresAtWallClockMs,
     startedAtMonotonicMs: room.startedAtMonotonicMs,
-  };
-}
-
-/**
- * Room の Lounge ID と期限からその場で表示する Lounge Invite を導出する。Room 作成時に
- * 既に検証済みの時計から計算した `expiresAtWallClockMs` をそのまま使うため、
- * `createLoungeInvite` を改めて呼んで同じ TTL 計算を重複させない。
- */
-export function inviteForRoom(
-  room: FormingLoungeRoom | ReadyLoungeRoom
-): LoungeInvite {
-  return {
-    schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
-    loungeId: room.loungeId,
-    expiresAtEpochMs: room.expiresAtWallClockMs,
   };
 }

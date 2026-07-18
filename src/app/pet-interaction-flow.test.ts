@@ -11,6 +11,7 @@ import {
 } from '../domain/pet-interaction';
 import {
   applyAgentModelDecision,
+  applyAgentModelDecisionBeforeLoungeExpiry,
   applyPetInteractionTick,
   beginPetInteraction,
   collapseToRetiredLounge,
@@ -41,6 +42,36 @@ function activeLounge(
 
 describe('Pet Interaction を Active Lounge の実判定経路へ配線する App 層', () => {
   describe('applyAgentModelDecision: Local / Rules の共通 Decision を既存 bounded protocol へ接続する', () => {
+    it('Provider 確定時に Lounge が満了していれば結果と Owner Question を作らず expired へ収束する', () => {
+      const active = activeLounge(['open-source'], ['open-source']);
+      const input = {
+        ownerPassport: active.ownerPassport,
+        encounteredPassport: active.encounteredPassport,
+        language: 'ja' as const,
+        deadlineAtWallClockMs: active.expiresAtWallClockMs,
+      };
+      const outcomeClock = {
+        wallClockMs: active.expiresAtWallClockMs,
+        monotonicMs:
+          active.startedAtMonotonicMs +
+          (active.expiresAtWallClockMs - CLOCK.wallClockMs),
+      };
+
+      const step = applyAgentModelDecisionBeforeLoungeExpiry(
+        active,
+        input,
+        { kind: 'no-signal' },
+        RULES_INTERACTION_PROVIDER,
+        CLOCK,
+        outcomeClock
+      );
+
+      expect(step).toEqual({
+        interaction: null,
+        lounge: { status: 'destroyed', reason: 'expired' },
+      });
+    });
+
     it('具体化できる Bridge は Owner Question を追加せず retired へ収束する', () => {
       const active = activeLounge(['open-source'], ['open-source']);
       const decision: AgentModelDecision = {
@@ -51,7 +82,7 @@ describe('Pet Interaction を Active Lounge の実判定経路へ配線する Ap
         confidence: 'possible',
       };
 
-      const step = applyAgentModelDecision(
+      const step = applyAgentModelDecisionBeforeLoungeExpiry(
         active,
         {
           ownerPassport: active.ownerPassport,
@@ -61,6 +92,7 @@ describe('Pet Interaction を Active Lounge の実判定経路へ配線する Ap
         },
         decision,
         RULES_INTERACTION_PROVIDER,
+        CLOCK,
         CLOCK
       );
 

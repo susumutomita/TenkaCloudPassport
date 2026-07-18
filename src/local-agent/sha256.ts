@@ -20,10 +20,15 @@ export class Sha256ReadError extends Error {
 export interface Sha256ReadOptions {
   readonly chunkSize?: number;
   readonly signal?: AbortSignal;
+  readonly yieldToEventLoop?: () => Promise<void>;
 }
 
 const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 const SHA256_BLOCK_SIZE = 64;
+
+function yieldToNextMacrotask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 const ROUND_CONSTANTS = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -251,6 +256,8 @@ export async function sha256HexFromSource(
     );
     accumulator.update(bytes);
     offset += bytes.byteLength;
+    await (options.yieldToEventLoop ?? yieldToNextMacrotask)();
+    if (options.signal?.aborted) throw cancelled();
   }
   return accumulator.digestHex();
 }

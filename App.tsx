@@ -1,21 +1,48 @@
 import { StatusBar } from 'expo-status-bar';
-import { DEFAULT_AGENT_MODEL_PROVIDER } from './src/app/default-agent-model-provider';
+import packageManifest from './package.json';
+import { createDefaultAgentModelProvider } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
-import { DEFAULT_LOCAL_MODEL_MANAGEMENT } from './src/app/default-local-model-management';
+import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
+import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
+import {
+  createLocalDataControl,
+  DeletionCoordinatedLocalProfileStorageAdapter,
+  LocalModelContextLeaseRegistry,
+  NoLocalModelStorageAdapter,
+} from './src/app/local-data-control';
 import PassportApp from './src/app/PassportApp';
 
-const localProfileStorage = createDefaultLocalProfileStorage();
+const localDataLeases = new LocalModelContextLeaseRegistry();
+const localDeletionJournal = createDefaultLocalDeletionJournal();
+const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
+  createDefaultLocalProfileStorage(),
+  localDataLeases,
+  localDeletionJournal
+);
 const backupSharePort = createDefaultBackupSharePort();
+const agentModelProvider = createDefaultAgentModelProvider(localDataLeases);
+const localModelComposition =
+  createDefaultLocalModelManagement(localDataLeases);
+const localDataControl = createLocalDataControl({
+  profileStorage: localProfileStorage,
+  modelStorage:
+    localModelComposition?.modelStorage ?? new NoLocalModelStorageAdapter(),
+  modelContexts: localDataLeases,
+  deletionJournal: localDeletionJournal,
+});
 
 export default function App() {
   return (
     <>
       <StatusBar style="dark" />
       <PassportApp
-        agentModelProvider={DEFAULT_AGENT_MODEL_PROVIDER}
+        appVersion={packageManifest.version}
+        agentModelProvider={agentModelProvider}
         backupSharePort={backupSharePort}
-        localModelManagement={DEFAULT_LOCAL_MODEL_MANAGEMENT}
+        localModelManagement={localModelComposition?.management ?? null}
+        localModelMutationLeases={localModelComposition?.mutationLeases ?? null}
+        localDataControl={localDataControl}
         localProfileStorage={localProfileStorage}
       />
     </>

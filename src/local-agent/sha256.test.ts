@@ -169,6 +169,22 @@ describe('GGUF File の incremental SHA-256', () => {
     expect(reads).toBe(0);
   });
 
+  it('別 macrotask の Abort を chunk 間で処理し、追加 read を行わない', async () => {
+    const controller = new AbortController();
+    const source = byteSource(new Uint8Array([1, 2, 3, 4]));
+    setTimeout(() => controller.abort(), 0);
+
+    expect(
+      await errorCode(() =>
+        sha256HexFromSource(source.source, {
+          chunkSize: 2,
+          signal: controller.signal,
+        })
+      )
+    ).toBe('CANCELLED');
+    expect(source.observation().reads).toBe(1);
+  });
+
   it('不正な Size と chunk Size を Native read 前に拒否する', async () => {
     const invalidSize: Sha256Source = {
       sizeBytes: Number.POSITIVE_INFINITY,

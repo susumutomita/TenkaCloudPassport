@@ -1,5 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
+import { copyModelBytesBounded } from './bounded-model-copy';
 import {
   type ClosableSha256Source,
   type LocalModelFileStore,
@@ -36,6 +37,107 @@ function fileInfo(file: File): StoredModelFileInfo {
 
 function deleteIfPresent(file: File): void {
   if (file.exists) file.delete();
+}
+
+function isManagedStoreName(name: string): boolean {
+  return (
+    name === MANIFEST_FILE_NAME ||
+    name === MANIFEST_TEMP_FILE_NAME ||
+    name === INCOMING_FILE_NAME ||
+    MODEL_FILE_PATTERN.test(name) ||
+    STAGED_FILE_PATTERN.test(name)
+  );
+}
+
+function managedPayloadDigest(name: string): string | null | undefined {
+  if (name === INCOMING_FILE_NAME) return null;
+  return (
+    MODEL_FILE_PATTERN.exec(name)?.[1] ?? STAGED_FILE_PATTERN.exec(name)?.[1]
+  );
+}
+
+function inspectManagedPayloads(directory: Directory) {
+  let count = 0;
+  let totalBytes = 0;
+  let representativeDigest: string | null = null;
+  let hasFinalOrStagedModel = false;
+  let hasManagedStore = false;
+  for (const entry of directory.list()) {
+    if (!(entry instanceof File)) continue;
+    if (!isManagedStoreName(entry.name)) continue;
+    hasManagedStore = true;
+    const digest = managedPayloadDigest(entry.name);
+    if (digest === undefined) continue;
+    const info = fileInfo(entry);
+    if (!info.exists || info.sizeBytes === null) {
+      throw new Error('Managed model file size is unavailable.');
+    }
+    count += 1;
+    totalBytes += info.sizeBytes;
+    if (!Number.isSafeInteger(totalBytes)) {
+      throw new Error(
+        'Managed model storage size exceeds the supported range.'
+      );
+    }
+    representativeDigest ??= digest;
+    if (digest !== null) hasFinalOrStagedModel = true;
+  }
+  return {
+    count,
+    totalBytes,
+    representativeDigest,
+    hasFinalOrStagedModel,
+    hasManagedStore,
+  };
+}
+
+async function copyExternalFileBounded(
+  externalUri: string,
+  destination: File,
+  maximumBytes: number,
+  minimumFreeBytes: number,
+  signal?: AbortSignal
+): Promise<void> {
+  const source = new File(externalUri);
+  let sourceHandle: ReturnType<File['open']> | null = null;
+  let destinationHandle: ReturnType<File['open']> | null = null;
+  let failed = false;
+  let failure: unknown;
+  try {
+    destination.create({ overwrite: true });
+    sourceHandle = source.open(FileMode.ReadOnly);
+    destinationHandle = destination.open(FileMode.Truncate);
+    await copyModelBytesBounded(
+      {
+        source: sourceHandle,
+        destination: destinationHandle,
+        availableDiskSpaceBytes: () => Paths.availableDiskSpace,
+      },
+      {
+        maximumBytes,
+        minimumFreeBytes,
+        ...(signal ? { signal } : {}),
+      }
+    );
+  } catch (error: unknown) {
+    failed = true;
+    failure = error;
+  } finally {
+    for (const handle of [sourceHandle, destinationHandle]) {
+      try {
+        handle?.close();
+      } catch (error: unknown) {
+        if (!failed) {
+          failed = true;
+          failure = error;
+        }
+      }
+    }
+  }
+  if (failed) {
+    deleteIfPresent(destination);
+    throw failure;
+  }
 }
 
 function exactManagedFile(privateUri: string, pattern: RegExp): File {
@@ -158,10 +260,16 @@ export function createExpoModelFileStore(): LocalModelFileStore {
     async availableDiskSpaceBytes() {
       return Paths.availableDiskSpace;
     },
-    async copyExternalFileToIncoming(externalUri) {
+    async copyExternalFileToIncoming(externalUri, options) {
       const incoming = new File(modelDirectory(), INCOMING_FILE_NAME);
       deleteIfPresent(incoming);
-      await new File(externalUri).copy(incoming);
+      await copyExternalFileBounded(
+        externalUri,
+        incoming,
+        options.maximumBytes,
+        options.minimumFreeBytes,
+        options.signal
+      );
     },
     async incomingFileInfo() {
       return fileInfo(new File(modelDirectory(), INCOMING_FILE_NAME));
@@ -215,6 +323,20 @@ export function createExpoModelFileStore(): LocalModelFileStore {
     },
     async deleteIncomingFile() {
       deleteIfPresent(new File(modelDirectory(), INCOMING_FILE_NAME));
+    },
+    async inspectManagedModelFiles() {
+      return inspectManagedPayloads(modelDirectory());
+    },
+    async purgeManagedFiles() {
+      const directory = modelDirectory();
+      for (const entry of directory.list()) {
+        if (entry instanceof File && isManagedStoreName(entry.name)) {
+          deleteIfPresent(entry);
+        }
+      }
+      if (directory.list().some((entry) => isManagedStoreName(entry.name))) {
+        throw new Error('Managed model files remain after purge.');
+      }
     },
   };
 }

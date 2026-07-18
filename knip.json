@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["**/dist/**", "**/coverage/**", "**/.expo/**", "**/fixtures/**"],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "exports": "warn",
+    "types": "warn",
+    "files": "warn",
+    "duplicates": "warn",
+    "dependencies": "off",
+    "devDependencies": "off",
+    "optionalPeerDependencies": "off",
+    "unlisted": "off",
+    "binaries": "off",
+    "unresolved": "off",
+    "enumMembers": "off",
+    "nsExports": "off",
+    "nsTypes": "off"
+  },
+  "entry": [
+    "index.ts",
+    "App.tsx",
+    "scripts/**/*.ts",
+    "src/**/*.test.{ts,tsx}",
+    "metro.config.cjs"
+  ],
+  "project": ["src/**", "scripts/**", "App.tsx", "index.ts"]
+}

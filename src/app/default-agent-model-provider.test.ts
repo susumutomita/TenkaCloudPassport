@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readSourceFile } from '../screens/accessibility-test-kit';
+import { LocalModelContextLeaseRegistry } from './local-data-control';
 import { createNativeAgentModelProvider } from './native-agent-model-provider-composition';
 
 function source(fileName: string): Promise<string> {
@@ -41,16 +42,19 @@ describe('AgentModelProvider の Platform Composition', () => {
         'この Composition Test では Native Module を実行しません。'
       );
     };
+    const modelContexts = new LocalModelContextLeaseRegistry(false);
 
     const expoGo = createNativeAgentModelProvider({
       runningInExpoGo: true,
       environment,
       loadModule,
+      modelContexts,
     });
     const developmentBuild = createNativeAgentModelProvider({
       runningInExpoGo: false,
       environment,
       loadModule,
+      modelContexts,
     });
 
     expect(expoGo.kind).toBe('rules');
@@ -60,11 +64,11 @@ describe('AgentModelProvider の Platform Composition', () => {
   it('App Composition Root は Platform Provider を PassportApp へ明示的に渡す', async () => {
     const app = await source('../../App.tsx');
 
-    expect(app).toContain('DEFAULT_AGENT_MODEL_PROVIDER');
-    expect(app).toContain('agentModelProvider={DEFAULT_AGENT_MODEL_PROVIDER}');
-    expect(app).toContain('DEFAULT_LOCAL_MODEL_MANAGEMENT');
+    expect(app).toContain('createDefaultAgentModelProvider(localDataLeases)');
+    expect(app).toContain('agentModelProvider={agentModelProvider}');
+    expect(app).toContain('createDefaultLocalModelManagement(localDataLeases)');
     expect(app).toContain(
-      'localModelManagement={DEFAULT_LOCAL_MODEL_MANAGEMENT}'
+      'localModelManagement={localModelComposition?.management ?? null}'
     );
   });
 
@@ -72,12 +76,15 @@ describe('AgentModelProvider の Platform Composition', () => {
     const fallback = await source('default-local-model-management.ts');
     const native = await source('default-local-model-management.native.ts');
 
-    expect(fallback).toContain('DEFAULT_LOCAL_MODEL_MANAGEMENT = null');
+    expect(fallback).toContain('createDefaultLocalModelManagement');
     expect(native).toContain('isRunningInExpoGo()');
     expect(native).toContain('createExpoModelFileStore()');
     expect(native).toContain('createLlamaModelInspector()');
     expect(native).toContain('createDeviceResourceTelemetry()');
     expect(native).toContain('createLocalModelLifecycle({');
+    expect(native).toContain(
+      'createLocalModelLifecycleStorageAdapter(lifecycle, fileStore)'
+    );
     expect(native).not.toContain("from 'llama.rn'");
   });
 

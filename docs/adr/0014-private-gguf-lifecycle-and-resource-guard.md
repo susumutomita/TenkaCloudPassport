@@ -6,7 +6,7 @@
 
 ## Context
 
-ADR-0012 は `llama.rn` Context を Encounter 単位で隔離したが、GGUF Path は Development Build の環境変数から
+ADR-0023 は `llama.rn` Context を Encounter 単位で隔離したが、GGUF Path は Development Build の環境変数から
 受け取るだけだ。Owner が Files から選ぶ数 GiB の GGUF は、選択時の不要 Copy、空き容量不足、権限失効、
 破損、同名衝突、過大な Model による OOM / Thermal shutdown を起こし得る。Digest 一致を安全性の証明として扱うと、
 悪意あるが byte として一貫した Model を信頼してしまう。
@@ -17,6 +17,7 @@ Document Picker は自動 cache copy を無効にし、Copy 前に Name / Size /
 private models directory の incoming File へ Copy し、Size、chunked SHA-256、`loadLlamaModelInfo` の Architecture /
 Context Metadata を検証してから、digest 名の最終 File と versioned Manifest を transaction として確定する。
 SHA-256 は byte 同一性の識別子に限り、安全性または出所の表示には使わない。
+Chunk copy は各 chunk 後に macrotask へ制御を返し、UI Cancel を次の read 前に Abort として観測する。
 
 Model Size に 20％の runtime reserve と Context reserve を加え、端末の effective memory に対する比率で
 `supported | caution | blocked` を決める。Caution は明示確認後だけ activate し、Blocked または Thermal State が
@@ -31,6 +32,13 @@ Unload / Delete は Runner の Abort だけで成功にせず、Native `stopComp
 待つ。Unload 後に active selection を外す。Delete は File を staged rename し、Manifest record と Report を atomic に
 外した後で最終削除する。Manifest 更新失敗時は File を復元し、cleanup 失敗は次回 load の reconcile で再試行する。
 実行中 Provider に影響する操作は Owner の確認後だけ行い、Lounge ID と Encounter key は維持する。
+Native teardown 完了後も Manifest / File mutation と Provider refresh が終わるまで新しい Context の開始を拒否する。
+Import も Copy 開始から最終 refresh まで同じ process-wide mutation lease を保持し、実行中 Context、全削除、
+起動 recovery lock と並行させない。Caution の再確認中に Provider が開始された場合は、Resource Risk の確認とは別に
+現在の判定を終了する確認を要求する。
+Manifest が壊れた、または欠落したまま managed payload が残る場合は、exact managed filename の件数と容量だけを
+Manifest 非依存で Preview し、Owner が tombstone 前から fail-safe purge を選べるようにする。
+payload が 0 件でも exact Manifest / temp が残る場合は Model 件数を増やさず managed store の削除導線を維持する。
 
 Activate 前は inactive Model も Size と SHA-256 を再検証する。Import の Manifest 書込が commit 前後どちらで失敗したか
 判定できない場合は確定 File を削除せず cache を破棄し、次回 load が永続 Manifest を正本として保持または削除へ収束させる。
@@ -48,7 +56,7 @@ Activate 前は inactive Model も Size と SHA-256 を再検証する。Import 
 ## References
 
 - 関連設計: [GGUF Import・Resource Guard・Benchmark の設計](../design/gguf-model-lifecycle.md)。
-- 関連 ADR: [ADR-0012](./0012-llama-provider-runtime-boundary.md)。
+- 関連 ADR: [ADR-0023](./0023-llama-provider-runtime-boundary.md)。
 - 関連 Issue: https://github.com/susumutomita/TenkaCloudPassport/issues/18 。
 - 外部資料: https://docs.expo.dev/versions/latest/sdk/document-picker/ 。
 - 外部資料: https://docs.expo.dev/versions/latest/sdk/filesystem/ 。

@@ -157,12 +157,14 @@ export default function PassportCreationScreen({
       />
       <ActionButton
         accessibilityHint={t.backupButtonHint}
+        disabled={saving}
         label={t.backupButton}
         onPress={onOpenBackup}
         variant="secondary"
       />
       <ActionButton
         accessibilityHint={common.settingsButtonHint}
+        disabled={saving}
         label={common.settingsButton}
         onPress={onOpenSettings}
         variant="secondary"

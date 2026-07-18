@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createLocalPrivateProfile } from '../domain/passport';
-import { ExpoFileSystemLocalProfileStorageAdapter } from './expo-file-system-local-profile-storage';
+import {
+  ExpoFileSystemLocalProfileStorageAdapter,
+  type ProfileDocument,
+} from './expo-file-system-local-profile-storage';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -13,6 +16,9 @@ import {
   FileBackedWebStorage,
   temporaryDirectory as newTemporaryDirectory,
   removeTemporaryDirectory,
+  VerifyMismatchStorage,
+  WriteFailingProfileDocument,
+  WriteFailingWebStorage,
 } from './storage-test-kit';
 import { WebLocalProfileStorageAdapter } from './web-local-profile-storage';
 
@@ -59,8 +65,62 @@ async function expectStorageError(
 
 async function saveAndRestore(storage: LocalProfileStoragePort): Promise<void> {
   expect(await storage.load()).toBeNull();
+  expect(await storage.inspect()).toEqual({ count: 0, bytes: 0 });
   await storage.save(profile());
   expect(await storage.load()).toEqual(profile());
+  const usage = await storage.inspect();
+  expect(usage.count).toBe(1);
+  expect(usage.bytes).toBeGreaterThan(0);
+  await storage.remove();
+  await storage.remove();
+  expect(await storage.load()).toBeNull();
+  expect(await storage.inspect()).toEqual({ count: 0, bytes: 0 });
+}
+
+class SizeUnknownProfileDocument implements ProfileDocument {
+  constructor(private readonly delegate: BunProfileDocument) {}
+
+  get exists(): boolean {
+    return this.delegate.exists;
+  }
+
+  get size(): null {
+    return null;
+  }
+
+  text(): Promise<string> {
+    return this.delegate.text();
+  }
+
+  write(content: string): Promise<void> {
+    return this.delegate.write(content);
+  }
+
+  delete(): Promise<void> {
+    return this.delegate.delete();
+  }
+}
+
+class InspectionFailingProfileDocument implements ProfileDocument {
+  get exists(): boolean {
+    return true;
+  }
+
+  get size(): number {
+    throw new Error('size permission denied');
+  }
+
+  text(): Promise<string> {
+    return Promise.reject(new Error('read permission denied'));
+  }
+
+  write(_content: string): Promise<void> {
+    return Promise.reject(new Error('write permission denied'));
+  }
+
+  delete(): Promise<void> {
+    return Promise.reject(new Error('delete permission denied'));
+  }
 }
 
 describe('Local Profile Storage adapter', () => {
@@ -145,5 +205,70 @@ describe('Local Profile Storage adapter', () => {
         ).save(profile()),
       'WRITE_FAILED'
     );
+  });
+
+  it('Native 使用量は OS が size を返さない場合も実内容の Byte 数を返す', async () => {
+    const document = new SizeUnknownProfileDocument(
+      new BunProfileDocument(
+        path.join(temporaryDirectory(), 'size-unknown-profile.json')
+      )
+    );
+    const storage = new ExpoFileSystemLocalProfileStorageAdapter(document);
+    await storage.save(profile());
+
+    const usage = await storage.inspect();
+
+    expect(usage.count).toBe(1);
+    expect(usage.bytes).toBeGreaterThan(0);
+  });
+
+  it('Native の使用量確認失敗と削除失敗を型付き Error にする', async () => {
+    const storage = new ExpoFileSystemLocalProfileStorageAdapter(
+      new InspectionFailingProfileDocument()
+    );
+
+    await expectStorageError(() => storage.inspect(), 'READ_FAILED');
+    await expectStorageError(() => storage.remove(), 'DELETE_FAILED');
+  });
+
+  it('Storage 媒体がない場合は使用量確認と削除も UNAVAILABLE にする', async () => {
+    const native = new ExpoFileSystemLocalProfileStorageAdapter(null);
+    const unavailable = new UnavailableLocalProfileStorageAdapter(
+      new Error('OS storage unavailable')
+    );
+
+    await expectStorageError(() => native.inspect(), 'UNAVAILABLE');
+    await expectStorageError(() => native.remove(), 'UNAVAILABLE');
+    await expectStorageError(() => unavailable.inspect(), 'UNAVAILABLE');
+    await expectStorageError(() => unavailable.remove(), 'UNAVAILABLE');
+  });
+
+  it('既存の Real I/O failure adapter も拡張した使用量確認・削除契約を満たす', async () => {
+    const nativePath = path.join(
+      temporaryDirectory(),
+      'write-failing-profile.json'
+    );
+    await new BunProfileDocument(nativePath).write(
+      JSON.stringify({ persisted: true })
+    );
+    const native = new ExpoFileSystemLocalProfileStorageAdapter(
+      new WriteFailingProfileDocument(nativePath, new Error('write failure'))
+    );
+    expect((await native.inspect()).count).toBe(1);
+    await native.remove();
+
+    const webRoot = temporaryDirectory();
+    const webDelegate = new FileBackedWebStorage(webRoot);
+    await new WebLocalProfileStorageAdapter(webDelegate).save(profile());
+    await new WebLocalProfileStorageAdapter(
+      new WriteFailingWebStorage(webRoot, new Error('write failure'))
+    ).remove();
+
+    const mismatchDelegate = new WebLocalProfileStorageAdapter(
+      new FileBackedWebStorage(temporaryDirectory())
+    );
+    const mismatch = new VerifyMismatchStorage(mismatchDelegate, profile());
+    expect(await mismatch.inspect()).toEqual({ count: 0, bytes: 0 });
+    await mismatch.remove();
   });
 });

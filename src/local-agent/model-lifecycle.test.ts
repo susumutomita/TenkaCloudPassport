@@ -9,6 +9,7 @@ import {
   createLocalModelLifecycle,
   type DeviceResourceSnapshot,
   type DeviceResourceTelemetry,
+  LocalModelCopyError,
   type LocalModelFileStore,
   type LocalModelInspector,
   type ModelImportCandidate,
@@ -62,6 +63,7 @@ class PrivateModelStore implements LocalModelFileStore {
   restoreFailure = false;
   finalizeFailure = false;
   incomingDeleteFailure = false;
+  purgeFailure = false;
   manifestReads = 0;
   manifestWrites = 0;
   closeCalls = 0;
@@ -124,11 +126,21 @@ class PrivateModelStore implements LocalModelFileStore {
     return this.availableBytes;
   }
 
-  async copyExternalFileToIncoming(externalUri: string): Promise<void> {
+  async copyExternalFileToIncoming(
+    externalUri: string,
+    options: Parameters<LocalModelFileStore['copyExternalFileToIncoming']>[1]
+  ): Promise<void> {
     this.copyCalls += 1;
     if (this.copyFailure) throw new Error('copy failed');
+    if (options.signal?.aborted) throw new LocalModelCopyError('ABORTED');
     const bytes = this.externalFiles.get(externalUri);
     if (!bytes) throw new Error('source missing');
+    if (bytes.byteLength > options.maximumBytes) {
+      throw new LocalModelCopyError('LIMIT_EXCEEDED');
+    }
+    if (this.availableBytes < options.minimumFreeBytes + bytes.byteLength) {
+      throw new LocalModelCopyError('INSUFFICIENT_STORAGE');
+    }
     this.privateFiles.set(this.incomingUri, bytes.slice());
   }
 
@@ -212,6 +224,46 @@ class PrivateModelStore implements LocalModelFileStore {
   async deleteIncomingFile(): Promise<void> {
     if (this.incomingDeleteFailure) throw new Error('delete failed');
     this.privateFiles.delete(this.incomingUri);
+  }
+
+  async inspectManagedModelFiles() {
+    let count = 0;
+    let totalBytes = 0;
+    let representativeDigest: string | null = null;
+    let hasFinalOrStagedModel = false;
+    for (const [uri, bytes] of this.privateFiles) {
+      const name = uri.slice(PRIVATE_ROOT.length + 1);
+      const digest =
+        /^([a-f0-9]{64})\.gguf$/.exec(name)?.[1] ??
+        /^([a-f0-9]{64})\.deleting\.gguf$/.exec(name)?.[1];
+      if (name !== '.incoming.gguf' && digest === undefined) continue;
+      count += 1;
+      totalBytes += bytes.byteLength;
+      representativeDigest ??= digest ?? null;
+      if (digest !== undefined) hasFinalOrStagedModel = true;
+    }
+    return {
+      count,
+      totalBytes,
+      representativeDigest,
+      hasFinalOrStagedModel,
+      hasManagedStore: this.manifestText !== null || count > 0,
+    };
+  }
+
+  async purgeManagedFiles(): Promise<void> {
+    if (this.purgeFailure) throw new Error('purge failed');
+    this.manifestText = null;
+    for (const uri of [...this.privateFiles.keys()]) {
+      const name = uri.slice(PRIVATE_ROOT.length + 1);
+      if (
+        name === '.incoming.gguf' ||
+        name === '.manifest.v1.tmp' ||
+        /^[a-f0-9]{64}(?:\.deleting)?\.gguf$/.test(name)
+      ) {
+        this.privateFiles.delete(uri);
+      }
+    }
   }
 }
 
@@ -359,6 +411,20 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       'MANIFEST_READ_FAILED'
     );
 
+    const missingManifestWithPayload = harness();
+    const orphanUri = `${PRIVATE_ROOT}/${DIGEST_ABC}.gguf`;
+    missingManifestWithPayload.fileStore.privateFiles.set(
+      orphanUri,
+      new TextEncoder().encode('abc')
+    );
+    await expectLifecycleError(
+      missingManifestWithPayload.lifecycle.load(),
+      'MANIFEST_READ_FAILED'
+    );
+    expect(
+      missingManifestWithPayload.fileStore.privateFiles.has(orphanUri)
+    ).toBeTrue();
+
     const reconcileFailure = harness();
     reconcileFailure.fileStore.reconcileFailure = true;
     await expectLifecycleError(
@@ -422,6 +488,15 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       batteryDeltaPermille: -10,
     });
     expect(state.fileStore.manifestText).not.toContain(CANDIDATE.uri);
+  });
+
+  it('Owner 確定前に候補と現在の端末空き容量を評価し、copy は開始しない', async () => {
+    const state = harness();
+
+    expect(await state.lifecycle.assessImportCandidate(CANDIDATE)).toBe(
+      state.fileStore.availableBytes
+    );
+    expect(state.fileStore.copyCalls).toBe(0);
   });
 
   it('Clock 未注入時も端末の wall clock と monotonic clock で Import を計測する', async () => {
@@ -519,6 +594,14 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     ][] = [
       [(state) => (state.fileStore.copyFailure = true), 'COPY_FAILED'],
       [
+        (state) =>
+          state.fileStore.externalFiles.set(
+            CANDIDATE.uri,
+            new TextEncoder().encode('abcd')
+          ),
+        'COPY_INCOMPLETE',
+      ],
+      [
         (state) => (state.fileStore.incomingSizeOverride = 2),
         'COPY_INCOMPLETE',
       ],
@@ -603,7 +686,9 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       'IMPORT_CANCELLED'
     );
     expect(moved.fileStore.privateFiles.size).toBe(1);
-    await moved.lifecycle.load();
+    await expectLifecycleError(moved.lifecycle.load(), 'MANIFEST_READ_FAILED');
+    expect(moved.fileStore.privateFiles.size).toBe(1);
+    await moved.lifecycle.purgeManagedStore();
     expect(moved.fileStore.privateFiles.size).toBe(0);
 
     const duplicate = harness();
@@ -632,8 +717,10 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     );
     expect(state.fileStore.privateFiles.size).toBe(1);
     expect(state.fileStore.manifestText).toBeNull();
+    await expectLifecycleError(state.lifecycle.load(), 'MANIFEST_READ_FAILED');
+    expect(state.fileStore.privateFiles.size).toBe(1);
+    await state.lifecycle.purgeManagedStore();
     expect((await state.lifecycle.load()).models).toEqual([]);
-    expect(state.fileStore.privateFiles.size).toBe(0);
 
     const committed = harness();
     committed.fileStore.writeManifestAfterCommitFailures = 1;
@@ -899,6 +986,52 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
         async () => undefined
       ),
       'MODEL_NOT_FOUND'
+    );
+  });
+
+  it('Fail-safe purge は壊れた Manifest や欠落 File を読まず、exact managed file だけを消す', async () => {
+    const corrupt = harness();
+    corrupt.fileStore.manifestText = '{';
+    corrupt.fileStore.privateFiles.set(
+      `${PRIVATE_ROOT}/${DIGEST_ABC}.gguf`,
+      new TextEncoder().encode('abc')
+    );
+    const unrelatedUri = `${PRIVATE_ROOT}/owner-note.txt`;
+    corrupt.fileStore.privateFiles.set(
+      unrelatedUri,
+      new TextEncoder().encode('keep')
+    );
+
+    await corrupt.lifecycle.purgeManagedStore();
+    expect(await corrupt.lifecycle.load()).toEqual({
+      schemaVersion: 1,
+      activeModelSha256: null,
+      models: [],
+      benchmarkReports: [],
+    });
+    expect(corrupt.fileStore.privateFiles.has(unrelatedUri)).toBe(true);
+
+    const missing = harness();
+    const model = await importModel(missing);
+    missing.fileStore.privateFiles.delete(model.privateUri);
+    const reloaded = createLocalModelLifecycle({
+      fileStore: missing.fileStore,
+      inspector: missing.inspector,
+      telemetry: missing.telemetry,
+      clock: missing.clock,
+    });
+    await reloaded.purgeManagedStore();
+    expect((await reloaded.load()).models).toEqual([]);
+  });
+
+  it('Fail-safe purge の削除失敗は cache を空扱いにせず型付きで拒否する', async () => {
+    const state = harness();
+    await importModel(state);
+    state.fileStore.purgeFailure = true;
+
+    await expectLifecycleError(
+      state.lifecycle.purgeManagedStore(),
+      'DELETE_FAILED'
     );
   });
 

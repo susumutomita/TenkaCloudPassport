@@ -17,6 +17,134 @@ function repoCheck(id: string) {
   return found;
 }
 
+describe('INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE', () => {
+  const r = rule('INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE');
+
+  it('package.json と bun.lock だけを対象にする', () => {
+    expect(r.scope('package.json')).toBe(true);
+    expect(r.scope('packages/app/package.json')).toBe(true);
+    expect(r.scope('bun.lock')).toBe(true);
+    expect(r.scope('src/app/diagnostic-report.ts')).toBe(false);
+  });
+
+  it('全 dependency 区分の Telemetry / Remote Inference SDK を拒否する', () => {
+    const findings = r.check({
+      path: 'package.json',
+      content: JSON.stringify({
+        dependencies: { '@sentry/react-native': '1.0.0' },
+        devDependencies: { openai: '1.0.0' },
+        optionalDependencies: { 'posthog-react-native': '1.0.0' },
+        peerDependencies: { '@anthropic-ai/sdk': '1.0.0' },
+      }),
+    });
+
+    expect(findings).toHaveLength(4);
+    expect(findings.every((finding) => finding.severity === 'error')).toBe(
+      true
+    );
+  });
+
+  it('bun.lock に解決された禁止 SDK があれば拒否する', () => {
+    const findings = r.check({
+      path: 'bun.lock',
+      content:
+        '"@datadog/mobile-react-native": ["@datadog/mobile-react-native@2.0.0", "", {}, "sha512-x"],\n',
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('Expo と Local-only package は通す', () => {
+    const findings = r.check({
+      path: 'package.json',
+      content: JSON.stringify({
+        dependencies: { expo: '57.0.0', 'llama.rn': '0.9.0' },
+      }),
+    });
+
+    expect(findings).toHaveLength(0);
+  });
+
+  it('Privacy 正本に列挙した各 SDK family の代表 package を検出する', () => {
+    const forbidden = [
+      '@react-native-firebase/analytics',
+      '@amplitude/analytics-react-native',
+      'mixpanel-react-native',
+      '@segment/analytics-react-native',
+      'appcenter-analytics',
+      '@bugsnag/react-native',
+      '@datadog/mobile-react-native',
+      'newrelic-react-native-agent',
+      'posthog-react-native',
+      'logrocket',
+      '@vercel/analytics',
+      'react-native-adjust',
+      'react-native-appsflyer',
+      'react-native-branch',
+      'react-native-google-mobile-ads',
+      '@google/generative-ai',
+      '@aws-sdk/client-bedrock-runtime',
+    ];
+    const findings = r.check({
+      path: 'package.json',
+      content: JSON.stringify({
+        dependencies: Object.fromEntries(
+          forbidden.map((packageName) => [packageName, '1.0.0'])
+        ),
+      }),
+    });
+
+    expect(findings).toHaveLength(forbidden.length);
+  });
+});
+
+describe('INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT', () => {
+  const r = rule('INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT');
+
+  it('Pilot Aggregate、Flow、2 Screen の production 4 file だけを対象にする', () => {
+    expect(r.scope('src/app/pilot-measurement.ts')).toBe(true);
+    expect(r.scope('src/app/use-pilot-measurement-flow.ts')).toBe(true);
+    expect(r.scope('src/screens/PilotMeasurementScreen.tsx')).toBe(true);
+    expect(r.scope('src/screens/ConversationSelfReportScreen.tsx')).toBe(true);
+    expect(r.scope('src/app/pilot-measurement.test.ts')).toBe(false);
+    expect(r.scope('src/app/backup-export.ts')).toBe(false);
+  });
+
+  it('Network Endpoint と永続 Storage の各入口を拒否する', () => {
+    const content = [
+      "fetch('/collect')",
+      'new XMLHttpRequest()',
+      "new WebSocket('wss:example')",
+      "new EventSource('/events')",
+      'navigator.sendBeacon()',
+      'AsyncStorage.setItem()',
+      'localStorage.setItem()',
+      'sessionStorage.setItem()',
+      'LocalProfileStorage.save()',
+      'https://collector.example',
+    ].join('\n');
+    const findings = r.check({
+      path: 'src/app/pilot-measurement.ts',
+      content,
+    });
+
+    expect(findings).toHaveLength(10);
+    expect(findings.every((finding) => finding.severity === 'error')).toBe(
+      true
+    );
+  });
+
+  it('Memory Counter と明示 Share Port だけの実装を通す', () => {
+    const findings = r.check({
+      path: 'src/app/pilot-measurement.ts',
+      content:
+        "let count = 0; count += 1; await sharePort.share({ fileName: 'aggregate.json', json });",
+    });
+
+    expect(findings).toHaveLength(0);
+  });
+});
+
 describe('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT', () => {
   const check = repoCheck('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT');
   const roots: string[] = [];
@@ -247,6 +375,294 @@ describe('INVARIANT_AGENT_FRONTMATTER_VALID', () => {
         'name: sample-agent\ndescription: コードレビューを担当する subagent。差分の正確性を確認し、簡素化の余地を洗い出す。PR 直前のレビュー段階で使う。'
       ),
     });
+    expect(findings).toHaveLength(0);
+  });
+});
+
+describe('INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY', () => {
+  const r = rule('INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY');
+
+  it('Local Agent / Adapter 実装を対象にし、Safety Boundary 本体とテストは除外する', () => {
+    expect(r.scope('src/local-agent/native-adapter.ts')).toBe(true);
+    expect(r.scope('src/adapters/llama-adapter.ts')).toBe(true);
+    expect(r.scope('src/infrastructure/model.ts')).toBe(true);
+    expect(r.scope('src/app/native-provider.ts')).toBe(true);
+    expect(r.scope('src/native/llama-provider.ts')).toBe(true);
+    expect(r.scope('src/local-agent/model-safety-boundary.ts')).toBe(false);
+    expect(r.scope('src/local-agent/native-adapter.test.ts')).toBe(false);
+    expect(r.scope('src/domain/agent-model-provider.ts')).toBe(true);
+  });
+
+  it('local-agent Provider の直接実装を error にする', () => {
+    const findings = r.check({
+      path: 'src/local-agent/native-adapter.ts',
+      content: "export const provider = { kind: 'local-agent', provide };\n",
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.rule).toBe('INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY');
+    expect(findings[0]?.severity).toBe('error');
+  });
+
+  it('Infrastructure から AgentModelProvider 型を直接 import する経路を error にする', () => {
+    const findings = r.check({
+      path: 'src/adapters/llama-adapter.ts',
+      content:
+        "import type { AgentModelProvider } from '../domain/agent-model-provider';\n",
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('App / Native の local-agent Provider 直接実装を error にする', () => {
+    for (const path of [
+      'src/app/native-provider.ts',
+      'src/native/llama-provider.ts',
+    ]) {
+      const findings = r.check({
+        path,
+        content: "export const provider = { kind: 'local-agent', provide };\n",
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('変数代入、shorthand、computed property の Provider 直接実装を error にする', () => {
+    const cases = [
+      "const kind = 'local-agent';\nreturn { kind, provide };\n",
+      "const discriminator = 'local-agent';\nreturn { kind: discriminator, provide };\n",
+      "return { ['kind']: 'local-agent', provide };\n",
+    ] as const;
+
+    for (const content of cases) {
+      const findings = r.check({
+        path: 'src/app/native-provider.ts',
+        content,
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('App の Provider consumer は AgentModelProvider 型を参照できる', () => {
+    const findings = r.check({
+      path: 'src/app/provider-session.ts',
+      content:
+        "import type { AgentModelProvider } from '../domain/agent-model-provider';\n",
+    });
+
+    expect(findings).toHaveLength(0);
+  });
+
+  it('既存 Provider 型定義と Session の比較・結果だけは local-agent literal を許可する', () => {
+    const typeFindings = r.check({
+      path: 'src/domain/agent-model-provider.ts',
+      content:
+        "interface Provider { readonly kind: 'rules' | 'local-agent'; }\n",
+    });
+    const sessionFindings = r.check({
+      path: 'src/app/agent-provider-session.ts',
+      content: [
+        "if (request.provider.kind === 'local-agent') start();",
+        "return { providerKind: 'local-agent', reason: 'timeout' };",
+      ].join('\n'),
+    });
+
+    expect(typeFindings).toHaveLength(0);
+    expect(sessionFindings).toHaveLength(0);
+  });
+
+  it('許可された Session 表現と同一行に Provider 直接生成を併記しても error にする', () => {
+    const cases = [
+      "return { providerKind: 'local-agent', provider: { kind: 'local-agent', provide } };",
+      "if (provider.kind === 'local-agent') return { kind: 'local-agent', provide };",
+    ] as const;
+
+    for (const content of cases) {
+      const findings = r.check({
+        path: 'src/app/agent-provider-session.ts',
+        content,
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('template literal と escape 表現の local-agent discriminator も error にする', () => {
+    const interpolatedTemplate = [
+      'export const provider = { kind: `local-',
+      '$',
+      "{'agent'}",
+      '`, provide };',
+    ].join('');
+    const cases = [
+      'export const provider = { kind: `local-agent`, provide };',
+      "export const provider = { kind: 'local\\x2dagent', provide };",
+      interpolatedTemplate,
+      "export const provider = { kind: 'local-' + 'agent', provide };",
+    ] as const;
+
+    for (const content of cases) {
+      const findings = r.check({
+        path: 'src/app/native-provider.ts',
+        content,
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('定数参照で discriminator を組み立てても Provider 構造を error にする', () => {
+    const dynamicTemplate = [
+      "const prefix = 'local-'; const suffix = 'agent';",
+      'export const provider: AgentModelProvider = {',
+      'kind: `',
+      '$',
+      '{prefix}',
+      '$',
+      "{suffix}` as AgentModelProvider['kind'],",
+      'provide,',
+      '};',
+    ].join('\n');
+
+    const dynamicClass = [
+      'const runtimeKind = readProviderKind();',
+      'class NativeProvider {',
+      'readonly kind = runtimeKind;',
+      'provide() {}',
+      '}',
+    ].join('\n');
+
+    for (const content of [dynamicTemplate, dynamicClass]) {
+      const findings = r.check({
+        path: 'src/app/native-provider.ts',
+        content,
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('kind と provide を別 object に分けて spread しても error にする', () => {
+    const dynamicKind = [
+      'kind: `',
+      '$',
+      '{prefix}',
+      '$',
+      "{suffix}` as AgentModelProvider['kind'],",
+    ].join('');
+    const spreadProvider = [
+      "const prefix = 'local-'; const suffix = 'agent';",
+      'const discriminator = {',
+      dynamicKind,
+      '};',
+      'export const provider: AgentModelProvider = {',
+      '...discriminator,',
+      'provide,',
+      '};',
+    ].join('\n');
+    const reverseSpreadProvider = [
+      "const prefix = 'local-'; const suffix = 'agent';",
+      'const completion = { provide };',
+      'export const provider: AgentModelProvider = {',
+      '...completion,',
+      dynamicKind,
+      '};',
+    ].join('\n');
+
+    for (const content of [spreadProvider, reverseSpreadProvider]) {
+      const findings = r.check({
+        path: 'src/app/native-provider.ts',
+        content,
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('kind rules と provide の直接実装は Domain owner だけに許可する', () => {
+    const domainFindings = r.check({
+      path: 'src/domain/agent-model-provider.ts',
+      content: "export const rules = { kind: 'rules', provide() {} };",
+    });
+    const appFindings = r.check({
+      path: 'src/app/rules-provider.ts',
+      content: "export const rules = { kind: 'rules', provide() {} };",
+    });
+
+    expect(domainFindings).toHaveLength(0);
+    expect(appFindings).toHaveLength(1);
+  });
+
+  it('kind rules の class 実装は Domain 外で error にする', () => {
+    const findings = r.check({
+      path: 'src/app/rules-provider.ts',
+      content: [
+        'class FakeRulesProvider {',
+        "readonly kind = 'rules';",
+        'provide() {}',
+        '}',
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('kind rules の後段 spread で discriminator を上書きできる object は error にする', () => {
+    const findings = r.check({
+      path: 'src/app/native-provider.ts',
+      content: [
+        "declare function readProviderKind(): AgentModelProvider['kind'];",
+        'export const provider: AgentModelProvider = {',
+        "kind: 'rules',",
+        '...{ kind: readProviderKind() },',
+        'provide,',
+        '};',
+      ].join('\n'),
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('文字列とコメント内の AgentModelProvider は型参照として誤検出しない', () => {
+    const cases = [
+      "export const docs = { title: 'AgentModelProvider' };",
+      'export const config = { enabled: true /* AgentModelProvider */ };',
+    ] as const;
+
+    for (const content of cases) {
+      const findings = r.check({ path: 'src/app/provider-copy.ts', content });
+      expect(findings).toHaveLength(0);
+    }
+  });
+
+  it('Capability constructor を Safety factory 外で呼ぶ production code は error にする', () => {
+    const cases = [
+      [
+        "import { createLocalAgentProviderCapability } from '../domain/agent-model-provider';",
+        'export const provider = createLocalAgentProviderCapability(provide);',
+      ].join('\n'),
+      [
+        "import * as providerDomain from '../domain/agent-model-provider';",
+        'const forge = providerDomain.createLocalAgentProviderCapability;',
+        'export const provider = forge(provide);',
+      ].join('\n'),
+    ] as const;
+
+    for (const content of cases) {
+      const findings = r.check({
+        path: 'src/app/native-provider.ts',
+        content,
+      });
+      expect(findings).toHaveLength(1);
+    }
+  });
+
+  it('Completion Port と Safety factory だけを使う Adapter は通す', () => {
+    const findings = r.check({
+      path: 'src/local-agent/lazy-local-agent.ts',
+      content: [
+        "import { createSafetyBoundLocalModelProvider } from './model-safety-boundary';",
+        'export const create = (port: LocalModelCompletionPort) =>',
+        '  createSafetyBoundLocalModelProvider(port);',
+      ].join('\n'),
+    });
+
     expect(findings).toHaveLength(0);
   });
 });

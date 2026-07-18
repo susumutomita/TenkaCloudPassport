@@ -52,23 +52,23 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).toContain('LOCALES');
   });
 
-  it('Issue 18: Picker 選択後に Size と警告を表示し、Owner 確定まで Import を開始しない', async () => {
+  it('Issue 18: Picker 選択後に Size・Copy 前空き容量・警告を表示し、Owner 確定まで Import を開始しない', async () => {
     const text = await source();
 
+    expect(text).toContain('modelManagement.selectCandidate');
+    expect(text).toContain('modelManagement.candidate');
     expectInOrder(text, [
-      'modelManagement.selectCandidate',
-      'modelManagement.candidate',
       't.candidateSummary(',
+      't.candidateAvailableStorage(',
       't.candidateWarning',
-      'modelManagement.confirmImport',
+      'onPress={onConfirm}',
     ]);
-    expect(text).toContain(
-      'readableBytes(modelManagement.candidate.sizeBytes)'
-    );
+    expect(text).toContain('readableBytes(candidate.sizeBytes)');
+    expect(text).toContain('availableStorageBytes');
     expectInOrder(text, [
-      'modelManagement.importInProgress',
+      'importInProgress',
       't.cancelRunningImportButton',
-      'modelManagement.cancelImport',
+      'onPress={onCancelRunning}',
     ]);
   });
 
@@ -115,6 +115,7 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).toContain('accessibilityLiveRegion="polite"');
     expect(text).toContain('accessibilityLiveRegion="assertive"');
     expect(text).toContain('disabled={modelManagement.busy}');
+    expect(text).toContain('modelManagement.candidateSelectionBlocked');
   });
 
   it('Issue 18: 進行中の Local Model 判定を終える操作は影響を説明してから Confirm / Cancel を提示する', async () => {

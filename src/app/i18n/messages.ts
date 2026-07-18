@@ -23,6 +23,49 @@ export interface ProfileNoticeTitles {
   readonly 'lounge-discarded': string;
 }
 
+export interface DiagnosticRecoveryMessages {
+  readonly TIMEOUT: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly CANCELLED: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly SCHEMA_ERROR: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly LOAD_ERROR: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly STORAGE_FAILURE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly DELETE_INTERRUPTED: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly MODEL_IN_USE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly PERMISSION_DENIED: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly TRANSPORT_UNAVAILABLE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly UNEXPECTED_FAILURE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+}
+
 export interface AppMessages {
   readonly common: {
     readonly brand: string;
@@ -207,6 +250,20 @@ export interface AppMessages {
     readonly sourceLabelCaption: string;
     readonly generatedNoteCaption: string;
   };
+  readonly conversationSelfReport: {
+    readonly title: string;
+    readonly description: string;
+    readonly optionalNotice: string;
+    readonly storageNotice: string;
+    readonly question: string;
+    readonly startedConversationButton: string;
+    readonly notYetButton: string;
+    readonly preferNotToAnswerButton: string;
+    readonly skipButton: string;
+    readonly answerHint: string;
+    readonly declineHint: string;
+    readonly skipHint: string;
+  };
   readonly destroyedLounge: {
     readonly title: string;
     readonly description: string;
@@ -268,6 +325,7 @@ export interface AppMessages {
     readonly selectModelButton: string;
     readonly selectModelHint: string;
     readonly candidateSummary: (name: string, size: string) => string;
+    readonly candidateAvailableStorage: (size: string) => string;
     readonly candidateWarning: string;
     readonly confirmImportButton: string;
     readonly cancelImportButton: string;
@@ -319,7 +377,65 @@ export interface AppMessages {
       outcome: string
     ) => string;
     readonly modelError: (code: string) => string;
+    readonly diagnosticsButton: string;
+    readonly diagnosticsButtonHint: string;
+    readonly pilotMeasurementButton: string;
+    readonly pilotMeasurementButtonHint: string;
     readonly backButton: string;
+  };
+  readonly pilotMeasurement: {
+    readonly title: string;
+    readonly description: string;
+    readonly memoryOnlyTitle: string;
+    readonly memoryOnlyText: string;
+    readonly researchConsentTitle: string;
+    readonly researchEnabled: string;
+    readonly researchDisabled: string;
+    readonly enableResearchButton: string;
+    readonly disableResearchButton: string;
+    readonly belowMinimum: (current: number, minimum: number) => string;
+    readonly previewTitle: string;
+    readonly byteLength: (bytes: number) => string;
+    readonly refreshButton: string;
+    readonly shareButton: (sharing: boolean) => string;
+    readonly shareError: string;
+    readonly backButton: string;
+    readonly notice: {
+      readonly shared: string;
+      readonly dismissed: string;
+      readonly saved: string;
+    };
+  };
+  readonly diagnostics: {
+    readonly title: string;
+    readonly description: string;
+    readonly loading: string;
+    readonly empty: string;
+    readonly reportSectionTitle: string;
+    readonly storageSectionTitle: string;
+    readonly byteLength: (bytes: number) => string;
+    readonly refreshButton: string;
+    readonly retryRecoveryButton: string;
+    readonly shareButton: (sharing: boolean) => string;
+    readonly endLoungeButton: string;
+    readonly resetPassportButton: string;
+    readonly removeModelButton: string;
+    readonly deleteAllButton: string;
+    readonly confirmDeleteAllText: (count: number, bytes: number) => string;
+    readonly confirmDeleteAllButton: string;
+    readonly cancelDeleteAllButton: string;
+    readonly backButton: string;
+    readonly unavailableActionHint: string;
+    readonly notice: {
+      readonly shared: string;
+      readonly dismissed: string;
+      readonly saved: string;
+      readonly loungeForgotten: string;
+      readonly passportReset: string;
+      readonly modelRemoved: string;
+      readonly allDeleted: string;
+    };
+    readonly recovery: DiagnosticRecoveryMessages;
   };
   readonly clueSelector: {
     readonly fieldLabels: {
@@ -640,6 +756,24 @@ const ja: AppMessages = {
     generatedNoteCaption:
       'この案内文は端末内で今回生成した補助的な文章です。相手からの原文ではありません。',
   },
+  conversationSelfReport: {
+    title: '任意の 1 Tap だけ。',
+    description:
+      'Lounge の内容はすでに破棄しました。この回答で結果の再判定や追加の質問は行いません。',
+    optionalNotice: '回答は任意です。答えずに今すぐ終了できます。',
+    storageNotice:
+      '選択肢の件数だけを Process 内 Memory で集計し、氏名、ID、正確な時刻、内容は保存しません。',
+    question:
+      '表示された Bridge をきっかけに、相手との口頭会話が始まりましたか。',
+    startedConversationButton: '会話が始まった',
+    notYetButton: 'まだ',
+    preferNotToAnswerButton: '回答しない',
+    skipButton: '答えずに今すぐ終了',
+    answerHint: 'この選択肢の件数だけを端末内の集計へ加えて終了します。',
+    declineHint:
+      '回答を拒否した件数だけを加え、会話開始率の分母には含めず終了します。',
+    skipHint: '回答の件数を加えず、ただちに終了します。',
+  },
   destroyedLounge: {
     title: 'この Lounge のデータを端末から破棄しました。',
     description:
@@ -716,6 +850,7 @@ const ja: AppMessages = {
     selectModelHint:
       'OS の Document Picker を開きます。選択しただけではアプリ専用領域へ Copy しません。',
     candidateSummary: (name, size) => `選択候補: ${name}、${size}`,
+    candidateAvailableStorage: (size) => `Copy 前の端末空き容量: ${size}`,
     candidateWarning:
       'この Size の File を端末内へ Copy します。SHA-256 は安全性や出所を証明しません。',
     confirmImportButton: 'この GGUF を端末内へ取り込む',
@@ -763,8 +898,125 @@ const ja: AppMessages = {
     ) =>
       `内容を保存しない計測 ${count} 件。直近: Import ${importMs ?? '-'} ms、Load ${loadMs ?? '-'} ms、First Token ${firstTokenMs ?? '-'} ms、完了 ${completionMs ?? '-'} ms、Peak Memory ${peakMemory}、Thermal ${thermalBefore} → ${thermalAfter}、Battery ${batteryDeltaPermille ?? '-'} permille、結果 ${outcome}。`,
     modelError: (code) =>
-      `Local Model の処理を完了できませんでした（${code}）。File URI や推論内容は記録していません。`,
+      code === 'NATIVE_CONTEXT_UNAVAILABLE'
+        ? 'Native Context の解放を確認できません。Model File は変更していません。App を完全に終了して再起動してください。'
+        : `Local Model の処理を完了できませんでした（${code}）。File URI や推論内容は記録していません。`,
+    diagnosticsButton: '診断と端末内 Data',
+    diagnosticsButtonHint:
+      'Network 送信なしの診断 Preview と、分離された削除操作を開きます。',
+    pilotMeasurementButton: 'Pilot の匿名 Aggregate',
+    pilotMeasurementButtonHint:
+      'Process 内 Counter の全項目を Preview し、最低集計単位を満たす場合だけ手動共有できます。',
     backButton: '戻る',
+  },
+  pilotMeasurement: {
+    title: '個人を追跡せず Pilot を振り返る。',
+    description:
+      'Start、Ready、Outcome、Provider、任意回答の件数だけを確認します。自動送信はしません。',
+    memoryOnlyTitle: 'この Aggregate は Process 内 Memory だけです。',
+    memoryOnlyText:
+      'アプリを閉じると消えます。正確な時刻、ID、場所、Passport、Bridge、会話内容は含みません。5 件でも匿名性を保証しません。',
+    researchConsentTitle: 'Research Consent は Product Consent と別です。',
+    researchEnabled:
+      'Research Counter は有効です。同意した参加者の Session だけを開始してください。',
+    researchDisabled:
+      'Research Counter は無効です。Product は計測なしでそのまま利用できます。',
+    enableResearchButton: 'Research Consent 確認後に Counter を有効化',
+    disableResearchButton: 'Research Counter を無効化',
+    belowMinimum: (current, minimum) =>
+      `Outcome は ${current} 件です。${minimum} 件に達するまで Preview JSON と共有を作りません。`,
+    previewTitle: '共有前の全項目 Preview',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: '現在の Counter から Preview を更新',
+    shareButton: (sharing) =>
+      sharing ? '共有中' : 'Preview を Share Sheet で手動共有',
+    shareError:
+      '共有できませんでした。Aggregate は自動送信せず、この Process の Memory にだけ残っています。',
+    backButton: 'Settings へ戻る',
+    notice: {
+      shared: 'Share Sheet で共有しました。',
+      dismissed: '共有を取り消しました。自動再送はしません。',
+      saved: 'Owner が選んだ保存先へ保存しました。',
+    },
+  },
+  diagnostics: {
+    title: '端末内だけで状態を確認する。',
+    description:
+      '内容、識別子、Path、Network metadata を含まない Sanitized Report を Preview します。自動送信はしません。',
+    loading: '端末内の件数と状態を確認しています。',
+    empty: '診断 Preview を作成できませんでした。再読み込みしてください。',
+    reportSectionTitle: 'Sanitized Report Preview',
+    storageSectionTitle: '削除対象 Preview',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: '現在状態を再読み込み',
+    retryRecoveryButton: '中断した全削除を再試行',
+    shareButton: (sharing) =>
+      sharing ? '共有中' : 'Preview を Share Sheet で共有',
+    endLoungeButton: 'End and forget Lounge',
+    resetPassportButton: 'Reset Passport',
+    removeModelButton: 'Remove Model',
+    deleteAllButton: 'Delete all local data',
+    confirmDeleteAllText: (count, bytes) =>
+      `${count} 件、${bytes} bytes を削除します。中断時は次回起動で再開します。`,
+    confirmDeleteAllButton: '確認して全削除を実行',
+    cancelDeleteAllButton: '全削除をやめる',
+    backButton: 'Settings へ戻る',
+    unavailableActionHint: '現在は対象 Data がないため実行できません。',
+    notice: {
+      shared: 'Sanitized Report を共有しました。',
+      dismissed: 'Share Sheet を閉じました。共有していません。',
+      saved: 'Sanitized Report をファイルへ保存しました。',
+      loungeForgotten: '現在の Lounge Data を端末から破棄しました。',
+      passportReset: 'Local Private Profile を削除しました。',
+      modelRemoved: 'Local Model を削除しました。',
+      allDeleted: 'すべての端末内 Data を削除しました。',
+    },
+    recovery: {
+      TIMEOUT: {
+        title: '処理が時間内に完了しませんでした。',
+        steps: ['もう一度実行するか Rules Provider を使用してください。'],
+      },
+      CANCELLED: {
+        title: '処理を中止しました。',
+        steps: ['必要な場合だけもう一度実行してください。'],
+      },
+      SCHEMA_ERROR: {
+        title: '検証できない形式を拒否しました。',
+        steps: ['入力元を確認し、安全な内容で再実行してください。'],
+      },
+      LOAD_ERROR: {
+        title: 'Local Model を読み込めませんでした。',
+        steps: ['Model を検証し直すか Remove Model を実行してください。'],
+      },
+      STORAGE_FAILURE: {
+        title: '端末内 Storage を利用できません。',
+        steps: ['空き容量と権限を確認して再試行してください。'],
+      },
+      DELETE_INTERRUPTED: {
+        title: '全削除を完了できませんでした。',
+        steps: [
+          '再試行するかアプリを再起動して削除 Recovery を続けてください。',
+        ],
+      },
+      MODEL_IN_USE: {
+        title: 'Local Model を使用中です。',
+        steps: ['Model Session を終了してから削除を再試行してください。'],
+      },
+      PERMISSION_DENIED: {
+        title: '必要な権限がありません。',
+        steps: ['OS Settings で権限を確認してください。'],
+      },
+      TRANSPORT_UNAVAILABLE: {
+        title: 'Transport を利用できません。',
+        steps: [
+          '権限と接続状態を確認し、Rules-only Flow はそのまま利用できます。',
+        ],
+      },
+      UNEXPECTED_FAILURE: {
+        title: '処理を完了できませんでした。',
+        steps: ['内容を共有せず、現在状態を再読み込みして再試行してください。'],
+      },
+    },
   },
   clueSelector: {
     fieldLabels: {
@@ -1108,6 +1360,26 @@ const en: AppMessages = {
     generatedNoteCaption:
       'This note was generated on this device just now, as a supplementary explanation. It is not original text from the other side.',
   },
+  conversationSelfReport: {
+    title: 'One optional tap.',
+    description:
+      'The Lounge content has already been discarded. This answer never re-judges the result or starts another question.',
+    optionalNotice:
+      'Answering is optional. You can finish now without answering.',
+    storageNotice:
+      'Only option counts are aggregated in process memory. No name, ID, exact time, or content is saved.',
+    question:
+      'Did the displayed Bridge prompt a spoken conversation with the other person to begin?',
+    startedConversationButton: 'Conversation started',
+    notYetButton: 'Not yet',
+    preferNotToAnswerButton: 'Prefer not to answer',
+    skipButton: 'Finish now without answering',
+    answerHint:
+      'Adds only this option count to the on-device aggregate and finishes.',
+    declineHint:
+      'Counts an explicit refusal, excludes it from the conversation-start denominator, and finishes.',
+    skipHint: 'Finishes immediately without adding an answer count.',
+  },
   destroyedLounge: {
     title: 'Discarded this Lounge’s data from this device.',
     description:
@@ -1186,6 +1458,8 @@ const en: AppMessages = {
     selectModelHint:
       'Opens the OS document picker. Selection alone does not copy the file into app-private storage.',
     candidateSummary: (name, size) => `Selected candidate: ${name}, ${size}`,
+    candidateAvailableStorage: (size) =>
+      `Available on-device storage before copy: ${size}`,
     candidateWarning:
       'This file size will be copied on-device. SHA-256 does not prove safety or provenance.',
     confirmImportButton: 'Import this GGUF on-device',
@@ -1234,8 +1508,123 @@ const en: AppMessages = {
     ) =>
       `${count} content-free measurements. Latest: import ${importMs ?? '-'} ms, load ${loadMs ?? '-'} ms, first token ${firstTokenMs ?? '-'} ms, completion ${completionMs ?? '-'} ms, peak memory ${peakMemory}, thermal ${thermalBefore} → ${thermalAfter}, battery ${batteryDeltaPermille ?? '-'} permille, outcome ${outcome}.`,
     modelError: (code) =>
-      `The local model operation could not finish (${code}). No file URI or inference content was recorded.`,
+      code === 'NATIVE_CONTEXT_UNAVAILABLE'
+        ? 'Native context teardown could not be confirmed. No model file was changed. Fully quit and restart the app.'
+        : `The local model operation could not finish (${code}). No file URI or inference content was recorded.`,
+    diagnosticsButton: 'Diagnostics and local data',
+    diagnosticsButtonHint:
+      'Opens an on-device diagnostic Preview and separate deletion actions.',
+    pilotMeasurementButton: 'Anonymous Pilot aggregate',
+    pilotMeasurementButtonHint:
+      'Previews every in-process counter and permits manual sharing only after the minimum aggregation unit.',
     backButton: 'Back',
+  },
+  pilotMeasurement: {
+    title: 'Review the Pilot without tracking people.',
+    description:
+      'Checks only counts for Start, Ready, Outcome, Provider, and optional answers. Nothing is sent automatically.',
+    memoryOnlyTitle: 'This aggregate exists only in process memory.',
+    memoryOnlyText:
+      'It disappears when the app closes. It contains no exact time, ID, location, Passport, Bridge, or conversation content. Five outcomes do not guarantee anonymity.',
+    researchConsentTitle: 'Research consent is separate from Product consent.',
+    researchEnabled:
+      'Research counters are enabled. Start only sessions whose participants consented to research.',
+    researchDisabled:
+      'Research counters are disabled. The Product remains fully usable without measurement.',
+    enableResearchButton: 'Enable counters after research consent',
+    disableResearchButton: 'Disable research counters',
+    belowMinimum: (current, minimum) =>
+      `${current} outcomes are available. Preview JSON and sharing stay unavailable until ${minimum}.`,
+    previewTitle: 'Every field before sharing',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: 'Refresh Preview from current counters',
+    shareButton: (sharing) =>
+      sharing ? 'Sharing' : 'Manually share Preview via Share Sheet',
+    shareError:
+      'Sharing failed. Nothing was sent automatically; the aggregate remains only in this process memory.',
+    backButton: 'Back to Settings',
+    notice: {
+      shared: 'Shared through the Share Sheet.',
+      dismissed: 'Sharing was dismissed. It will not retry automatically.',
+      saved: 'Saved to the destination selected by the Owner.',
+    },
+  },
+  diagnostics: {
+    title: 'Check status only on this device.',
+    description:
+      'Previews a Sanitized Report without content, identifiers, paths, or network metadata. Nothing is sent automatically.',
+    loading: 'Checking on-device counts and status.',
+    empty: 'Could not create a diagnostic Preview. Refresh and try again.',
+    reportSectionTitle: 'Sanitized Report Preview',
+    storageSectionTitle: 'Deletion target Preview',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: 'Refresh current status',
+    retryRecoveryButton: 'Retry interrupted deletion',
+    shareButton: (sharing) =>
+      sharing ? 'Sharing' : 'Share Preview via Share Sheet',
+    endLoungeButton: 'End and forget Lounge',
+    resetPassportButton: 'Reset Passport',
+    removeModelButton: 'Remove Model',
+    deleteAllButton: 'Delete all local data',
+    confirmDeleteAllText: (count, bytes) =>
+      `Delete ${count} item(s), ${bytes} bytes. An interrupted deletion resumes at next launch.`,
+    confirmDeleteAllButton: 'Confirm and delete all',
+    cancelDeleteAllButton: 'Cancel full deletion',
+    backButton: 'Back to Settings',
+    unavailableActionHint: 'There is no matching data to remove right now.',
+    notice: {
+      shared: 'Shared the Sanitized Report.',
+      dismissed: 'Closed the Share Sheet. Nothing was shared.',
+      saved: 'Saved the Sanitized Report to a file.',
+      loungeForgotten: 'Discarded the current Lounge data from this device.',
+      passportReset: 'Deleted the Local Private Profile.',
+      modelRemoved: 'Deleted the Local Model.',
+      allDeleted: 'Deleted all local data.',
+    },
+    recovery: {
+      TIMEOUT: {
+        title: 'The operation did not finish in time.',
+        steps: ['Try again or use the Rules Provider.'],
+      },
+      CANCELLED: {
+        title: 'The operation was cancelled.',
+        steps: ['Run it again only if it is still needed.'],
+      },
+      SCHEMA_ERROR: {
+        title: 'Rejected a format that could not be verified.',
+        steps: ['Check the source and retry with safe content.'],
+      },
+      LOAD_ERROR: {
+        title: 'Could not load the Local Model.',
+        steps: ['Verify the Model again or use Remove Model.'],
+      },
+      STORAGE_FAILURE: {
+        title: 'On-device storage is unavailable.',
+        steps: ['Check free space and permissions, then retry.'],
+      },
+      DELETE_INTERRUPTED: {
+        title: 'Could not complete full deletion.',
+        steps: ['Retry or restart the app to resume deletion recovery.'],
+      },
+      MODEL_IN_USE: {
+        title: 'The Local Model is in use.',
+        steps: ['End the Model Session, then retry deletion.'],
+      },
+      PERMISSION_DENIED: {
+        title: 'A required permission is missing.',
+        steps: ['Check the permission in OS Settings.'],
+      },
+      TRANSPORT_UNAVAILABLE: {
+        title: 'Transport is unavailable.',
+        steps: [
+          'Check permissions and connectivity. The Rules-only Flow remains available.',
+        ],
+      },
+      UNEXPECTED_FAILURE: {
+        title: 'Could not complete the operation.',
+        steps: ['Do not share content; refresh the current status and retry.'],
+      },
+    },
   },
   clueSelector: {
     fieldLabels: {

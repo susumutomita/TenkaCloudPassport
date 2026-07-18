@@ -5,6 +5,10 @@ import {
   type ModelImportCandidate,
   ModelLifecycleError,
 } from '../local-agent/model-lifecycle';
+import type {
+  LocalModelMutationLease,
+  LocalModelMutationLeasePort,
+} from './local-model-mutation-lease';
 
 type ActivationLifecycle = Pick<
   LocalModelLifecycle,
@@ -15,6 +19,7 @@ type ImportLifecycle = Pick<LocalModelLifecycle, 'importCandidate'>;
 
 export interface LocalModelOperationLane {
   readonly run: (operation: () => Promise<void>) => boolean;
+  readonly isPending: () => boolean;
   readonly dispose: () => void;
 }
 
@@ -45,10 +50,26 @@ export function createLocalModelOperationLane(
         });
       return true;
     },
+    isPending() {
+      return inFlight;
+    },
     dispose() {
       disposed = true;
     },
   };
+}
+
+/** Native Context と排他な Process lease を mutation の最終 refresh まで保持する。 */
+export async function withLocalModelMutationLease<T>(
+  mutationLeases: LocalModelMutationLeasePort,
+  operation: () => Promise<T>
+): Promise<T> {
+  const lease: LocalModelMutationLease = mutationLeases.acquireMutation();
+  try {
+    return await operation();
+  } finally {
+    lease.release();
+  }
 }
 
 interface ImportLocalModelCandidateInput {
@@ -85,8 +106,6 @@ export async function importLocalModelCandidate(
 export interface PerformLocalModelActivationInput {
   readonly lifecycle: ActivationLifecycle;
   readonly sha256: string;
-  readonly cancelCurrentRun: boolean;
-  readonly waitForNativeTeardown: () => Promise<void>;
   readonly refresh: () => Promise<void>;
   readonly setCautionAssessment: (
     assessment: ActivationAssessment | null
@@ -97,7 +116,6 @@ export interface PerformLocalModelActivationInput {
 export async function performLocalModelActivation(
   input: PerformLocalModelActivationInput
 ): Promise<void> {
-  if (input.cancelCurrentRun) await input.waitForNativeTeardown();
   const assessment = await input.lifecycle.assessActivation(input.sha256);
   await input.refresh();
   if (assessment.risk.level === 'caution') {

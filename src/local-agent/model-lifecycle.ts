@@ -34,6 +34,7 @@ export type ModelLifecycleErrorCode =
   | 'RESOURCE_BLOCKED'
   | 'MODEL_INTEGRITY_FAILED'
   | 'CAUTION_CONFIRMATION_REQUIRED'
+  | 'NATIVE_CONTEXT_UNAVAILABLE'
   | 'MODEL_NOT_FOUND'
   | 'DELETE_FAILED';
 
@@ -59,8 +60,37 @@ export interface StoredModelFileInfo {
   readonly uri: string;
 }
 
+export interface ManagedModelStoreInspection {
+  readonly count: number;
+  readonly totalBytes: number;
+  readonly representativeDigest: string | null;
+  readonly hasFinalOrStagedModel: boolean;
+  readonly hasManagedStore: boolean;
+}
+
 export interface ClosableSha256Source extends Sha256Source {
   readonly close: () => void;
+}
+
+export interface LocalModelCopyOptions {
+  readonly maximumBytes: number;
+  readonly minimumFreeBytes: number;
+  readonly signal?: AbortSignal;
+}
+
+export type LocalModelCopyErrorCode =
+  | 'ABORTED'
+  | 'LIMIT_EXCEEDED'
+  | 'INSUFFICIENT_STORAGE';
+
+export class LocalModelCopyError extends Error {
+  readonly code: LocalModelCopyErrorCode;
+
+  constructor(code: LocalModelCopyErrorCode) {
+    super('Local Model copy failed.');
+    this.name = 'LocalModelCopyError';
+    this.code = code;
+  }
 }
 
 /** Expo FileSystem の副作用を閉じ込める private storage Port。 */
@@ -71,7 +101,10 @@ export interface LocalModelFileStore {
     referencedModelDigests: readonly string[]
   ) => Promise<void>;
   readonly availableDiskSpaceBytes: () => Promise<number>;
-  readonly copyExternalFileToIncoming: (externalUri: string) => Promise<void>;
+  readonly copyExternalFileToIncoming: (
+    externalUri: string,
+    options: LocalModelCopyOptions
+  ) => Promise<void>;
   readonly incomingFileInfo: () => Promise<StoredModelFileInfo>;
   readonly openSha256Source: (
     privateUri: string
@@ -88,6 +121,10 @@ export interface LocalModelFileStore {
   ) => Promise<void>;
   readonly finalizeStagedModelDeletion: (stagedUri: string) => Promise<void>;
   readonly deleteIncomingFile: () => Promise<void>;
+  /** Manifest を parse せず exact managed GGUF payload の件数と byte 数だけを列挙する。 */
+  readonly inspectManagedModelFiles: () => Promise<ManagedModelStoreInspection>;
+  /** Manifest を信用せず、この Store が所有する exact filename だけを全消去して残存 0 を検証する。 */
+  readonly purgeManagedFiles: () => Promise<void>;
 }
 
 /** llama.rn の Metadata API。Context 初期化 API はこの Port に含めない。 */
@@ -120,6 +157,9 @@ export interface ActivationAssessment {
 
 export interface LocalModelLifecycle {
   readonly load: () => Promise<LocalModelManifest>;
+  readonly assessImportCandidate: (
+    candidate: ModelImportCandidate
+  ) => Promise<number>;
   readonly importCandidate: (
     candidate: ModelImportCandidate,
     signal?: AbortSignal
@@ -136,6 +176,7 @@ export interface LocalModelLifecycle {
     sha256: string,
     waitForNativeTeardown: () => Promise<void>
   ) => Promise<boolean>;
+  readonly purgeManagedStore: () => Promise<void>;
   readonly appendBenchmarkReport: (
     report: LocalModelBenchmarkReport
   ) => Promise<void>;
@@ -245,7 +286,17 @@ async function readManifest(
   fileStore: LocalModelFileStore
 ): Promise<LocalModelManifest> {
   try {
-    return parseManifestText(await fileStore.readManifestText());
+    const serialized = await fileStore.readManifestText();
+    if (serialized === null) {
+      const managed = await fileStore.inspectManagedModelFiles();
+      if (managed.hasFinalOrStagedModel) {
+        throw lifecycleError(
+          'MANIFEST_READ_FAILED',
+          'Local Model Manifest が無い状態で managed File が残っています。'
+        );
+      }
+    }
+    return parseManifestText(serialized);
   } catch (error: unknown) {
     if (error instanceof ModelLifecycleError) throw error;
     throw lifecycleError(
@@ -467,18 +518,9 @@ async function assertAvailableStorage(
   fileStore: LocalModelFileStore,
   sizeBytes: number
 ): Promise<void> {
-  let freeSpace: number;
-  try {
-    freeSpace = await fileStore.availableDiskSpaceBytes();
-  } catch {
-    throw lifecycleError(
-      'INSUFFICIENT_STORAGE',
-      'Local Model を安全に取り込む空き容量を確認できませんでした。'
-    );
-  }
+  const freeSpace = await availableStorageBytes(fileStore);
   if (
     sizeBytes > Number.MAX_SAFE_INTEGER - REQUIRED_FREE_SPACE_BYTES ||
-    !Number.isSafeInteger(freeSpace) ||
     freeSpace < sizeBytes + REQUIRED_FREE_SPACE_BYTES
   ) {
     throw lifecycleError(
@@ -488,13 +530,63 @@ async function assertAvailableStorage(
   }
 }
 
+async function availableStorageBytes(
+  fileStore: LocalModelFileStore
+): Promise<number> {
+  let freeSpace: number;
+  try {
+    freeSpace = await fileStore.availableDiskSpaceBytes();
+  } catch {
+    throw lifecycleError(
+      'INSUFFICIENT_STORAGE',
+      'Local Model を安全に取り込む空き容量を確認できませんでした。'
+    );
+  }
+  if (!Number.isSafeInteger(freeSpace) || freeSpace < 0) {
+    throw lifecycleError(
+      'INSUFFICIENT_STORAGE',
+      'Local Model を安全に取り込む空き容量を確認できませんでした。'
+    );
+  }
+  return freeSpace;
+}
+
 async function copyAndVerifyIncoming(
   fileStore: LocalModelFileStore,
-  candidate: ModelImportCandidate
+  candidate: ModelImportCandidate,
+  signal?: AbortSignal
 ): Promise<StoredModelFileInfo> {
   try {
-    await fileStore.copyExternalFileToIncoming(candidate.uri);
-  } catch {
+    await fileStore.copyExternalFileToIncoming(candidate.uri, {
+      maximumBytes: candidate.sizeBytes,
+      minimumFreeBytes: REQUIRED_FREE_SPACE_BYTES,
+      ...(signal ? { signal } : {}),
+    });
+  } catch (error: unknown) {
+    if (error instanceof LocalModelCopyError) {
+      if (error.code === 'ABORTED') {
+        throw lifecycleError(
+          'IMPORT_CANCELLED',
+          'Local Model の取り込みを中止しました。'
+        );
+      }
+      if (error.code === 'INSUFFICIENT_STORAGE') {
+        throw lifecycleError(
+          'INSUFFICIENT_STORAGE',
+          'Local Model を安全に取り込む空き容量がありません。'
+        );
+      }
+      throw lifecycleError(
+        'COPY_INCOMPLETE',
+        'Local Model が確認済み Size を超えたため Copy を中止しました。'
+      );
+    }
+    if (signal?.aborted) {
+      throw lifecycleError(
+        'IMPORT_CANCELLED',
+        'Local Model の取り込みを中止しました。'
+      );
+    }
     throw lifecycleError(
       'COPY_FAILED',
       'Local Model を private storage へ Copy できませんでした。'
@@ -718,6 +810,16 @@ export function createLocalModelLifecycle(
     return schedule(async () => ensureLoaded());
   }
 
+  function assessImportCandidate(
+    candidate: ModelImportCandidate
+  ): Promise<number> {
+    return schedule(async () => {
+      const current = await ensureLoaded();
+      assertCandidate(candidate, current);
+      return availableStorageBytes(fileStore);
+    });
+  }
+
   async function runImport(
     candidate: ModelImportCandidate,
     signal?: AbortSignal
@@ -731,7 +833,11 @@ export function createLocalModelLifecycle(
     const before = await resourceSnapshot(telemetry);
     await deleteIncomingQuietly(fileStore);
     try {
-      const incoming = await copyAndVerifyIncoming(fileStore, candidate);
+      const incoming = await copyAndVerifyIncoming(
+        fileStore,
+        candidate,
+        signal
+      );
       assertImportNotCancelled(signal);
       const sha256 = await digestPrivateFile(fileStore, incoming.uri, signal);
       assertImportNotCancelled(signal);
@@ -903,6 +1009,32 @@ export function createLocalModelLifecycle(
     });
   }
 
+  function purgeManagedStore(): Promise<void> {
+    return schedule(async () => {
+      manifest = null;
+      try {
+        await fileStore.purgeManagedFiles();
+      } catch {
+        throw lifecycleError(
+          'DELETE_FAILED',
+          'Local Model private storage を完全に削除できませんでした。'
+        );
+      }
+      const empty = await ensureLoaded();
+      if (
+        empty.activeModelSha256 !== null ||
+        empty.models.length !== 0 ||
+        empty.benchmarkReports.length !== 0
+      ) {
+        manifest = null;
+        throw lifecycleError(
+          'DELETE_FAILED',
+          'Local Model private storage の削除完了を確認できませんでした。'
+        );
+      }
+    });
+  }
+
   function appendBenchmarkReport(
     report: LocalModelBenchmarkReport
   ): Promise<void> {
@@ -939,11 +1071,13 @@ export function createLocalModelLifecycle(
 
   return {
     load,
+    assessImportCandidate,
     importCandidate,
     assessActivation,
     activate,
     unload,
     deleteModel,
+    purgeManagedStore,
     appendBenchmarkReport,
   };
 }

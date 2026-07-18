@@ -9,10 +9,15 @@ import {
   readSourceFile,
 } from '../screens/accessibility-test-kit';
 import {
+  LocalDataAccessBlockedError,
+  LocalModelContextLeaseRegistry,
+} from './local-data-control';
+import {
   confirmLocalModelCaution,
   createLocalModelOperationLane,
   importLocalModelCandidate,
   performLocalModelActivation,
+  withLocalModelMutationLease,
 } from './local-model-management-controller';
 
 function source(): Promise<string> {
@@ -75,9 +80,11 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
     });
 
     expect(lane.run(() => first)).toBe(true);
+    expect(lane.isPending()).toBeTrue();
     expect(lane.run(async () => undefined)).toBe(false);
     releaseFirst?.();
     await finished;
+    expect(lane.isPending()).toBeFalse();
     expect(events).toEqual(['start', 'finish']);
 
     let releaseDisposed: (() => void) | undefined;
@@ -113,6 +120,95 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
     expect(errorEvents).toEqual(['start', 'error', 'finish']);
   });
 
+  it('Process mutation lease を取得できない場合は lifecycle mutation を開始しない', async () => {
+    let mutationCalls = 0;
+
+    await expect(
+      withLocalModelMutationLease(
+        {
+          acquireMutation() {
+            throw new ModelLifecycleError(
+              'NATIVE_CONTEXT_UNAVAILABLE',
+              'restart required'
+            );
+          },
+        },
+        async () => {
+          mutationCalls += 1;
+        }
+      )
+    ).rejects.toMatchObject({ code: 'NATIVE_CONTEXT_UNAVAILABLE' });
+    expect(mutationCalls).toBe(0);
+
+    let releases = 0;
+    const mutationLeases = {
+      acquireMutation() {
+        return { release: () => (releases += 1) };
+      },
+    };
+    expect(
+      await withLocalModelMutationLease(mutationLeases, async () => 'done')
+    ).toBe('done');
+    await expect(
+      withLocalModelMutationLease(mutationLeases, async () => {
+        throw new Error('mutation failed');
+      })
+    ).rejects.toThrow('mutation failed');
+    expect(releases).toBe(2);
+  });
+
+  it('実 Registry の Context・全削除・Recovery lock は Import を lifecycle 呼出前に拒否する', async () => {
+    const candidate = {
+      name: MODEL.originalFileName,
+      uri: 'content://selected/local.gguf',
+      sizeBytes: MODEL.sizeBytes,
+    };
+    let importCalls = 0;
+    const attemptImport = (
+      contexts: LocalModelContextLeaseRegistry
+    ): Promise<ImportedLocalModel> =>
+      withLocalModelMutationLease(contexts, () =>
+        importLocalModelCandidate({
+          lifecycle: {
+            async importCandidate() {
+              importCalls += 1;
+              return MODEL;
+            },
+          },
+          candidate,
+          signal: new AbortController().signal,
+          refresh: async () => undefined,
+          onImported: () => undefined,
+        })
+      );
+
+    const activeContexts = new LocalModelContextLeaseRegistry(false);
+    const activeContext = activeContexts.acquire();
+    await expect(attemptImport(activeContexts)).rejects.toBeInstanceOf(
+      LocalDataAccessBlockedError
+    );
+    activeContext.release();
+
+    const deletingContexts = new LocalModelContextLeaseRegistry(false);
+    const deletion = deletingContexts.tryAcquireExclusive();
+    expect(deletion.kind).toBe('acquired');
+    if (deletion.kind !== 'acquired')
+      throw new Error('exclusive lease required');
+    await expect(attemptImport(deletingContexts)).rejects.toBeInstanceOf(
+      LocalDataAccessBlockedError
+    );
+    deletion.lease.release();
+
+    const recoveryLockedContexts = new LocalModelContextLeaseRegistry();
+    await expect(attemptImport(recoveryLockedContexts)).rejects.toBeInstanceOf(
+      LocalDataAccessBlockedError
+    );
+    expect(importCalls).toBe(0);
+
+    expect(await attemptImport(activeContexts)).toBe(MODEL);
+    expect(importCalls).toBe(1);
+  });
+
   it('Risk assessment の supported / caution / blocked を実行し、永続化後の表示 refresh を必ず行う', async () => {
     for (const level of ['supported', 'caution', 'blocked'] as const) {
       const current = assessment(level);
@@ -130,10 +226,6 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
       const operation = performLocalModelActivation({
         lifecycle,
         sha256: MODEL.sha256,
-        cancelCurrentRun: true,
-        waitForNativeTeardown: async () => {
-          events.push('teardown');
-        },
         refresh: async () => {
           events.push('refresh');
         },
@@ -147,19 +239,13 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
             error instanceof ModelLifecycleError ? error.code : 'unexpected'
           )
         ).toBe('RESOURCE_BLOCKED');
-        expect(events).toEqual(['teardown', 'assess', 'refresh']);
+        expect(events).toEqual(['assess', 'refresh']);
       } else if (level === 'caution') {
         await operation;
-        expect(events).toEqual([
-          'teardown',
-          'assess',
-          'refresh',
-          'show-caution',
-        ]);
+        expect(events).toEqual(['assess', 'refresh', 'show-caution']);
       } else {
         await operation;
         expect(events).toEqual([
-          'teardown',
           'assess',
           'refresh',
           'activate',
@@ -187,8 +273,6 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
       performLocalModelActivation({
         lifecycle,
         sha256: MODEL.sha256,
-        cancelCurrentRun: false,
-        waitForNativeTeardown: async () => undefined,
         refresh: async () => {
           refreshCalls += 1;
         },
@@ -230,18 +314,28 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
 
   it('Owner が確定した候補だけを AbortSignal 付きで Import し、実行中と unmount の Cancel を伝播する', async () => {
     const text = await source();
+    const importStart = text.indexOf('const performImport');
+    const confirmStart = text.indexOf('const confirmImport', importStart);
+    const importBody = text.slice(importStart, confirmStart);
 
-    expectInOrder(text, [
+    expectInOrder(importBody, [
       'const controller = new AbortController()',
+      'await waitForNativeTeardown()',
+      'withLocalModelMutationLease(mutationLeases',
       'importLocalModelCandidate({',
       'signal: controller.signal',
-      'onImported: () => setCandidate(null)',
+      'onImported: () => {',
+      'setCandidate(null)',
+      'setCandidateAvailableStorageBytes(null)',
     ]);
     expect(text).toContain('if (started)');
     expect(text).toContain('setImportInProgress(true)');
     expect(text).toContain('importControllerRef.current?.abort()');
     expect(text).toContain('operationLaneRef.current.dispose()');
     expect(text).toContain('setImportInProgress(false)');
+    expect(text).toContain(
+      "setPendingProviderOperation({ kind: 'import', candidate })"
+    );
   });
 
   it('Import 成功は表示を更新し、失敗は即時 reconcile を試みても元の型付き Error を維持する', async () => {
@@ -300,21 +394,63 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
     }
   });
 
-  it('実行中 Provider に影響する Activate / Unload / active Delete は確認待ちにし、確定後だけ teardown を待つ', async () => {
+  it('実行中 Provider に影響する全 Model mutation は確認待ちにし、teardown 後の process lease 内だけで実行する', async () => {
     const text = await source();
+    const confirmation = text.slice(
+      text.indexOf('const confirmProviderOperation')
+    );
 
     expect(text).toContain('if (hasActiveProviderRun)');
     expect(text).toContain(
-      'hasActiveProviderRun && manifest?.activeModelSha256 === sha256'
+      "setPendingProviderOperation({ kind: 'confirm-caution' })"
     );
-    expectInOrder(text, [
+    expectInOrder(confirmation, [
       'const pending = pendingProviderOperation',
       'setPendingProviderOperation(null)',
-      'performActivation(pending.sha256, true)',
+      'performActivation(pending.sha256)',
     ]);
     expect(text).toContain('waitForNativeTeardown,');
     expect(text).toContain(
-      'management.lifecycle.deleteModel(sha256, waitForNativeTeardown)'
+      'withLocalModelMutationLease(mutationLeases, async () => {'
     );
+    expect(text).toContain(
+      'management.lifecycle.deleteModel(sha256, async () => undefined)'
+    );
+    expect(text).toContain(
+      'withLocalModelMutationLease(mutationLeases, () =>\n        management.lifecycle.load()'
+    );
+    expect(text).toContain(
+      'run(() => withLocalModelMutationLease(mutationLeases, refresh))'
+    );
+    expect(text).toContain(
+      'management.lifecycle.assessImportCandidate(selected)'
+    );
+  });
+
+  it('初回 load も単一 operation lane に入り、候補変更は古い Import 確認 intent を失効する', async () => {
+    const text = await source();
+    const initialLoad = text.slice(
+      text.indexOf('useEffect(() => {\n    let active = true'),
+      text.indexOf('const reload = useCallback')
+    );
+
+    expectInOrder(initialLoad, [
+      'run(async () => {',
+      'withLocalModelMutationLease(mutationLeases',
+      'management.lifecycle.load()',
+      'setManifest(loaded)',
+      'configureProvider(loaded)',
+    ]);
+    expect(text).toContain("pending?.kind === 'import' ? null : pending");
+    expectInOrder(text.slice(text.indexOf('cancelCandidate:')), [
+      'clearPendingImport()',
+      'setCandidate(null)',
+    ]);
+    expectInOrder(text.slice(text.indexOf('const selectCandidate')), [
+      'if (hasActiveProviderRun) return',
+      'clearPendingImport()',
+      'management.pickCandidate()',
+    ]);
+    expect(text).toContain('candidateSelectionBlocked: hasActiveProviderRun');
   });
 });

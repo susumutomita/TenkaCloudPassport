@@ -135,13 +135,15 @@ describe('Passport Onboarding Schema Version 2', () => {
     );
   });
 
-  it('Peer Protocol Version 1.1 の Public Passport Payload を受理する', () => {
+  it('Peer Protocol Version 1.2 の Public Passport Payload を受理する', () => {
     const envelope = {
-      protocolVersion: { major: 1, minor: 1 },
+      protocolVersion: { major: 1, minor: 2 },
       loungeId: `lng_${'11'.repeat(16)}`,
       senderParticipantId: `ptc_${'22'.repeat(16)}`,
+      messageId: `mid_${'33'.repeat(16)}`,
       sequence: 0,
-      messageNonce: `msg_${'33'.repeat(16)}`,
+      sentAtEpochMs: 1_784_332_800_000,
+      expiresAtEpochMs: 1_784_332_860_000,
       payload: { kind: 'public-passport', publicPassport: PASSPORT },
     } as const;
 
@@ -150,7 +152,7 @@ describe('Passport Onboarding Schema Version 2', () => {
       () =>
         parsePeerEnvelope({
           ...envelope,
-          protocolVersion: { major: 1, minor: 0 },
+          protocolVersion: { major: 1, minor: 1 },
         }),
       'UNSUPPORTED_VERSION'
     );
