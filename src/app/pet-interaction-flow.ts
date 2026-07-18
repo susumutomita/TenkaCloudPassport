@@ -5,7 +5,11 @@ import type {
 import type { ClockSnapshot } from '../domain/clock-guard';
 import type { LanguageCode } from '../domain/clue-catalog';
 import type { RulesInteractionDiscoveryProvider } from '../domain/interaction-discovery-provider';
-import type { ActiveLounge, LoungeState } from '../domain/lounge';
+import {
+  type ActiveLounge,
+  advanceLounge,
+  type LoungeState,
+} from '../domain/lounge';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
 import {
   advanceInteraction,
@@ -53,6 +57,31 @@ export function applyAgentModelDecision(
     interaction: null,
     lounge: collapseToRetiredLounge(active, outcome),
   };
+}
+
+/**
+ * 非同期 Provider の確定結果を適用する直前に Lounge 本体の満了を評価する。Provider の Deadline と
+ * Lounge expiry が同時に到達した場合は最早の破棄を優先し、結果・Owner Question を生成しない。
+ */
+export function applyAgentModelDecisionBeforeLoungeExpiry(
+  active: ActiveLounge,
+  input: AgentModelInput,
+  decision: AgentModelDecision,
+  provider: RulesInteractionDiscoveryProvider,
+  startedClock: ClockSnapshot,
+  outcomeClock: ClockSnapshot
+): PetInteractionStep {
+  const current = advanceLounge(active, outcomeClock);
+  if (current.status === 'destroyed') {
+    return { interaction: null, lounge: current };
+  }
+  return applyAgentModelDecision(
+    current,
+    input,
+    decision,
+    provider,
+    startedClock
+  );
 }
 
 /**

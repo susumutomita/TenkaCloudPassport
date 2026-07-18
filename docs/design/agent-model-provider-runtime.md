@@ -70,22 +70,29 @@ Ledger と実行中 Promise の Map を同じ Closure で管理する。同じ E
 場合は Map への登録を `await` だけでなく Status Callback と Provider 開始より前に完了し、
 2 回目へ同じ Promise を返す。実行本体は登録後の Microtask で開始するため、`onStateChange` からの
 同期再入も去重をすり抜けない。完了後の Retry は Ledger の Outcome を返す。この二段階の去重に
-より、二重 Tap、Callback 再入、Retry、遅延成功のいずれでも Provider を再実行せず Bridge を
-再表示しない。Local Provider は単一 Native Lane へ直列化し、異なる Encounter Key でも前 Context の
+より、二重 Tap、Callback 再入、Retry、遅延成功のいずれでも Provider を再実行しない。Promise の去重だけでは
+同じ Promise への複数 Handler 登録を防げないため、呼び出し側も同期的な結果適用 Gate を Provider 呼出し前に
+取得し、最初の Settlement だけが結果を適用する。確定時 Clock で Lounge 満了を先に評価し、満了済みなら
+Bridge、Owner Question、Pilot Outcome を作らない。Local Provider は単一 Native Lane へ直列化し、異なる Encounter Key でも前 Context の
 停止・解放が完了するまで次の Native Context を開始しない。Ledger は各 Outcome を完了時の最新 Map へ
-merge し、待機中だった片方の結果で他方を失わない。
+merge し、待機中だった片方の結果で他方を失わない。Lounge 終端の `forget(encounterKey)` は in-flight を
+Cancel し、確定 Ledger を削除し、遅延 finalizer の再登録権限も破棄する。
 
 Local Provider は信頼境界なので、自発的に `TIMEOUT` を返すことを前提にしない。Runner は
-`deadlineAtWallClockMs - Date.now()` を上限とする Timer で `AbortSignal` を通知し、期限到達を内容のない
-`timeout` Failure へ変換して Rules Outcome を期限で確定する。Local Provider は Abort を受けたら Native
+注入した wall clock と `deadlineAtWallClockMs` の差を上限とする Timer で `AbortSignal` を通知し、期限到達を
+内容のない `timeout` Failure へ変換して Rules Outcome を期限で確定する。Provider 完了後にも clock を再検査し、
+Event Loop 遅延で Timer より先に届いた期限後成功を採用しない。明示 Cancel は Signal 自体を race 対象にして
+Abort を無視する Provider でも `cancelled` を確定する。Local Provider は Abort を受けたら Native
 停止と Resource 解放を完了して Promise を settle する。Runner は user-facing Outcome とは別にその teardown
-まで Native Lane を保持し、Abort を無視する Provider でも次の Context を重ねない。Lane 待機自体も各 Input
+まで Native Lane を保持し、Abort を無視する Provider でも次の Context を重ねない。`release()` が reject した
+場合は Context 消滅を証明できないため Lane を Process 再起動まで quarantine する。共有 Context lease registry
+も Process 内で同時に 1 本だけを許し、Runner が remount 相当で作り直されても quarantine 中の再取得を拒否する。Lane 待機自体も各 Input
 の Deadline で打ち切って Rules Outcome を返す。Timer は完了時に必ず解除し、期限後の成功値は採用しない。
 
 Outcome は確定時の `providerKind` も保持するため、再実行時に呼び出し側が別 Provider を渡しても、
 UI Status を新しい Provider へ誤表示せず最初の確定元を復元する。
-Lounge Exit / Expire 後の呼び出し側は State を破棄するため、遅延結果を新しい Lounge へ
-持ち越さない。
+Lounge Exit / Expire / Diagnostics 破棄後の呼び出し側は State と Encounter Key を破棄し、Runner も
+同じ Key を Forget するため、遅延結果を新しい Lounge へ持ち越さない。
 
 ## 代替案
 

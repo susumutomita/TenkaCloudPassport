@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/research/event-aggregate.schema.json",
+  "title": "TenkaCloud Passport Pilot Event Aggregate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "aggregateSchemaVersion",
+    "minimumAggregationUnit",
+    "startReady",
+    "readyToBridgeDurationBuckets",
+    "outcomes",
+    "providerRuns",
+    "conversationStartSelfReport"
+  ],
+  "properties": {
+    "aggregateSchemaVersion": { "const": 1 },
+    "minimumAggregationUnit": { "const": 5 },
+    "startReady": { "$ref": "#/$defs/startReady" },
+    "readyToBridgeDurationBuckets": { "$ref": "#/$defs/durationBuckets" },
+    "outcomes": { "$ref": "#/$defs/outcomes" },
+    "providerRuns": { "$ref": "#/$defs/providerRuns" },
+    "conversationStartSelfReport": { "$ref": "#/$defs/selfReport" }
+  },
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "startReady": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started", "ready"],
+      "properties": {
+        "started": { "$ref": "#/$defs/count" },
+        "ready": { "$ref": "#/$defs/count" }
+      }
+    },
+    "durationBuckets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "under30Seconds",
+        "from30To89Seconds",
+        "from90To179Seconds",
+        "atLeast180Seconds"
+      ],
+      "properties": {
+        "under30Seconds": { "$ref": "#/$defs/count" },
+        "from30To89Seconds": { "$ref": "#/$defs/count" },
+        "from90To179Seconds": { "$ref": "#/$defs/count" },
+        "atLeast180Seconds": { "$ref": "#/$defs/count" }
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bridge", "noSignal"],
+      "properties": {
+        "bridge": { "$ref": "#/$defs/count" },
+        "noSignal": { "$ref": "#/$defs/count" }
+      }
+    },
+    "providerRuns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rules", "localLlm", "fallback"],
+      "properties": {
+        "rules": { "$ref": "#/$defs/count" },
+        "localLlm": { "$ref": "#/$defs/count" },
+        "fallback": { "$ref": "#/$defs/count" }
+      }
+    },
+    "selfReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eligible",
+        "startedConversation",
+        "notYet",
+        "preferNotToAnswer"
+      ],
+      "properties": {
+        "eligible": { "$ref": "#/$defs/count" },
+        "startedConversation": { "$ref": "#/$defs/count" },
+        "notYet": { "$ref": "#/$defs/count" },
+        "preferNotToAnswer": { "$ref": "#/$defs/count" }
+      }
+    }
+  }
+}

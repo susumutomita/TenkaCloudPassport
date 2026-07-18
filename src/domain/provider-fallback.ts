@@ -1,10 +1,11 @@
 import {
   type AgentModelDecision,
-  type AgentModelFailureCode,
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
   type AgentModelProviderOptions,
+  assertAgentModelProviderCapability,
+  normalizeAgentModelFailureCode,
   validateAgentModelProviderOutput,
 } from './agent-model-provider';
 
@@ -26,9 +27,8 @@ export type ProviderSwitchReason =
  * 網羅的な switch にすることで、`AgentModelFailureCode` へ将来新しい値が増えた場合に
  * このマッピングの更新漏れをコンパイルエラーとして検出する。
  */
-function switchReasonFromFailureCode(
-  code: AgentModelFailureCode
-): ProviderSwitchReason {
+function switchReasonFromFailureCode(value: unknown): ProviderSwitchReason {
+  const code = normalizeAgentModelFailureCode(value);
   switch (code) {
     case 'TIMEOUT':
       return 'timeout';
@@ -51,6 +51,8 @@ export type ProviderAttemptResult =
       readonly kind: 'failure';
       readonly providerKind: AgentModelProvider['kind'];
       readonly reason: ProviderSwitchReason;
+      /** Native release が失敗し、Process 再起動まで次 Context を開始できない。 */
+      readonly nativeLaneQuarantined?: true;
     };
 
 /**
@@ -64,6 +66,7 @@ export async function attemptProvider(
   options?: AgentModelProviderOptions
 ): Promise<ProviderAttemptResult> {
   try {
+    assertAgentModelProviderCapability(provider);
     const output = await provider.provide(input, options);
     const decision = validateAgentModelProviderOutput(input, output);
     return { kind: 'success', providerKind: provider.kind, decision };
@@ -73,6 +76,9 @@ export async function attemptProvider(
         kind: 'failure',
         providerKind: provider.kind,
         reason: switchReasonFromFailureCode(error.code),
+        ...(error.nativeLaneQuarantined
+          ? { nativeLaneQuarantined: true as const }
+          : {}),
       };
     }
     throw error;

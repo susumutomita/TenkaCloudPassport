@@ -6,6 +6,7 @@ import type {
 } from './agent-model-provider';
 import {
   AgentModelProviderError,
+  createLocalAgentProviderCapability,
   RULES_MODEL_PROVIDER,
   rulesAgentModelDecision,
 } from './agent-model-provider';
@@ -28,73 +29,132 @@ const INPUT: AgentModelInput = {
   deadlineAtWallClockMs: 45_000,
 };
 
-const SUCCESS_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  async provide(input) {
-    return RULES_MODEL_PROVIDER.provide(input);
-  },
-};
+const SUCCESS_PROVIDER = createLocalAgentProviderCapability(async (input) =>
+  RULES_MODEL_PROVIDER.provide(input)
+);
 
-const TIMEOUT_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<AgentModelDecision> {
+const TIMEOUT_PROVIDER = createLocalAgentProviderCapability(
+  function provideTimeout(): Promise<AgentModelDecision> {
     return Promise.reject(
       new AgentModelProviderError(
         'TIMEOUT',
         'Local Agent が締切内に応答しませんでした。'
       )
     );
-  },
-};
+  }
+);
 
-const SCHEMA_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<AgentModelDecision> {
+const SCHEMA_ERROR_PROVIDER = createLocalAgentProviderCapability(
+  function provideSchemaError(): Promise<AgentModelDecision> {
     return Promise.reject(
       new AgentModelProviderError(
         'SCHEMA_ERROR',
         'Local Agent の出力が Bridge Output Schema を満たしませんでした。'
       )
     );
-  },
-};
+  }
+);
 
-const CANCELLED_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<AgentModelDecision> {
+const CANCELLED_PROVIDER = createLocalAgentProviderCapability(
+  function provideCancelled(): Promise<AgentModelDecision> {
     return Promise.reject(
       new AgentModelProviderError(
         'CANCELLED',
         'Local Agent の処理が取り消されました。'
       )
     );
-  },
-};
+  }
+);
 
-const LOAD_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<AgentModelDecision> {
+const LOAD_ERROR_PROVIDER = createLocalAgentProviderCapability(
+  function provideLoadError(): Promise<AgentModelDecision> {
     return Promise.reject(
       new AgentModelProviderError(
         'LOAD_ERROR',
         'Local Agent Module を読み込めませんでした。'
       )
     );
-  },
-};
+  }
+);
 
-const UNKNOWN_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<AgentModelDecision> {
+const UNKNOWN_ERROR_PROVIDER = createLocalAgentProviderCapability(
+  function provideUnknownError(): Promise<AgentModelDecision> {
     return Promise.reject(new Error('想定外の例外'));
-  },
-};
+  }
+);
+
+const CAPABILITY_PROVIDER = createLocalAgentProviderCapability((input) =>
+  RULES_MODEL_PROVIDER.provide(input)
+);
 
 function rulesFallback(): AgentModelDecision {
   return rulesAgentModelDecision(INPUT);
 }
 
 describe('attemptProvider: Primary Provider の結果を成功 / 型付き失敗へ正規化する', () => {
+  it('spread clone と継承 clone は Local Provider capability として実行しない', async () => {
+    const spreadClone: AgentModelProvider = { ...CAPABILITY_PROVIDER };
+    const inheritedClone: AgentModelProvider =
+      Object.create(CAPABILITY_PROVIDER);
+
+    for (const provider of [spreadClone, inheritedClone]) {
+      const result = await attemptProvider(provider, INPUT);
+      expect(result).toEqual({
+        kind: 'failure',
+        providerKind: 'local-agent',
+        reason: 'schema-error',
+      });
+    }
+  });
+
+  it('provide を差し替えた Rules clone は kind を信用せず実行しない', async () => {
+    let calls = 0;
+    const rulesClone: AgentModelProvider = {
+      ...RULES_MODEL_PROVIDER,
+      provide() {
+        calls += 1;
+        return { kind: 'no-signal' } as const;
+      },
+    };
+
+    const result = await attemptProvider(rulesClone, INPUT);
+
+    expect(result).toEqual({
+      kind: 'failure',
+      providerKind: 'rules',
+      reason: 'schema-error',
+    });
+    expect(calls).toBe(0);
+  });
+
+  it('Rules capability から列挙した symbol を複製しても Provider を実行しない', async () => {
+    const [providerSymbol] = Object.getOwnPropertySymbols(RULES_MODEL_PROVIDER);
+    if (!providerSymbol) throw new Error('Provider symbol が必要です。');
+    let calls = 0;
+    const forgedProvider = Object.create(Object.prototype);
+    Object.defineProperties(forgedProvider, {
+      kind: { value: 'local-agent', enumerable: true },
+      provide: {
+        value() {
+          calls += 1;
+          return { kind: 'no-signal' };
+        },
+        enumerable: true,
+      },
+      [providerSymbol]: { value: 'local-agent', enumerable: false },
+    });
+    Object.freeze(forgedProvider);
+
+    const result = await attemptProvider(forgedProvider, INPUT);
+
+    expect(result).toEqual({
+      kind: 'failure',
+      providerKind: 'local-agent',
+      reason: 'schema-error',
+    });
+    expect(calls).toBe(0);
+  });
+
   it('正常系: 成功したら success として decision をそのまま返す', async () => {
     const result = await attemptProvider(SUCCESS_PROVIDER, INPUT);
     expect(result).toEqual({

@@ -22,12 +22,13 @@ Local Private Profile と Public Passport は別型です。Public Passport は 
 | --- | --- | --- | --- | --- |
 | Local Private Profile | `L1` | `schemaVersion: 2` | Pet 表示情報、任意 Alias、カタログ版、候補、Languages である。 | 共有しない。 |
 | Public Passport | `L2` | `schemaVersion: 2` | Pet Name と今回 ON にした表示情報、Languages、最大 3 件の手掛かりである。 | QR と認証済み Pet だけである。 |
+| Lounge Invite | `L2` | `schemaVersion: 2` | Lounge ID、Join Secret、Discovery Hint、Transport Fingerprint、発行 / 満了時刻、定員、Required Capability である。 | QR を読み取る Pet だけである。 |
 | Lounge | `L3` | `schemaVersion: 1` | 使い捨て Lounge ID、Participant ID、期限、状態である。 | 認証済み Pet だけである。 |
 | Owner Question | `L3` | `schemaVersion: 1` | 版管理済み質問 ID と表示 key である。 | 自分の Owner だけである。 |
 | Match Evidence | `L3` | `schemaVersion: 1` | 確認済み手掛かりと同意済み回答の参照である。 | Agent Decision 内だけである。 |
 | Bridge | `L3` | `schemaVersion: 1` | 表示 template key と Match Evidence である。 | 自分の Owner だけである。 |
 | Agent Decision | `L3` | `schemaVersion: 1` | Bridge または `no-signal` の終端判断である。 | 必要な終了同期以外は共有しない。 |
-| Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 1 }` | Lounge ID、送信 Participant ID、sequence、nonce、許可済み payload である。 | 認証済み Pet だけである。 |
+| Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 2 }` | Lounge ID、送信 Participant ID、Message ID、sequence、送信 / 満了時刻、許可済み payload である。 | 認証済み Pet だけである。 |
 | Backup | `L4` | `backupSchemaVersion: 2` | Local Private Profile、端末設定、モデル検証記録である。 | Owner が選んだ保存先だけである。 |
 
 Public Passport、Peer Envelope、バックアップに Local ID、更新日時、端末 ID、連絡先、位置情報、URL、
@@ -43,7 +44,7 @@ token buffer、任意の自由記述を設けない。strict schema はこの al
 | Topics、Offer、Looking For、Goal | 順に 3 件、3 件、3 件、1 件である。 | Local 候補の分類別上限を固定する。 |
 | Pet Name と Owner Alias | 各 24 UTF-16 code unit である。 | 連絡先や詳細 Profile ではない短い表示名へ限定する。 |
 | Languages | 3 件である。 | 版管理済み Language カタログへ限定する。 |
-| Lounge の Participant | 8 人である。 | 近距離の一時セッションへ用途を限定し、状態と送信量を bounded にする。 |
+| Lounge の Participant | 6 人である。 | 近距離の一時セッションへ用途を限定し、状態と送信量を bounded にする。 |
 | Owner Question | 1 回である。 | 用語集と Privacy データ台帳の契約である。 |
 | Match Evidence の手掛かり | 3 件である。 | Public Passport より根拠を増やさない。 |
 | Version、ID、catalog 値以外の短い文字列 | 96 UTF-16 code unit である。 | 表示 key と app version を bounded にする。自由記述は許可しない。 |
@@ -68,9 +69,13 @@ ID を持たせないため、同じ内容を 2 回受信しても parser が横
 
 ## Version と互換性
 
-Peer Envelope は Major と Minor の両方を必須にする。現行実装は `1.1` だけを受理し、未知の
+Peer Envelope は Major と Minor の両方を必須にする。現行実装は `1.2` だけを受理し、未知の
 Major Version と未対応の Minor Version を拒否する。互換性を確認せず未知 field を無視する方式は
 strict schema と両立しないため採用しない。
+
+Payload、Capability Negotiation、順序、期限、rate、Late Join の詳細は
+[Peer Protocol Specification](./peer-protocol.md) を正本とする。Transport Authentication は Peer が
+自己申告する Wire field にせず、Adapter の検証結果と Envelope の Lounge / Participant を照合する。
 
 保存データの Migration は、旧 Version の strict schema を検証した後、新しい object を返す純粋関数に
 する。失敗時は入力 object、既存の現行データ、保存先を変更しない。Migration の呼び出し側は成功結果を

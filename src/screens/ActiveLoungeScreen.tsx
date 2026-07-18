@@ -16,6 +16,7 @@ interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
   readonly remainingMs: number;
   readonly locale?: Locale;
+  readonly providerBusy: boolean;
   readonly providerStatus: ProviderRuntimeStatus;
   /**
    * Issue 15: OS の Reduce Motion 設定（`src/app/reduced-motion-port.ts` が判定した値）。
@@ -118,6 +119,7 @@ export default function ActiveLoungeScreen({
   lounge,
   remainingMs,
   locale = DEFAULT_LOCALE,
+  providerBusy,
   providerStatus,
   reduceMotion = false,
   onBeginInteraction,
@@ -180,6 +182,7 @@ export default function ActiveLoungeScreen({
         </Text>
       ) : null}
       <ActionButton
+        disabled={providerBusy}
         label={t.beginInteractionButton}
         onPress={onBeginInteraction}
       />

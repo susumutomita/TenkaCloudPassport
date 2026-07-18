@@ -6,10 +6,11 @@ import {
   readdirSync,
   readFileSync,
   rmdirSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { LocalPrivateProfile } from '../domain/passport';
@@ -84,6 +85,11 @@ export class FileBackedWebStorage implements WebKeyValueStorage {
     writeFileSync(this.filePath(key), value, 'utf8');
   }
 
+  removeItem(key: string): void {
+    const target = this.filePath(key);
+    if (existsSync(target)) unlinkSync(target);
+  }
+
   /** このディレクトリに実際に書き込まれたキー（ファイル名）を列挙する。 */
   listKeys(): readonly string[] {
     return readdirSync(this.root)
@@ -100,12 +106,20 @@ export class BunProfileDocument implements ProfileDocument {
     return existsSync(this.filePath);
   }
 
+  get size(): number | null {
+    return this.exists ? statSync(this.filePath).size : null;
+  }
+
   text(): Promise<string> {
     return readFile(this.filePath, 'utf8');
   }
 
   write(content: string): Promise<void> {
     return writeFile(this.filePath, content, 'utf8');
+  }
+
+  delete(): Promise<void> {
+    return this.exists ? unlink(this.filePath) : Promise.resolve();
   }
 }
 
@@ -133,12 +147,20 @@ export class WriteFailingProfileDocument implements ProfileDocument {
     return this.delegate.exists;
   }
 
+  get size(): number | null {
+    return this.delegate.size;
+  }
+
   text(): Promise<string> {
     return this.delegate.text();
   }
 
   write(_content: string): Promise<void> {
     return Promise.reject(this.failure);
+  }
+
+  delete(): Promise<void> {
+    return this.delegate.delete();
   }
 }
 
@@ -163,6 +185,37 @@ export class WriteFailingWebStorage implements WebKeyValueStorage {
   setItem(_key: string, _value: string): void {
     throw this.failure;
   }
+
+  removeItem(key: string): void {
+    this.delegate.removeItem(key);
+  }
+}
+
+export class DeleteFailingWebStorage implements WebKeyValueStorage {
+  private readonly delegate: FileBackedWebStorage;
+
+  constructor(
+    root: string,
+    private readonly failure: Error,
+    private readonly operation: 'get' | 'remove' | 'set' = 'remove'
+  ) {
+    this.delegate = new FileBackedWebStorage(root);
+  }
+
+  getItem(key: string): string | null {
+    if (this.operation === 'get') throw this.failure;
+    return this.delegate.getItem(key);
+  }
+
+  setItem(key: string, value: string): void {
+    if (this.operation === 'set') throw this.failure;
+    this.delegate.setItem(key, value);
+  }
+
+  removeItem(key: string): void {
+    if (this.operation === 'remove') throw this.failure;
+    this.delegate.removeItem(key);
+  }
 }
 
 /**
@@ -186,5 +239,13 @@ export class VerifyMismatchStorage implements LocalProfileStoragePort {
 
   load(): Promise<LocalPrivateProfile | null> {
     return Promise.resolve(this.mismatchedProfile);
+  }
+
+  inspect() {
+    return this.delegate.inspect();
+  }
+
+  remove(): Promise<void> {
+    return this.delegate.remove();
   }
 }

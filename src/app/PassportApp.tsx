@@ -16,16 +16,17 @@ import {
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
+import type { LoungeInvite } from '../domain/lounge-invite';
 import {
   advanceLoungeRoom,
   createLoungeRoom,
   destroyLoungeRoom,
-  inviteForRoom,
   joinLoungeRoom,
   type LoungeRoomState,
   type LoungeRoomTerminationReason,
   markParticipantReady,
   type ReadyLoungeRoom,
+  ROOM_CAPACITY,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
@@ -40,9 +41,16 @@ import {
 import type { PetInteractionState } from '../domain/pet-interaction';
 import { INTERACTION_DEADLINE_MS } from '../domain/pet-interaction';
 import {
+  createParticipantId,
   createSessionIdentifiers,
   type ParticipantId,
 } from '../domain/session-identifiers';
+import {
+  createLoungeJoinRequest,
+  encodeLoungeJoinRequest,
+  type IssuedLoungeHandshake,
+  issueLoungeHandshake,
+} from '../protocol/lounge-handshake';
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
@@ -50,25 +58,38 @@ import BackupExportScreen from '../screens/BackupExportScreen';
 import BackupImportScreen, {
   type BackupImportValidationView,
 } from '../screens/BackupImportScreen';
+import ConversationSelfReportScreen from '../screens/ConversationSelfReportScreen';
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
+import LocalDiagnosticsScreen from '../screens/LocalDiagnosticsScreen';
 import OutcomeScreen from '../screens/OutcomeScreen';
 import OwnerQuestionScreen from '../screens/OwnerQuestionScreen';
 import PassportCreationScreen from '../screens/PassportCreationScreen';
 import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
+import PilotMeasurementScreen from '../screens/PilotMeasurementScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import {
   createAgentProviderSessionRunner,
+  createProviderResultApplicationGate,
   INITIAL_PROVIDER_RUNTIME_STATE,
   type ProviderRuntimeState,
+  pilotProviderRunFromOutcome,
 } from './agent-provider-session';
 import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
+import type { DiagnosticErrorSignal } from './diagnostic-recovery';
+import type { DiagnosticTransportState } from './diagnostic-report';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
+import { inProcessTransportFingerprint } from './in-process-transport-binding';
+import {
+  LocalDataAccessBlockedError,
+  type LocalDataControl,
+  LocalDataControlError,
+} from './local-data-control';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -83,10 +104,14 @@ import {
   toggleLanguageCode,
 } from './passport-share';
 import {
-  applyAgentModelDecision,
+  applyAgentModelDecisionBeforeLoungeExpiry,
   applyPetInteractionTick,
   submitOwnerQuestionAnswer,
 } from './pet-interaction-flow';
+import type {
+  ConversationSelfReport,
+  PilotProviderRun,
+} from './pilot-measurement';
 import {
   type ProfileNotice,
   profileNoticeFromStorageError,
@@ -100,12 +125,22 @@ import {
 import { readableError } from './readable-error';
 import { createReducedMotionPort } from './reduced-motion-port';
 import { type BackupFlow, useBackupFlow } from './use-backup-flow';
+import {
+  type LocalDiagnosticsFlow,
+  useLocalDiagnosticsFlow,
+} from './use-local-diagnostics-flow';
+import {
+  type PilotMeasurementFlow,
+  usePilotMeasurementFlow,
+} from './use-pilot-measurement-flow';
 
 interface PassportAppProps {
+  readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
   readonly agentModelProvider?: AgentModelProvider;
+  readonly localDataControl: LocalDataControl;
 }
 
 type SetupStage =
@@ -117,7 +152,51 @@ type SetupStage =
   | 'guest-share-preview'
   | 'backup-export'
   | 'backup-import'
-  | 'settings';
+  | 'settings'
+  | 'diagnostics'
+  | 'pilot-measurement';
+
+interface DiagnosticTransportSnapshot {
+  readonly state: DiagnosticTransportState;
+  readonly peerCount: number;
+  readonly permission: CameraPermissionState;
+}
+
+function diagnosticTransportSnapshot(
+  lounge: LoungeState | null,
+  loungeRoom: LoungeRoomState | null,
+  permission: CameraPermissionState
+): DiagnosticTransportSnapshot {
+  if (lounge?.status === 'active' || lounge?.status === 'retired') {
+    return { state: 'connected', peerCount: ROOM_CAPACITY, permission };
+  }
+  if (lounge?.status === 'destroyed' || loungeRoom?.status === 'expired') {
+    return { state: 'ended', peerCount: 0, permission };
+  }
+  if (loungeRoom) {
+    return {
+      state: 'hosting',
+      peerCount: loungeRoom.participants.length,
+      permission,
+    };
+  }
+  return { state: 'idle', peerCount: 0, permission };
+}
+
+function startupDiagnosticError(error: unknown): DiagnosticErrorSignal {
+  if (error instanceof LocalDataControlError) {
+    return { code: error.code, phase: 'startup' };
+  }
+  return { code: 'STORAGE_FAILURE', phase: 'profile-read' };
+}
+
+function hasDisposableLounge(
+  lounge: LoungeState | null,
+  loungeRoom: LoungeRoomState | null
+): boolean {
+  if (loungeRoom) return true;
+  return lounge !== null && lounge.status !== 'destroyed';
+}
 
 function currentClock(): ClockSnapshot {
   return {
@@ -127,6 +206,7 @@ function currentClock(): ClockSnapshot {
 }
 
 const VALIDATION_ERROR_FALLBACK = '入力を確認して、もう一度実行してください。';
+const IN_PROCESS_DISCOVERY_HINT = 'in-process-v1:host';
 
 /**
  * `BackupImportParseResult`（app 層、`backup` 本体まで持つ）を、`BackupImportScreen` が
@@ -385,10 +465,68 @@ function SharePreviewGate({
   );
 }
 
+const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
+  'settings',
+  'diagnostics',
+  'pilot-measurement',
+]);
+
+interface UtilityStageGateProps {
+  readonly stage: SetupStage;
+  readonly diagnosticsFlow: LocalDiagnosticsFlow;
+  readonly pilotMeasurementFlow: PilotMeasurementFlow;
+  readonly hasLounge: boolean;
+  readonly hasProfile: boolean;
+  readonly locale: Locale;
+  readonly onChangeLocale: (locale: Locale) => void;
+  readonly onCloseSettings: () => void;
+}
+
+function UtilityStageGate({
+  stage,
+  diagnosticsFlow,
+  pilotMeasurementFlow,
+  hasLounge,
+  hasProfile,
+  locale,
+  onChangeLocale,
+  onCloseSettings,
+}: UtilityStageGateProps) {
+  if (stage === 'diagnostics') {
+    return (
+      <LocalDiagnosticsScreen
+        flow={diagnosticsFlow}
+        hasLounge={hasLounge}
+        hasProfile={hasProfile}
+        locale={locale}
+      />
+    );
+  }
+  if (stage === 'pilot-measurement') {
+    return (
+      <PilotMeasurementScreen flow={pilotMeasurementFlow} locale={locale} />
+    );
+  }
+  if (stage === 'settings') {
+    return (
+      <SettingsScreen
+        locale={locale}
+        onBack={onCloseSettings}
+        onChangeLocale={onChangeLocale}
+        onOpenDiagnostics={diagnosticsFlow.open}
+        onOpenPilotMeasurement={pilotMeasurementFlow.open}
+      />
+    );
+  }
+  return null;
+}
+
 export default function PassportApp({
+  appVersion,
   localProfileStorage,
   backupSharePort,
   agentModelProvider = RULES_MODEL_PROVIDER,
+  localDataControl,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
   // 完走させる（docs/design/qr-invite-and-ready-flow.md）。5 状態すべての UI 分岐は
@@ -430,6 +568,8 @@ export default function PassportApp({
   const [guestShareSelection, setGuestShareSelection] =
     useState<PassportShareSelection | null>(null);
   const [lounge, setLounge] = useState<LoungeState | null>(null);
+  const [showConversationSelfReport, setShowConversationSelfReport] =
+    useState(false);
   // Issue 11: Pet Interaction の bounded protocol（`clarifying` の Owner Question）を
   // 保持する。`discovering` / `bridging` / `no-signal` は `pet-interaction-flow.ts` が
   // 呼び出しの中だけで一瞬経由し、確定した瞬間に Lounge 本体（`RetiredLounge`）へ収束させる
@@ -439,9 +579,18 @@ export default function PassportApp({
   );
   const [providerRuntimeState, setProviderRuntimeState] =
     useState<ProviderRuntimeState>(INITIAL_PROVIDER_RUNTIME_STATE);
+  const [providerRunPending, setProviderRunPending] = useState(false);
   const [providerRunner] = useState(() => createAgentProviderSessionRunner());
+  const [providerResultApplicationGate] = useState(() =>
+    createProviderResultApplicationGate()
+  );
   const activeEncounterKeyRef = useRef<string | null>(null);
   const [loungeRoom, setLoungeRoom] = useState<LoungeRoomState | null>(null);
+  const [issuedHandshake, setIssuedHandshake] =
+    useState<IssuedLoungeHandshake | null>(null);
+  const [scannedInvite, setScannedInvite] = useState<LoungeInvite | null>(null);
+  const inviteFlowGenerationRef = useRef(0);
+  const guestJoinInFlightRef = useRef(false);
   const [guestProfile, setGuestProfile] = useState<LocalPrivateProfile | null>(
     null
   );
@@ -452,6 +601,8 @@ export default function PassportApp({
     useState<CameraPermissionState>('not-determined');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastDiagnosticError, setLastDiagnosticError] =
+    useState<DiagnosticErrorSignal | null>(null);
   // Issue 15: OS の Reduce Motion 設定。Composition Root（このファイル）だけが
   // `AccessibilityInfo`（React Native 同梱）を直接扱い、Port 自体（`reduced-motion-port.ts`）
   // は環境依存の取得手段を注入されるだけの純粋な形を保つ。
@@ -464,17 +615,20 @@ export default function PassportApp({
   const cancelActiveProvider = useCallback((): void => {
     const encounterKey = activeEncounterKeyRef.current;
     activeEncounterKeyRef.current = null;
-    if (encounterKey) providerRunner.cancel(encounterKey);
+    providerResultApplicationGate.clear();
+    setProviderRunPending(false);
+    if (encounterKey) providerRunner.forget(encounterKey);
     setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
-  }, [providerRunner]);
+  }, [providerResultApplicationGate, providerRunner]);
 
   useEffect(() => {
     return () => {
       const encounterKey = activeEncounterKeyRef.current;
       activeEncounterKeyRef.current = null;
-      if (encounterKey) providerRunner.cancel(encounterKey);
+      providerResultApplicationGate.clear();
+      if (encounterKey) providerRunner.forget(encounterKey);
     };
-  }, [providerRunner]);
+  }, [providerResultApplicationGate, providerRunner]);
   const handleBackupImportCommitted = useCallback(
     (committed: LocalPrivateProfile): void => {
       setPrivateProfile(committed);
@@ -492,16 +646,37 @@ export default function PassportApp({
     onImportCommitted: handleBackupImportCommitted,
     onOpenStage: setStage,
     onCloseStage: closeBackupStage,
+    onDiagnosticError: setLastDiagnosticError,
   });
+  const pilotMeasurementFlow = usePilotMeasurementFlow({
+    sharePort: backupSharePort,
+    onOpen: () => setStage('pilot-measurement'),
+    onClose: () => setStage('settings'),
+  });
+  const recordPilotOutcome = useCallback(
+    (
+      state: LoungeState,
+      clock: ClockSnapshot,
+      provider: PilotProviderRun = 'rules'
+    ): void => {
+      if (state.status !== 'retired') return;
+      pilotMeasurementFlow.outcome({
+        kind: state.outcome.kind,
+        provider,
+        monotonicMs: clock.monotonicMs,
+      });
+    },
+    [pilotMeasurementFlow.outcome]
+  );
 
-  // invite は loungeRoom（forming / ready）から一意に導出できるため、独立した state に
-  // せず同期の取り忘れを構造的に防ぐ。expired / null では QR に表示するものがない。
+  // Invite は 1 回限り Secret の非公開 Buffer を持つ Host Handshake と対で保持する。
+  // Room だけから Secret を再導出できないため、期限切れ / 破棄時は両方を同時に解放する。
   const invite = useMemo(
     () =>
-      loungeRoom && loungeRoom.status !== 'expired'
-        ? inviteForRoom(loungeRoom)
+      loungeRoom && loungeRoom.status !== 'expired' && issuedHandshake
+        ? issuedHandshake.invite
         : null,
-    [loungeRoom]
+    [issuedHandshake, loungeRoom]
   );
   const inviteQrPayload = useMemo(
     () =>
@@ -530,8 +705,13 @@ export default function PassportApp({
    * 案内する内容と矛盾する）。
    */
   const discardInviteFlow = useCallback((): void => {
+    inviteFlowGenerationRef.current += 1;
+    guestJoinInFlightRef.current = false;
+    issuedHandshake?.host.dispose();
     qrScannerPort.publish(null);
     setLoungeRoom(null);
+    setIssuedHandshake(null);
+    setScannedInvite(null);
     setGuestProfile(null);
     setGuestShareSelection(null);
     setSeenRawPayloads(new Set());
@@ -539,7 +719,82 @@ export default function PassportApp({
     setEncounteredPetEmoji('🐶');
     setEncounteredSelection([]);
     setEncounteredConfirmed(false);
-  }, [qrScannerPort]);
+  }, [issuedHandshake, qrScannerPort]);
+
+  const forgetLoungeForDiagnostics = useCallback((): void => {
+    cancelActiveProvider();
+    discardInviteFlow();
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
+    setInteraction(null);
+    setLounge(null);
+    setErrorMessage(null);
+  }, [cancelActiveProvider, discardInviteFlow, pilotMeasurementFlow.abandon]);
+
+  const resetPassportInMemory = useCallback((): void => {
+    setPetName('');
+    setPetEmoji('🐾');
+    setOwnerAlias('');
+    setOwnerSelection([]);
+    setLanguageSelection([]);
+    setPrivateProfile(null);
+    setShareSelection(null);
+    setNotice({
+      kind: 'empty',
+      message: MESSAGES[locale].passportApp.emptyOnLoad,
+    });
+  }, [locale]);
+
+  const resetAllLocalMemory = useCallback(
+    (recoveryRequired: boolean): void => {
+      forgetLoungeForDiagnostics();
+      resetPassportInMemory();
+      backupFlow.reset();
+      pilotMeasurementFlow.reset();
+      if (!recoveryRequired) setStage('profile');
+    },
+    [
+      backupFlow,
+      forgetLoungeForDiagnostics,
+      pilotMeasurementFlow.reset,
+      resetPassportInMemory,
+    ]
+  );
+
+  const diagnosticsRuntimeSnapshot = useMemo(() => {
+    const providerError: DiagnosticErrorSignal | null =
+      providerRuntimeState.status === 'failed'
+        ? { code: 'LOAD_ERROR', phase: 'model-load' }
+        : null;
+    return {
+      appVersion,
+      providerStatus: providerRuntimeState.status,
+      transport: diagnosticTransportSnapshot(
+        lounge,
+        loungeRoom,
+        cameraPermission
+      ),
+      lastError: lastDiagnosticError ?? providerError,
+    };
+  }, [
+    appVersion,
+    cameraPermission,
+    lastDiagnosticError,
+    lounge,
+    loungeRoom,
+    providerRuntimeState.status,
+  ]);
+  const diagnosticsFlow = useLocalDiagnosticsFlow({
+    localDataControl,
+    backupSharePort,
+    runtimeSnapshot: diagnosticsRuntimeSnapshot,
+    onOpen: () => setStage('diagnostics'),
+    onClose: () => setStage('settings'),
+    onEndAndForgetLounge: forgetLoungeForDiagnostics,
+    onPassportReset: resetPassportInMemory,
+    onAllDataDeleted: resetAllLocalMemory,
+    onError: setLastDiagnosticError,
+  });
 
   // 初回復元は起動時 1 回だけ実行する副作用であり、その後の locale 切替のたびに
   // 再実行（＝再読込）すると Settings の「Lounge State と Consent を失わない」契約に
@@ -547,8 +802,9 @@ export default function PassportApp({
   // biome-ignore lint/correctness/useExhaustiveDependencies: 起動時 1 回だけの実行を保つため locale を意図的に依存配列から外す
   useEffect(() => {
     let active = true;
-    void localProfileStorage
-      .load()
+    void localDataControl
+      .recoverPendingDeletion()
+      .then(() => localProfileStorage.load())
       .then((profile) => {
         if (!active) return;
         if (!profile) {
@@ -573,6 +829,7 @@ export default function PassportApp({
       })
       .catch((error: unknown) => {
         if (active) {
+          setLastDiagnosticError(startupDiagnosticError(error));
           setNotice(profileNoticeFromStorageError(error, 'load', locale));
         }
       })
@@ -582,7 +839,7 @@ export default function PassportApp({
     return () => {
       active = false;
     };
-  }, [localProfileStorage]);
+  }, [localDataControl, localProfileStorage]);
 
   /**
    * Issue 11: Active Lounge の 1 秒 tick / Background 復帰の両方が、Lounge 本体の期限
@@ -607,6 +864,8 @@ export default function PassportApp({
         // 優先する。
         const step = applyPetInteractionTick(interaction, current, clock);
         if (step.lounge.status !== 'active') {
+          recordPilotOutcome(step.lounge, clock);
+          cancelActiveProvider();
           setInteraction(step.interaction);
           setLounge(step.lounge);
           return;
@@ -619,11 +878,17 @@ export default function PassportApp({
       // 「Lounge が終われば Pet Interaction も終わる」契約を状態としても保つ。
       if (current.status === 'active' && advanced.status !== 'active') {
         cancelActiveProvider();
+        pilotMeasurementFlow.abandon();
         setInteraction(null);
       }
       setLounge(advanced);
     },
-    [interaction, cancelActiveProvider]
+    [
+      cancelActiveProvider,
+      interaction,
+      pilotMeasurementFlow.abandon,
+      recordPilotOutcome,
+    ]
   );
 
   useEffect(() => {
@@ -653,12 +918,13 @@ export default function PassportApp({
       const advanced = advanceLoungeRoom(current, clock);
       if (advanced.status === 'expired') {
         discardInviteFlow();
+        pilotMeasurementFlow.abandon();
         setLounge({ status: 'destroyed', reason: 'expired' });
         return;
       }
       setLoungeRoom(advanced);
     },
-    [discardInviteFlow]
+    [discardInviteFlow, pilotMeasurementFlow.abandon]
   );
 
   useEffect(() => {
@@ -727,8 +993,17 @@ export default function PassportApp({
       setErrorMessage(null);
       setStage('encounter');
     } catch (error: unknown) {
+      setLastDiagnosticError({
+        code:
+          error instanceof LocalProfileStorageError ||
+          error instanceof LocalDataAccessBlockedError
+            ? 'STORAGE_FAILURE'
+            : 'SCHEMA_ERROR',
+        phase: 'profile-write',
+      });
       setNotice(
-        error instanceof LocalProfileStorageError
+        error instanceof LocalProfileStorageError ||
+          error instanceof LocalDataAccessBlockedError
           ? profileNoticeFromStorageError(error, 'save', locale)
           : {
               kind: 'validation-error',
@@ -763,6 +1038,8 @@ export default function PassportApp({
 
   function hostLounge(): void {
     if (!privateProfile || !shareSelection) return;
+    const flowGeneration = inviteFlowGenerationRef.current + 1;
+    inviteFlowGenerationRef.current = flowGeneration;
     try {
       const ownerShare = createPassportShare(privateProfile, shareSelection);
       const identifiers = createSessionIdentifiers(webCryptoRandomBytes);
@@ -775,15 +1052,54 @@ export default function PassportApp({
           clock,
         }
       );
-      qrScannerPort.publish(
-        encodeQrPayload({ kind: 'lounge-invite', value: inviteForRoom(room) })
+      const transportFingerprint = inProcessTransportFingerprint(
+        identifiers.loungeId
       );
-      setLoungeRoom(room);
-      setSeenRawPayloads(new Set());
-      setNowMs(Date.now());
-      setErrorMessage(null);
-      setStage('host-invite');
+      void issueLoungeHandshake({
+        loungeId: identifiers.loungeId,
+        issuedAtEpochMs: clock.wallClockMs,
+        startedAtMonotonicMs: clock.monotonicMs,
+        expiresAtEpochMs: room.expiresAtWallClockMs,
+        capacity: ROOM_CAPACITY,
+        requiredCapabilities: ['rules-provider-v1'],
+        hostDiscoveryHint: IN_PROCESS_DISCOVERY_HINT,
+        transportFingerprint,
+        randomBytes: webCryptoRandomBytes,
+      })
+        .then((handshake) => {
+          if (inviteFlowGenerationRef.current !== flowGeneration) {
+            handshake.host.dispose();
+            return;
+          }
+          pilotMeasurementFlow.start();
+          qrScannerPort.publish(
+            encodeQrPayload({
+              kind: 'lounge-invite',
+              value: handshake.invite,
+            })
+          );
+          setIssuedHandshake(handshake);
+          setScannedInvite(null);
+          setLoungeRoom(room);
+          setSeenRawPayloads(new Set());
+          setNowMs(Date.now());
+          setErrorMessage(null);
+          setStage('host-invite');
+        })
+        .catch((error: unknown) => {
+          if (inviteFlowGenerationRef.current === flowGeneration) {
+            setLastDiagnosticError({
+              code: 'TRANSPORT_UNAVAILABLE',
+              phase: 'transport',
+            });
+            setErrorMessage(qrFlowErrorMessage(error, locale));
+          }
+        });
     } catch (error: unknown) {
+      setLastDiagnosticError({
+        code: 'UNEXPECTED_FAILURE',
+        phase: 'transport',
+      });
       setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
@@ -791,17 +1107,22 @@ export default function PassportApp({
   function markHostReady(): void {
     if (!loungeRoom || !hostParticipantId) return;
     try {
+      const clock = currentClock();
       const updated = markParticipantReady(loungeRoom, {
         participantId: hostParticipantId,
-        clock: currentClock(),
+        clock,
       });
       setErrorMessage(null);
       if (updated.status === 'ready') {
-        activateReadyLounge(updated);
+        activateReadyLounge(updated, clock);
       } else {
         setLoungeRoom(updated);
       }
     } catch (error: unknown) {
+      setLastDiagnosticError({
+        code: 'TRANSPORT_UNAVAILABLE',
+        phase: 'transport',
+      });
       setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
@@ -809,31 +1130,66 @@ export default function PassportApp({
   function beginGuestScan(): void {
     setErrorMessage(null);
     setStage('guest-scan');
-    void qrScannerPort.getPermissionState().then(setCameraPermission);
+    void qrScannerPort
+      .getPermissionState()
+      .then(setCameraPermission)
+      .catch(() => {
+        setLastDiagnosticError({
+          code: 'PERMISSION_DENIED',
+          phase: 'permission',
+        });
+      });
   }
 
   function requestCameraPermission(): void {
-    void qrScannerPort.requestPermission().then(setCameraPermission);
+    void qrScannerPort
+      .requestPermission()
+      .then(setCameraPermission)
+      .catch(() => {
+        setLastDiagnosticError({
+          code: 'PERMISSION_DENIED',
+          phase: 'permission',
+        });
+      });
   }
 
   function recheckCameraPermission(): void {
-    void qrScannerPort.getPermissionState().then(setCameraPermission);
+    void qrScannerPort
+      .getPermissionState()
+      .then(setCameraPermission)
+      .catch(() => {
+        setLastDiagnosticError({
+          code: 'PERMISSION_DENIED',
+          phase: 'permission',
+        });
+      });
   }
 
   function performScan(): void {
+    const flowGeneration = inviteFlowGenerationRef.current;
     void scanQrPayload(qrScannerPort, seenRawPayloads)
       .then((result) => {
+        if (inviteFlowGenerationRef.current !== flowGeneration) return;
         setSeenRawPayloads(result.seenRawPayloads);
         if (result.payload.kind !== 'lounge-invite') {
+          setLastDiagnosticError({
+            code: 'SCHEMA_ERROR',
+            phase: 'transport',
+          });
           setErrorMessage(MESSAGES[locale].qrErrorNotice.notLoungeInviteQr);
           return;
         }
+        setScannedInvite(result.payload.value);
         // Guest が公開する内容は、対面で相手が declare した内容として既に Encounter
         // 画面で入力済みである（Issue 4 由来）。ここでは新たに入力を求めず、
         // その内容から今回の共有 Preview を組み立てて Ready 操作へ進む。Render 時に
         // 再導出せず、確定できた瞬間の値をそのまま state へ保持する。
         const resolvedGuestProfile = resolveGuestProfile(encounteredProfile);
         if (!resolvedGuestProfile) {
+          setLastDiagnosticError({
+            code: 'SCHEMA_ERROR',
+            phase: 'transport',
+          });
           setErrorMessage(
             MESSAGES[locale].qrErrorNotice.unresolvedGuestProfile
           );
@@ -847,44 +1203,103 @@ export default function PassportApp({
         setStage('guest-share-preview');
       })
       .catch((error: unknown) => {
-        setErrorMessage(qrFlowErrorMessage(error, locale));
+        if (inviteFlowGenerationRef.current === flowGeneration) {
+          setLastDiagnosticError({
+            code: 'SCHEMA_ERROR',
+            phase: 'transport',
+          });
+          setErrorMessage(qrFlowErrorMessage(error, locale));
+        }
       });
   }
 
   function guestReady(): void {
-    if (!loungeRoom || !guestShareSelection || !guestProfile) return;
-    try {
-      const guestShare = createPassportShare(guestProfile, guestShareSelection);
-      const identifiers = createSessionIdentifiers(webCryptoRandomBytes);
-      const clock = currentClock();
-      const joined = joinLoungeRoom(loungeRoom, {
-        participantId: identifiers.participantId,
-        publicPassport: guestShare.qrProjection,
-        clock,
-      });
-      const readied = markParticipantReady(joined, {
-        participantId: identifiers.participantId,
-        clock,
-      });
-      setErrorMessage(null);
-      if (readied.status === 'ready') {
-        activateReadyLounge(readied);
-      } else {
-        setLoungeRoom(readied);
-        setStage('host-invite');
+    if (
+      !loungeRoom ||
+      !guestShareSelection ||
+      !guestProfile ||
+      !issuedHandshake ||
+      !scannedInvite ||
+      guestJoinInFlightRef.current
+    )
+      return;
+    const flowGeneration = inviteFlowGenerationRef.current;
+    guestJoinInFlightRef.current = true;
+    void (async () => {
+      try {
+        const guestParticipantId = createParticipantId(webCryptoRandomBytes);
+        const request = await createLoungeJoinRequest(
+          scannedInvite,
+          guestParticipantId
+        );
+        await issuedHandshake.host.authorizeJoin(
+          encodeLoungeJoinRequest(request),
+          {
+            clock: currentClock(),
+            // QR の主張値ではなく Host が発行前から保持する Adapter identity を渡す。
+            // Issue 20 / 22 では実 Transport が測定した証明書 Fingerprint に置き換える。
+            transportFingerprint: issuedHandshake.invite.transportFingerprint,
+          }
+        );
+        if (inviteFlowGenerationRef.current !== flowGeneration) return;
+        const guestShare = createPassportShare(
+          guestProfile,
+          guestShareSelection
+        );
+        const clock = currentClock();
+        const joined = joinLoungeRoom(loungeRoom, {
+          participantId: guestParticipantId,
+          publicPassport: guestShare.qrProjection,
+          clock,
+        });
+        const readied = markParticipantReady(joined, {
+          participantId: guestParticipantId,
+          clock,
+        });
+        // 1 回限り Invite は Guest の認証成功時点で役目を終える。Host の Ready を
+        // 待たず QR を取り下げ、Secret を含む React state の参照も解放する。
+        issuedHandshake.host.dispose();
+        qrScannerPort.publish(null);
+        setIssuedHandshake(null);
+        setScannedInvite(null);
+        setSeenRawPayloads(new Set());
+        setErrorMessage(null);
+        if (readied.status === 'ready') {
+          activateReadyLounge(readied, clock);
+        } else {
+          setLoungeRoom(readied);
+          setStage('host-invite');
+        }
+      } catch (error: unknown) {
+        if (inviteFlowGenerationRef.current === flowGeneration) {
+          setLastDiagnosticError({
+            code: 'TRANSPORT_UNAVAILABLE',
+            phase: 'transport',
+          });
+          setErrorMessage(qrFlowErrorMessage(error, locale));
+        }
+      } finally {
+        if (inviteFlowGenerationRef.current === flowGeneration) {
+          guestJoinInFlightRef.current = false;
+        }
       }
-    } catch (error: unknown) {
-      setErrorMessage(qrFlowErrorMessage(error, locale));
-    }
+    })();
   }
 
   /** Ready Room の ID を Provider lifetime の Encounter Key として保持して Lounge を開始する。 */
-  function activateReadyLounge(room: ReadyLoungeRoom): void {
+  function activateReadyLounge(
+    room: ReadyLoungeRoom,
+    clock: ClockSnapshot
+  ): void {
     cancelActiveProvider();
     activeEncounterKeyRef.current = room.loungeId;
+    issuedHandshake?.host.dispose();
     qrScannerPort.publish(null);
     setLoungeRoom(null);
+    setIssuedHandshake(null);
+    setScannedInvite(null);
     setInteraction(null);
+    pilotMeasurementFlow.ready(clock.monotonicMs);
     setLounge(startLoungeFromRoom(room));
   }
 
@@ -898,6 +1313,7 @@ export default function PassportApp({
     if (!loungeRoom) return;
     const destroyed = destroyLoungeRoom(loungeRoom, reason);
     discardInviteFlow();
+    pilotMeasurementFlow.abandon();
     setLounge(destroyed);
     setErrorMessage(null);
   }
@@ -907,7 +1323,7 @@ export default function PassportApp({
   }
 
   /**
-   * 「会話の糸を探す」操作 1 回で共通 AgentModelProvider を実行する。検証済み Bridge は
+   * 「会話の糸を探す」操作 1 回で共通 Model Provider を実行する。検証済み Bridge は
    * そのまま Retired Lounge へ、保守的な no-signal は既存の bounded Rules Discovery と
    * Owner Question へ渡す。Runner が二重 Tap、Deadline、Fallback-once を所有する。
    */
@@ -915,6 +1331,7 @@ export default function PassportApp({
     if (lounge?.status !== 'active') return;
     const encounterKey = activeEncounterKeyRef.current;
     if (!encounterKey) return;
+    if (!providerResultApplicationGate.begin(encounterKey)) return;
     const active = lounge;
     const clock = currentClock();
     const input: AgentModelInput = {
@@ -927,6 +1344,7 @@ export default function PassportApp({
       ),
     };
     setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
+    setProviderRunPending(true);
     setErrorMessage(null);
     void providerRunner
       .run({
@@ -935,29 +1353,59 @@ export default function PassportApp({
         provider: agentModelProvider,
         input,
         onStateChange(state) {
-          if (activeEncounterKeyRef.current === encounterKey) {
+          if (
+            activeEncounterKeyRef.current === encounterKey &&
+            providerResultApplicationGate.isPending(encounterKey)
+          ) {
             setProviderRuntimeState(state);
           }
         },
       })
-      .then((result) => {
-        if (activeEncounterKeyRef.current !== encounterKey) return;
-        setProviderRuntimeState(result.state);
-        const step = applyAgentModelDecision(
-          active,
-          input,
-          result.outcome.decision,
-          RULES_INTERACTION_PROVIDER,
-          clock
-        );
-        setInteraction(step.interaction);
-        setLounge(step.lounge);
-      })
-      .catch(() => {
-        if (activeEncounterKeyRef.current === encounterKey) {
-          setProviderRuntimeState({ status: 'failed' });
+      .then(
+        (result) => {
+          if (
+            activeEncounterKeyRef.current !== encounterKey ||
+            !providerResultApplicationGate.settle(encounterKey)
+          ) {
+            return;
+          }
+          setProviderRunPending(false);
+          const outcomeClock = currentClock();
+          const step = applyAgentModelDecisionBeforeLoungeExpiry(
+            active,
+            input,
+            result.outcome.decision,
+            RULES_INTERACTION_PROVIDER,
+            clock,
+            outcomeClock
+          );
+          if (step.lounge.status === 'destroyed') {
+            cancelActiveProvider();
+            pilotMeasurementFlow.abandon();
+            setInteraction(null);
+            setLounge(step.lounge);
+            return;
+          }
+          setProviderRuntimeState(result.state);
+          recordPilotOutcome(
+            step.lounge,
+            outcomeClock,
+            pilotProviderRunFromOutcome(result.outcome)
+          );
+          if (step.lounge.status !== 'active') cancelActiveProvider();
+          setInteraction(step.interaction);
+          setLounge(step.lounge);
+        },
+        () => {
+          if (
+            activeEncounterKeyRef.current === encounterKey &&
+            providerResultApplicationGate.settle(encounterKey)
+          ) {
+            setProviderRunPending(false);
+            setProviderRuntimeState({ status: 'failed' });
+          }
         }
-      });
+      );
   }
 
   /**
@@ -969,13 +1417,16 @@ export default function PassportApp({
    */
   function submitOwnerAnswer(value: OwnerAnswerValue): void {
     if (lounge?.status !== 'active') return;
+    const clock = currentClock();
     const step = submitOwnerQuestionAnswer(
       interaction,
       lounge,
       value,
-      currentClock(),
+      clock,
       locale
     );
+    recordPilotOutcome(step.lounge, clock);
+    if (step.lounge.status !== 'active') cancelActiveProvider();
     setInteraction(step.interaction);
     setLounge(step.lounge);
     setErrorMessage(null);
@@ -983,6 +1434,8 @@ export default function PassportApp({
 
   function leave(): void {
     cancelActiveProvider();
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'owner-exit' }) : current
@@ -992,6 +1445,8 @@ export default function PassportApp({
 
   function endAsHost(): void {
     cancelActiveProvider();
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'host-ended' }) : current
@@ -1001,10 +1456,27 @@ export default function PassportApp({
 
   function complete(): void {
     cancelActiveProvider();
+    const shouldShowSelfReport =
+      lounge?.status === 'retired' && lounge.outcome.kind === 'bridge';
+    const showSelfReport =
+      pilotMeasurementFlow.selfReportPending && shouldShowSelfReport;
+    discardInviteFlow();
+    setInteraction(null);
     setLounge((current) =>
       current ? reduceLounge(current, { type: 'complete' }) : current
     );
+    setShowConversationSelfReport(showSelfReport);
     setErrorMessage(null);
+  }
+
+  function submitConversationSelfReport(answer: ConversationSelfReport): void {
+    pilotMeasurementFlow.selfReport(answer);
+    setShowConversationSelfReport(false);
+  }
+
+  function skipConversationSelfReport(): void {
+    pilotMeasurementFlow.skipSelfReport();
+    setShowConversationSelfReport(false);
   }
 
   function restartEncounter(): void {
@@ -1012,6 +1484,8 @@ export default function PassportApp({
     // Lounge 由来の一時データを一括破棄する。
     discardInviteFlow();
     cancelActiveProvider();
+    pilotMeasurementFlow.abandon();
+    setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge(null);
     setErrorMessage(null);
@@ -1027,6 +1501,7 @@ export default function PassportApp({
   function editLocalProfile(): void {
     const hadInviteInProgress = loungeRoom !== null;
     discardInviteFlow();
+    pilotMeasurementFlow.abandon();
     setErrorMessage(null);
     setStage('profile');
     if (hadInviteInProgress) {
@@ -1044,6 +1519,7 @@ export default function PassportApp({
    * 契約を、`passport-app-stage-flow.test.ts` がこの配線を固定する）。
    */
   function openSettings(): void {
+    if (saving) return;
     setStage('settings');
   }
 
@@ -1051,17 +1527,31 @@ export default function PassportApp({
     setStage('profile');
   }
 
-  // Issue 15: Settings は Lounge の状態確認より先に判定する。これにより、Active Lounge /
-  // Owner Question / Outcome / Destroyed のどの段階からでも Settings（言語切り替え）を
-  // 開け、`closeSettings` が `stage` を 'profile' へ戻しても `lounge` state は変更して
-  // いないため、次の render で元の Lounge 段階の画面へそのまま戻る（`lounge` の判定が
-  // 常に `stage` より優先されるため、2 段構えの復元処理を書く必要がない）。
-  if (stage === 'settings') {
+  // Settings と Diagnostics は Lounge の状態確認より先に判定する。これにより、Active
+  // Lounge / Owner Question / Outcome / Destroyed のどの段階からでも設定と診断を開ける。
+  // 戻る操作は `stage` だけを変えるため、Diagnostics の明示削除 Action を実行しない限り
+  // Lounge state は変化せず、Settings を閉じた次の render で元の段階へ戻る。
+  if (UTILITY_STAGES.has(stage)) {
     return (
-      <SettingsScreen
+      <UtilityStageGate
+        diagnosticsFlow={diagnosticsFlow}
+        hasLounge={hasDisposableLounge(lounge, loungeRoom)}
+        hasProfile={privateProfile !== null}
         locale={locale}
-        onBack={closeSettings}
         onChangeLocale={setLocale}
+        onCloseSettings={closeSettings}
+        pilotMeasurementFlow={pilotMeasurementFlow}
+        stage={stage}
+      />
+    );
+  }
+
+  if (showConversationSelfReport) {
+    return (
+      <ConversationSelfReportScreen
+        locale={locale}
+        onAnswer={submitConversationSelfReport}
+        onSkip={skipConversationSelfReport}
       />
     );
   }
@@ -1089,6 +1579,7 @@ export default function PassportApp({
         onExit={leave}
         onHostEnd={endAsHost}
         onOpenSettings={openSettings}
+        providerBusy={providerRunPending}
         providerStatus={providerRuntimeState.status}
         reduceMotion={reduceMotion}
         remainingMs={lounge.expiresAtWallClockMs - nowMs}

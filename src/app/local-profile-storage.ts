@@ -7,12 +7,20 @@ import {
 export interface LocalProfileStoragePort {
   load(): Promise<LocalPrivateProfile | null>;
   save(profile: LocalPrivateProfile): Promise<void>;
+  inspect(): Promise<LocalProfileStorageUsage>;
+  remove(): Promise<void>;
+}
+
+export interface LocalProfileStorageUsage {
+  readonly count: 0 | 1;
+  readonly bytes: number;
 }
 
 export type LocalProfileStorageErrorCode =
   | 'UNAVAILABLE'
   | 'READ_FAILED'
   | 'WRITE_FAILED'
+  | 'DELETE_FAILED'
   | 'INVALID_DATA';
 
 export class LocalProfileStorageError extends Error {
@@ -77,6 +85,26 @@ export class UnavailableLocalProfileStorageAdapter
   }
 
   save(_profile: LocalPrivateProfile): Promise<void> {
+    return Promise.reject(
+      new LocalProfileStorageError(
+        'UNAVAILABLE',
+        'この環境では端末内 Storage を利用できません。',
+        this.unavailableCause
+      )
+    );
+  }
+
+  inspect(): Promise<LocalProfileStorageUsage> {
+    return Promise.reject(
+      new LocalProfileStorageError(
+        'UNAVAILABLE',
+        'この環境では端末内 Storage を利用できません。',
+        this.unavailableCause
+      )
+    );
+  }
+
+  remove(): Promise<void> {
     return Promise.reject(
       new LocalProfileStorageError(
         'UNAVAILABLE',

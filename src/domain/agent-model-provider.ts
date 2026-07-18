@@ -98,17 +98,38 @@ export type AgentModelFailureCode =
   | 'SCHEMA_ERROR'
   | 'LOAD_ERROR';
 
+/** Native / JavaScript 境界の実値を閉じた failure code へ fail-closed に正規化する。 */
+export function normalizeAgentModelFailureCode(
+  value: unknown
+): AgentModelFailureCode {
+  switch (value) {
+    case 'TIMEOUT':
+    case 'CANCELLED':
+    case 'SCHEMA_ERROR':
+    case 'LOAD_ERROR':
+      return value;
+    default:
+      return 'LOAD_ERROR';
+  }
+}
+
 /**
  * Primary Provider（将来の Local Agent）だけが投げてよい型付き失敗。Rules 実装は
  * `RulesAgentModelProvider` という同期・例外なしの狭い型で公開するため、絶対に投げない。
  */
 export class AgentModelProviderError extends Error {
   readonly code: AgentModelFailureCode;
+  readonly nativeLaneQuarantined: boolean;
 
-  constructor(code: AgentModelFailureCode, message: string) {
+  constructor(
+    code: AgentModelFailureCode,
+    message: string,
+    options: { readonly nativeLaneQuarantined?: true } = {}
+  ) {
     super(message);
     this.name = 'AgentModelProviderError';
     this.code = code;
+    this.nativeLaneQuarantined = options.nativeLaneQuarantined === true;
   }
 }
 
@@ -116,8 +137,24 @@ export interface AgentModelProviderOptions {
   readonly signal?: AbortSignal;
 }
 
-export interface AgentModelProvider {
-  readonly kind: 'rules' | 'local-agent';
+const AGENT_MODEL_PROVIDER_BRAND: unique symbol = Symbol(
+  'AgentModelProviderCapability'
+);
+const AGENT_MODEL_PROVIDER_CAPABILITIES = new WeakSet<object>();
+
+/** Rules 実装専用の狭い型。同期・例外なしに加えて Domain 所有 brand を要求する。 */
+export interface RulesAgentModelProvider {
+  readonly kind: 'rules';
+  readonly [AGENT_MODEL_PROVIDER_BRAND]: 'rules';
+  provide(
+    input: AgentModelInput,
+    options?: AgentModelProviderOptions
+  ): AgentModelProviderOutput;
+}
+
+export interface LocalAgentModelProvider {
+  readonly kind: 'local-agent';
+  readonly [AGENT_MODEL_PROVIDER_BRAND]: 'local-agent';
   /** Native 境界の実値は TypeScript の型を信用せず、必ず Runtime Validator へ渡す。 */
   provide(
     input: AgentModelInput,
@@ -125,13 +162,67 @@ export interface AgentModelProvider {
   ): unknown | Promise<unknown>;
 }
 
-/**
- * Rules 実装専用の狭い型。`provide()` が同期・例外なしであることを型で保証する
- * （`RulesInteractionDiscoveryProvider` と同じパターン）。
- */
-export interface RulesAgentModelProvider {
-  readonly kind: 'rules';
-  provide(input: AgentModelInput): AgentModelProviderOutput;
+export type AgentModelProvider =
+  | RulesAgentModelProvider
+  | LocalAgentModelProvider;
+
+function sealAgentModelProviderCapability<T extends AgentModelProvider>(
+  provider: T
+): T {
+  Object.defineProperty(provider, AGENT_MODEL_PROVIDER_BRAND, {
+    value: provider.kind,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  AGENT_MODEL_PROVIDER_CAPABILITIES.add(provider);
+  return Object.freeze(provider);
+}
+
+/** Safety Boundary だけが production で呼べる Local Provider capability constructor。 */
+export function createLocalAgentProviderCapability(
+  provide: LocalAgentModelProvider['provide']
+): LocalAgentModelProvider {
+  const provider: LocalAgentModelProvider = {
+    kind: 'local-agent',
+    [AGENT_MODEL_PROVIDER_BRAND]: 'local-agent',
+    provide,
+  };
+  return sealAgentModelProviderCapability(provider);
+}
+
+function isAuthenticAgentModelProvider(provider: AgentModelProvider): boolean {
+  const kind = Object.getOwnPropertyDescriptor(provider, 'kind');
+  const provide = Object.getOwnPropertyDescriptor(provider, 'provide');
+  const brand = Object.getOwnPropertyDescriptor(
+    provider,
+    AGENT_MODEL_PROVIDER_BRAND
+  );
+  const expectedBrand = kind?.value;
+  return (
+    Object.getPrototypeOf(provider) === Object.prototype &&
+    Object.isFrozen(provider) &&
+    AGENT_MODEL_PROVIDER_CAPABILITIES.has(provider) &&
+    Reflect.ownKeys(provider).length === 3 &&
+    (expectedBrand === 'local-agent' || expectedBrand === 'rules') &&
+    typeof provide?.value === 'function' &&
+    brand?.value === expectedBrand &&
+    brand?.enumerable === false &&
+    brand?.configurable === false &&
+    brand?.writable === false
+  );
+}
+
+/** spread / 継承で構造だけを複製した Provider を kind に関係なく実行前に拒否する。 */
+export function assertAgentModelProviderCapability(
+  provider: AgentModelProvider
+): void {
+  if (!isAuthenticAgentModelProvider(provider)) {
+    throw new AgentModelProviderError(
+      'SCHEMA_ERROR',
+      'Local Agent Provider capability を検証できませんでした。'
+    );
+  }
 }
 
 /**
@@ -426,17 +517,19 @@ export function validateAgentModelProviderOutput(
  * 決定的な Provider。同一 Input からは常に同じ `AgentModelProviderOutput` を返し、
  * `AgentModelProviderError` を絶対に投げない。`rulesAgentModelDecision` が共通 Validator を通す。
  */
-export const RULES_MODEL_PROVIDER: RulesAgentModelProvider = {
-  kind: 'rules',
-  provide(input) {
-    const evidence = buildEncounterEvidence(input);
-    if (evidence.length === 0) return { kind: 'no-signal' };
-    return {
-      kind: 'bridge',
-      evidenceIds: evidence.map((item) => item.evidenceId),
-    };
-  },
-};
+export const RULES_MODEL_PROVIDER: RulesAgentModelProvider =
+  sealAgentModelProviderCapability({
+    kind: 'rules',
+    [AGENT_MODEL_PROVIDER_BRAND]: 'rules',
+    provide(input) {
+      const evidence = buildEncounterEvidence(input);
+      if (evidence.length === 0) return { kind: 'no-signal' };
+      return {
+        kind: 'bridge',
+        evidenceIds: evidence.map((item) => item.evidenceId),
+      };
+    },
+  });
 
 /** Rules も Local Agent と同じ Runtime Validator を通す基準実装 Entry Point。 */
 export function rulesAgentModelDecision(

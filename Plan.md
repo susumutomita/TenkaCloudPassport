@@ -1,5 +1,545 @@
 # Plan.md
 
+### [Issue 27 Facilitator Kit と Local Champion 運用] - 2026-07-18
+
+#### 目的
+
+Core Team が現地へ移動しなくても、初めての Local Champion が Privacy と Product Contract を守り、
+2〜6 名の対面 Lounge を準備、進行、終了できる版管理済み Kit を提供する。
+
+#### 制約
+
+- Champion 候補の発見には公開情報だけを使い、個人の採点、順位、中央名簿を作らない。
+- Product Consent と Research Consent を分離し、Research 不参加、`no-signal`、途中退出を失敗にしない。
+- Lounge 由来データは退出、Host 終了、20 分満了の最早契機で破棄し、Backup へ入れない。
+- 同期 Orientation は 30 分以内、Dry Run 前の説明は 10 分以内に収める。
+- Nearby Transport、配布、実機検証の未達を文書で補完したように扱わず、未検証経路は `Not run` とする。
+- 雇用、報酬、認定資格、Core Team の渡航、中央 Ambassador Database、有料広告を導入しない。
+
+#### 設計判断
+
+中央 CRM は削除要求と個人評価の面を増やし、文書だけを渡して同期確認をなくす案は Privacy 説明の
+取り違えを検出できない。Repository 内の JA / EN Kit を正本にし、30 分以内の Orientation と実在する
+未経験者の Dry Run を段階 Gate として組み合わせる。候補者情報は招待に使った既存 Channel の最小情報だけに
+限定し、中央 Registry へ複製しない。詳細は
+[Facilitator Kit と Local Champion 運用設計](./docs/design/facilitator-kit-and-local-champion.md) と
+[ADR-0022](./docs/adr/0022-decentralized-local-champion-operations.md) を正本とする。
+
+#### タスク
+
+1. 仕様書、設計、ADR、本セクションを実装より先に更新する。
+2. JA / EN の Facilitator Guide、1 Page Checklist、QR 掲示物を作る。
+3. 60 秒紹介、5 分 Setup、20 分 Session、30 / 60 / 90 分 Event Format を固定する。
+4. 6 つの必須 Recovery と 4 つの QR Recovery、Privacy 説明、状態別終了案内、Champion Lifecycle、
+   辞退と削除要求を固定する。
+5. Kit の必須文書、導線、契約語彙を実 file I/O の日本語 BDD Test で検証する。
+6. 全 Gate、独立 Review、Security / Simplify Review を完了する。
+7. 未経験者 1 名の Dry Run を実施し、迷い、判断不能、Privacy 説明漏れを記録して改訂する。
+
+#### 検証手順
+
+- `bun test scripts/facilitator-kit.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Web Export、重複 baseline を含む）。
+- Guide と Checklist の JA / EN 対応、10 Recovery、Privacy の 3 境界、3 Event Format を検査する。
+- Champion 発見軸が公開情報だけを使い、点数、順位、中央 Registry を作らないことを Review する。
+- Dry Run は実在する未経験者の記録を得るまで `Not run` とし、Repository Test を代替証跡にしない。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 27、Product Contract、Privacy Data Inventory、Retention、Pilot Protocol、Consent
+  Script、Observation Sheet を監査した。Issue 26 の Research Gate を複製せず参照し、Issue 27 は現場導線と
+  Champion Lifecycle に責務を限定する方針を固定した。
+- 2026-07-18: 中央 CRM、同期なしの文書配布、版管理 Kit と短時間 Orientation の 3 案を比較した。
+  個人台帳を作らず、Privacy 誤説明を Dry Run で止められる 3 案目を採用した。
+- 2026-07-18: Kit Version 1.0 の JA / EN Guide、1 Page Checklist、QR Poster、Dry Run Record、Support Matrix、
+  仕様書、ADR を作成した。最初の文書契約 Test は QR Poster の Version 欠落と Checklist の正本用語省略を
+  Red とし、JA / EN の用語と Version を修正して Green にした。
+- 2026-07-18: `/feature` の PM、Designer、QA、User 役レビューを統合した。Designer と User が再現した
+  Product / Research Consent の単一質問、Setup の二重計上、QR Error 不足、状態表示不足、役割 / 端末 / Locale、
+  個人退出の待機圧力を修正した。Guide と Checklist に `P0`〜`P10`、6 必須 Recovery と 4 QR Recovery に
+  `R1`〜`R10`、`NORMAL END` / `NOT STARTED` / `STOP THIS LOUNGE` を JA / EN で固定した。
+- 2026-07-18: Support Matrix は Repository 文書と物理 Capability を分けた。`Verified` への変更には App Commit /
+  Build ID、OS / Device 範囲、Transport / Provider、会場条件、検証月、Evidence URL、Review を要求し、Issue の
+  Close を実機証拠にしない契約へ補強した。
+- 2026-07-18: Designer 再 Review で、2 名以上かつ接続中の全 Participant が Ready になる前に `P7` を
+  開始できる曖昧さと、English の開催前 Gate が日本語 Support Matrix に依存する問題を検出した。All-Ready
+  Gate を JA / EN の Guide、Checklist、Dry Run Record に追加し、English Support Matrix と Record の判定説明を
+  自己完結させた。
+- 2026-07-18: 独立 Code / Security / Simplify Review で、1 回限り Invite を全員が Scan する不可能手順、
+  個人退出による全体終了、任意 Pet Emoji の説明欠落、Camera 拒否 Label、Host 込み人数の英訳、Host Loss の
+  破棄確認、Dry Run Evidence 項目、物理能力 Matrix、語句存在だけの Test False-pass を検出した。
+- 2026-07-18: Participant 1 名ごとの fresh Invite と Secret Rotation、All-Ready、個人退出と Host Loss の分離、
+  Public Passport Field、端末別破棄表示を JA / EN に固定した。Matrix に Build 配布、Provider、Host Loss、印刷を
+  `Not run` で追加し、Dry Run Record に Build、Locale、時間 Bucket、Recovery ID 別判断を追加した。
+- 2026-07-18: 文書契約 Test を構造検査へ強化した。物理 Matrix の状態と Evidence、Record Field Allowlist、
+  Champion と Consent の禁止方向、実 Prefix `TCPQ1:`、画像 / Data URL / Secret 値、Repository containment、
+  実在 Fragment を Fail-closed に検査し、実文書から作る危険変形が Red になることを確認した。
+- 2026-07-18: `/feature` の役割 Review は実装前の約 1,300 行を最終成果物と混在させず、各 Role の Finding、
+  解消状態、Physical `Not run` を示す短い Evidence へ整理した。
+- 2026-07-18: 修正後の独立 Code Review と Security / Simplify Review は、Blocker / High / Medium / Low の
+  新規 Finding なしで `ALLOW` となった。旧 Invite / Handshake だけを Dispose し、認証済み Membership を保持して
+  同じ Lounge で Rotate する R8 Recovery と、実 `jsc_` Join Secret の拒否も再確認した。
+- 2026-07-18: 最終文書契約は 12 Test、554 Expect で Green である。全変更 Markdown の Textlint、Typecheck、
+  staged Architecture Harness、`git diff --cached --check` も Green である。物理 Dry Run、印刷、実 Camera、
+  Nearby Transport、複数実機、Assistive Technology は `Not run` のままである。
+- 2026-07-18: PR Review の 5 指摘を反映した。設計フローに All-Ready 開始条件を明記し、
+  Dry Run Record の口頭補足と Capability を PM 保持契約へ追加した。`P0` の `Not run` を
+  Walkthrough のみに限定し、`P2` の 1 名時表現を明確化した。Consent の禁止方向は
+  Product → Research も Negative Test で検出する。
+- 2026-07-18: Security / Simplify 再 Review で、日本語 Consent の「代わりに使う」と Record の
+  重複 Field / 自由値が検出されない false-pass を確認した。JA / EN の両方向を実際の安全文から
+  危険文へ変形する Negative Test と、全 Record Field の一意性および選択値の検査を追加した。
+- 2026-07-18: 再再 Review で Record の Field 名だけを残した空値の false-pass を再現した。空値も
+  `invalid value` とし、折り返し行を同じ Field の値として最後まで照合する解析と Negative Test へ修正した。
+
+#### 振り返り
+
+- 問題: Issue の箇条書きを Guide へ並べた初稿は、Product と Research を最後の「続けますか」で同時に尋ね、
+  5 分 Setup を 20 分 Script の冒頭でも繰り返していた。6 Recovery も QR の不正、重複、期限切れ、別 Group を
+  区別せず、初めての Facilitator が安全な次操作を一意に選べなかった。
+- 根本原因: 受け入れ項目の存在を文書へ写すことを先に確認し、30 分 Event を入口から退出まで時系列で
+  Simulation していなかった。Product Consent、Research Consent、Invite の期限開始を独立した判断点として
+  Field Action に割り当てていなかった。
+- 予防策: Guide と Checklist で共通の `P0`〜`P10`、Recovery で `R1`〜`R10` を使い、JA / EN と相対 Link を
+  実 file I/O Test で固定する。新しい運用文書は、PM の条件照合だけでなく Designer と初見 User の時系列
+  Simulation を統合前 Gate にする。
+- 問題: Kit 文書の完成と実機利用可能性を同じ Ready 状態にすると、実 Transport や Camera が未検証でも
+  Champion が開催してよいと誤読できる。
+- 根本原因: Repository Gate と Physical Capability Gate の Evidence 所有者を Support Matrix で分けていなかった。
+- 予防策: 物理能力は既定 `Not run` とし、Build / OS / Device / Transport / 会場条件 / 検証月 / Evidence URL /
+  Review が同時に揃う Pull Request だけで `Verified` へ変更する。Issue Close や Green CI を実機 Evidence にしない。
+- 問題: P6 で各 Participant が Ready を選ぶと書いても、P7 の開始条件を Group 全体の Gate として明記しなければ、
+  未 Ready の人を除外した早期開始ができる。English Guide が日本語 Matrix へ Link するだけでは、英語利用者が
+  `Verified` と `Not run` の判断を単独で行えない。
+- 根本原因: Field Action の完了条件を個人操作として書き、前の State Machine が持つ All-Ready invariant を
+  Facilitator の開始判断へ翻訳していなかった。JA / EN 文書の対を File の存在と用語で確認し、参照先の意味が
+  各 Locale で自己完結するかを確認していなかった。
+- 予防策: 状態遷移の Field Guide では、操作だけでなく次 State へ進める人数、接続状態、全員条件、期限時の
+  Fail-closed 動作を Test で固定する。Locale 別の開始導線は、Link 先の判断表と Evidence 条件まで同じ Locale で
+  読めることを契約 Test に含める。
+- 問題: 「fresh QR」と「全員が Scan」という自然言語だけでは、Join Secret が 1 回利用後に `used` となる
+  Handshake 契約を表せず、3 名以上の正常系が成立しなかった。語句存在 Test は矛盾文や秘密値を追加しても
+  Green のままだった。
+- 根本原因: Field Guide を Product の画面順だけで書き、Protocol の `available` → `verifying` → `used` →
+  `rotate` と Group Membership の Leave / Host Loss を結合した Simulation を行っていなかった。Test も肯定語の
+  存在を検査し、表の Status、入力 Field、画像、Payload、Link 境界を構造として検査していなかった。
+- 予防策: Security Capability を含む運用手順は、参加人数分の状態遷移を正本から展開する。文書 Test は
+  Allowlist と禁止構造を両方持ち、実ファイルを危険状態へ変形した Negative Case で False-pass を再現してから
+  Green にする。
+
+---
+
+### [Issue 26 Privacy-preserving Pilot Measurement] - 2026-07-18
+
+#### 目的
+
+人間同士の会話開始を、Analytics SDK、安定 ID、内容収集、中央 Server なしで評価する。
+Product Consent と Research Consent を分離し、調査への不参加や Self-report の未回答を即時退出の妨げにしない。
+
+#### 制約
+
+- Event Aggregate は Process 内 Memory の固定 Counter だけであり、Event Log や正確な時刻を保持しない。
+- Research Counter は既定 OFF とし、Research Consent を別に確認した Session だけ明示 ON にする。
+- Ready から Bridge までの時間は単調増加時計から即座に Bucket 化し、元の値を Aggregate へ入れない。
+- Lounge / Participant / Device ID、Passport / Bridge / 会話内容、氏名、場所を Schema で表現しない。
+- Outcome 確定 5 件未満では Aggregate の Preview と Export を生成しない。この閾値は匿名性の保証ではない。
+- Share は固定 JSON Preview 後の明示操作だけとし、自動送信 Endpoint を追加しない。
+- Facilitator 時間と Incident は内容を伴わない Observation Sheet の粗い Bucket / Tally で扱う。
+- 第三者 Dry Run は実施証跡が必要であり、実装 Test を代替証跡にしない。
+
+#### 設計判断
+
+Analytics SDK は中央送信と追跡面を増やし、永続 Event Log は識別子を持たなくても時系列の再識別を招く。
+Lounge の進行点で固定 Counter だけを更新し、Process 終了で消える Memory Store を採用する。Bridge 後の
+Self-report は Lounge 本文を破棄してから別画面で 1 回だけ提示し、「回答しない」と即時 Skip を常に選べる。
+詳細は [実地評価設計](./docs/design/privacy-preserving-pilot-measurement.md) と
+[ADR-0021](./docs/adr/0021-memory-only-pilot-aggregate.md) を正本とする。
+
+#### タスク
+
+1. ADR、設計、Privacy Data Inventory、Retention、Threat Model、Research 文書を先に更新する。
+2. Event Aggregate の strict schema、禁止 field、最低集計単位を Red Test にする。
+3. Start / Ready / Outcome / Provider / Self-report を集計する Memory Store を Red Test 先行で実装する。
+4. Bridge 後の任意 1 Tap 画面と Settings の Preview / Manual Export を配線する。
+5. Analytics SDK と自動 Endpoint がない回帰 Test、全 Gate、独立 Review、Security / Simplify Review を完了する。
+6. 第三者が Observation Sheet を使う Pilot 前 Dry Run を別の物理 Gate として実施する。
+
+#### 検証手順
+
+- `bun test src/app/pilot-measurement.test.ts src/app/pilot-measurement-boundary.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Web Export、重複 baseline を含む）。
+- Aggregate JSON が strict allowlist だけを持ち、未知 field、正確な時刻、ID、内容を拒否すること。
+- 5 件未満、Preview 前、二重 Share、Self-report 未回答のすべてで安全側に停止すること。
+- Pilot 前 Dry Run は実在する第三者の記録を取得するまで未完了として残すこと。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 26、成功指標、Privacy / Retention / Threat Model、既存 Outcome / Settings /
+  Diagnostics の実配線を監査した。既存 Backup Share Port は手動共有境界として再利用できるが、
+  Profile Storage、Backup Schema、Diagnostic Report へ Pilot Counter を混ぜない方針を固定した。
+- 2026-07-18: Analytics SDK、永続 Event Log、Memory Counter の 3 案を比較し、時系列や識別子を
+  後から復元できない Memory Counter と最低 5 Outcome の Export Gate を採用した。
+- 2026-07-18: Counter を既定有効にすると Research 拒否者の Product 利用も数える欠陥を実装配線前に
+  検出した。既定 OFF の Process 内 Switch を追加し、無効化時は進行中 Measurement だけを破棄して
+  Product Flow は変更しない契約へ修正した。
+- 2026-07-18: strict Event Aggregate、4 duration Bucket、Provider / Self-report Counter、5 Outcome Gate、
+  手動 Preview / Share、JA / EN UI、Network / Storage 禁止 invariant を実配線した。Schema の Count 上限後は
+  Product を止めず Research だけを OFF にし、共有前の新 Event は古い Preview を無効化する。
+- 2026-07-18: 独立 Review の Self-report 表示中に Peer / Scan state が残る High と、JA Consent が撤回可能
+  範囲を広く説明する Medium を修正した。結果完了と同じ遷移で Lounge 内容を破棄し、混合後は個別除外
+  できない説明へ揃えた。`make before-commit` は 805 tests、Functions / Lines 100%、Web Export を含め成功し、
+  手動 Security / Simplify Review でも自動送信、永続化、Error 反射、重複 baseline 超過がないことを確認した。
+  第三者 Dry Run は実在する第三者の証跡が得られるまで、コード外の未完了 Gate として残す。
+- 2026-07-18: PR Review の5指摘を反映した。Process 横断 Counter を `L3P` に分離し、Handshake 成立前の
+  Start 漏れを閉じ、成功した Share の Preview を一回で消費する。Share Controller Test は本番
+  `WebBackupSharePort` と実 file I/O へ置き換えた。release marker 待機は OS watch 通知に依存せず、期限付き
+  実 file polling とした。再実行した `make before-commit` は 807 tests、Functions / Lines 100%、Web Export、
+  重複 ratchet を含め成功した。
+
+#### 振り返り
+
+- 問題: Research Consent 後、Handshake 成立前に Start を加算すると、Handshake の失敗や世代交代で破棄した
+  Lounge が未完了 Measurement として残る。また、共有成功後にも同じ Preview を再共有できた。
+- 根本原因: Product Flow の開始要求と、計測上の Session 成立点を同一視していた。一回限り Share の契約も
+  Share Port 呼び出し回数だけに置き、成功後の Preview lifecycle に明示していなかった。
+- 予防策: Handshake 成立と現在世代の確認後だけ Start を加算する順序を source-level 回帰 Test で固定する。
+  `shared` / `saved-to-file` 後は Preview を消費し、取消・失敗時だけ再試行可能にする。Process 横断集計は
+  Lounge 限定の `L3` と分けた `L3P` として台帳に明記する。
+
+---
+
+### [Issue 25 Telemetry-free Diagnostics and Local Erasure] - 2026-07-18
+
+#### 目的
+
+Network 送信なしの Sanitized Diagnostic と、中断しても次回起動で完了する端末内 Data 削除を実装する。
+診断と削除で Passport、Answer、Bridge、Prompt、Output、識別子、Path、Network metadata を扱わない。
+
+#### 制約
+
+- Diagnostic Report は strict allowlist とし、Preview 後の明示操作だけが Share Port を呼ぶ。
+- 全削除は write-ahead tombstone を論理 commit とし、rollback 用の秘密 Snapshot を作らない。
+- Lounge、Passport、Model、全 Data の操作を 1 つの曖昧な Reset Button にまとめない。
+- 現在未実装の Settings / Backup Cache / Model 永続化を存在するように表示しない。
+- OS Log の内容検査と実 Model Context は実機証跡が必要であり、Pure Test を代替証跡にしない。
+
+#### 設計判断
+
+順次削除だけの案は中断後の部分復元を許し、削除前 Snapshot rollback は秘密の複製を増やす。固定
+tombstone を先に書き、以降の load を閉じて冪等削除を再開する案を採用する。診断は時刻や ID を持たない
+Report Schema Version 1 とし、既存 Backup Share Port を手動 Export にだけ再利用する。詳細は
+[端末内診断と全削除](./docs/design/local-diagnostics-and-erasure.md) と
+[ADR-0020](./docs/adr/0020-local-diagnostics-and-erasure-transaction.md) を正本とする。
+
+#### タスク
+
+1. ADR、設計、Privacy Data Inventory、Retention、Threat Model、Harness 正本を先に更新する。
+2. Diagnostic strict schema / Snapshot / 禁止 field を Red Test にする。
+3. Profile / Model Resource と deletion journal を合成する `LocalDataControl` を Red Test 先行で実装する。
+4. tombstone 前失敗、削除中断、再起動回復、Model Context 使用中を実 I/O で検証する。
+5. Diagnostic / Local Data Screen、JA / EN Recovery、4 分離操作、Preview / Confirm / Share を配線する。
+6. dependency tree invariant、全ゲート、独立 Review、Security / Simplify Review を完了する。
+
+#### 検証手順
+
+- `bun test src/app/diagnostic-report.test.ts src/app/local-data-control.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（jscpd、全 Test、Functions / Lines 100%、Web Export を含む）。
+- Diagnostic JSON に禁止 key / value、未知 field、正確な時刻、ID、Path が存在しないこと。
+- tombstone 後に Process を作り直しても Profile / Model / Settings / Cache を復元しないこと。
+- 実機 OS Log は内容、Key、Path がない証跡を別 Gate として残すこと。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 25 と既存 Profile / Backup / Lounge / Model foundation を監査した。永続 Data は現在
+  Local Private Profile だけで、Settings は React state、Backup Cache と実 Model は存在しないことを確認。
+  件数 0 を正しく表示し、後続 Port 接続で拡張する設計にした。
+- 2026-07-18: 順次削除、rollback Snapshot、write-ahead tombstone の 3 案を比較し、秘密の複製を作らず
+  中断後も削除へ収束する tombstone 方式を ADR-0020 で採用した。
+- 2026-07-18: strict allowlist の Diagnostic Report、Preview / Confirm / Manual Share、JA / EN Recovery、
+  Lounge / Profile / Model / 全 Data の分離操作を Settings から配線した。保存・Import 中は Settings と
+  Backup 画面の遷移を閉じ、削除 transaction と既存 write が競合しない UI 境界にした。
+- 2026-07-18: 実 file を使う Profile / Journal / Model deletion と Process 再生成後の回復 Test、未知 field・
+  禁止値・依存 SDK を拒否する Test を追加した。OS Log の内容検査、実 Model Context / Storage の証跡は
+  Pure Test で置き換えず、実機 Gate として Issue 25 に残す。
+- 2026-07-18: 独立 Review の副作用後 throw、遅延 Profile write / Model Context、fresh process recovery
+  lock、旧 Preview、主要 Error Signal、同一 Process Recovery UI の指摘をすべて実 file / 配線 Test 付きで
+  解消し、最終判定 `ALLOW` を得た。`make before-commit` は 775 tests、Functions / Lines 100%、Web Export
+  を含めて成功した。手動 Security / Simplify Review でも Network 経路、秘密値の Error 反射、依存追加、
+  baseline 超過の重複がないことを確認した。
+
+---
+
+### [Issue 19 Local Model Safety Boundary] - 2026-07-18
+
+#### 目的
+
+Public Passport、Owner Answer、GGUF Output をすべて Untrusted Data として扱い、命令文、Unicode
+制御文字、過大・深い JSON、Tool Call、根拠外 Claim が Local Model 経路から UI、Log、外部 Action
+へ到達しない境界を完成する。Issue 16 の Evidence-only Provider Contract と Fallback-once を変更せず、
+Issue 17 の Native Adapter が必ず通る Pure TypeScript の安全境界を追加する。
+
+#### 制約
+
+- System Instruction と Untrusted Data は別 Message にし、同じ文字列連結をしない。
+- Pet Name、Owner Alias、Owner Answer 本文を Model Request に含めない。
+- Model が選択できる値は Input から再導出した canonical Evidence ID または `no-signal` だけにする。
+- Tool Definition は空配列とし、Tool Call 形式の出力も Runtime Validator で全体を拒否する。
+- Input / Output の拒否理由に攻撃文字列、Path、Prompt、Model Output を含めない。
+- Security Failure 後は同じ Encounter で Rules へ 1 回だけ切り替え、攻撃入力を再度 Model へ渡さない。
+- CI の Pure Boundary / Schema / Corpus / Fuzz Test を実機 Model Test の代替証跡にしない。
+
+#### 設計判断
+
+1. 禁止語 Filter は表記揺れ、別言語、Unicode、暗黙の命令を列挙できず、通過した自由記述を
+   そのまま Model へ渡す危険が残る。
+2. Passport 全体を delimiter 付き JSON として渡す案は Instruction との境界を明示できるが、
+   Pet Name と Alias を推論に不要なのに攻撃面へ残す。
+3. Public Passport から Domain が canonical Evidence 候補だけを再導出し、Model には ID、kind、
+   language の bounded JSON だけを別 Message で渡す案は、自由記述を Prompt 面から除去できる。
+
+案 3 を採用する。Input 境界は strict field、深さ、node 数、byte 数、Unicode 制御文字を検査する。
+Output は既存 `validateAgentModelProviderOutput()` が strict schema と Evidence 集合を二重検証し、
+表示文を固定 Renderer で再構築する。Safety Boundary は状態を保持せず、Fallback-once の所有権は
+既存 `createAgentProviderSessionRunner()` に残す。Provider は Domain 所有の非列挙 brand を持つ凍結済み
+capability とする。Local capability は Safety factory だけが生成し、Rules capability は Domain の基準実装
+だけが生成する。spread、継承、object literal で作った構造互換 object は実行境界で拒否する。
+
+#### タスク
+
+1. ADR、Safety Boundary、Attack Matrix、残余リスクを設計文書と脅威モデルに記録する。
+2. canonical Evidence-only Message、strict JSON Schema、tool 無効化を Red Test にする。
+3. Unicode 制御、過大 Text、深い JSON、未知 Field を型付きで拒否する Input Boundary を実装する。
+4. Prompt Injection、System Prompt、File、URL、Tool Call の Corpus を fixture 化する。
+5. Corpus と生成変種を使う 1,000 件以上の deterministic Fuzz Test を追加する。
+6. Schema を満たす根拠外 Claim、Tool Call、Invalid Output が固定 Error だけを返すことを検証する。
+7. Safety Failure 後の Rules Fallback が Encounter ごとに 1 回だけであることを結合検証する。
+8. 必須ゲート、独立レビュー、Security Review、Simplify Review を通し、実機残条件を明記して PR 化する。
+
+#### 検証手順
+
+- `bun test src/local-agent/model-safety-boundary.test.ts` で Red / Green を確認する。
+- `bun test src/domain/agent-model-provider.test.ts src/domain/provider-fallback.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従う独立コードレビュー。
+- 入力反射、Prompt 分離、Tool 無効化、Fallback-once、bounded 処理を Security Review する。
+- 既存 Validator / Evidence Builder / Runner と重複した責務がないことを Simplify Review する。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 19、Threat Model、Issue 16 Provider Contract を確認し、自由記述 Filter ではなく
+  canonical Evidence-only Request を Native Adapter 前段の必須境界とする方針を固定した。
+- 2026-07-18: 初回独立レビューで、未接続 composition、serialization 前の資源上限不足、Memory Fuzz の
+  false-pass、Unicode 集合不足、request 固有 Evidence enum 不足を Blocker / High / Medium として検出した。
+  Lazy Local Agent を Completion Port へ変更し、直接 Provider 実装を harness で禁止する修正対象にした。
+- 2026-07-18: 再レビューで、配列 own property の `toJSON` 迂回、`src/app` / `src/native` での
+  Provider 直接実装経路、Native typed error 本文の反射を High / Medium として再現した。配列を plain JSON
+  構造へ限定し、production `src/` 全域の Provider kind を harness で守り、Error code 以外を破棄する。
+- 2026-07-18: 3 回目レビューで `const kind = 'local-agent'; return { kind, provide };` による
+  harness 迂回を Medium として再現した。リテラルの許可箇所を既存型定義と Session 判定へ限定し、代入、
+  shorthand、computed property をすべて拒否する回帰テストを追加する。
+- 2026-07-18: 4 回目レビューで、Session の許可パターンと Provider 直接生成を同一行へ併記すると
+  行全体が許可される Medium を再現した。許可判定をリテラル出現単位へ変更し、正規部分を除去した後に
+  残る `local-agent` を拒否する。
+- 2026-07-18: 5 回目レビューで template literal と hexadecimal escape が文字列正規表現を迂回する
+  Medium を再現した。TypeScript AST の cooked string value と親構文を検査し、表記ではなく値と構文で
+  Provider discriminator の生成を禁止する。
+- 2026-07-18: 6 回目レビューで、複数の定数参照を組み合わせた discriminator は静的文字列評価を
+  迂回する Medium を再現した。factory 外で `kind` と `provide` を持つ object / class 構造を AST で拒否し、
+  `kind: 'rules'` の基準実装だけを許可する構造 invariant へ強化する。
+- 2026-07-18: 7 回目レビューで、`kind` と `provide` を別 object に分けて spread する Medium を
+  再現した。`kind` / `provide` と spread の組合せ、および object 内の `AgentModelProvider` 型コンテキストを
+  factory 外で拒否し、同一 object に両 member がある前提を廃止する。
+- 2026-07-18: 8 回目レビューで、`kind: 'rules'` の後段 spread が discriminator を上書きする
+  Medium を再現した。Rules の例外を spread、重複、追加 property がない `kind` / `provide` の2 member
+  object だけに限定する。
+- 2026-07-18: 9 回目レビューで、`kind` と `provide` の両方を spread する構造と継承構造が AST の
+  member 検査を迂回する Medium、および文字列・コメント内の型名を誤検出する Medium を再現した。
+  Local Provider を非列挙 brand 付きの凍結済み nominal capability に変更し、spread / 継承 clone を
+  Runtime で拒否する。Harness は capability constructor の production 呼出を Safety factory だけに限定し、
+  型コンテキストは TypeScript AST だけで判定する。
+- 2026-07-18: 10 回目レビュー実行は環境側で完了せず、自己監査で unbranded object が
+  `kind: 'rules'` を名乗ると Local capability 検査を早期 return できる経路を再現した。brand を Provider
+  union の両分岐へ必須化し、Rules 基準実装も non-enumerable / frozen capability として Domain 内だけで
+  生成する。実行境界は kind に関係なく capability を検証し、Rules の clone / 差替えも拒否する。
+- 2026-07-18: Security 自己監査で、Native が投げる typed error の `code` は TypeScript の readonly
+  だけでは実行時に閉じないことを確認した。Runtime で4種の failure code を再検証し、未知 code は本文と
+  同様に破棄して固定 `LOAD_ERROR` へ収束させる。
+- 2026-07-18: 11 回目の独立レビューで、export 済み Rules capability から private symbol を列挙し、
+  exact own keys / frozen / brand-kind 一致を複製できる High を再現した。Descriptor brand は型と診断に残すが、
+  Runtime 真正性は Domain module-private `WeakSet` の object identity を必須にする。constructor だけが
+  membership を追加し、symbol を複製した object も Provider 処理を実行しない。
+- 2026-07-18: 11 回目レビューの継続で、Safety factory 直利用時の未知 failure code が
+  `reason: undefined` になる Medium と、Domain 外の `kind = 'rules'` class が Harness を通る Medium を
+  再現した。failure code の Runtime 正規化を共通 Provider fallback 境界へ集約し、Rules class は path に
+  関係なく直接実装として拒否する。
+- 2026-07-18: 11 回目レビューの資源上限確認で、plain object / short array に大量 own key を持たせると
+  node guard 前に全 descriptor 走査と entries 複製を行う Medium を再現した。`Reflect.ownKeys()` 直後に
+  key 数を node 上限で拒否し、避けられない key 配列以外の走査・複製を開始しない。
+- 2026-07-18: 独立コードレビューの最終再確認は Blocker / High / Medium 0 件で APPROVE。symbol 複製、
+  unknown failure code、Rules class、own-key 上限の回帰を含む関連 148 tests、staged harness 0 findings、
+  `git diff --cached --check` の成功を reviewer と再確認した。
+- 2026-07-18: Security Review は、自由記述の非投影、serialization 前の accessor / `toJSON` / cycle /
+  byte / depth / node / own-key guard、Cc / Cf / Default Ignorable 拒否、request 固有 Evidence enum、`tools: []`、
+  strict Output Validator、固定 Error、closed failure code、WeakSet identity capability、Fallback-once を確認し、
+  新たな Blocker / High / Medium なし。実 GGUF parser、iOS / Android 資源・cancel・offline 証跡は Issue 17・18
+  の実機 Gate であり、本 foundation だけで Issue 19 を close しない。
+- 2026-07-18: Simplify Review は、既存 `parsePublicPassport()` / `buildEncounterEvidence()` /
+  `validateAgentModelProviderOutput()` / `createAgentProviderSessionRunner()` を再利用し、failure code 正規化を
+  Domain 1 箇所へ集約、Native は Completion Port 1 つ、Safety Boundary は request 状態を持たないことを確認。
+  AST helpers と preflight helpers は Biome complexity 上限内に分割済みで、削除できる重複は残っていない。
+- 2026-07-18: 最終 `make before-commit` は scripts 96 tests、source 732 tests、4 snapshots、Functions / Lines
+  100%、pre-release harness、textlint、Biome、TypeScript、Web export をすべて通過した。
+- 2026-07-18: PR 作成後に merge された PR 55 の jscpd ラチェットを rebase で取り込み、PR event の
+  CI が `src/domain` の baseline 22 行に対して 90 行を検出して Red になることを再現した。最大の
+  68 行は直前に merge 済みの Issue 24 `group-lounge-session.ts` にある Participant 検索・更新処理の
+  重複であり、baseline を緩めず共通 helper へ抽出して PR 56 の CI blocker を解消する。
+- 2026-07-18: Participant 検索と Connection Event の前処理を共通 helper へ抽出し、jscpd は
+  `src/domain` 22 行以下で Green。CI と同じ full-repo harness 引数の `make before-commit` は
+  scripts 113 tests、source 732 tests、Functions / Lines 100%、Web export Green となった。独立再レビューも
+  destroyed、generation、departed、unknown、stale の判定順を確認して APPROVE（Blocker / High / Medium 0）。
+  Security / Simplify 再確認では新規入力・出力・状態を増やさず、固定 Error と既存 helper への集約だけである。
+
+---
+
+### [Issue 24 Group Reliability Foundation] - 2026-07-18
+
+#### 目的
+
+2〜6 名の一時 Lounge で、通信の到着順や一時切断に依存せず Membership、Ready、Round、
+Bridge 表示を有限時間で収束させる。既存の 2 者間 Live Flow は変更せず、Issue 23 の認証済み
+Peer Protocol と Issue 12 の Fair Bridge 選定の間に、Transport 非依存の Host-authoritative な
+Group Coordinator を置く。
+
+#### 制約
+
+- `lounge-room.ts` の 2 名定員は既存 Rules Provider の境界なので 6 名へ拡張しない。
+- Membership の変更権限は Host だけに置き、Guest の自己申告 Snapshot を正本にしない。
+- Duplicate、Delay、Out-of-order は同じ State を返す冪等 Event とし、Round の再表示を起こさない。
+- Connection Event は世代番号、Round は Lounge 内の使用済み ID 集合で古い Event を無効化する。
+- Local Agent が終了しない場合も 45 秒後に Rules Provider の Group 選定へ 1 回だけ収束する。
+- Destroyed State には終了理由だけを残し、Membership、Passport、Outcome、Queue を保持しない。
+- 実機 3 台、実時間 30 分、Network Capture、Storage Inspection は実 Transport 導入後の検証であり、
+  純 TypeScript Test をその証跡として扱わない。
+
+#### 設計判断
+
+1. 既存 `lounge-room.ts` を 6 名化する案は UI を早く再利用できるが、2 者間 Rules 判定と
+   複数 Round の Group 判定を 1 つの State Machine に混在させる。
+2. Peer receiver に Group 状態を持たせる案は Message の認証・順序制御と Product Rule を結合し、
+   Transport Adapter ごとの再利用を難しくする。
+3. 純粋な Group Coordinator を追加し、Peer receiver から受理された Event だけを渡す案は、
+   状態遷移と Chaos Scenario を端末や Network Library なしに決定的に検証できる。
+
+案 3 を採用する。Host が Membership revision と Round ID を発行し、全接続 Participant の Ready で
+Round の参加者を Snapshot する。Late Join は Membership には入るが進行中 Round には入れない。
+切断は Grace Period 中だけ Identity と Ready を維持し、Guest は期限後に除外、Host は Lounge 全体を
+終了する。Round の明示完了と Deadline fallback は同じ Fair Bridge 選定を使う。
+退出者を含む確定済み Bridge は `no-signal` へ無効化し、残留者の Outcome に退出者を残さない。
+Tombstone または Round の bounded 上限へ到達した場合は、古い ID を再利用せず Lounge を終了する。
+
+#### タスク
+
+1. Group Rule、Failure Matrix、Recovery、実機証跡との境界を設計文書と ADR に記録する。
+2. Round ID を Session Identifier の責務へ移し、128 bit の生成を共有する。
+3. 2〜6 名、Duplicate Join、同じ Alias、Join / Leave Race、Late Join の Test を Red にする。
+4. Ready Snapshot、Membership revision、Grace Period、Host Loss、期限切れを実装する。
+5. Deadline fallback と Round 単位の冪等な Outcome を Fair Bridge 選定へ接続する。
+6. Duplicate、Delay、Out-of-order、Drop、Reconnect と仮想 30 分の Chaos Test を追加する。
+7. Peer receiver に Host 1 名だけの local cleanup Snapshot を反映する境界を追加する。
+8. 必須ゲートと独立レビューを通し、実機残条件を明記した Foundation PR を作成する。
+
+#### 検証手順
+
+- `bun test src/domain/group-lounge-session.test.ts` で Red / Green を確認する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従うコードレビュー。
+- 破棄後の Data、悪意ある Peer の隔離境界、Identity 再利用を Security Review する。
+- Timer、Membership、Round の重複状態がないことを Simplify Review する。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 24、Peer Protocol 1.2、Fair Bridge、既存 2 者間 Lounge を確認し、
+  Transport 非依存 Coordinator と実 Transport 証跡を分離する方針を固定した。
+- 2026-07-18: 独立レビューで検出した stale Bridge、古い Connection Event、Round ID 再利用、
+  Tombstone 上限超過、Host 1 名時の Peer cleanup 不整合を出荷前の修正対象にした。
+- 2026-07-18: 上記 5 件を修正し、独立再レビューで Blocker / High / Medium が 0 件であることを
+  確認した。Security Review では Destroyed State が理由以外を保持しないこと、Identity churn と
+  使用済み Round ID が bounded であること、Wire 上の Membership 2〜6 名契約を維持したことを確認した。
+  Simplify Review では既存の Bridge 選定、45 秒 Rules deadline、Lounge TTL を再利用し、Host 1 名 cleanup
+  だけを専用 API に隔離して Transport と Product Rule の重複を増やしていないことを確認した。
+- 2026-07-18: `make before-commit` を 707 Test、Functions 100%、Lines 100%、Web Export 成功で通過した。
+  実機 3 台、実時間 30 分、Network Capture、Storage Inspection は実 Transport 実装後の残条件とする。
+
+---
+
+### [Issue 21 一時 Lounge Handshake] - 2026-07-18
+
+#### 目的
+
+同一 LAN 上の第三者、撮影された古い QR、同じ Join Secret の同時利用を、Public Passport を
+送る前に拒否する。Lounge ID、Participant ID、Join Secret を Lounge ごとに暗号学的乱数から
+生成し、Transport の標準暗号が検証した Fingerprint と QR の 1 回限り Secret を結合する。
+
+#### 制約
+
+- Transport と暗号化方式の選定は Issue 20 の責務とし、本 Issue で独自暗号や平文 Transport を
+  実装しない。
+- Host の壁時計を参加期限の最終判定に使い、`expiresAt` と等しい時点を期限切れとする。
+- Secret、鍵、Lounge ID、Participant ID をログ、Backup、永続 Storage へ渡さない。
+- 認証完了前の API は Public Passport を受け取らず、認証済み Transport Identity だけを返す。
+- 既存の QR Preview / Ready flow は単一端末の検証経路として維持し、実機 Transport の証跡を
+  代替したと表現しない。
+
+#### 設計判断
+
+1. QR の Secret を Transport 上でそのまま比較する案は単純だが、Host が raw Secret を長く保持し、
+   誤ったログや Error へ混入する面を増やす。
+2. アプリ独自の暗号化 Channel を実装する案は Transport から独立できるが、独自暗号を禁止する
+   契約と Issue 20 の責務に反する。
+3. QR Secret を監査済みの `@noble/hashes` による HMAC-SHA-256 Key とし、Lounge、Participant、
+   期限、Capability、Transport Fingerprint を含む正規 Transcript の証明を検証する案は、
+   Expo Go / Native / Web の共通経路で標準 primitive だけを利用できる。
+
+案 3 を採用する。Host は認証要求を `available` から `verifying` へ同期的に予約して同時二重利用を
+拒否し、成功時は `used`、終了時は `disposed` にする。失敗時は Passport を扱わず、改ざんや
+Fingerprint 不一致の要求だけを型付き Error として返す。
+
+#### タスク
+
+1. Handshake の Protocol、Clock、Replay、Privacy 境界を設計文書と ADR に記録する。
+2. Capability と Session ID の共有型を整理し、個別 Participant ID を生成できるようにする。
+3. Lounge Invite v2 と Join Request の strict schema test を Red にする。
+4. 監査済み HMAC proof、Host の原子的 1 回利用、破棄、Key Rotation を実装する。
+5. QR / Ready flow を認証成功後だけ Public Passport 参加へ進む構造へ接続する。
+6. 正常、改ざん、Replay、同時利用、期限境界、Fingerprint 不一致、Known-answer を検証する。
+7. 必須ゲートと独立レビューを通し、依存関係を明記した PR を作成する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従うコードレビュー。
+- Secret 漏えい、Custom Crypto、認証前 Payload 経路の Security Review。
+- 重複する Validator、Transcript、状態遷移がないことの Simplify Review。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 20、21、22、既存 QR / Peer Protocol、Threat Model、Data Inventory を確認し、
+  Transport 非依存の認証境界だけを本 Issue で実装する方針を固定した。
+- 2026-07-18: Invite v2、HMAC-SHA-256 Join Proof、Host の原子的 1 回利用と Rotation、
+  認証成功後だけ Passport を Room へ渡す App Flow を実装した。Native に存在しない
+  `crypto.subtle` に依存せず、依存を持たない監査済み `@noble/hashes` を採用した。
+- 2026-07-18: Known-answer、改ざん、Replay、同時利用、二重押下、壁時計巻き戻しを含む期限境界、
+  Fingerprint 不一致、Rotation、非同期 Flow 破棄を含む 675 Test と Functions / Lines 100%、
+  Typecheck、Web Export を通過した。Issue 20 の実 Transport 証跡は本変更の完了証拠に含めない。
+
+---
+
 ### [Issue 1 プロダクト契約正本化] - 2026-07-17
 
 #### 目的
@@ -2200,17 +2740,22 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
 #### 設計判断
 
 1. Platform Composition Root と関数内 dynamic import で `llama.rn` を Native Build だけへ隔離する。
-2. System Instruction と consented Public Passport の JSON Data を別 Message にし、strict JSON Schema と
-   共通 Validator の二重境界で入力外 Evidence を出力全体ごと拒否する。
+2. Issue 19 の Safety Boundary が consented Public Passport から canonical Evidence だけを投影し、System
+   Instruction と bounded Evidence JSON を別 Message にする。Native Adapter は Passport 自由記述を受け取らず、
+   strict JSON Schema と共通 Validator の二重境界で入力外 Evidence を出力全体ごと拒否する。
 3. Context は Encounter ごとに作成し、成功・失敗・Cancel の全経路で解放する。Runner の Deadline、Lounge
    Exit / Expire、Unmount を同じ `AbortSignal` へ収束させる。
 4. 検証済み Evidence ID は既存 Bridge constructor だけで Live Outcome へ変換する。Wire v1 が表現できない
    Language-only Evidence は暗黙拡張せず `no-signal` とする。
-5. 旧 `lazy-local-agent.ts` は Issue 4 の別 Contract にだけ依存する未使用 Adapter なので、先に削除し、
-   `AgentModelProvider` の単一 Native Adapter へ置き換える。
+5. `model-safety-boundary.ts` を唯一の Local Provider factory とし、`lazy-local-agent.ts` と実 `llama.rn`
+   Adapter の両方を canonical Completion Port に従わせる。Native Adapter が `AgentModelProvider` を直接実装する
+   経路は残さない。
+6. 共有 Context lease registry は Process 内で同時に 1 本だけを許し、Runner 再作成でも Release quarantine を
+   迂回させない。App は Provider 実行とは別の同期 Gate で開始要求と結果適用を各 1 回に限定し、結果確定時の
+   Clock で Lounge 満了を先に評価する。
 
 詳細は [llama.rn Provider と Development Build 統合の設計](./docs/design/llama-provider-development-build.md) と
-[ADR-0012](./docs/adr/0012-llama-provider-runtime-boundary.md) を正本とする。
+[ADR-0023](./docs/adr/0023-llama-provider-runtime-boundary.md) を正本とする。
 
 #### タスク
 
@@ -2237,8 +2782,7 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
 - 2026-07-18: `llama.rn` 0.12.6、`expo-dev-client` 57.0.7、`expo-build-properties` 57.0.6 を
   lifecycle script 無効で導入した。`trustedDependencies` は空のままである。
 - 2026-07-18: Model 設定境界、strict JSON Schema、System / untrusted JSON Message 分離、Native Error
-  分類、Streaming Cancel、Context Release、Live Outcome 変換を実装した。旧 Issue 4 の未使用
-  `lazy-local-agent.ts` は `AgentModelProvider` の単一境界へ置き換えた。
+  分類、Streaming Cancel、Context Release、Live Outcome 変換を実装した。
 - 2026-07-18: `PassportApp` を Room の `loungeId` を Encounter Key とする Provider Runner へ配線した。
   Deadline、Lounge Exit / Expire、Unmount は同じ `AbortSignal` を Cancel し、遅延 Outcome は active
   Encounter guard で破棄する。
@@ -2273,3 +2817,139 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
   user-facing timeout Outcome と Native Lane teardown 所有権を分離し、Abort を無視する Provider でも期限で
   Rules を返す一方、旧 Context が残る限り次 Context を開始しない回帰 Test を追加した。Lane 待機側も自身の
   Deadline で Rules へ戻る。
+- 2026-07-19: 最新 `main` の Issue 19 Safety Boundary、secure Handshake、Diagnostics、Pilot Measurement を
+  merge し、`llama.rn` Adapter を direct Provider 実装から canonical `LocalModelCompletionPort` 実装へ変更した。
+  Passport の自由記述は Native request から除外し、Abort / Deadline / Context Release は control option として
+  維持した。物理 iPhone / Android arm64 の Offline 証拠は引き続き未実施である。
+- 2026-07-19: 統合後の独立 review で、Abort 無視時の明示 Cancel 永久待機、Deadline 後成功の採用、Cancel 理由の
+  上書き、Release 失敗後の Lane 再利用、Diagnostics 破棄後の遅延 Lounge 復活、実 Context の削除 lease 未接続、
+  Runner Ledger の残留、Pilot 時刻 / Provider 区分の推測を再現した。Signal race、完了後 Clock 再検査、Release
+  quarantine、共有 lease 注入、Encounter Forget、確定 Clock / Outcome mapping と旧実装を区別する回帰 Test へ
+  修正した。物理端末 Gate は引き続き `Not run` である。
+- 2026-07-19: 再レビューで Release quarantine が別 Runner / App remount 相当から迂回できること、同じ Promise へ
+  二重 Tap の Handler が複数登録され Owner Question の 45 秒期限を延長できること、Provider 確定と Lounge 満了の
+  競合で満了済み結果を一時適用できることを再現した。Process-global 単一 Context lease、App 結果適用 Gate、
+  確定時 Clock の満了先行評価と、旧実装を失敗させる回帰 Test へ修正する。
+---
+
+### [Issue 23 Versioned Peer Envelope・Capability・順序制御] - 2026-07-18
+
+#### 目的
+
+Rules / Local LLM の差と Network の duplicate、delay、drop があっても、認証済みの許可データだけを
+bounded に処理する Peer Protocol 1.2 を完成する。Late Joiner には現在 Snapshot だけを渡し、過去の
+Transcript、Owner Answer、Prompt、Model Output を再送しない。
+
+#### 制約
+
+- Nearby Transport Library、Socket、WebRTC、mDNS、暗号 primitive を Protocol 層へ import しない。
+- Transport Authentication を Wire の自己申告 field にせず、Adapter 由来の結果を別引数で照合する。
+- Raw Prompt、Chain of Thought、自由記述 Claim、未同意 Answer、長期 ID を Payload 型で表現しない。
+- 実 Transport と iOS / Android 実機検証は Issue 20・22・24 の責務を先取りしない。
+
+#### 設計判断
+
+1. Transport の順序保証だけに依存せず、Protocol receiver が Message ID、sequence、期限を検査する。
+2. Capability token は bounded な拡張形式とし、Unknown Optional は無視、Unknown Required は拒否する。
+3. Rules-only を共通の必須能力、Local LLM を任意能力にして混在 Lounge を成立させる。
+4. receiver が保持する本文は最新 Membership と Public Passport だけに限定する。
+5. 4 KiB、Peer ごとの rolling 1 秒 16 message / 8 KiB、Lounge 内 512 message を超えた Peer を
+   拒否し、Lounge 全体の認証済み入力 2,560 message を超えた場合は Session を閉じる。
+
+詳細は [Peer Protocol 1.2 の設計](./docs/design/peer-protocol-v1-2.md)、Wire の正本は
+[Peer Protocol Specification](./docs/architecture/peer-protocol.md)、判断は
+[ADR-0016](./docs/adr/0016-peer-protocol-receiver.md) を参照する。
+
+#### タスク
+
+1. 本セクション、設計書、Protocol Specification、ADR、Data Model を先に更新する。
+2. 10 種類の strict Payload と Envelope の日本語 BDD Test を Red で追加する。
+3. 認証、去重、順序、期限、Capability、rate、byte、総数を強制する receiver を実装する。
+4. Rules-only / Local LLM 互換性、Unknown Required、Late Join Snapshot、dispose を検証する。
+5. 必須ゲート、code review、security review、simplify review を通し、指摘を解消する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Web Export を含む）。
+- Unknown Version / kind / field / Required Capability、duplicate、out-of-order、gap、expired、future、
+  oversize、rate / byte / count limit を日本語 BDD Test で区別する。
+- Late Join Snapshot に Membership / Public Passport 以外が存在しないことを固定する。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 本文、既存 Protocol 1.1、Schema、Privacy / Threat Model、Quality Bar を監査し、
+  未実装の Message ID、時刻、Capability、順序 state、resource limit、Late Join 境界を特定した。
+- 2026-07-18: Strict parser と stateful receiver を分離し、Transport Authentication を Wire 本文から
+  独立させる設計、Protocol Specification、ADR-0016 を実装より先に作成した。
+- 2026-07-18: Protocol 1.2 の Envelope と 10 種類の Payload、認証照合、Capability Negotiation、
+  Message ID 去重、sequence gap / out-of-order / expiry、Peer 単位の rate / byte 制限、
+  Lounge 全体の総数制限、
+  Late Join Snapshot、Guest / Host 終了時の破棄を実装した。
+- 2026-07-18: 未認証接続が偽 Participant ID ごとの state を作る Memory DoS を避け、認証済み
+  Remote Peer state も Local を除く 5 名に限定した。Clock 後退で rate window をリセットせず、
+  Host / Guest role と Host-only Membership を Transport の実 ID に照合する回帰 Test を追加した。
+- 2026-07-18: `bun run typecheck`、`bun biome check .`、変更 Markdown の `bunx textlint`、
+  Error / Warning 0 件の architecture harness を通した。`bun test src --coverage` は 635 Test、
+  4 Snapshot、Functions / Lines 100% で Green となった。
+- 2026-07-18: 独立 review で Membership 除外後の retained data、Peer 単位になっていた総数、
+  退出済み active slot、固定 rate window、巨大 raw の先行 allocation に false-pass を確認した。
+  Membership / `leave` purge と bounded tombstone、Lounge 全体 512 件、rolling 1 秒窓、code unit
+  早期拒否へ修正し、複数 Peer・窓境界・交代 Late Joiner・巨大入力の回帰 Test を追加した。
+- 2026-07-18: Issue 本文の Per-peer Message Count Limit を再照合し、Peer 512 件と Lounge 全体
+  2,560 件を分離した。また Local Host の receiver が self-echo なしでは Membership を保持できない
+  不足を `updateLocalMembership()` と回帰 Test で補い、Late Join Snapshot の生成経路を固定した。
+- 2026-07-18: 再レビューで一般 Peer rejection が Host Membership を汚染する経路と、Local/Wire の
+  revision 上限差を再現した。一般 rejection ledger と退出 tombstone を分離し、revision の共通上限
+  2,147,483,647 を導入して、Host 制御面継続と上限境界の日本語 BDD Test を追加した。
+- 2026-07-18: 最終独立 review は `ALLOW` となり、追加 Blocker / High / Medium は 0 件だった。
+  `make before-commit` は 646 Test、4 Snapshot、Functions / Lines 100%、Web Export Green、
+  staged architecture harness は Error / Warning 0 件で完了した。
+
+### クリーンコード CI (jscpd ラチェットと knip 報告) - 2026-07-18
+
+#### 目的
+
+既存実装を調べずに持ち込まれる再実装 (コピー&ペースト) と、リファクタ後に取り残される未使用コードを
+機械検出します。Biome の認知的複雑度ゲートが守れない 2 つの空白 (ファイル横断の重複、
+未使用 export / file) を埋めます。
+
+#### 制約と設計判断
+
+- 検査は「新しく増えた分を正確に指せるか」で止める側と知らせる側に分けます。jscpd は
+  baseline ラチェット方式で増分だけを検出できるため `make before-commit` と CI で止めます。
+  knip は現時点の全量しか出せないため CI job summary へ知らせるだけにします。判断の正本は
+  [ADR-0012](./docs/adr/0012-duplication-ratchet-and-dead-code-report.md) です。
+- 検出ロジックは No Mock で検証します。テストは一時 directory に実 file を置き、実 jscpd
+  binary を実行して report と baseline の実 I/O を通します。
+- baseline を増やす更新は PR body で理由を説明します。
+
+#### タスク
+
+- [x] ADR-0012 を作成する。
+- [x] `scripts/check-duplication.ts` と日本語 BDD テストを追加する。
+- [x] `.jscpd.json` と `scripts/duplication-baseline.json` を追加する。
+- [x] `knip.json` を追加し、report を精査して誤検知を除く。
+- [x] Makefile (`dup_check` / `dup_baseline` / `dup_report` / `dead_code`) と
+  before-commit、CI を接続する。
+- [x] AGENTS.md のコマンド一覧を更新する。
+
+#### 検証手順
+
+- `make before-commit` が緑 (dup_check 含む)。
+- `bun scripts/check-duplication.ts` が baseline 一致で exit 0。
+- `bun run dead-code` が exit 0 で現状の未使用候補を報告する。
+
+#### 進捗ログ
+
+- 2026-07-18: 参考記事の 4 本柱 (ESLint サイズ規律 / SonarJS / jscpd / knip) を棚卸しし、
+  本 repo は Biome の複雑度 error 化が導入済みのため、空白である jscpd と knip を導入対象に
+  決めました。
+
+#### 振り返り
+
+- 問題: 重複と未使用コードは 1 file しか見ない linter では検出できず、レビューの記憶にも
+  依存できない状態でした。
+- 根本原因: ファイル横断の検査を CI に持っていなかったためです。
+- 予防策: 増分を正確に指せる検査 (jscpd ラチェット) は CI で止め、全量しか出せない検査
+  (knip) は知らせるだけに分けて、形骸化させずに運用します。

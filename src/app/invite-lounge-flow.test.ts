@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { completeLounge, evaluateLounge } from '../domain/lounge';
-import { createLoungeInvite } from '../domain/lounge-invite';
 import {
   createLoungeRoom,
   joinLoungeRoom,
-  LoungeRoomError,
   markParticipantReady,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
@@ -13,13 +11,51 @@ import {
   projectPublicPassport,
 } from '../domain/passport';
 import { RULES_PROVIDER } from '../domain/rules-provider';
-import { createSessionIdentifiers } from '../domain/session-identifiers';
+import {
+  createParticipantId,
+  createSessionIdentifiers,
+  type LoungeId,
+} from '../domain/session-identifiers';
+import {
+  createLoungeJoinRequest,
+  encodeLoungeJoinRequest,
+  issueLoungeHandshake,
+  LoungeHandshakeError,
+} from '../protocol/lounge-handshake';
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import { scanQrPayload } from './qr-scan-flow';
 import { createInProcessQrScannerPort } from './qr-scanner-port';
 
 const CLOCK = { wallClockMs: 1_700_000_000_000, monotonicMs: 10_000 };
+const TRANSPORT_FINGERPRINT = `sha256_${'aa'.repeat(32)}`;
+
+function issueHandshake(loungeId: LoungeId) {
+  return issueLoungeHandshake({
+    loungeId,
+    issuedAtEpochMs: CLOCK.wallClockMs,
+    startedAtMonotonicMs: CLOCK.monotonicMs,
+    expiresAtEpochMs: CLOCK.wallClockMs + 20 * 60 * 1_000,
+    capacity: 2,
+    requiredCapabilities: ['rules-provider-v1'],
+    hostDiscoveryHint: 'in-process-v1:host',
+    transportFingerprint: TRANSPORT_FINGERPRINT,
+    randomBytes: webCryptoRandomBytes,
+  });
+}
+
+async function authorizeGuest(
+  invite: Awaited<ReturnType<typeof issueHandshake>>['invite'],
+  host: Awaited<ReturnType<typeof issueHandshake>>['host'],
+  participantId: ReturnType<typeof createParticipantId>,
+  clock = CLOCK
+) {
+  const request = await createLoungeJoinRequest(invite, participantId);
+  return host.authorizeJoin(encodeLoungeJoinRequest(request), {
+    clock,
+    transportFingerprint: TRANSPORT_FINGERPRINT,
+  });
+}
 
 function passportFor(clueIds: readonly string[]) {
   const profile = createLocalPrivateProfile({
@@ -62,12 +98,9 @@ describe('QR 招待から Ready gating を経て Agent State Machine が開始�
         clock: CLOCK,
       }
     );
-    const invite = createLoungeInvite({
-      loungeId,
-      nowEpochMs: CLOCK.wallClockMs,
-    });
+    const handshake = await issueHandshake(loungeId);
     qrScannerPort.publish(
-      encodeQrPayload({ kind: 'lounge-invite', value: invite })
+      encodeQrPayload({ kind: 'lounge-invite', value: handshake.invite })
     );
 
     expect(roomAfterHostJoin.status).toBe('forming');
@@ -80,9 +113,20 @@ describe('QR 招待から Ready gating を経て Agent State Machine が開始�
     }
     expect(scanResult.payload.value.loungeId).toBe(loungeId);
 
+    const guestParticipantId = createParticipantId(webCryptoRandomBytes);
+    const transportAuthentication = await authorizeGuest(
+      scanResult.payload.value,
+      handshake.host,
+      guestParticipantId
+    );
+    expect(transportAuthentication).toEqual({
+      kind: 'authenticated',
+      loungeId,
+      participantId: guestParticipantId,
+    });
+
+    // 参加認証が成功した後だけ Public Passport を Room へ渡す。
     const guestPassport = passportFor(['open-source']);
-    const { participantId: guestParticipantId } =
-      createSessionIdentifiers(webCryptoRandomBytes);
     const roomAfterGuestJoin = joinLoungeRoom(roomAfterHostJoin, {
       participantId: guestParticipantId,
       publicPassport: guestPassport,
@@ -142,10 +186,11 @@ describe('QR 招待から Ready gating を経て Agent State Machine が開始�
         clock: CLOCK,
       }
     );
+    const handshake = await issueHandshake(loungeId);
     qrScannerPort.publish(
       encodeQrPayload({
         kind: 'lounge-invite',
-        value: createLoungeInvite({ loungeId, nowEpochMs: CLOCK.wallClockMs }),
+        value: handshake.invite,
       })
     );
 
@@ -153,8 +198,12 @@ describe('QR 招待から Ready gating を経て Agent State Machine が開始�
     if (scanResult.payload.kind !== 'lounge-invite') {
       throw new Error('lounge-invite が必要です。');
     }
-    const { participantId: guestParticipantId } =
-      createSessionIdentifiers(webCryptoRandomBytes);
+    const guestParticipantId = createParticipantId(webCryptoRandomBytes);
+    await authorizeGuest(
+      scanResult.payload.value,
+      handshake.host,
+      guestParticipantId
+    );
     const roomAfterGuestJoin = joinLoungeRoom(roomAfterHostJoin, {
       participantId: guestParticipantId,
       publicPassport: passportFor(['accessibility']),
@@ -212,10 +261,11 @@ describe('QR 招待から Ready gating を経て Agent State Machine が開始�
       publicPassport: passportFor(['open-source']),
       clock: CLOCK,
     });
+    const handshake = await issueHandshake(loungeId);
     qrScannerPort.publish(
       encodeQrPayload({
         kind: 'lounge-invite',
-        value: createLoungeInvite({ loungeId, nowEpochMs: CLOCK.wallClockMs }),
+        value: handshake.invite,
       })
     );
 
@@ -223,19 +273,20 @@ describe('QR 招待から Ready gating を経て Agent State Machine が開始�
     if (scanResult.payload.kind !== 'lounge-invite') {
       throw new Error('lounge-invite が必要です。');
     }
-    const { participantId: guestParticipantId } =
-      createSessionIdentifiers(webCryptoRandomBytes);
+    const guestParticipantId = createParticipantId(webCryptoRandomBytes);
     const afterExpiryClock = {
       wallClockMs: CLOCK.wallClockMs + 20 * 60 * 1_000,
       monotonicMs: CLOCK.monotonicMs,
     };
 
-    expect(() =>
-      joinLoungeRoom(room, {
-        participantId: guestParticipantId,
-        publicPassport: passportFor(['open-source']),
-        clock: afterExpiryClock,
-      })
-    ).toThrow(LoungeRoomError);
+    await expect(
+      authorizeGuest(
+        scanResult.payload.value,
+        handshake.host,
+        guestParticipantId,
+        afterExpiryClock
+      )
+    ).rejects.toBeInstanceOf(LoungeHandshakeError);
+    expect(room.participants).toHaveLength(1);
   });
 });

@@ -4,6 +4,8 @@ import {
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  createLocalAgentProviderCapability,
+  type LocalAgentModelProvider,
   RULES_MODEL_PROVIDER,
 } from '../domain/agent-model-provider';
 import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
@@ -15,8 +17,10 @@ import {
   type AgentProviderSessionRequest,
   type AgentProviderSessionRunner,
   createAgentProviderSessionRunner,
+  createProviderResultApplicationGate,
   INITIAL_PROVIDER_RUNTIME_STATE,
   type ProviderRuntimeState,
+  pilotProviderRunFromOutcome,
   transitionProviderRuntime,
 } from './agent-provider-session';
 
@@ -27,44 +31,44 @@ const INPUT: AgentModelInput = {
   deadlineAtWallClockMs: 4_102_444_800_000,
 };
 
-const LOCAL_SUCCESS_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide() {
-    return { kind: 'bridge', evidenceIds: ['topic:open-source'] };
-  },
-};
+function localProvider(
+  provide: LocalAgentModelProvider['provide']
+): LocalAgentModelProvider {
+  return createLocalAgentProviderCapability(provide);
+}
 
-const LOCAL_SCHEMA_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide() {
+const LOCAL_SUCCESS_PROVIDER = localProvider(function provideSuccess() {
+  return { kind: 'bridge', evidenceIds: ['topic:open-source'] };
+});
+
+const LOCAL_SCHEMA_ERROR_PROVIDER = localProvider(
+  function provideSchemaError() {
     return {
       kind: 'bridge',
       evidenceIds: ['topic:open-source'],
       url: 'https://example.invalid',
     };
-  },
-};
+  }
+);
 
-const LOCAL_CANCELLED_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<never> {
+const LOCAL_CANCELLED_PROVIDER = localProvider(
+  function provideCancelled(): Promise<never> {
     return Promise.reject(
       new AgentModelProviderError('CANCELLED', 'Native context was cancelled.')
     );
-  },
-};
+  }
+);
 
-const LOCAL_UNKNOWN_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<never> {
+const LOCAL_UNKNOWN_ERROR_PROVIDER = localProvider(
+  function provideUnknownError(): Promise<never> {
     return Promise.reject(new Error('sensitive raw model failure'));
-  },
-};
+  }
+);
 
 const INVALID_RULES_PROVIDER: AgentModelProvider = {
-  kind: 'rules',
+  ...RULES_MODEL_PROVIDER,
   provide() {
-    return { kind: 'bridge', evidenceIds: [] };
+    return { kind: 'bridge', evidenceIds: [] } as const;
   },
 };
 
@@ -158,9 +162,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide(_input, options) {
+    const provider = localProvider(
+      function provideUntilCancelled(_input, options) {
         receivedSignal = options?.signal;
         markStarted?.();
         return new Promise((_resolve, reject) => {
@@ -176,8 +179,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
             { once: true }
           );
         });
-      },
-    };
+      }
+    );
     const runner = createAgentProviderSessionRunner();
     const pending = runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -198,6 +201,65 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     expect(runner.cancel('encounter-cancel')).toBe(false);
   });
 
+  it('Abort を無視する Provider も明示 Cancel の時点で Rules へ確定する', async () => {
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const provider = localProvider(function provideIgnoringCancel() {
+      markStarted?.();
+      return new Promise(() => undefined);
+    });
+    const runner = createAgentProviderSessionRunner();
+    const pending = runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-ignore-explicit-cancel',
+      provider,
+      input: { ...INPUT, deadlineAtWallClockMs: Date.now() + 10_000 },
+    });
+    await started;
+
+    expect(runner.cancel('encounter-ignore-explicit-cancel')).toBe(true);
+    const result = await Promise.race([
+      pending,
+      Bun.sleep(50).then(() => 'still-pending' as const),
+    ]);
+
+    expect(result).not.toBe('still-pending');
+    if (result !== 'still-pending') {
+      expect(result.outcome.switchReason).toBe('cancelled');
+    }
+  });
+
+  it('明示 Cancel 後の Native Load Error より最初の cancelled を優先する', async () => {
+    const provider = localProvider(
+      async function provideLoadErrorAfterCancel(_input, options) {
+        await new Promise<void>((resolve) => {
+          options?.signal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        throw new AgentModelProviderError(
+          'LOAD_ERROR',
+          'Cancel 後に到着した Native Error'
+        );
+      }
+    );
+    const runner = createAgentProviderSessionRunner();
+    const pending = runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-cancel-before-load-error',
+      provider,
+      input: { ...INPUT, deadlineAtWallClockMs: Date.now() + 10_000 },
+    });
+    await Promise.resolve();
+
+    expect(runner.cancel('encounter-cancel-before-load-error')).toBe(true);
+    const result = await pending;
+
+    expect(result.outcome.switchReason).toBe('cancelled');
+  });
+
   it('実行中でない Encounter の Cancel は副作用のない false を返す', () => {
     const runner = createAgentProviderSessionRunner();
 
@@ -206,13 +268,10 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
   it('Provider 開始前の即時 Cancel は Native Provider を呼ばず Rules へ切り替える', async () => {
     let calls = 0;
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return { kind: 'no-signal' };
-      },
-    };
+    const provider = localProvider(function provideCancelledBeforeStart() {
+      calls += 1;
+      return { kind: 'no-signal' };
+    });
     const runner = createAgentProviderSessionRunner();
     const pending = runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -235,16 +294,13 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        markStarted?.();
-        return new Promise((resolve) => {
-          completeProvider = () => resolve({ kind: 'no-signal' });
-        });
-      },
-    };
+    const provider = localProvider(function provideConcurrent() {
+      calls += 1;
+      markStarted?.();
+      return new Promise((resolve) => {
+        completeProvider = () => resolve({ kind: 'no-signal' });
+      });
+    });
     const runner = createAgentProviderSessionRunner();
     const request = {
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -274,16 +330,13 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        markStarted?.();
-        return new Promise((resolve) => {
-          completeProvider = () => resolve({ kind: 'no-signal' });
-        });
-      },
-    };
+    const provider = localProvider(function provideReentrant() {
+      calls += 1;
+      markStarted?.();
+      return new Promise((resolve) => {
+        completeProvider = () => resolve({ kind: 'no-signal' });
+      });
+    });
     const runner = createAgentProviderSessionRunner();
     const request: AgentProviderSessionRequest = {
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -318,9 +371,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     const abortObserved = new Promise<void>((resolve) => {
       markAbortObserved = resolve;
     });
-    const abortAwareProvider: AgentModelProvider = {
-      kind: 'local-agent',
-      async provide(_input, options) {
+    const abortAwareProvider = localProvider(
+      async function provideUntilTeardown(_input, options) {
         deadlineSignal = options?.signal;
         await new Promise<void>((resolve) => {
           options?.signal?.addEventListener('abort', () => resolve(), {
@@ -334,8 +386,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
           'CANCELLED',
           'Native teardown completed.'
         );
-      },
-    };
+      }
+    );
     const runner = createAgentProviderSessionRunner();
     const pending = runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -358,13 +410,10 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
   it('Abort を無視する Provider でも期限で Rules を返し、次の Native Context は開始しない', async () => {
     let calls = 0;
-    const ignoresAbortProvider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return new Promise(() => undefined);
-      },
-    };
+    const ignoresAbortProvider = localProvider(function provideIgnoringAbort() {
+      calls += 1;
+      return new Promise(() => undefined);
+    });
     const runner = createAgentProviderSessionRunner();
 
     const first = await runner.run({
@@ -387,13 +436,10 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
   it('開始前に Deadline を過ぎていれば Local Provider を呼ばず timeout にする', async () => {
     let calls = 0;
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return { kind: 'no-signal' };
-      },
-    };
+    const provider = localProvider(function provideExpired() {
+      calls += 1;
+      return { kind: 'no-signal' };
+    });
     const runner = createAgentProviderSessionRunner();
     const result = await runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -406,6 +452,26 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     expect(result.outcome.switchReason).toBe('timeout');
   });
 
+  it('Provider 成功が Deadline 後なら Timer より先に完了しても timeout にする', async () => {
+    let wallClockMs = 1_000;
+    const provider = localProvider(function provideAfterDeadline() {
+      wallClockMs = 1_011;
+      return { kind: 'bridge', evidenceIds: ['topic:open-source'] };
+    });
+    const runner = createAgentProviderSessionRunner(
+      EMPTY_PROVIDER_RUN_LEDGER,
+      () => wallClockMs
+    );
+    const result = await runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-success-after-deadline',
+      provider,
+      input: { ...INPUT, deadlineAtWallClockMs: 1_010 },
+    });
+
+    expect(result.outcome.switchReason).toBe('timeout');
+  });
+
   it('Deadline Abort 後の Local Provider 遅延成功は timeout Outcome を上書きしない', async () => {
     let calls = 0;
     let completeProvider: (() => void) | undefined;
@@ -413,9 +479,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     const abortObserved = new Promise<void>((resolve) => {
       markAbortObserved = resolve;
     });
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide(_input, options) {
+    const provider = localProvider(
+      function provideLateCompletion(_input, options) {
         calls += 1;
         options?.signal?.addEventListener(
           'abort',
@@ -429,8 +494,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
               evidenceIds: ['topic:open-source'],
             });
         });
-      },
-    };
+      }
+    );
     const runner = createAgentProviderSessionRunner();
     const request = {
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -465,9 +530,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     const firstAbort = new Promise<void>((resolve) => {
       markFirstAbort = resolve;
     });
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      async provide(_input, options) {
+    const provider = localProvider(
+      async function provideSerialized(_input, options) {
         calls += 1;
         if (calls > 1) return { kind: 'no-signal' };
         markFirstStarted?.();
@@ -482,8 +546,8 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
           'CANCELLED',
           'First Context released.'
         );
-      },
-    };
+      }
+    );
     const runner = createAgentProviderSessionRunner();
     const first = runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -602,13 +666,12 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
   it('同じ Encounter の再実行は確定済み Outcome を返し、Provider を再度呼ばない', async () => {
     let calls = 0;
-    const countingProvider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide(): { readonly kind: 'no-signal' } {
-        calls += 1;
-        return { kind: 'no-signal' };
-      },
-    };
+    const countingProvider = localProvider(function provideCounting(): {
+      readonly kind: 'no-signal';
+    } {
+      calls += 1;
+      return { kind: 'no-signal' };
+    });
     const first = await runAgentProviderSession({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
       ledger: EMPTY_PROVIDER_RUN_LEDGER,
@@ -627,6 +690,60 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     expect(calls).toBe(1);
     expect(second.outcome).toBe(first.outcome);
     expect(second.ledger).toBe(first.ledger);
+  });
+
+  it('forget は確定済み Outcome を破棄して同じ Key を新規実行できる', async () => {
+    let calls = 0;
+    const provider = localProvider(function provideAfterForget() {
+      calls += 1;
+      return { kind: 'no-signal' };
+    });
+    const runner = createAgentProviderSessionRunner();
+    const request = {
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-forgotten-settled',
+      provider,
+      input: INPUT,
+    };
+    await runner.run(request);
+
+    runner.forget(request.encounterKey);
+    await runner.run(request);
+
+    expect(calls).toBe(2);
+  });
+
+  it('forget 後の遅延完了は Ledger へ Outcome を再登録しない', async () => {
+    let calls = 0;
+    const completions: Array<() => void> = [];
+    const starts: Array<() => void> = [];
+    const provider = localProvider(function provideAfterForgottenCompletion() {
+      calls += 1;
+      starts.shift()?.();
+      return new Promise((resolve) => {
+        completions.push(() => resolve({ kind: 'no-signal' }));
+      });
+    });
+    const runner = createAgentProviderSessionRunner();
+    const request = {
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-forgotten-in-flight',
+      provider,
+      input: { ...INPUT, deadlineAtWallClockMs: Date.now() + 10_000 },
+    };
+    const firstStarted = new Promise<void>((resolve) => starts.push(resolve));
+    const first = runner.run(request);
+    await firstStarted;
+    runner.forget(request.encounterKey);
+    completions.shift()?.();
+    await first;
+
+    const secondStarted = new Promise<void>((resolve) => starts.push(resolve));
+    const second = runner.run(request);
+    await secondStarted;
+    expect(calls).toBe(2);
+    completions.shift()?.();
+    await second;
   });
 
   it('Rules Fallback で確定済みの Encounter も再実行せず rules 状態を復元する', async () => {
@@ -699,5 +816,43 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
     expect(decision.kind).toBe('bridge');
     expect(Object.keys(result.state)).toEqual(['status']);
+  });
+
+  it('Pilot Provider は UI State ではなく確定 Outcome だけから排他的に決める', () => {
+    const primaryRules = {
+      decision: { kind: 'no-signal' as const },
+      settledBy: 'primary' as const,
+      providerKind: 'rules' as const,
+      switchReason: null,
+    };
+    const primaryLocal = {
+      ...primaryRules,
+      providerKind: 'local-agent' as const,
+    };
+    const fallback = {
+      ...primaryRules,
+      settledBy: 'rules-fallback' as const,
+      switchReason: 'load-error' as const,
+    };
+
+    expect(pilotProviderRunFromOutcome(primaryRules)).toBe('rules');
+    expect(pilotProviderRunFromOutcome(primaryLocal)).toBe('local-llm');
+    expect(pilotProviderRunFromOutcome(fallback)).toBe('fallback');
+  });
+
+  it('結果適用 Gate は二重 Tap と同じ Promise の複数 Handler でも最初の Settlement だけを許す', () => {
+    const gate = createProviderResultApplicationGate();
+
+    expect(gate.begin('encounter-application')).toBe(true);
+    expect(gate.isPending('encounter-application')).toBe(true);
+    expect(gate.isPending('other-encounter')).toBe(false);
+    expect(gate.begin('encounter-application')).toBe(false);
+    expect(gate.settle('encounter-application')).toBe(true);
+    expect(gate.settle('encounter-application')).toBe(false);
+
+    expect(gate.begin('encounter-application')).toBe(true);
+    gate.clear();
+    expect(gate.isPending('encounter-application')).toBe(false);
+    expect(gate.settle('encounter-application')).toBe(false);
   });
 });
