@@ -80,7 +80,23 @@ export type AgentModelDecision =
     }
   | { readonly kind: 'no-signal' };
 
-export type AgentModelFailureCode = 'TIMEOUT' | 'SCHEMA_ERROR' | 'LOAD_ERROR';
+/**
+ * Native / Model 境界から受け取る唯一の Output Schema。自由記述、URL、Contact、Tool Call、
+ * Action、人物 ID を Field として表現できない。表示文と Confidence は Validator が
+ * 検証済み Evidence から再構築する。
+ */
+export type AgentModelProviderOutput =
+  | {
+      readonly kind: 'bridge';
+      readonly evidenceIds: readonly string[];
+    }
+  | { readonly kind: 'no-signal' };
+
+export type AgentModelFailureCode =
+  | 'TIMEOUT'
+  | 'CANCELLED'
+  | 'SCHEMA_ERROR'
+  | 'LOAD_ERROR';
 
 /**
  * Primary Provider（将来の Local Agent）だけが投げてよい型付き失敗。Rules 実装は
@@ -98,9 +114,8 @@ export class AgentModelProviderError extends Error {
 
 export interface AgentModelProvider {
   readonly kind: 'rules' | 'local-agent';
-  provide(
-    input: AgentModelInput
-  ): AgentModelDecision | Promise<AgentModelDecision>;
+  /** Native 境界の実値は TypeScript の型を信用せず、必ず Runtime Validator へ渡す。 */
+  provide(input: AgentModelInput): unknown | Promise<unknown>;
 }
 
 /**
@@ -109,7 +124,7 @@ export interface AgentModelProvider {
  */
 export interface RulesAgentModelProvider {
   readonly kind: 'rules';
-  provide(input: AgentModelInput): AgentModelDecision;
+  provide(input: AgentModelInput): AgentModelProviderOutput;
 }
 
 /**
@@ -311,17 +326,117 @@ export function buildAgentModelDecisionFromEvidence(
   };
 }
 
+function providerOutputSchemaError(message: string): never {
+  throw new AgentModelProviderError(
+    'SCHEMA_ERROR',
+    `Provider Output Schema が不正です。${message}`
+  );
+}
+
+function providerOutputMap(value: unknown): ReadonlyMap<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return providerOutputSchemaError('Object が必要です。');
+  }
+  return new Map(Object.entries(value));
+}
+
+function assertExactProviderFields(
+  fields: ReadonlyMap<string, unknown>,
+  expected: readonly string[]
+): void {
+  const actual = [...fields.keys()].sort();
+  const sortedExpected = [...expected].sort();
+  if (
+    actual.length !== sortedExpected.length ||
+    actual.some((field, index) => field !== sortedExpected[index])
+  ) {
+    providerOutputSchemaError(
+      `許可 Field は ${sortedExpected.join(', ')} だけです。`
+    );
+  }
+}
+
+/**
+ * Rules / Local Agent 共通の Runtime Validator。Provider が返した `evidenceIds` を Input から
+ * 再導出できる Evidence と照合し、Domain が管理する固定文だけを `AgentModelDecision` として
+ * 返す。Model の自由記述を表示・Log・Error Message へ反射しない。
+ */
+export function validateAgentModelProviderOutput(
+  input: AgentModelInput,
+  value: unknown
+): AgentModelDecision {
+  const fields = providerOutputMap(value);
+  if (fields.get('kind') === 'no-signal') {
+    assertExactProviderFields(fields, ['kind']);
+    return { kind: 'no-signal' };
+  }
+  if (fields.get('kind') !== 'bridge') {
+    return providerOutputSchemaError(
+      'kind は bridge または no-signal である必要があります。'
+    );
+  }
+  assertExactProviderFields(fields, ['kind', 'evidenceIds']);
+  const evidenceIds = fields.get('evidenceIds');
+  if (!Array.isArray(evidenceIds)) {
+    return providerOutputSchemaError(
+      'evidenceIds は配列である必要があります。'
+    );
+  }
+  const availableEvidence = buildEncounterEvidence(input);
+  if (evidenceIds.length < 1 || evidenceIds.length > availableEvidence.length) {
+    return providerOutputSchemaError(
+      'Bridge には 1 件以上かつ入力から導出できる件数以内の Evidence が必要です。'
+    );
+  }
+  const selectedIds = new Set<string>();
+  for (const candidate of evidenceIds) {
+    if (typeof candidate !== 'string' || candidate.length > 160) {
+      return providerOutputSchemaError(
+        'Evidence ID は 160 文字以下の文字列である必要があります。'
+      );
+    }
+    if (selectedIds.has(candidate)) {
+      return providerOutputSchemaError('Evidence ID は重複できません。');
+    }
+    selectedIds.add(candidate);
+  }
+  const selectedEvidence = availableEvidence.filter((item) =>
+    selectedIds.has(item.evidenceId)
+  );
+  if (selectedEvidence.length !== selectedIds.size) {
+    return providerOutputSchemaError(
+      '入力に存在しない Evidence は Bridge の根拠にできません。'
+    );
+  }
+  return buildAgentModelDecisionFromEvidence(
+    selectedEvidence,
+    input.language ?? DEFAULT_AGENT_MODEL_LANGUAGE
+  );
+}
+
 /**
  * Rules 基準実装。端末外へ通信せず、Network / Clock / Randomness を直接参照しない
- * 決定的な Provider。同一 Input からは常に同じ `AgentModelDecision` を返し、
- * `AgentModelProviderError` を絶対に投げない。
+ * 決定的な Provider。同一 Input からは常に同じ `AgentModelProviderOutput` を返し、
+ * `AgentModelProviderError` を絶対に投げない。`rulesAgentModelDecision` が共通 Validator を通す。
  */
 export const RULES_MODEL_PROVIDER: RulesAgentModelProvider = {
   kind: 'rules',
   provide(input) {
-    const language = input.language ?? DEFAULT_AGENT_MODEL_LANGUAGE;
     const evidence = buildEncounterEvidence(input);
     if (evidence.length === 0) return { kind: 'no-signal' };
-    return buildAgentModelDecisionFromEvidence(evidence, language);
+    return {
+      kind: 'bridge',
+      evidenceIds: evidence.map((item) => item.evidenceId),
+    };
   },
 };
+
+/** Rules も Local Agent と同じ Runtime Validator を通す基準実装 Entry Point。 */
+export function rulesAgentModelDecision(
+  input: AgentModelInput
+): AgentModelDecision {
+  return validateAgentModelProviderOutput(
+    input,
+    RULES_MODEL_PROVIDER.provide(input)
+  );
+}

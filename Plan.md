@@ -2114,3 +2114,68 @@ Share Sheet Port だけを完成させる。
   `grep` で実際の呼び出し元が存在することを確認する。呼び出し元が無い場合は、
   テストが green であっても実装漏れ（配線忘れ）として扱い、削除するか呼び出し元を
   追加するかをその場で判断する。
+
+### [Issue 16 Local LLM と Rules の品質・失敗時契約を統一する] - 2026-07-18
+
+#### 目的
+
+Model の有無や性能に依存せず、Rules と Local Agent が同じ Input / Output Schema、Runtime
+Validator、Privacy、不捏造、時間制限、Fallback-once、UI Status を共有する実行時境界を完成させる。
+
+#### 制約
+
+- Provider は検証済み Evidence ID の選択か `no-signal` だけを返し、URL、Tool Call、外部 Action、
+  Contact、人物特定、自由記述 Claim を返せない。
+- Transport、Storage、React、Expo、具体的 Model Package、Cloud API、Telemetry に依存しない。
+- Model 未導入の Expo Go / Web は正常な `rules` 状態とし、既存 Rules フローを妨げない。
+- 実際の `llama.rn` Adapter、GGUF 読込、Development Build 実機証跡は Issue 17・18 の責務とする。
+
+#### 設計判断
+
+1. Provider Output を `{ kind: 'no-signal' }` または
+   `{ kind: 'bridge'; evidenceIds }` に限定し、共通 Runtime Validator が Input から Evidence を
+   再導出して Reason、Opener、Confidence を固定 Renderer で構築する。
+2. `TIMEOUT | CANCELLED | SCHEMA_ERROR | LOAD_ERROR` を閉じた型付き Failure とし、型付き失敗だけ
+   Rules へ 1 回 Fallback する。未知例外は `failed` へ進めて再送出する。
+3. UI State は `rules | loading-local-model | local-model | falling-back | failed` だけを保持し、
+   Passport、Answer、Prompt、Model Output、Error 本文を持たない。
+4. `createAgentProviderSessionRunner()` が実行中 Promise と確定済み Ledger を所有する。同じ
+   Encounter の同時呼び出しは共有 Promise、完了後の Retry は Ledger で去重する。
+5. Local Provider の自発的な Timeout 通知を信用せず、Runner が Input の Deadline を Timer で
+   強制する。期限後の遅延完了には State / Ledger の更新権限を与えない。
+
+詳細は [Agent Model Provider Runtime の設計](./docs/design/agent-model-provider-runtime.md) を正本とする。
+
+#### タスク
+
+1. 設計書と本セクションを先に更新する。
+2. Output Schema、共通 Runtime Validator、4 種類の型付き Failure を日本語 BDD テスト先行で
+   実装する。
+3. 5 状態の State Machine と JA/EN 固定 Status mapper を実装し、Active Lounge へ配線する。
+4. Fallback-once Ledger、同一 Encounter の in-flight 去重、Deadline 強制、遅延完了破棄を実装する。
+5. Model 未導入 Rules-only、Airplane Mode 相当の純 TypeScript Contract、Privacy を検証する。
+6. 指定ゲートと code / security / simplify review を通し、指摘を解消する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（typecheck、全 Test、100% Coverage、Web Export を含む）。
+- 同一 Encounter の `Promise.all` が Provider を 1 回だけ呼ぶこと。
+- 完了しない Provider が Deadline で Rules へ Fallback し、遅延完了が Outcome を変えないこと。
+- Strict Schema が未知 Field、URL、Tool、Contact、人物 ID、未知 / 重複 / 空 Evidence を拒否すること。
+
+#### 進捗ログ
+
+- 2026-07-18: Output Schema、共通 Validator、4 種類の Failure、5 状態 State Machine、
+  Fallback-once、JA/EN Status UI を実装し、最初の `make before-commit` で 607 Test、対象の
+  Functions / Lines 100%、Web Export Green を確認した。
+- 2026-07-18: 独立 code review で、確定前の同時呼び出しが Ledger をすり抜ける競合と、
+  完了しない Provider に Deadline を強制していない問題を再現した。完了条件を満たさないため
+  Merge を止め、Runner-owned in-flight Promise と Deadline Timer の設計を追加して修正へ戻した。
+- 2026-07-18: `createAgentProviderSessionRunner()` を実装し、同一 Encounter の同時呼び出しが
+  同一 Promise を返すこと、Provider が 1 回だけ呼ばれること、完了しない Provider が Deadline で
+  Rules へ Fallback すること、期限後の遅延完了が確定済み Outcome を上書きしないことを日本語
+  BDD Test で固定した。Focused Test は 19 件 Green、Runner の Functions / Lines は 100% となった。
+- 2026-07-18: 再レビューで、Status Callback が同期的に同じ Encounter を再入実行すると、
+  Provider 開始から in-flight Map 登録までの間へ割り込める競合を再現した。Map 登録後の
+  Microtask で実行本体を開始する設計へ補強し、同期再入の回帰テストを追加することにした。

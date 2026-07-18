@@ -298,11 +298,12 @@ export interface AppMessages {
     readonly 'no-signal': string;
     readonly retired: string;
   };
-  readonly providerSwitchNotice: {
-    readonly noSwitch: string;
-    readonly timeout: string;
-    readonly 'schema-error': string;
-    readonly 'load-error': string;
+  readonly providerStatusNotice: {
+    readonly rules: string;
+    readonly 'loading-local-model': string;
+    readonly 'local-model': string;
+    readonly 'falling-back': string;
+    readonly failed: string;
   };
   readonly ownerQuestionDisclosure: {
     readonly sharedWithMessage: string;
@@ -686,14 +687,12 @@ const ja: AppMessages = {
     'no-signal': '今回は no-signal です。',
     retired: 'この Lounge での役割を終えました。',
   },
-  providerSwitchNotice: {
-    noSwitch: 'Rules Provider（基準実装）で判定しています。',
-    timeout:
-      'Local Agent の応答がなかったため、Rules Provider へ切り替えました。',
-    'schema-error':
-      'Local Agent の出力を検証できなかったため、Rules Provider へ切り替えました。',
-    'load-error':
-      'Local Agent を読み込めなかったため、Rules Provider へ切り替えました。',
+  providerStatusNotice: {
+    rules: 'Rules Provider（基準実装）で判定します。',
+    'loading-local-model': 'Local Model を端末内で読み込んでいます。',
+    'local-model': 'Local Model を端末内だけで使用しています。',
+    'falling-back': 'Rules Provider へ安全に切り替えています。',
+    failed: '判定を完了できませんでした。',
   },
   ownerQuestionDisclosure: {
     sharedWithMessage:
@@ -1102,14 +1101,12 @@ const en: AppMessages = {
     'no-signal': 'This time it is no-signal.',
     retired: 'Finished this role in this Lounge.',
   },
-  providerSwitchNotice: {
-    noSwitch: 'Judging with the Rules Provider (baseline implementation).',
-    timeout:
-      'The Local Agent did not respond in time, so switched to the Rules Provider.',
-    'schema-error':
-      'The Local Agent’s output could not be validated, so switched to the Rules Provider.',
-    'load-error':
-      'The Local Agent could not be loaded, so switched to the Rules Provider.',
+  providerStatusNotice: {
+    rules: 'Using the Rules Provider (baseline implementation).',
+    'loading-local-model': 'Loading the Local Model on this device.',
+    'local-model': 'Using the Local Model only on this device.',
+    'falling-back': 'Safely switching to the Rules Provider.',
+    failed: 'Could not complete the judgment.',
   },
   ownerQuestionDisclosure: {
     sharedWithMessage:

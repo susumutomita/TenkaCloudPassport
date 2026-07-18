@@ -52,6 +52,10 @@ import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import {
+  INITIAL_PROVIDER_RUNTIME_STATE,
+  type ProviderRuntimeState,
+} from './agent-provider-session';
 import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
@@ -91,6 +95,8 @@ import { type BackupFlow, useBackupFlow } from './use-backup-flow';
 interface PassportAppProps {
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
+  /** Issue 17 の Native Adapter が接続するまで、未導入は正常な Rules 状態とする。 */
+  readonly providerRuntimeState?: ProviderRuntimeState;
 }
 
 type SetupStage =
@@ -373,6 +379,7 @@ function SharePreviewGate({
 export default function PassportApp({
   localProfileStorage,
   backupSharePort,
+  providerRuntimeState = INITIAL_PROVIDER_RUNTIME_STATE,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
   // 完走させる（docs/design/qr-invite-and-ready-flow.md）。5 状態すべての UI 分岐は
@@ -1011,6 +1018,7 @@ export default function PassportApp({
         onExit={leave}
         onHostEnd={endAsHost}
         onOpenSettings={openSettings}
+        providerStatus={providerRuntimeState.status}
         reduceMotion={reduceMotion}
         remainingMs={lounge.expiresAtWallClockMs - nowMs}
       />

@@ -124,6 +124,15 @@ describe('PassportApp の Stage 遷移契約', () => {
     }
   });
 
+  it('Model 未導入の既定 Provider Status を Active Lounge へ明示的に渡す', async () => {
+    const text = await source();
+
+    expect(text).toContain(
+      'providerRuntimeState = INITIAL_PROVIDER_RUNTIME_STATE'
+    );
+    expect(text).toContain('providerStatus={providerRuntimeState.status}');
+  });
+
   it('Invite フローからの離脱経路（再開・Profile 編集）は discardInviteFlow を直接呼ぶ', async () => {
     const text = await source();
 

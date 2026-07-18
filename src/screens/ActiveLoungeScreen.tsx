@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
+import type { ProviderRuntimeStatus } from '../app/agent-provider-session';
 import { expiryNotice } from '../app/expiry-notice';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import { interactionStatusNotice } from '../app/interaction-status-notice';
-import { providerSwitchNotice } from '../app/provider-switch-notice';
+import { providerStatusNotice } from '../app/provider-status-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import { type ClueId, clueById } from '../domain/clue-catalog';
@@ -15,6 +16,7 @@ interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
   readonly remainingMs: number;
   readonly locale?: Locale;
+  readonly providerStatus: ProviderRuntimeStatus;
   /**
    * Issue 15: OS の Reduce Motion 設定（`src/app/reduced-motion-port.ts` が判定した値）。
    * 真のとき、Pet Emoji の拍動 Animation を静的な表示へ置換する。
@@ -116,6 +118,7 @@ export default function ActiveLoungeScreen({
   lounge,
   remainingMs,
   locale = DEFAULT_LOCALE,
+  providerStatus,
   reduceMotion = false,
   onBeginInteraction,
   onExit,
@@ -159,14 +162,8 @@ export default function ActiveLoungeScreen({
       <Text style={styles.interactionStatus}>
         {interactionStatusNotice('discovering', locale).message}
       </Text>
-      {/*
-        Issue 13: Provider 切替理由を内容を含まない Status として表示する。この画面は
-        まだ Local Agent 接続後の実際の Provider Runner（`src/domain/provider-fallback.ts`）を
-        保持しないため（Issue 17 の Known follow-up）、常に「切替なし（null）」を渡す固定表示
-        であり、live な per-session readout ではない。
-      */}
       <Text style={styles.providerStatus}>
-        {providerSwitchNotice(null, locale).message}
+        {providerStatusNotice(providerStatus, locale).message}
       </Text>
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>{t.disposableNoticeTitle}</Text>

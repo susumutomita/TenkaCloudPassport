@@ -7,6 +7,7 @@ import type {
 import {
   AgentModelProviderError,
   RULES_MODEL_PROVIDER,
+  rulesAgentModelDecision,
 } from './agent-model-provider';
 import { publicPassportWithClues as passport } from './domain-test-kit';
 import {
@@ -19,7 +20,7 @@ import {
 /**
  * Issue 13: Fallback-once semantics のテスト。ここで使う 4 つの Provider は本物の
  * `AgentModelProvider` Port 実装であり（vi.mock 等のモック・スタブではない）、
- * Timeout / Schema Error / Load Error それぞれを実際に型付き例外として投げる。
+ * Timeout / Cancel / Schema Error / Load Error それぞれを実際に型付き例外として投げる。
  */
 const INPUT: AgentModelInput = {
   ownerPassport: passport(['open-source']),
@@ -58,6 +59,18 @@ const SCHEMA_ERROR_PROVIDER: AgentModelProvider = {
   },
 };
 
+const CANCELLED_PROVIDER: AgentModelProvider = {
+  kind: 'local-agent',
+  provide(): Promise<AgentModelDecision> {
+    return Promise.reject(
+      new AgentModelProviderError(
+        'CANCELLED',
+        'Local Agent の処理が取り消されました。'
+      )
+    );
+  },
+};
+
 const LOAD_ERROR_PROVIDER: AgentModelProvider = {
   kind: 'local-agent',
   provide(): Promise<AgentModelDecision> {
@@ -78,7 +91,7 @@ const UNKNOWN_ERROR_PROVIDER: AgentModelProvider = {
 };
 
 function rulesFallback(): AgentModelDecision {
-  return RULES_MODEL_PROVIDER.provide(INPUT);
+  return rulesAgentModelDecision(INPUT);
 }
 
 describe('attemptProvider: Primary Provider の結果を成功 / 型付き失敗へ正規化する', () => {
@@ -86,23 +99,45 @@ describe('attemptProvider: Primary Provider の結果を成功 / 型付き失敗
     const result = await attemptProvider(SUCCESS_PROVIDER, INPUT);
     expect(result).toEqual({
       kind: 'success',
-      decision: RULES_MODEL_PROVIDER.provide(INPUT),
+      providerKind: 'local-agent',
+      decision: rulesAgentModelDecision(INPUT),
     });
   });
 
   it('期限切れ (timeout): AgentModelProviderError(TIMEOUT) を failure へ正規化する', async () => {
     const result = await attemptProvider(TIMEOUT_PROVIDER, INPUT);
-    expect(result).toEqual({ kind: 'failure', reason: 'timeout' });
+    expect(result).toEqual({
+      kind: 'failure',
+      providerKind: 'local-agent',
+      reason: 'timeout',
+    });
   });
 
   it('Schema Error: AgentModelProviderError(SCHEMA_ERROR) を failure へ正規化する', async () => {
     const result = await attemptProvider(SCHEMA_ERROR_PROVIDER, INPUT);
-    expect(result).toEqual({ kind: 'failure', reason: 'schema-error' });
+    expect(result).toEqual({
+      kind: 'failure',
+      providerKind: 'local-agent',
+      reason: 'schema-error',
+    });
+  });
+
+  it('Cancel: AgentModelProviderError(CANCELLED) を failure へ正規化する', async () => {
+    const result = await attemptProvider(CANCELLED_PROVIDER, INPUT);
+    expect(result).toEqual({
+      kind: 'failure',
+      providerKind: 'local-agent',
+      reason: 'cancelled',
+    });
   });
 
   it('Load Error: AgentModelProviderError(LOAD_ERROR) を failure へ正規化する', async () => {
     const result = await attemptProvider(LOAD_ERROR_PROVIDER, INPUT);
-    expect(result).toEqual({ kind: 'failure', reason: 'load-error' });
+    expect(result).toEqual({
+      kind: 'failure',
+      providerKind: 'local-agent',
+      reason: 'load-error',
+    });
   });
 
   it('AgentModelProviderError 以外の例外は無言で握り潰さず再送出する', async () => {
@@ -122,12 +157,14 @@ describe('runProviderOnce: Fallback-once semantics', () => {
       rulesFallback
     );
     expect(step.outcome.settledBy).toBe('primary');
+    expect(step.outcome.providerKind).toBe('local-agent');
     expect(step.outcome.switchReason).toBeNull();
   });
 
-  it('Timeout / Schema Error / Load Error のいずれでも Rules へ 1 回だけ切り替わる', async () => {
+  it('Timeout / Cancel / Schema Error / Load Error のいずれでも Rules へ 1 回だけ切り替わる', async () => {
     for (const [provider, expectedReason] of [
       [TIMEOUT_PROVIDER, 'timeout'],
+      [CANCELLED_PROVIDER, 'cancelled'],
       [SCHEMA_ERROR_PROVIDER, 'schema-error'],
       [LOAD_ERROR_PROVIDER, 'load-error'],
     ] as const) {
@@ -139,10 +176,9 @@ describe('runProviderOnce: Fallback-once semantics', () => {
         rulesFallback
       );
       expect(step.outcome.settledBy).toBe('rules-fallback');
+      expect(step.outcome.providerKind).toBe('rules');
       expect(step.outcome.switchReason).toBe(expectedReason);
-      expect(step.outcome.decision).toEqual(
-        RULES_MODEL_PROVIDER.provide(INPUT)
-      );
+      expect(step.outcome.decision).toEqual(rulesAgentModelDecision(INPUT));
     }
   });
 
