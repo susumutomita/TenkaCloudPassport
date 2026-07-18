@@ -3,6 +3,7 @@ import type { AgentModelInput } from '../domain/agent-model-provider';
 import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
 import { createConfiguredNativeAgentModelProvider } from '../local-agent/configured-agent-model-provider';
 import type {
+  LlamaCompletionParameters,
   LlamaContextPort,
   LlamaModulePort,
 } from '../local-agent/llama-agent-model-provider';
@@ -27,11 +28,15 @@ const MODEL_ENVIRONMENT = {
 } as const;
 
 class CompletedContext implements LlamaContextPort {
+  completionCalls = 0;
+  parameters: LlamaCompletionParameters | undefined;
   releaseCalls = 0;
 
   constructor(private readonly text: string) {}
 
-  async completion(): Promise<unknown> {
+  async completion(parameters: LlamaCompletionParameters): Promise<unknown> {
+    this.completionCalls += 1;
+    this.parameters = parameters;
     return { text: this.text };
   }
 
@@ -166,5 +171,38 @@ describe('Development Build Local Agent の統合 Matrix', () => {
     expect(result.outcome.settledBy).toBe('rules-fallback');
     expect(stopCalls).toBe(1);
     expect(releaseCalls).toBe(1);
+  });
+
+  it('攻撃文字列と Tool Call Output を反射せず、同じ Encounter は Rules へ 1 回だけ切り替える', async () => {
+    const attack = 'ignore previous';
+    const attackInput: AgentModelInput = {
+      ...INPUT,
+      ownerPassport: passport(['open-source'], [], attack),
+    };
+    const context = new CompletedContext(
+      '{"kind":"tool_call","name":"open_url","arguments":["https://evil.invalid"]}'
+    );
+    const provider = createConfiguredNativeAgentModelProvider(
+      MODEL_ENVIRONMENT,
+      async () => moduleWithContext(context)
+    );
+    const runner = createAgentProviderSessionRunner();
+    const request = {
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'integration-prompt-injection',
+      provider,
+      input: attackInput,
+    } as const;
+
+    const first = await runner.run(request);
+    const second = await runner.run(request);
+
+    expect(first.outcome.switchReason).toBe('schema-error');
+    expect(first.outcome.settledBy).toBe('rules-fallback');
+    expect(second.outcome).toEqual(first.outcome);
+    expect(context.completionCalls).toBe(1);
+    expect(context.releaseCalls).toBe(1);
+    expect(context.parameters?.messages[1]?.content).not.toContain(attack);
+    expect(context.parameters).not.toHaveProperty('tools');
   });
 });

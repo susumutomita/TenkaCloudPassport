@@ -1,9 +1,12 @@
 import {
-  type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
-  buildEncounterEvidence,
 } from '../domain/agent-model-provider';
+import {
+  type AgentInferenceRequest,
+  parseAgentInferenceOutputText,
+  prepareAgentInferenceRequest,
+} from './agent-inference-safety';
 import type { LocalModelConfiguration } from './local-model-configuration';
 
 export interface LlamaMessage {
@@ -82,25 +85,13 @@ function outputSchema(allowedEvidenceIds: readonly string[]): object {
 }
 
 function completionParameters(
-  input: AgentModelInput,
+  request: AgentInferenceRequest,
   configuration: LocalModelConfiguration
 ): LlamaCompletionParameters {
-  const allowedEvidence = buildEncounterEvidence(input);
-  const allowedEvidenceIds = allowedEvidence.map(
-    (evidence) => evidence.evidenceId
-  );
-  const untrustedData = {
-    consentedPassports: {
-      owner: input.ownerPassport,
-      encountered: input.encounteredPassport,
-    },
-    ownerAnswer: input.ownerAnswer ?? null,
-    allowedEvidence,
-  };
   return {
     messages: [
       { role: 'system', content: SYSTEM_INSTRUCTION },
-      { role: 'user', content: JSON.stringify(untrustedData) },
+      { role: 'user', content: request.promptJson },
     ],
     n_predict: configuration.nPredict,
     temperature: 0,
@@ -108,7 +99,7 @@ function completionParameters(
       type: 'json_schema',
       json_schema: {
         strict: true,
-        schema: outputSchema(allowedEvidenceIds),
+        schema: outputSchema(request.allowedEvidenceIds),
       },
     },
   };
@@ -126,14 +117,7 @@ function parsedCompletionResult(result: unknown): unknown {
       'Local Model の Completion Result 形式が不正です。'
     );
   }
-  try {
-    return JSON.parse(Reflect.get(result, 'text'));
-  } catch {
-    throw new AgentModelProviderError(
-      'SCHEMA_ERROR',
-      'Local Model の構造化 Output を解析できませんでした。'
-    );
-  }
+  return parseAgentInferenceOutputText(Reflect.get(result, 'text'));
 }
 
 function cancelledError(): AgentModelProviderError {
@@ -209,7 +193,7 @@ function observeCompletionCancellation(
 
 async function completeContext(
   context: LlamaContextPort,
-  input: AgentModelInput,
+  request: AgentInferenceRequest,
   configuration: LocalModelConfiguration,
   signal: AbortSignal | undefined
 ): Promise<unknown> {
@@ -217,7 +201,7 @@ async function completeContext(
   const cancellation = observeCompletionCancellation(context, signal);
   try {
     const result = await context.completion(
-      completionParameters(input, configuration),
+      completionParameters(request, configuration),
       cancellation.onToken
     );
     await cancellation.waitForStop();
@@ -238,14 +222,14 @@ type CompletionAttempt =
 
 async function captureCompletion(
   context: LlamaContextPort,
-  input: AgentModelInput,
+  request: AgentInferenceRequest,
   configuration: LocalModelConfiguration,
   signal: AbortSignal | undefined
 ): Promise<CompletionAttempt> {
   try {
     return {
       kind: 'success',
-      output: await completeContext(context, input, configuration, signal),
+      output: await completeContext(context, request, configuration, signal),
     };
   } catch (error: unknown) {
     return { kind: 'failure', error: normalizeNativeError(error) };
@@ -253,15 +237,16 @@ async function captureCompletion(
 }
 
 async function executeLlamaProvider(
-  input: AgentModelInput,
+  input: unknown,
   configuration: LocalModelConfiguration,
   loadModule: LlamaModuleLoader,
   signal: AbortSignal | undefined
 ): Promise<unknown> {
+  const request = prepareAgentInferenceRequest(input);
   const context = await initializeContext(configuration, loadModule, signal);
   const completion = await captureCompletion(
     context,
-    input,
+    request,
     configuration,
     signal
   );

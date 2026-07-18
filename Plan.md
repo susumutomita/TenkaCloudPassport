@@ -2200,8 +2200,9 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
 #### 設計判断
 
 1. Platform Composition Root と関数内 dynamic import で `llama.rn` を Native Build だけへ隔離する。
-2. System Instruction と consented Public Passport の JSON Data を別 Message にし、strict JSON Schema と
-   共通 Validator の二重境界で入力外 Evidence を出力全体ごと拒否する。
+2. System Instruction と untrusted JSON Data を別 Message にし、strict JSON Schema と共通 Validator の
+   二重境界で入力外 Evidence を出力全体ごと拒否する。Issue 19 ではさらに Public Passport 全体を
+   Evidence-only JSON へ縮小した。
 3. Context は Encounter ごとに作成し、成功・失敗・Cancel の全経路で解放する。Runner の Deadline、Lounge
    Exit / Expire、Unmount を同じ `AbortSignal` へ収束させる。
 4. 検証済み Evidence ID は既存 Bridge constructor だけで Live Outcome へ変換する。Wire v1 が表現できない
@@ -2273,3 +2274,73 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
   user-facing timeout Outcome と Native Lane teardown 所有権を分離し、Abort を無視する Provider でも期限で
   Rules を返す一方、旧 Context が残る限り次 Context を開始しない回帰 Test を追加した。Lane 待機側も自身の
   Deadline で Rules へ戻る。
+
+### [Issue 19 悪意ある入力と不正 Model Output を安全境界で封じる] - 2026-07-18
+
+#### 目的
+
+Public Passport、Owner Answer、Peer Message、GGUF Output をすべて Untrusted として扱い、Prompt
+Injection、秘密・端末パス・System Prompt の反射、Tool Call、Evidence 外 Claim、Crash、Hang、無制限な
+Memory Growth を Pure Boundary と Runtime Validator で防ぐ。
+
+#### 制約
+
+- Model は Tool、Network、File、URL Open、Contact、Telemetry の Port を持たない。
+- Model へ渡すのは信頼側 Domain が導出した Evidence だけとし、Pet 名、Alias、Raw Prompt、端末 Path、
+  Owner Answer 本文を渡さない。
+- Safety Failure の本文を UI、Log、Error、Rules Fallback の Prompt へ反射しない。
+- CI の Pure Test は実機 GGUF の安全証明にせず、Issue 17 の実機 Gate を置き換えない。
+- Model Weight、GGUF Import、Benchmark、Peer Wire Protocol は Issue 18・23 の責務とする。
+
+#### 設計判断
+
+1. Local Agent の実行直前に `AgentModelInput` を strict schema で再検証し、Unicode
+   `Default_Ignorable_Code_Point` と `Cc` 制御文字を拒否し、正規文字列を NFC へ正規化する。
+2. Public Passport 全体を Prompt へ入れず、`buildEncounterEvidence()` が返す閉じた Evidence だけを
+   Versioned JSON へ射影する。Prompt は UTF-8 4 KiB、Output は UTF-8 4 KiB・深度 4 を超える場合に
+   Model 初期化前または Runtime Validation 前に拒否する。
+3. strict JSON Schema と共通 Runtime Validator を維持し、Tool Call、未知 Field、自由記述、入力外
+   Evidence が 1 件でもあれば Output 全体を破棄する。
+4. 固定 Attack Corpus と 1,000 件以上の決定的 Fuzz Input を Native Model の Mock なしで Pure
+   Boundary、Schema、Validator へ直接適用する。
+5. 型付き Failure だけを既存 Runner が同じ Encounter で Rules へ 1 回切り替え、Local Provider の
+   再実行と攻撃文字列の再投入を行わない。
+
+詳細は [Local Agent の入力・出力安全境界](./docs/design/local-agent-input-output-safety.md) と
+[ADR-0013](./docs/adr/0013-minimize-local-agent-prompt-data.md) を正本とする。
+
+#### タスク
+
+1. Design Doc、ADR、Threat Model、本 Plan を先に更新する。
+2. Local Agent Input の strict schema、Unicode 制御、NFC、4 KiB Prompt 上限を Test 先行で実装する。
+3. Provider Prompt を Public Passport 全体から Evidence-only JSON へ縮小する。
+4. Attack Corpus と 1,000 件以上の Fuzz Test、Output / Error 非反射 Test を追加する。
+5. Fallback-once と同じ攻撃文字列を再投入しない Security Regression を確認する。
+6. staged harness、`make before-commit`、code review、security review、simplify を順に通す。
+
+#### 検証手順
+
+- Corpus に「前の指示を無視」「System Prompt を出力」「File を読む」「URL を開く」、Tool Call、
+  Contact、端末 Path、双方向制御、Zero-width、Invisible Separator、過大文字列を含める。
+- 未知 Field、未知 Version、未知 Clue、深い JSON、Prototype 付き Object、過大入力を型付き失敗にする。
+- Prompt Message に Pet 名、Alias、Owner Answer、URL、端末パス、攻撃文字列が含まれないことを確認する。
+- Schema 適合に見える Evidence 外 Claim と Tool Call 形式を Output 全体ごと拒否する。
+- 1,000 件以上の Fuzz Input が制限時間内に bounded result または内容非反射の `SCHEMA_ERROR` へ
+  収束し、実行間で状態を蓄積しないことを確認する。
+- 必須順序の staged harness、`make before-commit`、code review、security review、simplify を通す。
+
+#### 進捗ログ
+
+- 2026-07-18: Public Passport 全体を Delimiter 付きで渡す案、危険語句 Blocklist 案、Evidence-only
+  Projection 案を比較し、不要な攻撃文字列を Model Context へ入れない Evidence-only 案を採用した。
+  Design Doc、ADR-0013、Threat Model、本 Plan を実装前に更新した。
+- 2026-07-18: 独立 code review が個別 Unicode 列挙では U+2063 Invisible Separator を見逃すことと、
+  1,000 件 Fuzz の byte / 時間検査だけでは状態蓄積を検出しないことを指摘した。Unicode Binary Property の
+  `Default_Ignorable_Code_Point` と `Cc` 全体の拒否へ変更し、14 境界文字の Test を追加した。Memory は
+  20,000 回の追加実行と強制 GC 後の Heap 増加 8 MiB 上限を別 Test で固定した。
+- 2026-07-18: 修正後の focused 30 Test と再レビューは ALLOW になった。staged harness は Error / Warning
+  0 件、`make before-commit` は scripts 79 件、source 666 件、Functions / Lines 100%、Biome、TypeScript、
+  pre-release、Web Export が Green だった。
+- 2026-07-18: security review は新規依存、通信、Tool Port、Error / Log 反射、型 Escape が無いこと、Input / Output
+  上限と Fallback-once を確認し、追加指摘なしだった。simplify review は既存 `parsePublicPassport`、
+  `parseBoundedJson`、共通 Output Validator の再利用と責務分離を確認し、追加指摘なしだった。

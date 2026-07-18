@@ -66,7 +66,7 @@
 | 端末紛失 | OS の端末ロックとアプリ専用保護領域を使い、Lounge データをメモリだけで扱う。通知とタスク切替画面へ内容を出さない。 | アプリ起動時に OS の保護状態を確認し、保護を利用できない場合は Local Private Profile とバックアップの Import を開かない。 | Owner は OS の端末探索と遠隔消去を使う。新端末へは Owner が保持する最小のバックアップだけを Import する。 | 解除済み端末、OS 侵害、外部に保存済みのバックアップはアプリから回収できない。 |
 | 肩越し閲覧 | QR は参加受付中だけ表示し、Owner Answer と Bridge はデフォルトで mask して明示操作中だけ表示する。画面収録と task snapshot は OS が許す範囲で抑止する。 | 受動的な目視と外部カメラはアプリから検出できない。QR の読み取りと参加要求は補助的な異常として即時表示し、想定外の参加数を Owner が確認する。 | Host は直ちに Lounge を終了し、新しい nonce と一時鍵で QR を再生成する。Local Private Profile の公開選択も見直す。 | 目視、外部カメラ、Owner が表示を許した時間の撮影は防げない場合がある。 |
 | 悪意ある QR | QR は JSON 以外の URL や命令を開かず、strict schema、型、版、長さ、配列数、総 byte、20 分以内の期限を検証する。読み取りだけで通信または推論を開始しない。 | 検証失敗理由を内容なしの Security Signal として現在の画面に表示し、同じ nonce の反復を Lounge 中だけ数える。 | 入力を破棄し、既存 Lounge と Local Private Profile を変更せず、Owner に正規 QR の再提示を求める。 | 対応 schema 内の有害な意味内容と、正規 QR 自体の差し替えは構文検証だけでは判別できない。 |
-| Prompt Injection | 外部文字列を命令として prompt へ連結しない。モデルには network、file、tool、バックアップ、Profile の操作権限を与えず、許可済み構造化データだけを渡す。 | 出力を strict schema、根拠集合、Bridge 上限で検証し、未確認の手掛かり、連絡先、URL、命令文を含む出力を拒否する。 | 推論状態と出力を破棄し、その参加者へ `no-signal` を返すか Lounge を終了する。モデルを再実行して穴埋めしない。 | 許可済み語彙の範囲で不適切な意味を作る可能性は残るため、Owner の表示前確認を維持する。 |
+| Prompt Injection | Local Agent 境界で入力を再検証し、危険 Unicode を拒否する。Public Passport の表示文字列を Prompt へ入れず、Domain が導出した Evidence だけを別 JSON Message で渡す。モデルには network、file、tool、バックアップ、Profile の操作権限を与えない。 | 出力を strict schema、根拠集合、Bridge 上限で再検証し、未確認の手掛かり、連絡先、URL、命令文、Tool Call を含む出力全体を拒否する。固定 Corpus と 1,000 件以上の Fuzz Input を CI で検証する。 | 推論状態と出力を破棄し、内容を反射しない型付き失敗から Rules へ 1 回だけ切り替える。同じ入力で Model を再実行しない。 | 許可済み Evidence の選択を Model が偏らせる可能性は残るため、固定 Renderer、Owner の表示前確認、実機 Red Team Gate を維持する。 |
 | Lounge 侵入 | 参加 Pet ごとに 1 回限りの capability と QR を発行し、Host が使用済みへの原子的遷移と参加要求を確認する。安定 ID を参加判定に使わない。 | Host と参加 Pet に現在の参加数、追加、離脱を表示し、capability の二重利用と認証失敗を検出する。 | Host は Lounge を終了し、すべてのローカルデータを削除する。続行する場合は新しい QR から作り直す。 | QR を正規に受け取った悪意ある参加者は Public Passport を見られ、他の参加者へ内容を口頭で伝えられる。 |
 | Replay | Lounge ごとに暗号学的乱数の nonce と一時鍵を生成し、各 Pet Message を Lounge nonce、送信者の一時鍵、単調増加 sequence、message nonce、AEAD tag に結び付ける。Host は参加許可前に raw token を破棄し、一方向 digest だけを使用済み集合へ追加する。 | Host の使用済み capability digest 集合と、各端末の受理済み message nonce、sequence、期限、AEAD 検証により、二重参加、重複、順序戻り、別 Lounge の message を拒否する。 | 該当接続を閉じ、鍵とキューを破棄する。状態に矛盾があれば Lounge 全体を終了する。再参加には Host が発行する新しい capability を必要とする。 | 端末時刻が大きくずれた場合は正規 QR も拒否する。Host の再起動後は過去集合を復元せず、一時秘密鍵を失った以前の Lounge 全体を無効にする。 |
 | パケット盗聴 | QR の一時公開鍵を起点に相互認証したセッション鍵を導出し、全 Pet Message と終了通知を AEAD で暗号化する。平文 fallback、外部 relay、外部推論 API を持たない。 | 改ざんを伴わない受動的な盗聴はアプリから検出できない。AEAD tag、相手の一時鍵、sequence の検証失敗は能動的な改ざんの補助シグナルとして接続を閉じる。 | Lounge を終了し、鍵を破棄して新しい QR で再作成する。 | 通信量、時刻、通信層アドレス、同一 LAN 上に端末がいる事実などのメタデータは OS とネットワーク機器から見える場合がある。 |
@@ -81,3 +81,6 @@
 - Security Signal に入力本文、手掛かり、鍵、端末情報、通信層アドレスを含めず、Lounge 終了時に消す。
 - 検出不能または根拠不足の場合は Bridge を生成せず、`no-signal` または Lounge 終了を選ぶ。
 - 依存関係と通信先の検査で Analytics SDK と外部推論 API が存在しないことを継続確認する。
+- Local Agent へは Public Passport 全体ではなく、信頼側 Domain が導出した版付き Evidence だけを渡す。
+  Prompt JSON は 4 KiB 以下とし、Tool Definition と自由記述 Output Field を持たせない。
+- Invalid Model Output と Safety Failure の本文を UI、Log、Error、Fallback Prompt へ反射しない。

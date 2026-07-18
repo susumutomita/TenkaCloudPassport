@@ -48,6 +48,8 @@ token buffer、任意の自由記述を設けない。strict schema はこの al
 | Match Evidence の手掛かり | 3 件である。 | Public Passport より根拠を増やさない。 |
 | Version、ID、catalog 値以外の短い文字列 | 96 UTF-16 code unit である。 | 表示 key と app version を bounded にする。自由記述は許可しない。 |
 | Peer Envelope の UTF-8 JSON | 4 KiB である。 | 過大な Pet Message を検証前に拒否する。 |
+| Local Agent の Evidence-only Prompt JSON | 4 KiB である。 | Public Passport 本文を含めず、Model Context へ渡す入力を bounded にする。 |
+| GGUF Output の UTF-8 JSON / ネスト深度 | 4 KiB / 4 である。 | Native が生成 Token 上限を無視しても JSON parse と Runtime Validator を bounded にする。 |
 | バックアップの UTF-8 JSON | 64 KiB である。 | カタログ選択と設定だけの allowlist を超える入力を拒否する。 |
 | 外部 JSON のネスト深度 | 8 である。 | 深い再帰入力を Schema 検証前に拒否する。 |
 | `sequence` | `0` 以上 `2,147,483,647` 以下である。 | 単調増加整数へ限定し、数値精度と無制限増加を避ける。 |
