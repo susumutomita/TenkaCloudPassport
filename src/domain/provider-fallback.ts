@@ -4,20 +4,25 @@ import {
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  validateAgentModelProviderOutput,
 } from './agent-model-provider';
 
 /**
- * Issue 13: Local Agent の Timeout / Schema Error / Load Error 後、重複 Bridge を出さず
+ * Local Agent の Timeout / Cancel / Schema Error / Load Error 後、重複 Bridge を出さず
  * Rules へ 1 回だけ切り替える Fallback-once semantics。`docs/design/agent-model-provider-contract.md`
- * の「失敗の 3 種類と Fallback-once」を正本とする。
+ * の「失敗の 4 種類と Fallback-once」を正本とする。
  */
 
-/** Provider 切替理由。内容を持たない閉じた enum で、UI（`provider-switch-notice.ts`）は
+/** Provider 切替理由。内容を持たない閉じた enum で、UI（`provider-status-notice.ts`）は
  * この値だけを表示し、Evidence や Chain of Thought を一切表示しない。 */
-export type ProviderSwitchReason = 'timeout' | 'schema-error' | 'load-error';
+export type ProviderSwitchReason =
+  | 'timeout'
+  | 'cancelled'
+  | 'schema-error'
+  | 'load-error';
 
 /**
- * 網羅的な switch にすることで、`AgentModelFailureCode` へ将来 4 つ目の値が増えた場合に
+ * 網羅的な switch にすることで、`AgentModelFailureCode` へ将来新しい値が増えた場合に
  * このマッピングの更新漏れをコンパイルエラーとして検出する。
  */
 function switchReasonFromFailureCode(
@@ -26,6 +31,8 @@ function switchReasonFromFailureCode(
   switch (code) {
     case 'TIMEOUT':
       return 'timeout';
+    case 'CANCELLED':
+      return 'cancelled';
     case 'SCHEMA_ERROR':
       return 'schema-error';
     case 'LOAD_ERROR':
@@ -34,8 +41,16 @@ function switchReasonFromFailureCode(
 }
 
 export type ProviderAttemptResult =
-  | { readonly kind: 'success'; readonly decision: AgentModelDecision }
-  | { readonly kind: 'failure'; readonly reason: ProviderSwitchReason };
+  | {
+      readonly kind: 'success';
+      readonly providerKind: AgentModelProvider['kind'];
+      readonly decision: AgentModelDecision;
+    }
+  | {
+      readonly kind: 'failure';
+      readonly providerKind: AgentModelProvider['kind'];
+      readonly reason: ProviderSwitchReason;
+    };
 
 /**
  * Primary Provider（将来の Local Agent）を 1 回呼び出し、成功か型付き失敗かへ正規化する
@@ -47,12 +62,14 @@ export async function attemptProvider(
   input: AgentModelInput
 ): Promise<ProviderAttemptResult> {
   try {
-    const decision = await provider.provide(input);
-    return { kind: 'success', decision };
+    const output = await provider.provide(input);
+    const decision = validateAgentModelProviderOutput(input, output);
+    return { kind: 'success', providerKind: provider.kind, decision };
   } catch (error) {
     if (error instanceof AgentModelProviderError) {
       return {
         kind: 'failure',
+        providerKind: provider.kind,
         reason: switchReasonFromFailureCode(error.code),
       };
     }
@@ -63,6 +80,7 @@ export async function attemptProvider(
 export interface ProviderRunOutcome {
   readonly decision: AgentModelDecision;
   readonly settledBy: 'primary' | 'rules-fallback';
+  readonly providerKind: AgentModelProvider['kind'];
   /** `null` は Primary がそのまま採用されたことを示す（切替なし）。 */
   readonly switchReason: ProviderSwitchReason | null;
 }
@@ -79,8 +97,8 @@ export interface ProviderRunStep {
 
 /**
  * Fallback-once の純粋な Runner（同期・副作用なし）。同じ `encounterKey` に対しては、
- * 一度確定した Outcome を二度と再計算・上書きしない。Local Agent の Timeout / Schema
- * Error / Load Error 後に届く遅延イベントや、Lounge の Cancel 後に届く重複イベントが、
+ * 一度確定した Outcome を二度と再計算・上書きしない。Local Agent の Timeout / Cancel /
+ * Schema Error / Load Error 後に届く遅延イベントや重複イベントが、
  * 確定済みの Bridge / `no-signal` を上書きしたり Rules Provider を再度呼び出したりしない
  * （`pet-interaction.ts` の「最も早い Event が理由を決める」原則と同じ idempotency）。
  * `computeRulesFallback` は thunk のため、Primary が成功した経路では一度も呼ばれない。
@@ -97,10 +115,16 @@ export function runProviderOnce(
   }
   const outcome: ProviderRunOutcome =
     attempt.kind === 'success'
-      ? { decision: attempt.decision, settledBy: 'primary', switchReason: null }
+      ? {
+          decision: attempt.decision,
+          settledBy: 'primary',
+          providerKind: attempt.providerKind,
+          switchReason: null,
+        }
       : {
           decision: computeRulesFallback(),
           settledBy: 'rules-fallback',
+          providerKind: 'rules',
           switchReason: attempt.reason,
         };
   const nextLedger = new Map(ledger);
