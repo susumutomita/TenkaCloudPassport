@@ -2,6 +2,7 @@ export const SESSION_RANDOM_BYTES = 16;
 
 export type LoungeId = `lng_${string}`;
 export type ParticipantId = `ptc_${string}`;
+export type RoundId = `rnd_${string}`;
 
 export type RandomBytes = (length: number) => Uint8Array;
 
@@ -55,6 +56,10 @@ export function createParticipantId(randomBytes: RandomBytes): ParticipantId {
   return `ptc_${bytesToHex(validatedRandomBytes(randomBytes))}`;
 }
 
+export function createRoundId(randomBytes: RandomBytes): RoundId {
+  return `rnd_${bytesToHex(validatedRandomBytes(randomBytes))}`;
+}
+
 export function createSessionIdentifiers(randomBytes: RandomBytes): {
   readonly loungeId: LoungeId;
   readonly participantId: ParticipantId;
@@ -79,4 +84,8 @@ export function isLoungeId(value: string): value is LoungeId {
 
 export function isParticipantId(value: string): value is ParticipantId {
   return /^ptc_[0-9a-f]{32}$/.test(value);
+}
+
+export function isRoundId(value: string): value is RoundId {
+  return /^rnd_[0-9a-f]{32}$/.test(value);
 }

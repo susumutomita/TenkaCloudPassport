@@ -1385,6 +1385,50 @@ describe('Issue 23: 認証済み Peer Protocol receiver', () => {
     });
   });
 
+  it('Host 1 名の local cleanup Snapshot は最後の Guest state を破棄するが Wire では拒否する', () => {
+    const session = rulesOnlySession();
+    completeHandshake(session);
+    expect(
+      session.receive(
+        authenticatedRaw(
+          envelope(2, { kind: 'public-passport', publicPassport: PASSPORT })
+        )
+      ).kind
+    ).toBe('accepted');
+    session.updateLocalMembership({
+      revision: 1,
+      participantIds: [HOST_ID, GUEST_ID],
+    });
+
+    expect(() =>
+      session.updateLocalMembership({
+        revision: 2,
+        participantIds: [HOST_ID],
+      })
+    ).toThrow(PeerProtocolSessionError);
+    session.cleanupLocalHostMembership(2);
+
+    expect(session.lateJoinSnapshot()).toEqual({
+      membership: { revision: 2, participantIds: [HOST_ID] },
+      publicPassports: [],
+    });
+    expect(session.peerCapabilities(GUEST_ID)).toBeNull();
+    expect(() => session.cleanupLocalHostMembership(2)).toThrow(
+      PeerProtocolSessionError
+    );
+    expectSchemaError(
+      () =>
+        parsePeerEnvelope(
+          envelope(3, {
+            kind: 'membership',
+            revision: 2,
+            participantIds: [HOST_ID],
+          })
+        ),
+      'LIMIT_EXCEEDED'
+    );
+  });
+
   it('Local Membership revision は Wire と同じ最大値だけを受理する', () => {
     const maximumSession = rulesOnlySession();
     maximumSession.updateLocalMembership({

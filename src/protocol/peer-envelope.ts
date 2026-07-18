@@ -1,7 +1,11 @@
 import type { CapabilityToken } from '../domain/capability';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import type { PublicPassport } from '../domain/passport';
-import type { LoungeId, ParticipantId } from '../domain/session-identifiers';
+import type {
+  LoungeId,
+  ParticipantId,
+  RoundId,
+} from '../domain/session-identifiers';
 
 export type { CapabilityToken } from '../domain/capability';
 export {
@@ -12,6 +16,7 @@ export {
   LOCAL_LLM_CAPABILITY,
   RULES_PROVIDER_CAPABILITY,
 } from '../domain/capability';
+export type { RoundId } from '../domain/session-identifiers';
 
 export const PROTOCOL_VERSION = { major: 1, minor: 2 } as const;
 export const PEER_MESSAGE_MAX_TTL_MS = 60_000;
@@ -25,7 +30,6 @@ export interface ProtocolVersion {
 }
 
 export type MessageId = `mid_${string}`;
-export type RoundId = `rnd_${string}`;
 export type EvidenceId = `evi_${string}`;
 export interface HelloPayload {
   readonly kind: 'hello';

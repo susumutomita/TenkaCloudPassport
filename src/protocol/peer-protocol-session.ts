@@ -450,6 +450,29 @@ export class PeerProtocolSession {
     }
   }
 
+  #assertLocalHost(): void {
+    if (this.#input.localParticipantId !== this.#input.hostParticipantId) {
+      throw new PeerProtocolSessionError(
+        'HOST_ONLY_OPERATION',
+        'Local Membership を更新できるのは Host だけです。'
+      );
+    }
+  }
+
+  #assertCleanupRevision(revision: number): void {
+    if (
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      revision > PEER_MAX_SEQUENCE ||
+      revision <= this.#lastMembershipRevision
+    ) {
+      throw new PeerProtocolSessionError(
+        'INVALID_MEMBERSHIP',
+        'Local cleanup には現在より新しい範囲内の revision が必要です。'
+      );
+    }
+  }
+
   #removeParticipant(participantId: ParticipantId): void {
     this.#peers.delete(participantId);
     this.#rejectedPeers.delete(participantId);
@@ -632,14 +655,20 @@ export class PeerProtocolSession {
 
   updateLocalMembership(payload: Omit<MembershipPayload, 'kind'>): void {
     this.#assertOpen();
-    if (this.#input.localParticipantId !== this.#input.hostParticipantId) {
-      throw new PeerProtocolSessionError(
-        'HOST_ONLY_OPERATION',
-        'Local Membership を更新できるのは Host だけです。'
-      );
-    }
+    this.#assertLocalHost();
     this.#assertMembership(payload);
     this.#applyMembership({ kind: 'membership', ...payload });
+  }
+
+  cleanupLocalHostMembership(revision: number): void {
+    this.#assertOpen();
+    this.#assertLocalHost();
+    this.#assertCleanupRevision(revision);
+    this.#applyMembership({
+      kind: 'membership',
+      revision,
+      participantIds: [this.#input.hostParticipantId],
+    });
   }
 
   lateJoinSnapshot(): LateJoinSnapshot {

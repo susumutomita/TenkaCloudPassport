@@ -3,7 +3,9 @@ import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import {
   createLoungeId,
   createParticipantId,
+  createRoundId,
   createSessionIdentifiers,
+  isRoundId,
   SessionIdentifierError,
 } from './session-identifiers';
 
@@ -33,11 +35,12 @@ function expectIdentifierError(
 }
 
 describe('使い捨て Session ID', () => {
-  it('Lounge ID と Participant ID を個別の 128 bit 乱数から生成する', () => {
+  it('Lounge ID、Participant ID、Round ID を個別の 128 bit 乱数から生成する', () => {
     const randomBytes = sequentialRandomBytes();
 
     expect(createLoungeId(randomBytes)).toBe(`lng_${'01'.repeat(16)}`);
     expect(createParticipantId(randomBytes)).toBe(`ptc_${'02'.repeat(16)}`);
+    expect(createRoundId(randomBytes)).toBe(`rnd_${'03'.repeat(16)}`);
   });
 
   it('注入した独立 128 bit 乱数から Lounge ID と Participant ID を生成する', () => {
@@ -55,6 +58,12 @@ describe('使い捨て Session ID', () => {
 
     expect(second.loungeId).not.toBe(first.loungeId);
     expect(second.participantId).not.toBe(first.participantId);
+  });
+
+  it('Round ID は 128 bit の小文字 hexadecimal だけを受理する', () => {
+    expect(isRoundId(`rnd_${'ab'.repeat(16)}`)).toBe(true);
+    expect(isRoundId('rnd_ab')).toBe(false);
+    expect(isRoundId(`rnd_${'AB'.repeat(16)}`)).toBe(false);
   });
 
   it('乱数生成器が 128 bit 以外を返した場合は発行しない', () => {
