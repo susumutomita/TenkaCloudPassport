@@ -33,7 +33,7 @@ receiver へ別引数で渡し、Wire の値と一致した場合だけ認証済
 | `public-passport` | `publicPassport` | strict Public Passport です。Participant ごとの最新値だけ保持する。 |
 | `pet-signal` | `evidenceId`, `fieldReference`, `signalType` | 検証済み field 参照だけで、自由記述 Instruction を持たない。 |
 | `bridge-proposal` | `participantIds[]`, `evidenceIds[]` | Claim は Lounge-scoped Evidence ID だけです。表示文や Score を持たない。 |
-| `membership` | `revision`, `participantIds[]` | Host だけが送る完全 Snapshot です。revision は 0〜2,147,483,647 とし、空状態でも巻き戻さない。 |
+| `membership` | `revision`, `participantIds[]` | Host だけが送る 2〜6 名の完全 Snapshot です。revision は 0〜2,147,483,647 とし、空状態でも巻き戻さない。 |
 | `leave` | `reason` | Owner、Network、Host End の閉じた理由です。 |
 | `expire` | `reason: lounge-expired` | Host だけが送る終了通知です。各端末の TTL 強制を置き換えない。 |
 | `error` | `code`, `phase` | 内容を持たない固定 code と phase だけです。 |
@@ -41,6 +41,10 @@ receiver へ別引数で渡し、Wire の値と一致した場合だけ認証済
 `pet-signal.fieldReference` は `{ kind: "clue", clueId }` または
 `{ kind: "language", language }` だけです。Clue ID と Language は同梱カタログ値に限る。
 `evidenceId` は `evi_` + 128 bit 値で、別 Lounge へ再利用しない。
+
+Wire へ送る Membership は 2〜6 名です。Host receiver 内の cleanup に限り、Host 1 名の local
+Snapshot を `cleanupLocalHostMembership()` へ適用できます。この Snapshot は最後の Guest state を
+破棄するための内部境界であり、Wire parser と `updateLocalMembership()` は 1 名を拒否します。
 
 ## Wire Example
 
