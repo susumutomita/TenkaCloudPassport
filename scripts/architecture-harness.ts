@@ -586,6 +586,34 @@ const RULES: Rule[] = [
         : lockPrivacyFindings(filePath, content),
   },
   {
+    id: 'INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT',
+    description:
+      'Pilot Measurement は Process Memory と手動 Share Port だけを使い、自動 Endpoint と永続 Storage を持たない',
+    scope: (p) =>
+      p === 'src/app/pilot-measurement.ts' ||
+      p === 'src/app/use-pilot-measurement-flow.ts' ||
+      p === 'src/screens/PilotMeasurementScreen.tsx' ||
+      p === 'src/screens/ConversationSelfReportScreen.tsx',
+    check: ({ path: filePath, content }) => {
+      const findings: Finding[] = [];
+      const forbidden =
+        /\b(?:fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|AsyncStorage|localStorage|sessionStorage|LocalProfileStorage|https?:\/\/)/;
+      const lines = content.split('\n');
+      for (let index = 0; index < lines.length; index += 1) {
+        if (!forbidden.test(lines[index])) continue;
+        findings.push({
+          rule: 'INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT',
+          severity: 'error',
+          file: filePath,
+          line: index + 1,
+          message:
+            'Pilot Measurement は自動送信と永続 Storage を使わず、Preview 後の手動 Share Port だけを使う',
+        });
+      }
+      return findings;
+    },
+  },
+  {
     id: 'INVARIANT_NO_TEST_FOCUS',
     description: 'コミット前に .only / .skip / xit / xdescribe を残さない',
     scope: (p) => /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(p),

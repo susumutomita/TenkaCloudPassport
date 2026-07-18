@@ -8,6 +8,8 @@ import type {
 } from '../app/use-local-diagnostics-flow';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
+import JsonPreviewCard from '../components/JsonPreviewCard';
+import ScreenCard from '../components/ScreenCard';
 import { colors, spacing } from '../ui/theme';
 
 interface LocalDiagnosticsScreenProps {
@@ -81,31 +83,19 @@ function DiagnosticSections({
         <Text style={styles.status}>{t.empty}</Text>
       ) : null}
       {diagnosticPreview ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{t.reportSectionTitle}</Text>
-          {diagnosticPreview.items.map((item) => (
-            <View key={item.key} style={styles.item}>
-              <Text style={styles.itemKey}>{item.key}</Text>
-              <Text selectable style={styles.itemValue}>
-                {item.value}
-              </Text>
-            </View>
-          ))}
-          <Text style={styles.body}>
-            {t.byteLength(diagnosticPreview.byteLength)}
-          </Text>
-          <Text selectable style={styles.jsonPreview}>
-            {diagnosticPreview.json}
-          </Text>
-        </View>
+        <JsonPreviewCard
+          byteLengthLabel={t.byteLength(diagnosticPreview.byteLength)}
+          items={diagnosticPreview.items}
+          json={diagnosticPreview.json}
+          title={t.reportSectionTitle}
+        />
       ) : null}
       {localDataPreview ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{t.storageSectionTitle}</Text>
+        <ScreenCard title={t.storageSectionTitle}>
           <Text style={styles.body}>
             {t.confirmDeleteAllText(totalCount, localDataPreview.totalBytes)}
           </Text>
-        </View>
+        </ScreenCard>
       ) : null}
       {noticeText ? (
         <Text accessibilityLiveRegion="polite" style={styles.notice}>
@@ -242,14 +232,6 @@ export default function LocalDiagnosticsScreen({
 
 const styles = StyleSheet.create({
   status: { color: colors.muted, fontSize: 16, lineHeight: 24 },
-  card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
   error: {
     backgroundColor: colors.surface,
     borderColor: colors.danger,
@@ -261,15 +243,6 @@ const styles = StyleSheet.create({
   confirmation: { gap: spacing.sm },
   sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: '800' },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  item: { gap: spacing.xs },
-  itemKey: { color: colors.muted, fontSize: 13, fontWeight: '700' },
-  itemValue: { color: colors.ink, fontSize: 15 },
-  jsonPreview: {
-    color: colors.ink,
-    fontFamily: 'monospace',
-    fontSize: 12,
-    lineHeight: 18,
-  },
   notice: {
     backgroundColor: colors.primarySoft,
     borderRadius: 10,

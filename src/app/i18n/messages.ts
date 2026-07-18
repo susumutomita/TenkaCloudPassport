@@ -250,6 +250,20 @@ export interface AppMessages {
     readonly sourceLabelCaption: string;
     readonly generatedNoteCaption: string;
   };
+  readonly conversationSelfReport: {
+    readonly title: string;
+    readonly description: string;
+    readonly optionalNotice: string;
+    readonly storageNotice: string;
+    readonly question: string;
+    readonly startedConversationButton: string;
+    readonly notYetButton: string;
+    readonly preferNotToAnswerButton: string;
+    readonly skipButton: string;
+    readonly answerHint: string;
+    readonly declineHint: string;
+    readonly skipHint: string;
+  };
   readonly destroyedLounge: {
     readonly title: string;
     readonly description: string;
@@ -307,7 +321,32 @@ export interface AppMessages {
     readonly languageOptionHint: string;
     readonly diagnosticsButton: string;
     readonly diagnosticsButtonHint: string;
+    readonly pilotMeasurementButton: string;
+    readonly pilotMeasurementButtonHint: string;
     readonly backButton: string;
+  };
+  readonly pilotMeasurement: {
+    readonly title: string;
+    readonly description: string;
+    readonly memoryOnlyTitle: string;
+    readonly memoryOnlyText: string;
+    readonly researchConsentTitle: string;
+    readonly researchEnabled: string;
+    readonly researchDisabled: string;
+    readonly enableResearchButton: string;
+    readonly disableResearchButton: string;
+    readonly belowMinimum: (current: number, minimum: number) => string;
+    readonly previewTitle: string;
+    readonly byteLength: (bytes: number) => string;
+    readonly refreshButton: string;
+    readonly shareButton: (sharing: boolean) => string;
+    readonly shareError: string;
+    readonly backButton: string;
+    readonly notice: {
+      readonly shared: string;
+      readonly dismissed: string;
+      readonly saved: string;
+    };
   };
   readonly diagnostics: {
     readonly title: string;
@@ -659,6 +698,24 @@ const ja: AppMessages = {
     generatedNoteCaption:
       'この案内文は端末内で今回生成した補助的な文章です。相手からの原文ではありません。',
   },
+  conversationSelfReport: {
+    title: '任意の 1 Tap だけ。',
+    description:
+      'Lounge の内容はすでに破棄しました。この回答で結果の再判定や追加の質問は行いません。',
+    optionalNotice: '回答は任意です。答えずに今すぐ終了できます。',
+    storageNotice:
+      '選択肢の件数だけを Process 内 Memory で集計し、氏名、ID、正確な時刻、内容は保存しません。',
+    question:
+      '表示された Bridge をきっかけに、相手との口頭会話が始まりましたか。',
+    startedConversationButton: '会話が始まった',
+    notYetButton: 'まだ',
+    preferNotToAnswerButton: '回答しない',
+    skipButton: '答えずに今すぐ終了',
+    answerHint: 'この選択肢の件数だけを端末内の集計へ加えて終了します。',
+    declineHint:
+      '回答を拒否した件数だけを加え、会話開始率の分母には含めず終了します。',
+    skipHint: '回答の件数を加えず、ただちに終了します。',
+  },
   destroyedLounge: {
     title: 'この Lounge のデータを端末から破棄しました。',
     description:
@@ -730,7 +787,40 @@ const ja: AppMessages = {
     diagnosticsButton: '診断と端末内 Data',
     diagnosticsButtonHint:
       'Network 送信なしの診断 Preview と、分離された削除操作を開きます。',
+    pilotMeasurementButton: 'Pilot の匿名 Aggregate',
+    pilotMeasurementButtonHint:
+      'Process 内 Counter の全項目を Preview し、最低集計単位を満たす場合だけ手動共有できます。',
     backButton: '戻る',
+  },
+  pilotMeasurement: {
+    title: '個人を追跡せず Pilot を振り返る。',
+    description:
+      'Start、Ready、Outcome、Provider、任意回答の件数だけを確認します。自動送信はしません。',
+    memoryOnlyTitle: 'この Aggregate は Process 内 Memory だけです。',
+    memoryOnlyText:
+      'アプリを閉じると消えます。正確な時刻、ID、場所、Passport、Bridge、会話内容は含みません。5 件でも匿名性を保証しません。',
+    researchConsentTitle: 'Research Consent は Product Consent と別です。',
+    researchEnabled:
+      'Research Counter は有効です。同意した参加者の Session だけを開始してください。',
+    researchDisabled:
+      'Research Counter は無効です。Product は計測なしでそのまま利用できます。',
+    enableResearchButton: 'Research Consent 確認後に Counter を有効化',
+    disableResearchButton: 'Research Counter を無効化',
+    belowMinimum: (current, minimum) =>
+      `Outcome は ${current} 件です。${minimum} 件に達するまで Preview JSON と共有を作りません。`,
+    previewTitle: '共有前の全項目 Preview',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: '現在の Counter から Preview を更新',
+    shareButton: (sharing) =>
+      sharing ? '共有中' : 'Preview を Share Sheet で手動共有',
+    shareError:
+      '共有できませんでした。Aggregate は自動送信せず、この Process の Memory にだけ残っています。',
+    backButton: 'Settings へ戻る',
+    notice: {
+      shared: 'Share Sheet で共有しました。',
+      dismissed: '共有を取り消しました。自動再送はしません。',
+      saved: 'Owner が選んだ保存先へ保存しました。',
+    },
   },
   diagnostics: {
     title: '端末内だけで状態を確認する。',
@@ -1153,6 +1243,26 @@ const en: AppMessages = {
     generatedNoteCaption:
       'This note was generated on this device just now, as a supplementary explanation. It is not original text from the other side.',
   },
+  conversationSelfReport: {
+    title: 'One optional tap.',
+    description:
+      'The Lounge content has already been discarded. This answer never re-judges the result or starts another question.',
+    optionalNotice:
+      'Answering is optional. You can finish now without answering.',
+    storageNotice:
+      'Only option counts are aggregated in process memory. No name, ID, exact time, or content is saved.',
+    question:
+      'Did the displayed Bridge prompt a spoken conversation with the other person to begin?',
+    startedConversationButton: 'Conversation started',
+    notYetButton: 'Not yet',
+    preferNotToAnswerButton: 'Prefer not to answer',
+    skipButton: 'Finish now without answering',
+    answerHint:
+      'Adds only this option count to the on-device aggregate and finishes.',
+    declineHint:
+      'Counts an explicit refusal, excludes it from the conversation-start denominator, and finishes.',
+    skipHint: 'Finishes immediately without adding an answer count.',
+  },
   destroyedLounge: {
     title: 'Discarded this Lounge’s data from this device.',
     description:
@@ -1226,7 +1336,40 @@ const en: AppMessages = {
     diagnosticsButton: 'Diagnostics and local data',
     diagnosticsButtonHint:
       'Opens an on-device diagnostic Preview and separate deletion actions.',
+    pilotMeasurementButton: 'Anonymous Pilot aggregate',
+    pilotMeasurementButtonHint:
+      'Previews every in-process counter and permits manual sharing only after the minimum aggregation unit.',
     backButton: 'Back',
+  },
+  pilotMeasurement: {
+    title: 'Review the Pilot without tracking people.',
+    description:
+      'Checks only counts for Start, Ready, Outcome, Provider, and optional answers. Nothing is sent automatically.',
+    memoryOnlyTitle: 'This aggregate exists only in process memory.',
+    memoryOnlyText:
+      'It disappears when the app closes. It contains no exact time, ID, location, Passport, Bridge, or conversation content. Five outcomes do not guarantee anonymity.',
+    researchConsentTitle: 'Research consent is separate from Product consent.',
+    researchEnabled:
+      'Research counters are enabled. Start only sessions whose participants consented to research.',
+    researchDisabled:
+      'Research counters are disabled. The Product remains fully usable without measurement.',
+    enableResearchButton: 'Enable counters after research consent',
+    disableResearchButton: 'Disable research counters',
+    belowMinimum: (current, minimum) =>
+      `${current} outcomes are available. Preview JSON and sharing stay unavailable until ${minimum}.`,
+    previewTitle: 'Every field before sharing',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: 'Refresh Preview from current counters',
+    shareButton: (sharing) =>
+      sharing ? 'Sharing' : 'Manually share Preview via Share Sheet',
+    shareError:
+      'Sharing failed. Nothing was sent automatically; the aggregate remains only in this process memory.',
+    backButton: 'Back to Settings',
+    notice: {
+      shared: 'Shared through the Share Sheet.',
+      dismissed: 'Sharing was dismissed. It will not retry automatically.',
+      saved: 'Saved to the destination selected by the Owner.',
+    },
   },
   diagnostics: {
     title: 'Check status only on this device.',

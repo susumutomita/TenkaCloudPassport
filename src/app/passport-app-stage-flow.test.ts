@@ -32,6 +32,7 @@ const FUNCTION_NAMES = [
   'cancelInvite',
   'leave',
   'endAsHost',
+  'complete',
   'restartEncounter',
   'editLocalProfile',
 ] as const;
@@ -234,6 +235,29 @@ describe('PassportApp の Stage 遷移契約', () => {
       'setEncounteredConfirmed(',
     ]) {
       expect(body).toContain(resetCall);
+    }
+  });
+
+  it('結果完了は Self-report 表示前の同一遷移で Lounge 内容と Interaction を破棄する', async () => {
+    const text = await source();
+    const body = functionBody(text, 'complete');
+
+    expectInOrder(body, [
+      'const showSelfReport',
+      'discardInviteFlow()',
+      'setInteraction(null)',
+      "type: 'complete'",
+      'setShowConversationSelfReport(showSelfReport)',
+    ]);
+    const discardBody = functionBody(text, 'discardInviteFlow');
+    for (const resetCall of [
+      'setGuestProfile(null)',
+      'setGuestShareSelection(null)',
+      "setEncounteredPetName('')",
+      'setEncounteredSelection([])',
+      'setSeenRawPayloads(new Set())',
+    ]) {
+      expect(discardBody).toContain(resetCall);
     }
   });
 

@@ -98,6 +98,53 @@ describe('INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE', () => {
   });
 });
 
+describe('INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT', () => {
+  const r = rule('INVARIANT_PILOT_MEASUREMENT_NO_AUTOMATIC_ENDPOINT');
+
+  it('Pilot Aggregate、Flow、2 Screen の production 4 file だけを対象にする', () => {
+    expect(r.scope('src/app/pilot-measurement.ts')).toBe(true);
+    expect(r.scope('src/app/use-pilot-measurement-flow.ts')).toBe(true);
+    expect(r.scope('src/screens/PilotMeasurementScreen.tsx')).toBe(true);
+    expect(r.scope('src/screens/ConversationSelfReportScreen.tsx')).toBe(true);
+    expect(r.scope('src/app/pilot-measurement.test.ts')).toBe(false);
+    expect(r.scope('src/app/backup-export.ts')).toBe(false);
+  });
+
+  it('Network Endpoint と永続 Storage の各入口を拒否する', () => {
+    const content = [
+      "fetch('/collect')",
+      'new XMLHttpRequest()',
+      "new WebSocket('wss:example')",
+      "new EventSource('/events')",
+      'navigator.sendBeacon()',
+      'AsyncStorage.setItem()',
+      'localStorage.setItem()',
+      'sessionStorage.setItem()',
+      'LocalProfileStorage.save()',
+      'https://collector.example',
+    ].join('\n');
+    const findings = r.check({
+      path: 'src/app/pilot-measurement.ts',
+      content,
+    });
+
+    expect(findings).toHaveLength(10);
+    expect(findings.every((finding) => finding.severity === 'error')).toBe(
+      true
+    );
+  });
+
+  it('Memory Counter と明示 Share Port だけの実装を通す', () => {
+    const findings = r.check({
+      path: 'src/app/pilot-measurement.ts',
+      content:
+        "let count = 0; count += 1; await sharePort.share({ fileName: 'aggregate.json', json });",
+    });
+
+    expect(findings).toHaveLength(0);
+  });
+});
+
 describe('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT', () => {
   const check = repoCheck('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT');
   const roots: string[] = [];
