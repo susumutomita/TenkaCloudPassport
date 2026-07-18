@@ -95,8 +95,28 @@ app_test:
 web_export:
 	bun run build:web
 
+# jscpd ベースライン・ラチェット。重複ゼロは強制しない (意図的な類似は baseline に
+# 焼き込み済み)。baseline を超える新規コピー&ペーストだけ fail させる (ADR-0012)。
+.PHONY: dup_check
+dup_check:
+	bun scripts/check-duplication.ts
+
+.PHONY: dup_baseline
+dup_baseline:
+	bun scripts/check-duplication.ts --update
+
+.PHONY: dup_report
+dup_report:
+	bunx jscpd
+
+# knip デッドコード検出。全量報告しかできないため gate にせず報告のみ (ADR-0012)。
+# rules は knip.json で warn 化済みなので検出があっても exit 0。
+.PHONY: dead_code
+dead_code:
+	bun run dead-code
+
 .PHONY: before-commit
-before-commit: architecture_harness harness_test pre_release_check lint_text lint typecheck app_test web_export
+before-commit: architecture_harness harness_test pre_release_check dup_check lint_text lint typecheck app_test web_export
 
 .PHONY: dev
 dev:
