@@ -219,7 +219,7 @@ export function parseBoundedJson(
   maximumBytes: number,
   maximumDepth: number
 ): unknown {
-  if (new TextEncoder().encode(raw).byteLength > maximumBytes) {
+  if (boundedUtf8ByteLength(raw, maximumBytes) > maximumBytes) {
     return schemaError(
       'LIMIT_EXCEEDED',
       '$',
@@ -244,4 +244,12 @@ export function parseBoundedJson(
     );
   }
   return parsed;
+}
+
+export function boundedUtf8ByteLength(
+  raw: string,
+  maximumBytes: number
+): number {
+  if (raw.length > maximumBytes) return maximumBytes + 1;
+  return new TextEncoder().encode(raw).byteLength;
 }

@@ -52,7 +52,8 @@ const PASSPORT = {
 
 const LOUNGE_ID: `lng_${string}` = `lng_${'11'.repeat(16)}`;
 const PARTICIPANT_ID: `ptc_${string}` = `ptc_${'22'.repeat(16)}`;
-const MESSAGE_NONCE: `msg_${string}` = `msg_${'33'.repeat(16)}`;
+const MESSAGE_ID: `mid_${string}` = `mid_${'33'.repeat(16)}`;
+const SENT_AT_EPOCH_MS = 1_784_332_800_000;
 
 const QUESTION = {
   schemaVersion: 1,
@@ -79,11 +80,13 @@ const DECISION = {
 } as const;
 
 const PEER_ENVELOPE = {
-  protocolVersion: { major: 1, minor: 1 },
+  protocolVersion: { major: 1, minor: 2 },
   loungeId: LOUNGE_ID,
   senderParticipantId: PARTICIPANT_ID,
+  messageId: MESSAGE_ID,
   sequence: 0,
-  messageNonce: MESSAGE_NONCE,
+  sentAtEpochMs: SENT_AT_EPOCH_MS,
+  expiresAtEpochMs: SENT_AT_EPOCH_MS + 60_000,
   payload: { kind: 'public-passport', publicPassport: PASSPORT },
 } as const;
 
@@ -244,11 +247,13 @@ describe('Versioned Domain Schema', () => {
       () => parseAgentDecision({ schemaVersion: 1, kind: 'bridge' }),
       () =>
         parsePeerEnvelope({
-          protocolVersion: { major: 1, minor: 1 },
+          protocolVersion: { major: 1, minor: 2 },
           loungeId: LOUNGE_ID,
           senderParticipantId: PARTICIPANT_ID,
+          messageId: MESSAGE_ID,
           sequence: 0,
-          messageNonce: MESSAGE_NONCE,
+          sentAtEpochMs: SENT_AT_EPOCH_MS,
+          expiresAtEpochMs: SENT_AT_EPOCH_MS + 60_000,
         }),
       () =>
         parseBackup({
@@ -627,16 +632,16 @@ describe('Versioned Domain Schema', () => {
 });
 
 describe('Peer Protocol Version と入力上限', () => {
-  it('Version 1.1 を受理し、未知 Major と未対応 Minor を拒否する', () => {
+  it('Version 1.2 を受理し、未知 Major と旧 Minor を拒否する', () => {
     expect(parsePeerEnvelope(PEER_ENVELOPE).protocolVersion).toEqual({
       major: 1,
-      minor: 1,
+      minor: 2,
     });
     expectSchemaError(
       () =>
         parsePeerEnvelope({
           ...PEER_ENVELOPE,
-          protocolVersion: { major: 2, minor: 1 },
+          protocolVersion: { major: 2, minor: 2 },
         }),
       'UNSUPPORTED_VERSION'
     );
@@ -644,7 +649,7 @@ describe('Peer Protocol Version と入力上限', () => {
       () =>
         parsePeerEnvelope({
           ...PEER_ENVELOPE,
-          protocolVersion: { major: 1, minor: 0 },
+          protocolVersion: { major: 1, minor: 1 },
         }),
       'UNSUPPORTED_VERSION'
     );
@@ -663,16 +668,15 @@ describe('Peer Protocol Version と入力上限', () => {
       () =>
         parsePeerEnvelope({
           ...PEER_ENVELOPE,
-          protocolVersion: { major: 1, minor: 1, patch: 0 },
+          protocolVersion: { major: 1, minor: 2, patch: 0 },
         }),
       'UNKNOWN_FIELD'
     );
   });
 
-  it('message nonce の形式不正を拒否する', () => {
+  it('Message ID の形式不正を拒否する', () => {
     expectSchemaError(
-      () =>
-        parsePeerEnvelope({ ...PEER_ENVELOPE, messageNonce: 'msg_invalid' }),
+      () => parsePeerEnvelope({ ...PEER_ENVELOPE, messageId: 'mid_invalid' }),
       'INVALID_VALUE'
     );
   });
@@ -692,7 +696,7 @@ describe('Peer Protocol Version と入力上限', () => {
     );
   });
 
-  it('Public Passport、Owner Answer、retired 以外の payload を拒否する', () => {
+  it('Raw Prompt、Owner Answer、旧 retired payload を拒否する', () => {
     expectSchemaError(
       () =>
         parsePeerEnvelope({
@@ -711,24 +715,28 @@ describe('Peer Protocol Version と入力上限', () => {
             answer: 'decline',
           },
         }),
-      'INVALID_VALUE'
+      'UNKNOWN_FIELD'
     );
-    expect(
-      parsePeerEnvelope({
-        ...PEER_ENVELOPE,
-        payload: {
-          kind: 'owner-answer',
-          questionId: 'confirm-shared-clue',
-          answer: 'yes',
-        },
-      }).payload.kind
-    ).toBe('owner-answer');
-    expect(
-      parsePeerEnvelope({
-        ...PEER_ENVELOPE,
-        payload: { kind: 'retired', outcome: 'no-signal' },
-      }).payload.kind
-    ).toBe('retired');
+    expectSchemaError(
+      () =>
+        parsePeerEnvelope({
+          ...PEER_ENVELOPE,
+          payload: {
+            kind: 'owner-answer',
+            questionId: 'confirm-shared-clue',
+            answer: 'yes',
+          },
+        }),
+      'UNKNOWN_FIELD'
+    );
+    expectSchemaError(
+      () =>
+        parsePeerEnvelope({
+          ...PEER_ENVELOPE,
+          payload: { kind: 'retired', outcome: 'no-signal' },
+        }),
+      'UNKNOWN_FIELD'
+    );
   });
 
   it('Message の UTF-8 byte 数が 4 KiB を超える場合は Schema 前に拒否する', () => {
