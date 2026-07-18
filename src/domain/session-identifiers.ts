@@ -47,6 +47,14 @@ function bytesToHex(bytes: Uint8Array): string {
   );
 }
 
+export function createLoungeId(randomBytes: RandomBytes): LoungeId {
+  return `lng_${bytesToHex(validatedRandomBytes(randomBytes))}`;
+}
+
+export function createParticipantId(randomBytes: RandomBytes): ParticipantId {
+  return `ptc_${bytesToHex(validatedRandomBytes(randomBytes))}`;
+}
+
 export function createSessionIdentifiers(randomBytes: RandomBytes): {
   readonly loungeId: LoungeId;
   readonly participantId: ParticipantId;

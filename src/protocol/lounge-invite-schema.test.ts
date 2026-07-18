@@ -12,7 +12,13 @@ function validInvite(): LoungeInvite {
   return {
     schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
     loungeId: LOUNGE_ID,
-    expiresAtEpochMs: 1_000_000,
+    joinSecret: `jsc_${'11'.repeat(32)}`,
+    hostDiscoveryHint: 'local-v1:host-a',
+    transportFingerprint: `sha256_${'aa'.repeat(32)}`,
+    issuedAtEpochMs: 1_000_000,
+    expiresAtEpochMs: 2_200_000,
+    capacity: 6,
+    requiredCapabilities: ['rules-provider-v1'],
   };
 }
 
@@ -50,7 +56,7 @@ describe('Lounge Invite の strict validator', () => {
 
   it('未対応の Schema Version を拒否する', () => {
     expectSchemaError(
-      () => parseLoungeInvite({ ...validInvite(), schemaVersion: 2 }),
+      () => parseLoungeInvite({ ...validInvite(), schemaVersion: 3 }),
       'UNSUPPORTED_VERSION'
     );
   });

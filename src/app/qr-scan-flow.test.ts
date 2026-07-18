@@ -12,7 +12,13 @@ function inviteRaw(): string {
     value: {
       schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
       loungeId: LOUNGE_ID,
-      expiresAtEpochMs: 1_000_000,
+      joinSecret: `jsc_${'11'.repeat(32)}`,
+      hostDiscoveryHint: 'local-v1:host-a',
+      transportFingerprint: `sha256_${'aa'.repeat(32)}`,
+      issuedAtEpochMs: 1_000_000,
+      expiresAtEpochMs: 2_200_000,
+      capacity: 6,
+      requiredCapabilities: ['rules-provider-v1'],
     },
   });
 }
@@ -30,7 +36,13 @@ describe('QR Scan Flow のオーケストレーション', () => {
       value: {
         schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
         loungeId: LOUNGE_ID,
-        expiresAtEpochMs: 1_000_000,
+        joinSecret: `jsc_${'11'.repeat(32)}`,
+        hostDiscoveryHint: 'local-v1:host-a',
+        transportFingerprint: `sha256_${'aa'.repeat(32)}`,
+        issuedAtEpochMs: 1_000_000,
+        expiresAtEpochMs: 2_200_000,
+        capacity: 6,
+        requiredCapabilities: ['rules-provider-v1'],
       },
     });
     expect(result.seenRawPayloads.has(raw)).toBe(true);

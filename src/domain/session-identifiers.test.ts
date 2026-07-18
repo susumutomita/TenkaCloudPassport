@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import {
+  createLoungeId,
+  createParticipantId,
   createSessionIdentifiers,
   SessionIdentifierError,
 } from './session-identifiers';
@@ -31,6 +33,13 @@ function expectIdentifierError(
 }
 
 describe('使い捨て Session ID', () => {
+  it('Lounge ID と Participant ID を個別の 128 bit 乱数から生成する', () => {
+    const randomBytes = sequentialRandomBytes();
+
+    expect(createLoungeId(randomBytes)).toBe(`lng_${'01'.repeat(16)}`);
+    expect(createParticipantId(randomBytes)).toBe(`ptc_${'02'.repeat(16)}`);
+  });
+
   it('注入した独立 128 bit 乱数から Lounge ID と Participant ID を生成する', () => {
     const identifiers = createSessionIdentifiers(sequentialRandomBytes());
 

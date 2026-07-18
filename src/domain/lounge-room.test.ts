@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { endHostedLounge, LOUNGE_TTL_MS, leaveLounge } from './lounge';
-import { LOUNGE_INVITE_SCHEMA_VERSION } from './lounge-invite';
 import {
   advanceLoungeRoom,
   createLoungeRoom,
   destroyLoungeRoom,
   type FormingLoungeRoom,
-  inviteForRoom,
   joinLoungeRoom,
   LoungeRoomError,
   type LoungeRoomState,
@@ -379,45 +377,6 @@ describe('Lounge Room の Ready gating', () => {
 
     expect(state.status).toBe('forming');
     expect(state.participants).toEqual([]);
-  });
-
-  it('forming 状態の Room から同じ Lounge ID と期限を持つ Invite を導出する', () => {
-    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
-
-    expect(inviteForRoom(room)).toEqual({
-      schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
-      loungeId: LOUNGE_ID,
-      expiresAtEpochMs: room.expiresAtWallClockMs,
-    });
-  });
-
-  it('ready 状態の Room からも同じ Lounge ID と期限を持つ Invite を導出する', () => {
-    const room = createLoungeRoom({ loungeId: LOUNGE_ID, clock: CLOCK });
-    const joinedHost = joinLoungeRoom(room, {
-      participantId: HOST_ID,
-      publicPassport: passport(),
-      clock: CLOCK,
-    });
-    const joinedGuest = joinLoungeRoom(joinedHost, {
-      participantId: GUEST_ID,
-      publicPassport: passport(),
-      clock: CLOCK,
-    });
-    const hostReady = markParticipantReady(joinedGuest, {
-      participantId: HOST_ID,
-      clock: CLOCK,
-    });
-    const ready = markParticipantReady(hostReady, {
-      participantId: GUEST_ID,
-      clock: CLOCK,
-    });
-    if (ready.status !== 'ready') throw new Error('ready が必要です。');
-
-    expect(inviteForRoom(ready)).toEqual({
-      schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
-      loungeId: LOUNGE_ID,
-      expiresAtEpochMs: ready.expiresAtWallClockMs,
-    });
   });
 
   it('作成直後（0 秒経過）の期限確認では forming 状態を変更しない', () => {
