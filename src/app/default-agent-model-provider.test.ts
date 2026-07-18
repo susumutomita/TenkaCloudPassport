@@ -111,6 +111,7 @@ describe('AgentModelProvider の Platform Composition', () => {
     const config = await source(
       '../../modules/device-resource-telemetry/expo-module.config.json'
     );
+    const gitignore = await source('../../.gitignore');
     const podspec = await source(
       '../../modules/device-resource-telemetry/ios/TenkaDeviceResourceTelemetry.podspec'
     );
@@ -122,6 +123,10 @@ describe('AgentModelProvider の Platform Composition', () => {
     );
 
     expect(config).toContain('TenkaDeviceResourceTelemetryModule');
+    expect(gitignore).toContain('/ios/');
+    expect(gitignore).toContain('/android/');
+    expect(gitignore).not.toMatch(/^ios\/$/m);
+    expect(gitignore).not.toMatch(/^android\/$/m);
     expect(podspec).toContain("spec.dependency 'ExpoModulesCore'");
     expect(podspec).toContain(
       "spec.source_files = '**/*.{h,m,mm,swift,hpp,cpp}'"

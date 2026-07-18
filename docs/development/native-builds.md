@@ -61,6 +61,8 @@ private models directory へ Copy する。`supported` は activate でき、`ca
 は Context を初期化しない。Unload / Delete は実行中 Completion の停止と Context Release を待ってから行う。
 端末資源値は `modules/device-resource-telemetry` の local Expo module が返す。`expo-module.config.json` に加えて iOS
 Podspec と Android Library / Manifest が必要であり、次の autolinking 結果に module class が両方現れることを確認する。
+生成される repository root の `/ios` と `/android` だけを `.gitignore` の対象とし、`modules/` 配下の Swift / Kotlin
+実装は必ず追跡する。local checkout にだけ Native source が存在する状態は CI と実機 Build の false-pass になるため許可しない。
 
 ```bash
 bunx expo-modules-autolinking resolve --platform apple --json
