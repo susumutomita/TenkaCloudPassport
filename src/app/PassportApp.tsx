@@ -4,21 +4,23 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
+import type { LoungeInvite } from '../domain/lounge-invite';
 import {
   advanceLoungeRoom,
   createLoungeRoom,
   destroyLoungeRoom,
-  inviteForRoom,
   joinLoungeRoom,
   type LoungeRoomState,
   type LoungeRoomTerminationReason,
   markParticipantReady,
+  ROOM_CAPACITY,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
@@ -32,9 +34,16 @@ import {
 } from '../domain/passport';
 import type { PetInteractionState } from '../domain/pet-interaction';
 import {
+  createParticipantId,
   createSessionIdentifiers,
   type ParticipantId,
 } from '../domain/session-identifiers';
+import {
+  createLoungeJoinRequest,
+  encodeLoungeJoinRequest,
+  type IssuedLoungeHandshake,
+  issueLoungeHandshake,
+} from '../protocol/lounge-handshake';
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
@@ -60,6 +69,7 @@ import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
+import { inProcessTransportFingerprint } from './in-process-transport-binding';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -118,6 +128,7 @@ function currentClock(): ClockSnapshot {
 }
 
 const VALIDATION_ERROR_FALLBACK = '入力を確認して、もう一度実行してください。';
+const IN_PROCESS_DISCOVERY_HINT = 'in-process-v1:host';
 
 /**
  * `BackupImportParseResult`（app 層、`backup` 本体まで持つ）を、`BackupImportScreen` が
@@ -429,6 +440,11 @@ export default function PassportApp({
     null
   );
   const [loungeRoom, setLoungeRoom] = useState<LoungeRoomState | null>(null);
+  const [issuedHandshake, setIssuedHandshake] =
+    useState<IssuedLoungeHandshake | null>(null);
+  const [scannedInvite, setScannedInvite] = useState<LoungeInvite | null>(null);
+  const inviteFlowGenerationRef = useRef(0);
+  const guestJoinInFlightRef = useRef(false);
   const [guestProfile, setGuestProfile] = useState<LocalPrivateProfile | null>(
     null
   );
@@ -467,14 +483,14 @@ export default function PassportApp({
     onCloseStage: closeBackupStage,
   });
 
-  // invite は loungeRoom（forming / ready）から一意に導出できるため、独立した state に
-  // せず同期の取り忘れを構造的に防ぐ。expired / null では QR に表示するものがない。
+  // Invite は 1 回限り Secret の非公開 Buffer を持つ Host Handshake と対で保持する。
+  // Room だけから Secret を再導出できないため、期限切れ / 破棄時は両方を同時に解放する。
   const invite = useMemo(
     () =>
-      loungeRoom && loungeRoom.status !== 'expired'
-        ? inviteForRoom(loungeRoom)
+      loungeRoom && loungeRoom.status !== 'expired' && issuedHandshake
+        ? issuedHandshake.invite
         : null,
-    [loungeRoom]
+    [issuedHandshake, loungeRoom]
   );
   const inviteQrPayload = useMemo(
     () =>
@@ -503,8 +519,13 @@ export default function PassportApp({
    * 案内する内容と矛盾する）。
    */
   const discardInviteFlow = useCallback((): void => {
+    inviteFlowGenerationRef.current += 1;
+    guestJoinInFlightRef.current = false;
+    issuedHandshake?.host.dispose();
     qrScannerPort.publish(null);
     setLoungeRoom(null);
+    setIssuedHandshake(null);
+    setScannedInvite(null);
     setGuestProfile(null);
     setGuestShareSelection(null);
     setSeenRawPayloads(new Set());
@@ -512,7 +533,7 @@ export default function PassportApp({
     setEncounteredPetEmoji('🐶');
     setEncounteredSelection([]);
     setEncounteredConfirmed(false);
-  }, [qrScannerPort]);
+  }, [issuedHandshake, qrScannerPort]);
 
   // 初回復元は起動時 1 回だけ実行する副作用であり、その後の locale 切替のたびに
   // 再実行（＝再読込）すると Settings の「Lounge State と Consent を失わない」契約に
@@ -735,6 +756,8 @@ export default function PassportApp({
 
   function hostLounge(): void {
     if (!privateProfile || !shareSelection) return;
+    const flowGeneration = inviteFlowGenerationRef.current + 1;
+    inviteFlowGenerationRef.current = flowGeneration;
     try {
       const ownerShare = createPassportShare(privateProfile, shareSelection);
       const identifiers = createSessionIdentifiers(webCryptoRandomBytes);
@@ -747,14 +770,44 @@ export default function PassportApp({
           clock,
         }
       );
-      qrScannerPort.publish(
-        encodeQrPayload({ kind: 'lounge-invite', value: inviteForRoom(room) })
+      const transportFingerprint = inProcessTransportFingerprint(
+        identifiers.loungeId
       );
-      setLoungeRoom(room);
-      setSeenRawPayloads(new Set());
-      setNowMs(Date.now());
-      setErrorMessage(null);
-      setStage('host-invite');
+      void issueLoungeHandshake({
+        loungeId: identifiers.loungeId,
+        issuedAtEpochMs: clock.wallClockMs,
+        startedAtMonotonicMs: clock.monotonicMs,
+        expiresAtEpochMs: room.expiresAtWallClockMs,
+        capacity: ROOM_CAPACITY,
+        requiredCapabilities: ['rules-provider-v1'],
+        hostDiscoveryHint: IN_PROCESS_DISCOVERY_HINT,
+        transportFingerprint,
+        randomBytes: webCryptoRandomBytes,
+      })
+        .then((handshake) => {
+          if (inviteFlowGenerationRef.current !== flowGeneration) {
+            handshake.host.dispose();
+            return;
+          }
+          qrScannerPort.publish(
+            encodeQrPayload({
+              kind: 'lounge-invite',
+              value: handshake.invite,
+            })
+          );
+          setIssuedHandshake(handshake);
+          setScannedInvite(null);
+          setLoungeRoom(room);
+          setSeenRawPayloads(new Set());
+          setNowMs(Date.now());
+          setErrorMessage(null);
+          setStage('host-invite');
+        })
+        .catch((error: unknown) => {
+          if (inviteFlowGenerationRef.current === flowGeneration) {
+            setErrorMessage(qrFlowErrorMessage(error, locale));
+          }
+        });
     } catch (error: unknown) {
       setErrorMessage(qrFlowErrorMessage(error, locale));
     }
@@ -771,7 +824,10 @@ export default function PassportApp({
       if (updated.status === 'ready') {
         // Agent State Machine（既存 Lounge）を開始したら、Room の 1 秒 tick はもう
         // 不要なので破棄し、20 分の TTL が尽きるまで無駄に動き続けさせない。
+        issuedHandshake?.host.dispose();
         qrScannerPort.publish(null);
+        setIssuedHandshake(null);
+        setScannedInvite(null);
         setLoungeRoom(null);
         setInteraction(null);
         setLounge(startLoungeFromRoom(updated));
@@ -798,13 +854,16 @@ export default function PassportApp({
   }
 
   function performScan(): void {
+    const flowGeneration = inviteFlowGenerationRef.current;
     void scanQrPayload(qrScannerPort, seenRawPayloads)
       .then((result) => {
+        if (inviteFlowGenerationRef.current !== flowGeneration) return;
         setSeenRawPayloads(result.seenRawPayloads);
         if (result.payload.kind !== 'lounge-invite') {
           setErrorMessage(MESSAGES[locale].qrErrorNotice.notLoungeInviteQr);
           return;
         }
+        setScannedInvite(result.payload.value);
         // Guest が公開する内容は、対面で相手が declare した内容として既に Encounter
         // 画面で入力済みである（Issue 4 由来）。ここでは新たに入力を求めず、
         // その内容から今回の共有 Preview を組み立てて Ready 操作へ進む。Render 時に
@@ -824,38 +883,81 @@ export default function PassportApp({
         setStage('guest-share-preview');
       })
       .catch((error: unknown) => {
-        setErrorMessage(qrFlowErrorMessage(error, locale));
+        if (inviteFlowGenerationRef.current === flowGeneration) {
+          setErrorMessage(qrFlowErrorMessage(error, locale));
+        }
       });
   }
 
   function guestReady(): void {
-    if (!loungeRoom || !guestShareSelection || !guestProfile) return;
-    try {
-      const guestShare = createPassportShare(guestProfile, guestShareSelection);
-      const identifiers = createSessionIdentifiers(webCryptoRandomBytes);
-      const clock = currentClock();
-      const joined = joinLoungeRoom(loungeRoom, {
-        participantId: identifiers.participantId,
-        publicPassport: guestShare.qrProjection,
-        clock,
-      });
-      const readied = markParticipantReady(joined, {
-        participantId: identifiers.participantId,
-        clock,
-      });
-      setErrorMessage(null);
-      if (readied.status === 'ready') {
+    if (
+      !loungeRoom ||
+      !guestShareSelection ||
+      !guestProfile ||
+      !issuedHandshake ||
+      !scannedInvite ||
+      guestJoinInFlightRef.current
+    )
+      return;
+    const flowGeneration = inviteFlowGenerationRef.current;
+    guestJoinInFlightRef.current = true;
+    void (async () => {
+      try {
+        const guestParticipantId = createParticipantId(webCryptoRandomBytes);
+        const request = await createLoungeJoinRequest(
+          scannedInvite,
+          guestParticipantId
+        );
+        await issuedHandshake.host.authorizeJoin(
+          encodeLoungeJoinRequest(request),
+          {
+            clock: currentClock(),
+            // QR の主張値ではなく Host が発行前から保持する Adapter identity を渡す。
+            // Issue 20 / 22 では実 Transport が測定した証明書 Fingerprint に置き換える。
+            transportFingerprint: issuedHandshake.invite.transportFingerprint,
+          }
+        );
+        if (inviteFlowGenerationRef.current !== flowGeneration) return;
+        const guestShare = createPassportShare(
+          guestProfile,
+          guestShareSelection
+        );
+        const clock = currentClock();
+        const joined = joinLoungeRoom(loungeRoom, {
+          participantId: guestParticipantId,
+          publicPassport: guestShare.qrProjection,
+          clock,
+        });
+        const readied = markParticipantReady(joined, {
+          participantId: guestParticipantId,
+          clock,
+        });
+        // 1 回限り Invite は Guest の認証成功時点で役目を終える。Host の Ready を
+        // 待たず QR を取り下げ、Secret を含む React state の参照も解放する。
+        issuedHandshake.host.dispose();
         qrScannerPort.publish(null);
-        setLoungeRoom(null);
-        setInteraction(null);
-        setLounge(startLoungeFromRoom(readied));
-      } else {
-        setLoungeRoom(readied);
-        setStage('host-invite');
+        setIssuedHandshake(null);
+        setScannedInvite(null);
+        setSeenRawPayloads(new Set());
+        setErrorMessage(null);
+        if (readied.status === 'ready') {
+          setLoungeRoom(null);
+          setInteraction(null);
+          setLounge(startLoungeFromRoom(readied));
+        } else {
+          setLoungeRoom(readied);
+          setStage('host-invite');
+        }
+      } catch (error: unknown) {
+        if (inviteFlowGenerationRef.current === flowGeneration) {
+          setErrorMessage(qrFlowErrorMessage(error, locale));
+        }
+      } finally {
+        if (inviteFlowGenerationRef.current === flowGeneration) {
+          guestJoinInFlightRef.current = false;
+        }
       }
-    } catch (error: unknown) {
-      setErrorMessage(qrFlowErrorMessage(error, locale));
-    }
+    })();
   }
 
   /**

@@ -1,5 +1,140 @@
 # Plan.md
 
+### [Issue 24 Group Reliability Foundation] - 2026-07-18
+
+#### 目的
+
+2〜6 名の一時 Lounge で、通信の到着順や一時切断に依存せず Membership、Ready、Round、
+Bridge 表示を有限時間で収束させる。既存の 2 者間 Live Flow は変更せず、Issue 23 の認証済み
+Peer Protocol と Issue 12 の Fair Bridge 選定の間に、Transport 非依存の Host-authoritative な
+Group Coordinator を置く。
+
+#### 制約
+
+- `lounge-room.ts` の 2 名定員は既存 Rules Provider の境界なので 6 名へ拡張しない。
+- Membership の変更権限は Host だけに置き、Guest の自己申告 Snapshot を正本にしない。
+- Duplicate、Delay、Out-of-order は同じ State を返す冪等 Event とし、Round の再表示を起こさない。
+- Connection Event は世代番号、Round は Lounge 内の使用済み ID 集合で古い Event を無効化する。
+- Local Agent が終了しない場合も 45 秒後に Rules Provider の Group 選定へ 1 回だけ収束する。
+- Destroyed State には終了理由だけを残し、Membership、Passport、Outcome、Queue を保持しない。
+- 実機 3 台、実時間 30 分、Network Capture、Storage Inspection は実 Transport 導入後の検証であり、
+  純 TypeScript Test をその証跡として扱わない。
+
+#### 設計判断
+
+1. 既存 `lounge-room.ts` を 6 名化する案は UI を早く再利用できるが、2 者間 Rules 判定と
+   複数 Round の Group 判定を 1 つの State Machine に混在させる。
+2. Peer receiver に Group 状態を持たせる案は Message の認証・順序制御と Product Rule を結合し、
+   Transport Adapter ごとの再利用を難しくする。
+3. 純粋な Group Coordinator を追加し、Peer receiver から受理された Event だけを渡す案は、
+   状態遷移と Chaos Scenario を端末や Network Library なしに決定的に検証できる。
+
+案 3 を採用する。Host が Membership revision と Round ID を発行し、全接続 Participant の Ready で
+Round の参加者を Snapshot する。Late Join は Membership には入るが進行中 Round には入れない。
+切断は Grace Period 中だけ Identity と Ready を維持し、Guest は期限後に除外、Host は Lounge 全体を
+終了する。Round の明示完了と Deadline fallback は同じ Fair Bridge 選定を使う。
+退出者を含む確定済み Bridge は `no-signal` へ無効化し、残留者の Outcome に退出者を残さない。
+Tombstone または Round の bounded 上限へ到達した場合は、古い ID を再利用せず Lounge を終了する。
+
+#### タスク
+
+1. Group Rule、Failure Matrix、Recovery、実機証跡との境界を設計文書と ADR に記録する。
+2. Round ID を Session Identifier の責務へ移し、128 bit の生成を共有する。
+3. 2〜6 名、Duplicate Join、同じ Alias、Join / Leave Race、Late Join の Test を Red にする。
+4. Ready Snapshot、Membership revision、Grace Period、Host Loss、期限切れを実装する。
+5. Deadline fallback と Round 単位の冪等な Outcome を Fair Bridge 選定へ接続する。
+6. Duplicate、Delay、Out-of-order、Drop、Reconnect と仮想 30 分の Chaos Test を追加する。
+7. Peer receiver に Host 1 名だけの local cleanup Snapshot を反映する境界を追加する。
+8. 必須ゲートと独立レビューを通し、実機残条件を明記した Foundation PR を作成する。
+
+#### 検証手順
+
+- `bun test src/domain/group-lounge-session.test.ts` で Red / Green を確認する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従うコードレビュー。
+- 破棄後の Data、悪意ある Peer の隔離境界、Identity 再利用を Security Review する。
+- Timer、Membership、Round の重複状態がないことを Simplify Review する。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 24、Peer Protocol 1.2、Fair Bridge、既存 2 者間 Lounge を確認し、
+  Transport 非依存 Coordinator と実 Transport 証跡を分離する方針を固定した。
+- 2026-07-18: 独立レビューで検出した stale Bridge、古い Connection Event、Round ID 再利用、
+  Tombstone 上限超過、Host 1 名時の Peer cleanup 不整合を出荷前の修正対象にした。
+- 2026-07-18: 上記 5 件を修正し、独立再レビューで Blocker / High / Medium が 0 件であることを
+  確認した。Security Review では Destroyed State が理由以外を保持しないこと、Identity churn と
+  使用済み Round ID が bounded であること、Wire 上の Membership 2〜6 名契約を維持したことを確認した。
+  Simplify Review では既存の Bridge 選定、45 秒 Rules deadline、Lounge TTL を再利用し、Host 1 名 cleanup
+  だけを専用 API に隔離して Transport と Product Rule の重複を増やしていないことを確認した。
+- 2026-07-18: `make before-commit` を 707 Test、Functions 100%、Lines 100%、Web Export 成功で通過した。
+  実機 3 台、実時間 30 分、Network Capture、Storage Inspection は実 Transport 実装後の残条件とする。
+
+---
+
+### [Issue 21 一時 Lounge Handshake] - 2026-07-18
+
+#### 目的
+
+同一 LAN 上の第三者、撮影された古い QR、同じ Join Secret の同時利用を、Public Passport を
+送る前に拒否する。Lounge ID、Participant ID、Join Secret を Lounge ごとに暗号学的乱数から
+生成し、Transport の標準暗号が検証した Fingerprint と QR の 1 回限り Secret を結合する。
+
+#### 制約
+
+- Transport と暗号化方式の選定は Issue 20 の責務とし、本 Issue で独自暗号や平文 Transport を
+  実装しない。
+- Host の壁時計を参加期限の最終判定に使い、`expiresAt` と等しい時点を期限切れとする。
+- Secret、鍵、Lounge ID、Participant ID をログ、Backup、永続 Storage へ渡さない。
+- 認証完了前の API は Public Passport を受け取らず、認証済み Transport Identity だけを返す。
+- 既存の QR Preview / Ready flow は単一端末の検証経路として維持し、実機 Transport の証跡を
+  代替したと表現しない。
+
+#### 設計判断
+
+1. QR の Secret を Transport 上でそのまま比較する案は単純だが、Host が raw Secret を長く保持し、
+   誤ったログや Error へ混入する面を増やす。
+2. アプリ独自の暗号化 Channel を実装する案は Transport から独立できるが、独自暗号を禁止する
+   契約と Issue 20 の責務に反する。
+3. QR Secret を監査済みの `@noble/hashes` による HMAC-SHA-256 Key とし、Lounge、Participant、
+   期限、Capability、Transport Fingerprint を含む正規 Transcript の証明を検証する案は、
+   Expo Go / Native / Web の共通経路で標準 primitive だけを利用できる。
+
+案 3 を採用する。Host は認証要求を `available` から `verifying` へ同期的に予約して同時二重利用を
+拒否し、成功時は `used`、終了時は `disposed` にする。失敗時は Passport を扱わず、改ざんや
+Fingerprint 不一致の要求だけを型付き Error として返す。
+
+#### タスク
+
+1. Handshake の Protocol、Clock、Replay、Privacy 境界を設計文書と ADR に記録する。
+2. Capability と Session ID の共有型を整理し、個別 Participant ID を生成できるようにする。
+3. Lounge Invite v2 と Join Request の strict schema test を Red にする。
+4. 監査済み HMAC proof、Host の原子的 1 回利用、破棄、Key Rotation を実装する。
+5. QR / Ready flow を認証成功後だけ Public Passport 参加へ進む構造へ接続する。
+6. 正常、改ざん、Replay、同時利用、期限境界、Fingerprint 不一致、Known-answer を検証する。
+7. 必須ゲートと独立レビューを通し、依存関係を明記した PR を作成する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従うコードレビュー。
+- Secret 漏えい、Custom Crypto、認証前 Payload 経路の Security Review。
+- 重複する Validator、Transcript、状態遷移がないことの Simplify Review。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 20、21、22、既存 QR / Peer Protocol、Threat Model、Data Inventory を確認し、
+  Transport 非依存の認証境界だけを本 Issue で実装する方針を固定した。
+- 2026-07-18: Invite v2、HMAC-SHA-256 Join Proof、Host の原子的 1 回利用と Rotation、
+  認証成功後だけ Passport を Room へ渡す App Flow を実装した。Native に存在しない
+  `crypto.subtle` に依存せず、依存を持たない監査済み `@noble/hashes` を採用した。
+- 2026-07-18: Known-answer、改ざん、Replay、同時利用、二重押下、壁時計巻き戻しを含む期限境界、
+  Fingerprint 不一致、Rotation、非同期 Flow 破棄を含む 675 Test と Functions / Lines 100%、
+  Typecheck、Web Export を通過した。Issue 20 の実 Transport 証跡は本変更の完了証拠に含めない。
+
+---
+
 ### [Issue 1 プロダクト契約正本化] - 2026-07-17
 
 #### 目的

@@ -88,6 +88,10 @@ Passport、Ready、Signal を受信した場合は Passport Data を Application
 | Capability | Supported 8 件、Required 4 件 |
 | Evidence ID | 4 件 / Bridge Proposal |
 
+Wire Membership は 2〜6 名を維持する。Host receiver 内の cleanup だけは Host 1 名の local Snapshot を
+`cleanupLocalHostMembership()` へ適用し、最後の Guest の Passport と Peer state を破棄する。この 1 名
+Snapshot は Wire へ送信せず、次の Guest を加えた 2 名以上の Snapshot から配布を再開する。
+
 未認証接続は Peer state を作らずに拒否する。Peer 単位の上限超過、認証不一致、不正 Schema、
 Capability 不一致と Peer ごとの 512 件超過は該当 Participant だけを Lounge 内で拒否する。
 Lounge 全体の認証済み入力は Handshake、重複、不正入力も含め 2,560 件までとし、2,561 件目は
@@ -111,8 +115,8 @@ Lounge セッション内に残す。tombstone の件数も Lounge 全体 2,560 
 - Message ID の重複、sequence の戻り、gap、期限境界、未来時刻、Lounge 期限超過を区別する。
 - Membership は Host だけが更新し、除外 Participant の state を破棄する。Guest の `leave` は現在
   Snapshot から Guest を除外し、Host の `leave` / `expire` は全 state を破棄する。
-- Guest の `leave` で Membership が 2 名未満になり Snapshot が空になっても、最後の revision は保持し、
-  古い Membership の replay を拒否する。
+- Guest の `leave` で Wire Membership が 2 名未満になった場合も最後の revision は保持し、古い
+  Membership の replay を拒否する。Local Host は専用 cleanup API で Host 1 名の Snapshot を保持できる。
 - Local Membership と Wire Membership の revision は同じ 0〜2,147,483,647 に限定する。一般 Peer の
   Schema / rate / Capability 拒否記録と、退出確定 ID の再追加禁止 tombstone は分離する。
 - `dispose()` 後の受信は型付き `SESSION_CLOSED` とし、Snapshot は空にする。

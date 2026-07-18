@@ -45,7 +45,13 @@ function invite(): LoungeInvite {
   return {
     schemaVersion: LOUNGE_INVITE_SCHEMA_VERSION,
     loungeId: LOUNGE_ID,
-    expiresAtEpochMs: 1_000_000,
+    joinSecret: `jsc_${'11'.repeat(32)}`,
+    hostDiscoveryHint: 'local-v1:host-a',
+    transportFingerprint: `sha256_${'aa'.repeat(32)}`,
+    issuedAtEpochMs: 1_000_000,
+    expiresAtEpochMs: 2_200_000,
+    capacity: 6,
+    requiredCapabilities: ['rules-provider-v1'],
   };
 }
 
@@ -133,7 +139,7 @@ describe('QR Payload の encode / decode', () => {
 
   it('未知の kind を持つ envelope を拒否する', () => {
     const raw = `${QR_PROTOCOL_PREFIX}${JSON.stringify({
-      qrProtocolVersion: { major: 1, minor: 1 },
+      qrProtocolVersion: { major: 1, minor: 2 },
       kind: 'something-else',
       value: {},
     })}`;
@@ -143,7 +149,7 @@ describe('QR Payload の encode / decode', () => {
 
   it('envelope に未知の field があれば拒否する', () => {
     const raw = `${QR_PROTOCOL_PREFIX}${JSON.stringify({
-      qrProtocolVersion: { major: 1, minor: 1 },
+      qrProtocolVersion: { major: 1, minor: 2 },
       kind: 'lounge-invite',
       value: invite(),
       extra: 'x',
@@ -164,7 +170,7 @@ describe('QR Payload の encode / decode', () => {
 
   it('内側の Schema Version が未対応でも未知 Version として拒否する', () => {
     const raw = `${QR_PROTOCOL_PREFIX}${JSON.stringify({
-      qrProtocolVersion: { major: 1, minor: 1 },
+      qrProtocolVersion: { major: 1, minor: 2 },
       kind: 'lounge-invite',
       value: { ...invite(), schemaVersion: 99 },
     })}`;
@@ -174,7 +180,7 @@ describe('QR Payload の encode / decode', () => {
 
   it('内側の値が構造的に不正なら JSON エラーとして拒否する', () => {
     const raw = `${QR_PROTOCOL_PREFIX}${JSON.stringify({
-      qrProtocolVersion: { major: 1, minor: 1 },
+      qrProtocolVersion: { major: 1, minor: 2 },
       kind: 'public-passport',
       value: { schemaVersion: 2 },
     })}`;
@@ -221,9 +227,22 @@ describe('QR の Privacy 契約', () => {
     for (const token of forbiddenTokens) {
       expect(raw.toLowerCase()).not.toContain(token.toLowerCase());
     }
+    for (const token of ['ssid', 'ownerAlias']) {
+      expect(raw.toLowerCase()).not.toContain(token.toLowerCase());
+    }
     const decoded = JSON.parse(raw.slice(QR_PROTOCOL_PREFIX.length));
     expect(Object.keys(decoded.value).sort()).toEqual(
-      ['expiresAtEpochMs', 'loungeId', 'schemaVersion'].sort()
+      [
+        'capacity',
+        'expiresAtEpochMs',
+        'hostDiscoveryHint',
+        'issuedAtEpochMs',
+        'joinSecret',
+        'loungeId',
+        'requiredCapabilities',
+        'schemaVersion',
+        'transportFingerprint',
+      ].sort()
     );
   });
 });

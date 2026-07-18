@@ -22,6 +22,7 @@ Local Private Profile と Public Passport は別型です。Public Passport は 
 | --- | --- | --- | --- | --- |
 | Local Private Profile | `L1` | `schemaVersion: 2` | Pet 表示情報、任意 Alias、カタログ版、候補、Languages である。 | 共有しない。 |
 | Public Passport | `L2` | `schemaVersion: 2` | Pet Name と今回 ON にした表示情報、Languages、最大 3 件の手掛かりである。 | QR と認証済み Pet だけである。 |
+| Lounge Invite | `L2` | `schemaVersion: 2` | Lounge ID、Join Secret、Discovery Hint、Transport Fingerprint、発行 / 満了時刻、定員、Required Capability である。 | QR を読み取る Pet だけである。 |
 | Lounge | `L3` | `schemaVersion: 1` | 使い捨て Lounge ID、Participant ID、期限、状態である。 | 認証済み Pet だけである。 |
 | Owner Question | `L3` | `schemaVersion: 1` | 版管理済み質問 ID と表示 key である。 | 自分の Owner だけである。 |
 | Match Evidence | `L3` | `schemaVersion: 1` | 確認済み手掛かりと同意済み回答の参照である。 | Agent Decision 内だけである。 |
@@ -43,7 +44,7 @@ token buffer、任意の自由記述を設けない。strict schema はこの al
 | Topics、Offer、Looking For、Goal | 順に 3 件、3 件、3 件、1 件である。 | Local 候補の分類別上限を固定する。 |
 | Pet Name と Owner Alias | 各 24 UTF-16 code unit である。 | 連絡先や詳細 Profile ではない短い表示名へ限定する。 |
 | Languages | 3 件である。 | 版管理済み Language カタログへ限定する。 |
-| Lounge の Participant | 8 人である。 | 近距離の一時セッションへ用途を限定し、状態と送信量を bounded にする。 |
+| Lounge の Participant | 6 人である。 | 近距離の一時セッションへ用途を限定し、状態と送信量を bounded にする。 |
 | Owner Question | 1 回である。 | 用語集と Privacy データ台帳の契約である。 |
 | Match Evidence の手掛かり | 3 件である。 | Public Passport より根拠を増やさない。 |
 | Version、ID、catalog 値以外の短い文字列 | 96 UTF-16 code unit である。 | 表示 key と app version を bounded にする。自由記述は許可しない。 |

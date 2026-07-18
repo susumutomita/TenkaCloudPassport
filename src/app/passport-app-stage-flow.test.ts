@@ -124,6 +124,67 @@ describe('PassportApp の Stage 遷移契約', () => {
     }
   });
 
+  it('Guest は Handshake 認証後だけ Public Passport を Room へ渡す', async () => {
+    const body = functionBody(await source(), 'guestReady');
+
+    expectInOrder(body, [
+      'createLoungeJoinRequest',
+      'authorizeJoin',
+      'createPassportShare',
+      'joinLoungeRoom',
+    ]);
+  });
+
+  it('Guest 認証成功時点で Host Ready を待たず QR と Secret 参照を解放する', async () => {
+    const body = functionBody(await source(), 'guestReady');
+
+    expectInOrder(body, [
+      'authorizeJoin',
+      'qrScannerPort.publish(null)',
+      'setIssuedHandshake(null)',
+      'setScannedInvite(null)',
+      'setSeenRawPayloads(new Set())',
+      "readied.status === 'ready'",
+    ]);
+  });
+
+  it('Guest Ready の二重実行を同期的に予約し RNG 失敗も同じ UI Error 経路へ収束させる', async () => {
+    const body = functionBody(await source(), 'guestReady');
+
+    expect(body).toContain('guestJoinInFlightRef.current');
+    expectInOrder(body, [
+      'guestJoinInFlightRef.current = true',
+      'try {',
+      'createParticipantId',
+    ]);
+    const failurePath = body.slice(body.indexOf('catch (error: unknown)'));
+    expectInOrder(failurePath, [
+      'catch (error: unknown)',
+      'setErrorMessage',
+      'finally',
+      'guestJoinInFlightRef.current = false',
+    ]);
+  });
+
+  it('Invite Flow の破棄は Handshake Key と走査済み Invite も解放する', async () => {
+    const body = functionBody(await source(), 'discardInviteFlow');
+
+    expect(body).toContain('issuedHandshake?.host.dispose()');
+    expect(body).toContain('setIssuedHandshake(null)');
+    expect(body).toContain('setScannedInvite(null)');
+    expect(body).toContain('guestJoinInFlightRef.current = false');
+    expect(body).toContain('inviteFlowGenerationRef.current += 1');
+  });
+
+  it('破棄後に完了した非同期 Handshake は状態を復活させず Key を破棄する', async () => {
+    const hostBody = functionBody(await source(), 'hostLounge');
+
+    expect(hostBody).toContain(
+      'inviteFlowGenerationRef.current !== flowGeneration'
+    );
+    expect(hostBody).toContain('handshake.host.dispose()');
+  });
+
   it('Model 未導入の既定 Provider Status を Active Lounge へ明示的に渡す', async () => {
     const text = await source();
 

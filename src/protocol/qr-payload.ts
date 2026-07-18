@@ -18,7 +18,7 @@ export const QR_FAMILY_PREFIX = 'TCPQ';
 export const QR_PROTOCOL_PREFIX = 'TCPQ1:';
 export const QR_PAYLOAD_MAX_BYTES = 1024;
 const QR_JSON_MAX_DEPTH = 6;
-const QR_PROTOCOL_VERSION = { major: 1, minor: 1 } as const;
+const QR_PROTOCOL_VERSION = { major: 1, minor: 2 } as const;
 
 export type QrPayload =
   | { readonly kind: 'public-passport'; readonly value: PublicPassport }
