@@ -3,7 +3,6 @@ import {
   type AgentModelProvider,
   AgentModelProviderError,
 } from '../domain/agent-model-provider';
-import type { LocalModelManagementPort } from '../local-agent/local-model-management';
 import type {
   ImportedLocalModel,
   LocalModelManifest,
@@ -20,6 +19,7 @@ import {
   performLocalModelActivation,
   withLocalModelMutationLease,
 } from './local-model-management-controller';
+import type { LocalModelManagementPort } from './local-model-management-port';
 import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
 
 export interface LocalModelManagementView {

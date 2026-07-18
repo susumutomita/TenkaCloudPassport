@@ -45,7 +45,6 @@ import {
   createSessionIdentifiers,
   type ParticipantId,
 } from '../domain/session-identifiers';
-import type { LocalModelManagementPort } from '../local-agent/local-model-management';
 import {
   createLoungeJoinRequest,
   encodeLoungeJoinRequest,
@@ -91,6 +90,7 @@ import {
   type LocalDataControl,
   LocalDataControlError,
 } from './local-data-control';
+import type { LocalModelManagementPort } from './local-model-management-port';
 import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
 import {
   LocalProfileStorageError,

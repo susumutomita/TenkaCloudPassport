@@ -2936,6 +2936,10 @@ Owner が Files から選んだ GGUF を、Size 確認後だけ private director
 - 2026-07-19: その修正レビューで、Outcome handler 自体を teardown wait の後ろへ置くと Abort を無視する Native Provider で
   Rules fallback と Pilot Outcome を永久に適用できない退行を検出した。Outcome は直ちに適用し、teardown は独立 guard として
   pending 解除だけを所有する二相状態へ分離する。Model mutation が割り込む場合だけ drain 後に確定 Ledger を破棄する。
+- 2026-07-19: PR CI の全 Repository harness で、App Composition の `LocalModelManagementPort` を
+  `src/local-agent/` に置いたため `AgentModelProvider` への直接依存が Local Agent Safety Boundary 違反になることを検出した。
+  Port は Provider を所有・注入する App 層へ移し、Local Agent 層は Completion Port と Safety Boundary 実装だけを保持する。
+  Invariant は緩和せず、全 Repository と staged の両 harness で回帰を確認する。
 ---
 
 ### [Issue 23 Versioned Peer Envelope・Capability・順序制御] - 2026-07-18

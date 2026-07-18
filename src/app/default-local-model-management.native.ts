@@ -10,7 +10,6 @@ import {
 } from '../local-agent/llama-agent-model-provider';
 import { createLlamaModelInspector } from '../local-agent/llama-model-inspector.native';
 import { loadLlamaModule } from '../local-agent/llama-module-loader.native';
-import type { LocalModelManagementPort } from '../local-agent/local-model-management';
 import { createModelBenchmarkRecorder } from '../local-agent/model-benchmark';
 import {
   createLocalModelLifecycle,
@@ -19,6 +18,7 @@ import {
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
 import type { DefaultLocalModelManagementComposition } from './default-local-model-management-contract';
 import { createLocalModelLifecycleStorageAdapter } from './local-model-lifecycle-storage-adapter';
+import type { LocalModelManagementPort } from './local-model-management-port';
 import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
 
 function createNativeManagement(

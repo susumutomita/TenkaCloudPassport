@@ -1,5 +1,5 @@
-import type { LocalModelManagementPort } from '../local-agent/local-model-management';
 import type { LocalModelStoragePort } from './local-data-control';
+import type { LocalModelManagementPort } from './local-model-management-port';
 import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
 
 export interface DefaultLocalModelManagementComposition {
