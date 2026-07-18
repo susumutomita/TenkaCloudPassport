@@ -23,6 +23,49 @@ export interface ProfileNoticeTitles {
   readonly 'lounge-discarded': string;
 }
 
+export interface DiagnosticRecoveryMessages {
+  readonly TIMEOUT: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly CANCELLED: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly SCHEMA_ERROR: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly LOAD_ERROR: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly STORAGE_FAILURE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly DELETE_INTERRUPTED: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly MODEL_IN_USE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly PERMISSION_DENIED: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly TRANSPORT_UNAVAILABLE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+  readonly UNEXPECTED_FAILURE: {
+    readonly title: string;
+    readonly steps: readonly string[];
+  };
+}
+
 export interface AppMessages {
   readonly common: {
     readonly brand: string;
@@ -262,7 +305,40 @@ export interface AppMessages {
       selected: boolean
     ) => string;
     readonly languageOptionHint: string;
+    readonly diagnosticsButton: string;
+    readonly diagnosticsButtonHint: string;
     readonly backButton: string;
+  };
+  readonly diagnostics: {
+    readonly title: string;
+    readonly description: string;
+    readonly loading: string;
+    readonly empty: string;
+    readonly reportSectionTitle: string;
+    readonly storageSectionTitle: string;
+    readonly byteLength: (bytes: number) => string;
+    readonly refreshButton: string;
+    readonly retryRecoveryButton: string;
+    readonly shareButton: (sharing: boolean) => string;
+    readonly endLoungeButton: string;
+    readonly resetPassportButton: string;
+    readonly removeModelButton: string;
+    readonly deleteAllButton: string;
+    readonly confirmDeleteAllText: (count: number, bytes: number) => string;
+    readonly confirmDeleteAllButton: string;
+    readonly cancelDeleteAllButton: string;
+    readonly backButton: string;
+    readonly unavailableActionHint: string;
+    readonly notice: {
+      readonly shared: string;
+      readonly dismissed: string;
+      readonly saved: string;
+      readonly loungeForgotten: string;
+      readonly passportReset: string;
+      readonly modelRemoved: string;
+      readonly allDeleted: string;
+    };
+    readonly recovery: DiagnosticRecoveryMessages;
   };
   readonly clueSelector: {
     readonly fieldLabels: {
@@ -651,7 +727,89 @@ const ja: AppMessages = {
     languageOptionAccessibilityLabel: (label, selected) =>
       `表示言語 ${label}${selected ? '、選択中' : ''}`,
     languageOptionHint: 'この端末の表示言語をこの言語に切り替えます。',
+    diagnosticsButton: '診断と端末内 Data',
+    diagnosticsButtonHint:
+      'Network 送信なしの診断 Preview と、分離された削除操作を開きます。',
     backButton: '戻る',
+  },
+  diagnostics: {
+    title: '端末内だけで状態を確認する。',
+    description:
+      '内容、識別子、Path、Network metadata を含まない Sanitized Report を Preview します。自動送信はしません。',
+    loading: '端末内の件数と状態を確認しています。',
+    empty: '診断 Preview を作成できませんでした。再読み込みしてください。',
+    reportSectionTitle: 'Sanitized Report Preview',
+    storageSectionTitle: '削除対象 Preview',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: '現在状態を再読み込み',
+    retryRecoveryButton: '中断した全削除を再試行',
+    shareButton: (sharing) =>
+      sharing ? '共有中' : 'Preview を Share Sheet で共有',
+    endLoungeButton: 'End and forget Lounge',
+    resetPassportButton: 'Reset Passport',
+    removeModelButton: 'Remove Model',
+    deleteAllButton: 'Delete all local data',
+    confirmDeleteAllText: (count, bytes) =>
+      `${count} 件、${bytes} bytes を削除します。中断時は次回起動で再開します。`,
+    confirmDeleteAllButton: '確認して全削除を実行',
+    cancelDeleteAllButton: '全削除をやめる',
+    backButton: 'Settings へ戻る',
+    unavailableActionHint: '現在は対象 Data がないため実行できません。',
+    notice: {
+      shared: 'Sanitized Report を共有しました。',
+      dismissed: 'Share Sheet を閉じました。共有していません。',
+      saved: 'Sanitized Report をファイルへ保存しました。',
+      loungeForgotten: '現在の Lounge Data を端末から破棄しました。',
+      passportReset: 'Local Private Profile を削除しました。',
+      modelRemoved: 'Local Model を削除しました。',
+      allDeleted: 'すべての端末内 Data を削除しました。',
+    },
+    recovery: {
+      TIMEOUT: {
+        title: '処理が時間内に完了しませんでした。',
+        steps: ['もう一度実行するか Rules Provider を使用してください。'],
+      },
+      CANCELLED: {
+        title: '処理を中止しました。',
+        steps: ['必要な場合だけもう一度実行してください。'],
+      },
+      SCHEMA_ERROR: {
+        title: '検証できない形式を拒否しました。',
+        steps: ['入力元を確認し、安全な内容で再実行してください。'],
+      },
+      LOAD_ERROR: {
+        title: 'Local Model を読み込めませんでした。',
+        steps: ['Model を検証し直すか Remove Model を実行してください。'],
+      },
+      STORAGE_FAILURE: {
+        title: '端末内 Storage を利用できません。',
+        steps: ['空き容量と権限を確認して再試行してください。'],
+      },
+      DELETE_INTERRUPTED: {
+        title: '全削除を完了できませんでした。',
+        steps: [
+          '再試行するかアプリを再起動して削除 Recovery を続けてください。',
+        ],
+      },
+      MODEL_IN_USE: {
+        title: 'Local Model を使用中です。',
+        steps: ['Model Session を終了してから削除を再試行してください。'],
+      },
+      PERMISSION_DENIED: {
+        title: '必要な権限がありません。',
+        steps: ['OS Settings で権限を確認してください。'],
+      },
+      TRANSPORT_UNAVAILABLE: {
+        title: 'Transport を利用できません。',
+        steps: [
+          '権限と接続状態を確認し、Rules-only Flow はそのまま利用できます。',
+        ],
+      },
+      UNEXPECTED_FAILURE: {
+        title: '処理を完了できませんでした。',
+        steps: ['内容を共有せず、現在状態を再読み込みして再試行してください。'],
+      },
+    },
   },
   clueSelector: {
     fieldLabels: {
@@ -1065,7 +1223,87 @@ const en: AppMessages = {
     languageOptionAccessibilityLabel: (label, selected) =>
       `Display language ${label}${selected ? ', selected' : ''}`,
     languageOptionHint: 'Switches this device’s display language to this one.',
+    diagnosticsButton: 'Diagnostics and local data',
+    diagnosticsButtonHint:
+      'Opens an on-device diagnostic Preview and separate deletion actions.',
     backButton: 'Back',
+  },
+  diagnostics: {
+    title: 'Check status only on this device.',
+    description:
+      'Previews a Sanitized Report without content, identifiers, paths, or network metadata. Nothing is sent automatically.',
+    loading: 'Checking on-device counts and status.',
+    empty: 'Could not create a diagnostic Preview. Refresh and try again.',
+    reportSectionTitle: 'Sanitized Report Preview',
+    storageSectionTitle: 'Deletion target Preview',
+    byteLength: (bytes) => `${bytes} bytes`,
+    refreshButton: 'Refresh current status',
+    retryRecoveryButton: 'Retry interrupted deletion',
+    shareButton: (sharing) =>
+      sharing ? 'Sharing' : 'Share Preview via Share Sheet',
+    endLoungeButton: 'End and forget Lounge',
+    resetPassportButton: 'Reset Passport',
+    removeModelButton: 'Remove Model',
+    deleteAllButton: 'Delete all local data',
+    confirmDeleteAllText: (count, bytes) =>
+      `Delete ${count} item(s), ${bytes} bytes. An interrupted deletion resumes at next launch.`,
+    confirmDeleteAllButton: 'Confirm and delete all',
+    cancelDeleteAllButton: 'Cancel full deletion',
+    backButton: 'Back to Settings',
+    unavailableActionHint: 'There is no matching data to remove right now.',
+    notice: {
+      shared: 'Shared the Sanitized Report.',
+      dismissed: 'Closed the Share Sheet. Nothing was shared.',
+      saved: 'Saved the Sanitized Report to a file.',
+      loungeForgotten: 'Discarded the current Lounge data from this device.',
+      passportReset: 'Deleted the Local Private Profile.',
+      modelRemoved: 'Deleted the Local Model.',
+      allDeleted: 'Deleted all local data.',
+    },
+    recovery: {
+      TIMEOUT: {
+        title: 'The operation did not finish in time.',
+        steps: ['Try again or use the Rules Provider.'],
+      },
+      CANCELLED: {
+        title: 'The operation was cancelled.',
+        steps: ['Run it again only if it is still needed.'],
+      },
+      SCHEMA_ERROR: {
+        title: 'Rejected a format that could not be verified.',
+        steps: ['Check the source and retry with safe content.'],
+      },
+      LOAD_ERROR: {
+        title: 'Could not load the Local Model.',
+        steps: ['Verify the Model again or use Remove Model.'],
+      },
+      STORAGE_FAILURE: {
+        title: 'On-device storage is unavailable.',
+        steps: ['Check free space and permissions, then retry.'],
+      },
+      DELETE_INTERRUPTED: {
+        title: 'Could not complete full deletion.',
+        steps: ['Retry or restart the app to resume deletion recovery.'],
+      },
+      MODEL_IN_USE: {
+        title: 'The Local Model is in use.',
+        steps: ['End the Model Session, then retry deletion.'],
+      },
+      PERMISSION_DENIED: {
+        title: 'A required permission is missing.',
+        steps: ['Check the permission in OS Settings.'],
+      },
+      TRANSPORT_UNAVAILABLE: {
+        title: 'Transport is unavailable.',
+        steps: [
+          'Check permissions and connectivity. The Rules-only Flow remains available.',
+        ],
+      },
+      UNEXPECTED_FAILURE: {
+        title: 'Could not complete the operation.',
+        steps: ['Do not share content; refresh the current status and retry.'],
+      },
+    },
   },
   clueSelector: {
     fieldLabels: {

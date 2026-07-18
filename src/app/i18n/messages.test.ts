@@ -19,6 +19,11 @@ function collectLeafPaths(node: unknown, prefix: string): string[] {
   if (typeof node === 'string' || typeof node === 'function') {
     return [prefix];
   }
+  if (Array.isArray(node)) {
+    return node.flatMap((item, index) =>
+      collectLeafPaths(item, `${prefix}.${index}`)
+    );
+  }
   if (isPlainObject(node)) {
     return Object.keys(node).flatMap((key) =>
       collectLeafPaths(node[key], prefix ? `${prefix}.${key}` : key)
@@ -28,12 +33,10 @@ function collectLeafPaths(node: unknown, prefix: string): string[] {
 }
 
 function readPath(node: unknown, path: string): unknown {
-  return path
-    .split('.')
-    .reduce<unknown>(
-      (current, key) => (isPlainObject(current) ? current[key] : undefined),
-      node
-    );
+  return path.split('.').reduce<unknown>((current, key) => {
+    if (Array.isArray(current)) return current[Number(key)];
+    return isPlainObject(current) ? current[key] : undefined;
+  }, node);
 }
 
 /** 代表的な引数でパラメータ化関数を呼び、非空の文字列を返すことだけを確認する。 */

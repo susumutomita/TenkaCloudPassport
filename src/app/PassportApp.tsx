@@ -54,6 +54,7 @@ import BackupImportScreen, {
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
+import LocalDiagnosticsScreen from '../screens/LocalDiagnosticsScreen';
 import OutcomeScreen from '../screens/OutcomeScreen';
 import OwnerQuestionScreen from '../screens/OwnerQuestionScreen';
 import PassportCreationScreen from '../screens/PassportCreationScreen';
@@ -67,9 +68,16 @@ import {
 } from './agent-provider-session';
 import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
+import type { DiagnosticErrorSignal } from './diagnostic-recovery';
+import type { DiagnosticTransportState } from './diagnostic-report';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { inProcessTransportFingerprint } from './in-process-transport-binding';
+import {
+  LocalDataAccessBlockedError,
+  type LocalDataControl,
+  LocalDataControlError,
+} from './local-data-control';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -101,10 +109,16 @@ import {
 import { readableError } from './readable-error';
 import { createReducedMotionPort } from './reduced-motion-port';
 import { type BackupFlow, useBackupFlow } from './use-backup-flow';
+import {
+  type LocalDiagnosticsFlow,
+  useLocalDiagnosticsFlow,
+} from './use-local-diagnostics-flow';
 
 interface PassportAppProps {
+  readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
+  readonly localDataControl: LocalDataControl;
   /** Issue 17 の Native Adapter が接続するまで、未導入は正常な Rules 状態とする。 */
   readonly providerRuntimeState?: ProviderRuntimeState;
 }
@@ -118,7 +132,50 @@ type SetupStage =
   | 'guest-share-preview'
   | 'backup-export'
   | 'backup-import'
-  | 'settings';
+  | 'settings'
+  | 'diagnostics';
+
+interface DiagnosticTransportSnapshot {
+  readonly state: DiagnosticTransportState;
+  readonly peerCount: number;
+  readonly permission: CameraPermissionState;
+}
+
+function diagnosticTransportSnapshot(
+  lounge: LoungeState | null,
+  loungeRoom: LoungeRoomState | null,
+  permission: CameraPermissionState
+): DiagnosticTransportSnapshot {
+  if (lounge?.status === 'active' || lounge?.status === 'retired') {
+    return { state: 'connected', peerCount: ROOM_CAPACITY, permission };
+  }
+  if (lounge?.status === 'destroyed' || loungeRoom?.status === 'expired') {
+    return { state: 'ended', peerCount: 0, permission };
+  }
+  if (loungeRoom) {
+    return {
+      state: 'hosting',
+      peerCount: loungeRoom.participants.length,
+      permission,
+    };
+  }
+  return { state: 'idle', peerCount: 0, permission };
+}
+
+function startupDiagnosticError(error: unknown): DiagnosticErrorSignal {
+  if (error instanceof LocalDataControlError) {
+    return { code: error.code, phase: 'startup' };
+  }
+  return { code: 'STORAGE_FAILURE', phase: 'profile-read' };
+}
+
+function hasDisposableLounge(
+  lounge: LoungeState | null,
+  loungeRoom: LoungeRoomState | null
+): boolean {
+  if (loungeRoom) return true;
+  return lounge !== null && lounge.status !== 'destroyed';
+}
 
 function currentClock(): ClockSnapshot {
   return {
@@ -387,9 +444,58 @@ function SharePreviewGate({
   );
 }
 
+const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
+  'settings',
+  'diagnostics',
+]);
+
+interface UtilityStageGateProps {
+  readonly stage: SetupStage;
+  readonly diagnosticsFlow: LocalDiagnosticsFlow;
+  readonly hasLounge: boolean;
+  readonly hasProfile: boolean;
+  readonly locale: Locale;
+  readonly onChangeLocale: (locale: Locale) => void;
+  readonly onCloseSettings: () => void;
+}
+
+function UtilityStageGate({
+  stage,
+  diagnosticsFlow,
+  hasLounge,
+  hasProfile,
+  locale,
+  onChangeLocale,
+  onCloseSettings,
+}: UtilityStageGateProps) {
+  if (stage === 'diagnostics') {
+    return (
+      <LocalDiagnosticsScreen
+        flow={diagnosticsFlow}
+        hasLounge={hasLounge}
+        hasProfile={hasProfile}
+        locale={locale}
+      />
+    );
+  }
+  if (stage === 'settings') {
+    return (
+      <SettingsScreen
+        locale={locale}
+        onBack={onCloseSettings}
+        onChangeLocale={onChangeLocale}
+        onOpenDiagnostics={diagnosticsFlow.open}
+      />
+    );
+  }
+  return null;
+}
+
 export default function PassportApp({
+  appVersion,
   localProfileStorage,
   backupSharePort,
+  localDataControl,
   providerRuntimeState = INITIAL_PROVIDER_RUNTIME_STATE,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
@@ -455,6 +561,8 @@ export default function PassportApp({
     useState<CameraPermissionState>('not-determined');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastDiagnosticError, setLastDiagnosticError] =
+    useState<DiagnosticErrorSignal | null>(null);
   // Issue 15: OS の Reduce Motion 設定。Composition Root（このファイル）だけが
   // `AccessibilityInfo`（React Native 同梱）を直接扱い、Port 自体（`reduced-motion-port.ts`）
   // は環境依存の取得手段を注入されるだけの純粋な形を保つ。
@@ -481,6 +589,7 @@ export default function PassportApp({
     onImportCommitted: handleBackupImportCommitted,
     onOpenStage: setStage,
     onCloseStage: closeBackupStage,
+    onDiagnosticError: setLastDiagnosticError,
   });
 
   // Invite は 1 回限り Secret の非公開 Buffer を持つ Host Handshake と対で保持する。
@@ -535,14 +644,81 @@ export default function PassportApp({
     setEncounteredConfirmed(false);
   }, [issuedHandshake, qrScannerPort]);
 
+  const forgetLoungeForDiagnostics = useCallback((): void => {
+    discardInviteFlow();
+    setInteraction(null);
+    setLounge(null);
+    setErrorMessage(null);
+  }, [discardInviteFlow]);
+
+  const resetPassportInMemory = useCallback((): void => {
+    setPetName('');
+    setPetEmoji('🐾');
+    setOwnerAlias('');
+    setOwnerSelection([]);
+    setLanguageSelection([]);
+    setPrivateProfile(null);
+    setShareSelection(null);
+    setNotice({
+      kind: 'empty',
+      message: MESSAGES[locale].passportApp.emptyOnLoad,
+    });
+  }, [locale]);
+
+  const resetAllLocalMemory = useCallback(
+    (recoveryRequired: boolean): void => {
+      forgetLoungeForDiagnostics();
+      resetPassportInMemory();
+      backupFlow.reset();
+      if (!recoveryRequired) setStage('profile');
+    },
+    [backupFlow, forgetLoungeForDiagnostics, resetPassportInMemory]
+  );
+
+  const diagnosticsRuntimeSnapshot = useMemo(() => {
+    const providerError: DiagnosticErrorSignal | null =
+      providerRuntimeState.status === 'failed'
+        ? { code: 'LOAD_ERROR', phase: 'model-load' }
+        : null;
+    return {
+      appVersion,
+      providerStatus: providerRuntimeState.status,
+      transport: diagnosticTransportSnapshot(
+        lounge,
+        loungeRoom,
+        cameraPermission
+      ),
+      lastError: lastDiagnosticError ?? providerError,
+    };
+  }, [
+    appVersion,
+    cameraPermission,
+    lastDiagnosticError,
+    lounge,
+    loungeRoom,
+    providerRuntimeState.status,
+  ]);
+  const diagnosticsFlow = useLocalDiagnosticsFlow({
+    localDataControl,
+    backupSharePort,
+    runtimeSnapshot: diagnosticsRuntimeSnapshot,
+    onOpen: () => setStage('diagnostics'),
+    onClose: () => setStage('settings'),
+    onEndAndForgetLounge: forgetLoungeForDiagnostics,
+    onPassportReset: resetPassportInMemory,
+    onAllDataDeleted: resetAllLocalMemory,
+    onError: setLastDiagnosticError,
+  });
+
   // 初回復元は起動時 1 回だけ実行する副作用であり、その後の locale 切替のたびに
   // 再実行（＝再読込）すると Settings の「Lounge State と Consent を失わない」契約に
   // 反する。locale は復元完了時点の表示言語としてクロージャの値をそのまま使う。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 起動時 1 回だけの実行を保つため locale を意図的に依存配列から外す
   useEffect(() => {
     let active = true;
-    void localProfileStorage
-      .load()
+    void localDataControl
+      .recoverPendingDeletion()
+      .then(() => localProfileStorage.load())
       .then((profile) => {
         if (!active) return;
         if (!profile) {
@@ -567,6 +743,7 @@ export default function PassportApp({
       })
       .catch((error: unknown) => {
         if (active) {
+          setLastDiagnosticError(startupDiagnosticError(error));
           setNotice(profileNoticeFromStorageError(error, 'load', locale));
         }
       })
@@ -576,7 +753,7 @@ export default function PassportApp({
     return () => {
       active = false;
     };
-  }, [localProfileStorage]);
+  }, [localDataControl, localProfileStorage]);
 
   /**
    * Issue 11: Active Lounge の 1 秒 tick / Background 復帰の両方が、Lounge 本体の期限
@@ -720,8 +897,17 @@ export default function PassportApp({
       setErrorMessage(null);
       setStage('encounter');
     } catch (error: unknown) {
+      setLastDiagnosticError({
+        code:
+          error instanceof LocalProfileStorageError ||
+          error instanceof LocalDataAccessBlockedError
+            ? 'STORAGE_FAILURE'
+            : 'SCHEMA_ERROR',
+        phase: 'profile-write',
+      });
       setNotice(
-        error instanceof LocalProfileStorageError
+        error instanceof LocalProfileStorageError ||
+          error instanceof LocalDataAccessBlockedError
           ? profileNoticeFromStorageError(error, 'save', locale)
           : {
               kind: 'validation-error',
@@ -805,10 +991,18 @@ export default function PassportApp({
         })
         .catch((error: unknown) => {
           if (inviteFlowGenerationRef.current === flowGeneration) {
+            setLastDiagnosticError({
+              code: 'TRANSPORT_UNAVAILABLE',
+              phase: 'transport',
+            });
             setErrorMessage(qrFlowErrorMessage(error, locale));
           }
         });
     } catch (error: unknown) {
+      setLastDiagnosticError({
+        code: 'UNEXPECTED_FAILURE',
+        phase: 'transport',
+      });
       setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
@@ -835,6 +1029,10 @@ export default function PassportApp({
         setLoungeRoom(updated);
       }
     } catch (error: unknown) {
+      setLastDiagnosticError({
+        code: 'TRANSPORT_UNAVAILABLE',
+        phase: 'transport',
+      });
       setErrorMessage(qrFlowErrorMessage(error, locale));
     }
   }
@@ -842,15 +1040,39 @@ export default function PassportApp({
   function beginGuestScan(): void {
     setErrorMessage(null);
     setStage('guest-scan');
-    void qrScannerPort.getPermissionState().then(setCameraPermission);
+    void qrScannerPort
+      .getPermissionState()
+      .then(setCameraPermission)
+      .catch(() => {
+        setLastDiagnosticError({
+          code: 'PERMISSION_DENIED',
+          phase: 'permission',
+        });
+      });
   }
 
   function requestCameraPermission(): void {
-    void qrScannerPort.requestPermission().then(setCameraPermission);
+    void qrScannerPort
+      .requestPermission()
+      .then(setCameraPermission)
+      .catch(() => {
+        setLastDiagnosticError({
+          code: 'PERMISSION_DENIED',
+          phase: 'permission',
+        });
+      });
   }
 
   function recheckCameraPermission(): void {
-    void qrScannerPort.getPermissionState().then(setCameraPermission);
+    void qrScannerPort
+      .getPermissionState()
+      .then(setCameraPermission)
+      .catch(() => {
+        setLastDiagnosticError({
+          code: 'PERMISSION_DENIED',
+          phase: 'permission',
+        });
+      });
   }
 
   function performScan(): void {
@@ -860,6 +1082,10 @@ export default function PassportApp({
         if (inviteFlowGenerationRef.current !== flowGeneration) return;
         setSeenRawPayloads(result.seenRawPayloads);
         if (result.payload.kind !== 'lounge-invite') {
+          setLastDiagnosticError({
+            code: 'SCHEMA_ERROR',
+            phase: 'transport',
+          });
           setErrorMessage(MESSAGES[locale].qrErrorNotice.notLoungeInviteQr);
           return;
         }
@@ -870,6 +1096,10 @@ export default function PassportApp({
         // 再導出せず、確定できた瞬間の値をそのまま state へ保持する。
         const resolvedGuestProfile = resolveGuestProfile(encounteredProfile);
         if (!resolvedGuestProfile) {
+          setLastDiagnosticError({
+            code: 'SCHEMA_ERROR',
+            phase: 'transport',
+          });
           setErrorMessage(
             MESSAGES[locale].qrErrorNotice.unresolvedGuestProfile
           );
@@ -884,6 +1114,10 @@ export default function PassportApp({
       })
       .catch((error: unknown) => {
         if (inviteFlowGenerationRef.current === flowGeneration) {
+          setLastDiagnosticError({
+            code: 'SCHEMA_ERROR',
+            phase: 'transport',
+          });
           setErrorMessage(qrFlowErrorMessage(error, locale));
         }
       });
@@ -950,6 +1184,10 @@ export default function PassportApp({
         }
       } catch (error: unknown) {
         if (inviteFlowGenerationRef.current === flowGeneration) {
+          setLastDiagnosticError({
+            code: 'TRANSPORT_UNAVAILABLE',
+            phase: 'transport',
+          });
           setErrorMessage(qrFlowErrorMessage(error, locale));
         }
       } finally {
@@ -1075,6 +1313,7 @@ export default function PassportApp({
    * 契約を、`passport-app-stage-flow.test.ts` がこの配線を固定する）。
    */
   function openSettings(): void {
+    if (saving) return;
     setStage('settings');
   }
 
@@ -1082,17 +1321,20 @@ export default function PassportApp({
     setStage('profile');
   }
 
-  // Issue 15: Settings は Lounge の状態確認より先に判定する。これにより、Active Lounge /
-  // Owner Question / Outcome / Destroyed のどの段階からでも Settings（言語切り替え）を
-  // 開け、`closeSettings` が `stage` を 'profile' へ戻しても `lounge` state は変更して
-  // いないため、次の render で元の Lounge 段階の画面へそのまま戻る（`lounge` の判定が
-  // 常に `stage` より優先されるため、2 段構えの復元処理を書く必要がない）。
-  if (stage === 'settings') {
+  // Settings と Diagnostics は Lounge の状態確認より先に判定する。これにより、Active
+  // Lounge / Owner Question / Outcome / Destroyed のどの段階からでも設定と診断を開ける。
+  // 戻る操作は `stage` だけを変えるため、Diagnostics の明示削除 Action を実行しない限り
+  // Lounge state は変化せず、Settings を閉じた次の render で元の段階へ戻る。
+  if (UTILITY_STAGES.has(stage)) {
     return (
-      <SettingsScreen
+      <UtilityStageGate
+        diagnosticsFlow={diagnosticsFlow}
+        hasLounge={hasDisposableLounge(lounge, loungeRoom)}
+        hasProfile={privateProfile !== null}
         locale={locale}
-        onBack={closeSettings}
         onChangeLocale={setLocale}
+        onCloseSettings={closeSettings}
+        stage={stage}
       />
     );
   }

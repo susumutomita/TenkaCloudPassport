@@ -17,6 +17,87 @@ function repoCheck(id: string) {
   return found;
 }
 
+describe('INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE', () => {
+  const r = rule('INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE');
+
+  it('package.json と bun.lock だけを対象にする', () => {
+    expect(r.scope('package.json')).toBe(true);
+    expect(r.scope('packages/app/package.json')).toBe(true);
+    expect(r.scope('bun.lock')).toBe(true);
+    expect(r.scope('src/app/diagnostic-report.ts')).toBe(false);
+  });
+
+  it('全 dependency 区分の Telemetry / Remote Inference SDK を拒否する', () => {
+    const findings = r.check({
+      path: 'package.json',
+      content: JSON.stringify({
+        dependencies: { '@sentry/react-native': '1.0.0' },
+        devDependencies: { openai: '1.0.0' },
+        optionalDependencies: { 'posthog-react-native': '1.0.0' },
+        peerDependencies: { '@anthropic-ai/sdk': '1.0.0' },
+      }),
+    });
+
+    expect(findings).toHaveLength(4);
+    expect(findings.every((finding) => finding.severity === 'error')).toBe(
+      true
+    );
+  });
+
+  it('bun.lock に解決された禁止 SDK があれば拒否する', () => {
+    const findings = r.check({
+      path: 'bun.lock',
+      content:
+        '"@datadog/mobile-react-native": ["@datadog/mobile-react-native@2.0.0", "", {}, "sha512-x"],\n',
+    });
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it('Expo と Local-only package は通す', () => {
+    const findings = r.check({
+      path: 'package.json',
+      content: JSON.stringify({
+        dependencies: { expo: '57.0.0', 'llama.rn': '0.9.0' },
+      }),
+    });
+
+    expect(findings).toHaveLength(0);
+  });
+
+  it('Privacy 正本に列挙した各 SDK family の代表 package を検出する', () => {
+    const forbidden = [
+      '@react-native-firebase/analytics',
+      '@amplitude/analytics-react-native',
+      'mixpanel-react-native',
+      '@segment/analytics-react-native',
+      'appcenter-analytics',
+      '@bugsnag/react-native',
+      '@datadog/mobile-react-native',
+      'newrelic-react-native-agent',
+      'posthog-react-native',
+      'logrocket',
+      '@vercel/analytics',
+      'react-native-adjust',
+      'react-native-appsflyer',
+      'react-native-branch',
+      'react-native-google-mobile-ads',
+      '@google/generative-ai',
+      '@aws-sdk/client-bedrock-runtime',
+    ];
+    const findings = r.check({
+      path: 'package.json',
+      content: JSON.stringify({
+        dependencies: Object.fromEntries(
+          forbidden.map((packageName) => [packageName, '1.0.0'])
+        ),
+      }),
+    });
+
+    expect(findings).toHaveLength(forbidden.length);
+  });
+});
+
 describe('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT', () => {
   const check = repoCheck('INVARIANT_SUPPLY_CHAIN_CONFIG_PRESENT');
   const roots: string[] = [];

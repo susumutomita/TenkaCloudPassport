@@ -1,0 +1,36 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Sanitized Diagnostic Report の strict allowlist 許可した現在状態だけを固定 Schema の JSON と Preview にする 1`] = `
+{
+  "error": {
+    "code": "SCHEMA_ERROR",
+    "phase": "model-output",
+  },
+  "model": {
+    "architecture": "llama",
+    "digestPrefix": "abcdef01",
+    "sizeBytes": 4294967296,
+  },
+  "provider": {
+    "status": "falling-back",
+  },
+  "reportSchema": 1,
+  "storage": {
+    "backupCacheCount": 0,
+    "modelCount": 1,
+    "profileCount": 1,
+    "settingsCount": 0,
+    "totalBytes": 4294967512,
+  },
+  "transport": {
+    "peerCount": 2,
+    "permission": "granted",
+    "state": "connected",
+  },
+  "version": {
+    "app": "1.0.0",
+    "profileSchema": 2,
+    "protocol": "1.2",
+  },
+}
+`;

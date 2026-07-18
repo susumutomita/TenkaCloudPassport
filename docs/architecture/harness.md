@@ -40,6 +40,13 @@
   `packages/` / `src/` / `scripts/` の TypeScript に、Biome が拾わない型エスケープを残さない (error)。対象は `as unknown as` の二段キャストと `@ts-nocheck` / `@ts-expect-error`。型を回避せず、外部入力は境界で検証して内部では検証済みの型だけを扱う。`any` / `as any` は Biome `noExplicitAny`、`@ts-ignore` は Biome `noTsIgnore` が担当する。
 - `INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY`
   production `src/` 全域は `kind: 'local-agent'` を直接実装しない (error)。TypeScript AST の cooked string value を検査し、通常文字列、template literal、escape 表現を同じ discriminator として扱う。Provider の Local / Rules 両分岐は Domain 所有の非列挙 brand を持つ凍結済み nominal capability とする。Local capability constructor の production 参照は `src/local-agent/model-safety-boundary.ts` だけに許可し、Rules capability は `src/domain/agent-model-provider.ts` の基準実装だけに許可する。Provider 実行境界は own brand、kind との一致、非列挙性、凍結状態、および Domain module-private `WeakSet` の identity membership を再検証するため、symbol 列挙、`kind` / `provide` を別 object の spread、継承で再構成しても実行できない。Harness の構造補助検査は Domain owner 外の `kind` / `provide` object / class を拒否するが、型参照の判定に文字列やコメントの正規表現を使わず TypeScript AST の型コンテキストだけを見る。`src/local-agent/`、`src/adapters/`、`src/infrastructure/`、`src/native/` は `AgentModelProvider` 型も直接参照しない。Native Adapter は `LocalModelCompletionPort` だけを実装し、Safety factory を通す。Public Passport の自由記述、未検証 Output、Tool Definition を Safety Boundary の外から Provider 経路へ入れない。
+- `INVARIANT_PRIVACY_NO_TELEMETRY_OR_REMOTE_INFERENCE`
+  `package.json` の全 dependency 区分と `bun.lock` に、Analytics、Crash SaaS、Advertising、Remote Log、
+  外部推論 Client の高シグナルな package 名を追加しない。検出対象は Sentry、Firebase Analytics、
+  Amplitude、Mixpanel、Segment、App Center、Bugsnag、Datadog、New Relic、PostHog、Adjust、AppsFlyer、
+  Branch、LogRocket、Vercel Analytics、Google Mobile Ads、OpenAI、Anthropic、Google GenAI、Cohere、
+  Mistral、Groq、Hugging Face Inference、Amazon Bedrock Runtime、Azure OpenAI の SDK とする。一般的な
+  Network library 名は誤検知を避けて review 対象に残す。
 - `INVARIANT_NO_CLIENT_AUTH_STORAGE`
   `packages/` / `src/` のブラウザ実装で、token / auth / session / credential を示すキーや値を `localStorage` / `sessionStorage` に保存しない (error)。認証情報は JavaScript から読めない HttpOnly Cookie など、脅威モデルに合うサーバー管理方式を使う。
 - `INVARIANT_NO_DANGEROUS_HTML`

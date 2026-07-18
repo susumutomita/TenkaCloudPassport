@@ -23,6 +23,7 @@ import {
   backupNoticeFromShareOutcome,
 } from './backup-notice';
 import type { BackupSharePort } from './backup-share-port';
+import type { DiagnosticErrorSignal } from './diagnostic-recovery';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import type { LocalProfileStoragePort } from './local-profile-storage';
 
@@ -45,6 +46,8 @@ export interface BackupFlow {
   readonly validate: () => void;
   readonly setImportChoice: (choice: BackupImportConflictChoice) => void;
   readonly commit: () => Promise<void>;
+  /** 全端末内 Data 削除後に、未保存の Export / Import 入力も Memory から破棄する。 */
+  readonly reset: () => void;
 }
 
 interface UseBackupFlowParams {
@@ -58,6 +61,7 @@ interface UseBackupFlowParams {
   readonly onImportCommitted: (profile: LocalPrivateProfile) => void;
   readonly onOpenStage: (stage: BackupStage) => void;
   readonly onCloseStage: () => void;
+  readonly onDiagnosticError: (error: DiagnosticErrorSignal) => void;
 }
 
 /**
@@ -76,6 +80,7 @@ export function useBackupFlow({
   onImportCommitted,
   onOpenStage,
   onCloseStage,
+  onDiagnosticError,
 }: UseBackupFlowParams): BackupFlow {
   const [exportedAt, setExportedAt] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -117,6 +122,7 @@ export function useBackupFlow({
    * 破棄する。Profile が無い場合は Export する対象が無いため Import 画面へ直接進む。
    */
   const open = useCallback((): void => {
+    if (committing) return;
     if (!privateProfile) {
       openImport();
       return;
@@ -124,11 +130,12 @@ export function useBackupFlow({
     setExportedAt(new Date().toISOString());
     setExportNotice(BACKUP_NOTICE_IDLE);
     onOpenStage('backup-export');
-  }, [privateProfile, openImport, onOpenStage]);
+  }, [committing, privateProfile, openImport, onOpenStage]);
 
   const close = useCallback((): void => {
+    if (committing) return;
     onCloseStage();
-  }, [onCloseStage]);
+  }, [committing, onCloseStage]);
 
   /** Export は利用者の明示操作（この関数の呼び出し元である Button）だけが Share Sheet を開く。 */
   const share = useCallback(async (): Promise<void> => {
@@ -141,15 +148,30 @@ export function useBackupFlow({
       });
       setExportNotice(backupNoticeFromShareOutcome(outcome, locale));
     } catch (error: unknown) {
+      onDiagnosticError({
+        code: 'UNEXPECTED_FAILURE',
+        phase: 'backup-export',
+      });
       setExportNotice(backupNoticeFromShareFailure(error, locale));
     } finally {
       setSharing(false);
     }
-  }, [exportPreview, sharing, backupSharePort, locale]);
+  }, [exportPreview, sharing, backupSharePort, locale, onDiagnosticError]);
 
   const changeRawInput = useCallback((value: string): void => {
     setRawInput(value);
     setImportResult(null);
+    setImportNotice(BACKUP_NOTICE_IDLE);
+  }, []);
+
+  const reset = useCallback((): void => {
+    setExportedAt(null);
+    setSharing(false);
+    setExportNotice(BACKUP_NOTICE_IDLE);
+    setRawInput('');
+    setImportResult(null);
+    setImportChoiceState('use-imported');
+    setCommitting(false);
     setImportNotice(BACKUP_NOTICE_IDLE);
   }, []);
 
@@ -182,6 +204,7 @@ export function useBackupFlow({
       onImportCommitted(committed);
       setImportNotice(backupNoticeFromImportCommitSuccess(locale));
     } catch (error: unknown) {
+      onDiagnosticError({ code: 'STORAGE_FAILURE', phase: 'backup-import' });
       setImportNotice(backupNoticeFromImportCommitFailure(error, locale));
     } finally {
       setCommitting(false);
@@ -193,6 +216,7 @@ export function useBackupFlow({
     importChoice,
     localProfileStorage,
     onImportCommitted,
+    onDiagnosticError,
     locale,
   ]);
 
@@ -213,5 +237,6 @@ export function useBackupFlow({
     validate,
     setImportChoice: setImportChoiceState,
     commit,
+    reset,
   };
 }
