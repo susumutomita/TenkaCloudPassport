@@ -1,57 +1,58 @@
-import type {
-  EncounterInput,
-  ParticipantOutcome,
-} from '../domain/rules-provider';
+import {
+  type AgentModelFailureCode,
+  AgentModelProviderError,
+  normalizeAgentModelFailureCode,
+} from '../domain/agent-model-provider';
+import {
+  createSafetyBoundLocalModelProvider,
+  type LocalModelCompletionPort,
+  type LocalModelRequest,
+} from './model-safety-boundary';
 
+/** Development Build の Native module が実装する最小 Port。Passport は受け取れない。 */
 export interface LocalAgentModule {
-  decide(input: EncounterInput): Promise<ParticipantOutcome>;
+  complete(request: LocalModelRequest): unknown | Promise<unknown>;
 }
 
 export type LocalAgentModuleLoader = () => Promise<LocalAgentModule>;
+export type LocalAgent = ReturnType<typeof createSafetyBoundLocalModelProvider>;
 
-export interface LocalAgent {
-  readonly kind: 'local-agent';
-  decide(input: EncounterInput): Promise<ParticipantOutcome>;
+function safeLocalAgentError(
+  code: AgentModelFailureCode = 'LOAD_ERROR'
+): AgentModelProviderError {
+  return new AgentModelProviderError(
+    code,
+    'Local Agent は安全に完了できませんでした。'
+  );
 }
 
-export type LocalAgentErrorCode = 'MODULE_LOAD_FAILED' | 'DECISION_FAILED';
-
-export class LocalAgentError extends Error {
-  readonly code: LocalAgentErrorCode;
-
-  constructor(code: LocalAgentErrorCode, message: string) {
-    super(message);
-    this.name = 'LocalAgentError';
-    this.code = code;
-  }
-}
-
+/**
+ * Native module の遅延読込を Safety Boundary の Completion Port に閉じ込める。
+ * module は canonical Evidence Request だけを受け、AgentModelInput / Passport を参照できない。
+ */
 export function createLazyLocalAgent(
   loadModule: LocalAgentModuleLoader
 ): LocalAgent {
   let modulePromise: Promise<LocalAgentModule> | undefined;
-  return {
-    kind: 'local-agent',
-    async decide(input) {
+  const completionPort: LocalModelCompletionPort = {
+    async complete(request) {
       let module: LocalAgentModule;
       try {
         modulePromise ??= loadModule();
         module = await modulePromise;
       } catch {
         modulePromise = undefined;
-        throw new LocalAgentError(
-          'MODULE_LOAD_FAILED',
-          'Development Build の Local Agent module を読み込めませんでした。'
-        );
+        throw safeLocalAgentError();
       }
       try {
-        return await module.decide(input);
-      } catch {
-        throw new LocalAgentError(
-          'DECISION_FAILED',
-          'Local Agent は検証可能な判定結果を返せませんでした。'
-        );
+        return await module.complete(request);
+      } catch (error: unknown) {
+        if (error instanceof AgentModelProviderError) {
+          throw safeLocalAgentError(normalizeAgentModelFailureCode(error.code));
+        }
+        throw safeLocalAgentError();
       }
     },
   };
+  return createSafetyBoundLocalModelProvider(completionPort);
 }

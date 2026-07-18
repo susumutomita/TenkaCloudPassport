@@ -1,5 +1,129 @@
 # Plan.md
 
+### [Issue 19 Local Model Safety Boundary] - 2026-07-18
+
+#### 目的
+
+Public Passport、Owner Answer、GGUF Output をすべて Untrusted Data として扱い、命令文、Unicode
+制御文字、過大・深い JSON、Tool Call、根拠外 Claim が Local Model 経路から UI、Log、外部 Action
+へ到達しない境界を完成する。Issue 16 の Evidence-only Provider Contract と Fallback-once を変更せず、
+Issue 17 の Native Adapter が必ず通る Pure TypeScript の安全境界を追加する。
+
+#### 制約
+
+- System Instruction と Untrusted Data は別 Message にし、同じ文字列連結をしない。
+- Pet Name、Owner Alias、Owner Answer 本文を Model Request に含めない。
+- Model が選択できる値は Input から再導出した canonical Evidence ID または `no-signal` だけにする。
+- Tool Definition は空配列とし、Tool Call 形式の出力も Runtime Validator で全体を拒否する。
+- Input / Output の拒否理由に攻撃文字列、Path、Prompt、Model Output を含めない。
+- Security Failure 後は同じ Encounter で Rules へ 1 回だけ切り替え、攻撃入力を再度 Model へ渡さない。
+- CI の Pure Boundary / Schema / Corpus / Fuzz Test を実機 Model Test の代替証跡にしない。
+
+#### 設計判断
+
+1. 禁止語 Filter は表記揺れ、別言語、Unicode、暗黙の命令を列挙できず、通過した自由記述を
+   そのまま Model へ渡す危険が残る。
+2. Passport 全体を delimiter 付き JSON として渡す案は Instruction との境界を明示できるが、
+   Pet Name と Alias を推論に不要なのに攻撃面へ残す。
+3. Public Passport から Domain が canonical Evidence 候補だけを再導出し、Model には ID、kind、
+   language の bounded JSON だけを別 Message で渡す案は、自由記述を Prompt 面から除去できる。
+
+案 3 を採用する。Input 境界は strict field、深さ、node 数、byte 数、Unicode 制御文字を検査する。
+Output は既存 `validateAgentModelProviderOutput()` が strict schema と Evidence 集合を二重検証し、
+表示文を固定 Renderer で再構築する。Safety Boundary は状態を保持せず、Fallback-once の所有権は
+既存 `createAgentProviderSessionRunner()` に残す。Provider は Domain 所有の非列挙 brand を持つ凍結済み
+capability とする。Local capability は Safety factory だけが生成し、Rules capability は Domain の基準実装
+だけが生成する。spread、継承、object literal で作った構造互換 object は実行境界で拒否する。
+
+#### タスク
+
+1. ADR、Safety Boundary、Attack Matrix、残余リスクを設計文書と脅威モデルに記録する。
+2. canonical Evidence-only Message、strict JSON Schema、tool 無効化を Red Test にする。
+3. Unicode 制御、過大 Text、深い JSON、未知 Field を型付きで拒否する Input Boundary を実装する。
+4. Prompt Injection、System Prompt、File、URL、Tool Call の Corpus を fixture 化する。
+5. Corpus と生成変種を使う 1,000 件以上の deterministic Fuzz Test を追加する。
+6. Schema を満たす根拠外 Claim、Tool Call、Invalid Output が固定 Error だけを返すことを検証する。
+7. Safety Failure 後の Rules Fallback が Encounter ごとに 1 回だけであることを結合検証する。
+8. 必須ゲート、独立レビュー、Security Review、Simplify Review を通し、実機残条件を明記して PR 化する。
+
+#### 検証手順
+
+- `bun test src/local-agent/model-safety-boundary.test.ts` で Red / Green を確認する。
+- `bun test src/domain/agent-model-provider.test.ts src/domain/provider-fallback.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従う独立コードレビュー。
+- 入力反射、Prompt 分離、Tool 無効化、Fallback-once、bounded 処理を Security Review する。
+- 既存 Validator / Evidence Builder / Runner と重複した責務がないことを Simplify Review する。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 19、Threat Model、Issue 16 Provider Contract を確認し、自由記述 Filter ではなく
+  canonical Evidence-only Request を Native Adapter 前段の必須境界とする方針を固定した。
+- 2026-07-18: 初回独立レビューで、未接続 composition、serialization 前の資源上限不足、Memory Fuzz の
+  false-pass、Unicode 集合不足、request 固有 Evidence enum 不足を Blocker / High / Medium として検出した。
+  Lazy Local Agent を Completion Port へ変更し、直接 Provider 実装を harness で禁止する修正対象にした。
+- 2026-07-18: 再レビューで、配列 own property の `toJSON` 迂回、`src/app` / `src/native` での
+  Provider 直接実装経路、Native typed error 本文の反射を High / Medium として再現した。配列を plain JSON
+  構造へ限定し、production `src/` 全域の Provider kind を harness で守り、Error code 以外を破棄する。
+- 2026-07-18: 3 回目レビューで `const kind = 'local-agent'; return { kind, provide };` による
+  harness 迂回を Medium として再現した。リテラルの許可箇所を既存型定義と Session 判定へ限定し、代入、
+  shorthand、computed property をすべて拒否する回帰テストを追加する。
+- 2026-07-18: 4 回目レビューで、Session の許可パターンと Provider 直接生成を同一行へ併記すると
+  行全体が許可される Medium を再現した。許可判定をリテラル出現単位へ変更し、正規部分を除去した後に
+  残る `local-agent` を拒否する。
+- 2026-07-18: 5 回目レビューで template literal と hexadecimal escape が文字列正規表現を迂回する
+  Medium を再現した。TypeScript AST の cooked string value と親構文を検査し、表記ではなく値と構文で
+  Provider discriminator の生成を禁止する。
+- 2026-07-18: 6 回目レビューで、複数の定数参照を組み合わせた discriminator は静的文字列評価を
+  迂回する Medium を再現した。factory 外で `kind` と `provide` を持つ object / class 構造を AST で拒否し、
+  `kind: 'rules'` の基準実装だけを許可する構造 invariant へ強化する。
+- 2026-07-18: 7 回目レビューで、`kind` と `provide` を別 object に分けて spread する Medium を
+  再現した。`kind` / `provide` と spread の組合せ、および object 内の `AgentModelProvider` 型コンテキストを
+  factory 外で拒否し、同一 object に両 member がある前提を廃止する。
+- 2026-07-18: 8 回目レビューで、`kind: 'rules'` の後段 spread が discriminator を上書きする
+  Medium を再現した。Rules の例外を spread、重複、追加 property がない `kind` / `provide` の2 member
+  object だけに限定する。
+- 2026-07-18: 9 回目レビューで、`kind` と `provide` の両方を spread する構造と継承構造が AST の
+  member 検査を迂回する Medium、および文字列・コメント内の型名を誤検出する Medium を再現した。
+  Local Provider を非列挙 brand 付きの凍結済み nominal capability に変更し、spread / 継承 clone を
+  Runtime で拒否する。Harness は capability constructor の production 呼出を Safety factory だけに限定し、
+  型コンテキストは TypeScript AST だけで判定する。
+- 2026-07-18: 10 回目レビュー実行は環境側で完了せず、自己監査で unbranded object が
+  `kind: 'rules'` を名乗ると Local capability 検査を早期 return できる経路を再現した。brand を Provider
+  union の両分岐へ必須化し、Rules 基準実装も non-enumerable / frozen capability として Domain 内だけで
+  生成する。実行境界は kind に関係なく capability を検証し、Rules の clone / 差替えも拒否する。
+- 2026-07-18: Security 自己監査で、Native が投げる typed error の `code` は TypeScript の readonly
+  だけでは実行時に閉じないことを確認した。Runtime で4種の failure code を再検証し、未知 code は本文と
+  同様に破棄して固定 `LOAD_ERROR` へ収束させる。
+- 2026-07-18: 11 回目の独立レビューで、export 済み Rules capability から private symbol を列挙し、
+  exact own keys / frozen / brand-kind 一致を複製できる High を再現した。Descriptor brand は型と診断に残すが、
+  Runtime 真正性は Domain module-private `WeakSet` の object identity を必須にする。constructor だけが
+  membership を追加し、symbol を複製した object も Provider 処理を実行しない。
+- 2026-07-18: 11 回目レビューの継続で、Safety factory 直利用時の未知 failure code が
+  `reason: undefined` になる Medium と、Domain 外の `kind = 'rules'` class が Harness を通る Medium を
+  再現した。failure code の Runtime 正規化を共通 Provider fallback 境界へ集約し、Rules class は path に
+  関係なく直接実装として拒否する。
+- 2026-07-18: 11 回目レビューの資源上限確認で、plain object / short array に大量 own key を持たせると
+  node guard 前に全 descriptor 走査と entries 複製を行う Medium を再現した。`Reflect.ownKeys()` 直後に
+  key 数を node 上限で拒否し、避けられない key 配列以外の走査・複製を開始しない。
+- 2026-07-18: 独立コードレビューの最終再確認は Blocker / High / Medium 0 件で APPROVE。symbol 複製、
+  unknown failure code、Rules class、own-key 上限の回帰を含む関連 148 tests、staged harness 0 findings、
+  `git diff --cached --check` の成功を reviewer と再確認した。
+- 2026-07-18: Security Review は、自由記述の非投影、serialization 前の accessor / `toJSON` / cycle /
+  byte / depth / node / own-key guard、Cc / Cf / Default Ignorable 拒否、request 固有 Evidence enum、`tools: []`、
+  strict Output Validator、固定 Error、closed failure code、WeakSet identity capability、Fallback-once を確認し、
+  新たな Blocker / High / Medium なし。実 GGUF parser、iOS / Android 資源・cancel・offline 証跡は Issue 17・18
+  の実機 Gate であり、本 foundation だけで Issue 19 を close しない。
+- 2026-07-18: Simplify Review は、既存 `parsePublicPassport()` / `buildEncounterEvidence()` /
+  `validateAgentModelProviderOutput()` / `createAgentProviderSessionRunner()` を再利用し、failure code 正規化を
+  Domain 1 箇所へ集約、Native は Completion Port 1 つ、Safety Boundary は request 状態を持たないことを確認。
+  AST helpers と preflight helpers は Biome complexity 上限内に分割済みで、削除できる重複は残っていない。
+- 2026-07-18: 最終 `make before-commit` は scripts 96 tests、source 732 tests、4 snapshots、Functions / Lines
+  100%、pre-release harness、textlint、Biome、TypeScript、Web export をすべて通過した。
+
+---
+
 ### [Issue 24 Group Reliability Foundation] - 2026-07-18
 
 #### 目的

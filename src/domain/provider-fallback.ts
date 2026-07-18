@@ -1,9 +1,10 @@
 import {
   type AgentModelDecision,
-  type AgentModelFailureCode,
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  assertAgentModelProviderCapability,
+  normalizeAgentModelFailureCode,
   validateAgentModelProviderOutput,
 } from './agent-model-provider';
 
@@ -25,9 +26,8 @@ export type ProviderSwitchReason =
  * 網羅的な switch にすることで、`AgentModelFailureCode` へ将来新しい値が増えた場合に
  * このマッピングの更新漏れをコンパイルエラーとして検出する。
  */
-function switchReasonFromFailureCode(
-  code: AgentModelFailureCode
-): ProviderSwitchReason {
+function switchReasonFromFailureCode(value: unknown): ProviderSwitchReason {
+  const code = normalizeAgentModelFailureCode(value);
   switch (code) {
     case 'TIMEOUT':
       return 'timeout';
@@ -62,6 +62,7 @@ export async function attemptProvider(
   input: AgentModelInput
 ): Promise<ProviderAttemptResult> {
   try {
+    assertAgentModelProviderCapability(provider);
     const output = await provider.provide(input);
     const decision = validateAgentModelProviderOutput(input, output);
     return { kind: 'success', providerKind: provider.kind, decision };

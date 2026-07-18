@@ -3,7 +3,7 @@
  * Architecture Harness — リポジトリ全体の invariant を機械的に検証する。
  *
  * 設計:
- * - 依存ゼロ (Bun ランタイム + 標準モジュールのみ)
+ * - Bun ランタイム、標準モジュール、リポジトリ固定の TypeScript compiler だけを使う
  * - invariant は本ファイル先頭の RULES に並べる。追加は RULES への push のみで完結する
  * - 実行は `--staged` (git ステージ済の変更だけ) または全件スキャンの 2 モード
  * - `--fail-on=error|warning` で exit code を制御 (CI / pre-commit hook 用)
@@ -16,6 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import ts from 'typescript';
 import type {
   Finding,
   RepoCheck,
@@ -35,6 +36,321 @@ const isImplSource = (p: string, ext = /\.(ts|tsx|js|jsx)$/): boolean =>
   ext.test(p) &&
   !/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(p) &&
   !/(^|\/)(__mocks__|__fixtures__|__tests__|tests?)\//.test(p);
+
+const LOCAL_AGENT_PROVIDER_TYPE_PATHS = new Set([
+  'src/domain/agent-model-provider.ts',
+  'src/domain/interaction-discovery-provider.ts',
+  'src/domain/rules-provider.ts',
+]);
+
+function isProviderKindTypeLiteral(
+  filePath: string,
+  node: ts.StringLiteralLike,
+  sourceFile: ts.SourceFile
+): boolean {
+  if (!LOCAL_AGENT_PROVIDER_TYPE_PATHS.has(filePath)) return false;
+  const literalType = node.parent;
+  const typeContainer = literalType.parent;
+  const property = ts.isUnionTypeNode(typeContainer)
+    ? typeContainer.parent
+    : typeContainer;
+  return (
+    ts.isLiteralTypeNode(literalType) &&
+    ts.isPropertySignature(property) &&
+    (property.name?.getText(sourceFile) === 'kind' ||
+      property.name?.getText(sourceFile) === '[AGENT_MODEL_PROVIDER_BRAND]')
+  );
+}
+
+function isAllowedSessionLiteral(
+  filePath: string,
+  node: ts.StringLiteralLike,
+  sourceFile: ts.SourceFile
+): boolean {
+  if (filePath !== 'src/app/agent-provider-session.ts') return false;
+  const parent = node.parent;
+  if (
+    ts.isPropertyAssignment(parent) &&
+    parent.initializer === node &&
+    parent.name.getText(sourceFile) === 'providerKind'
+  ) {
+    return true;
+  }
+  if (
+    !ts.isBinaryExpression(parent) ||
+    parent.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return false;
+  }
+  const other = parent.left === node ? parent.right : parent.left;
+  return ts.isPropertyAccessExpression(other) && other.name.text === 'kind';
+}
+
+function staticTemplateValue(node: ts.TemplateExpression): string | undefined {
+  let value = node.head.text;
+  for (const span of node.templateSpans) {
+    const expression = staticStringValue(span.expression);
+    if (expression === undefined) return undefined;
+    value += expression + span.literal.text;
+  }
+  return value;
+}
+
+function staticStringValue(node: ts.Node): string | undefined {
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isTemplateExpression(node)) return staticTemplateValue(node);
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isNonNullExpression(node)
+  ) {
+    return staticStringValue(node.expression);
+  }
+  if (
+    !ts.isBinaryExpression(node) ||
+    node.operatorToken.kind !== ts.SyntaxKind.PlusToken
+  ) {
+    return undefined;
+  }
+  const left = staticStringValue(node.left);
+  const right = staticStringValue(node.right);
+  return left === undefined || right === undefined ? undefined : left + right;
+}
+
+function propertyNameValue(
+  name: ts.PropertyName | undefined
+): string | undefined {
+  if (!name) return undefined;
+  if (
+    ts.isIdentifier(name) ||
+    ts.isStringLiteralLike(name) ||
+    ts.isNumericLiteral(name)
+  ) {
+    return name.text;
+  }
+  if (ts.isComputedPropertyName(name)) {
+    return staticStringValue(name.expression);
+  }
+  return undefined;
+}
+
+function typeNamesAgentModelProvider(type: ts.TypeNode | undefined): boolean {
+  return Boolean(type && /\bAgentModelProvider\b/.test(type.getText()));
+}
+
+function referencesCapabilityConstructor(
+  filePath: string,
+  node: ts.Node
+): boolean {
+  if (filePath === 'src/domain/agent-model-provider.ts') return false;
+  if (
+    ts.isIdentifier(node) &&
+    node.text === 'createLocalAgentProviderCapability'
+  ) {
+    return true;
+  }
+  return (
+    ts.isStringLiteralLike(node) &&
+    ts.isElementAccessExpression(node.parent) &&
+    node.parent.argumentExpression === node &&
+    staticStringValue(node) === 'createLocalAgentProviderCapability'
+  );
+}
+
+function isDomainCapabilityImplementation(
+  filePath: string,
+  node: ts.Node
+): boolean {
+  if (filePath !== 'src/domain/agent-model-provider.ts') return false;
+  let current: ts.Node | undefined = node;
+  while (current) {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isIdentifier(current.name) &&
+      current.name.text === 'RULES_MODEL_PROVIDER'
+    ) {
+      return true;
+    }
+    if (
+      ts.isFunctionDeclaration(current) &&
+      (current.name?.text === 'createLocalAgentProviderCapability' ||
+        current.name?.text === 'isAuthenticAgentModelProvider')
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function objectHasAgentModelProviderContext(
+  node: ts.ObjectLiteralExpression
+): boolean {
+  let current: ts.Node = node;
+  while (true) {
+    const parent = current.parent;
+    if (ts.isParenthesizedExpression(parent)) {
+      current = parent;
+      continue;
+    }
+    if (
+      (ts.isAsExpression(parent) ||
+        ts.isTypeAssertionExpression(parent) ||
+        ts.isSatisfiesExpression(parent)) &&
+      parent.expression === current
+    ) {
+      if (typeNamesAgentModelProvider(parent.type)) return true;
+      current = parent;
+      continue;
+    }
+    break;
+  }
+  const parent = current.parent;
+  return (
+    (ts.isVariableDeclaration(parent) &&
+      parent.initializer === current &&
+      typeNamesAgentModelProvider(parent.type)) ||
+    (ts.isPropertyDeclaration(parent) &&
+      parent.initializer === current &&
+      typeNamesAgentModelProvider(parent.type))
+  );
+}
+
+function isExactRulesProviderObject(
+  filePath: string,
+  node: ts.ObjectLiteralExpression,
+  kind: ts.ObjectLiteralElementLike | undefined,
+  provide: ts.ObjectLiteralElementLike | undefined
+): boolean {
+  if (
+    filePath !== 'src/domain/agent-model-provider.ts' ||
+    node.properties.length !== 2 ||
+    !kind ||
+    !provide ||
+    ts.isSpreadAssignment(kind) ||
+    ts.isSpreadAssignment(provide)
+  ) {
+    return false;
+  }
+  if (
+    ts.isComputedPropertyName(kind.name) ||
+    ts.isComputedPropertyName(provide.name)
+  ) {
+    return false;
+  }
+  return (
+    ts.isPropertyAssignment(kind) &&
+    staticStringValue(kind.initializer) === 'rules'
+  );
+}
+
+function unsafeProviderObject(
+  filePath: string,
+  node: ts.ObjectLiteralExpression
+): boolean {
+  const kind = node.properties.find(
+    (member) =>
+      !ts.isSpreadAssignment(member) &&
+      propertyNameValue(member.name) === 'kind'
+  );
+  const provide = node.properties.find(
+    (member) =>
+      !ts.isSpreadAssignment(member) &&
+      propertyNameValue(member.name) === 'provide'
+  );
+  if (isExactRulesProviderObject(filePath, node, kind, provide)) return false;
+  if (objectHasAgentModelProviderContext(node)) {
+    return true;
+  }
+  const hasSpread = node.properties.some(ts.isSpreadAssignment);
+  return Boolean((kind && provide) || (hasSpread && provide !== undefined));
+}
+
+function unsafeProviderClass(node: ts.ClassLikeDeclaration): boolean {
+  const kind = node.members.find(
+    (member) => propertyNameValue(member.name) === 'kind'
+  );
+  const provide = node.members.find(
+    (member) => propertyNameValue(member.name) === 'provide'
+  );
+  return Boolean(kind && provide);
+}
+
+function safetyBoundaryFinding(
+  filePath: string,
+  sourceFile: ts.SourceFile,
+  node: ts.Node
+): Finding {
+  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+  return {
+    rule: 'INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY',
+    severity: 'error',
+    file: filePath,
+    line: position.line + 1,
+    message:
+      'Local Agent Provider を直接実装しない。model-safety-boundary の LocalModelCompletionPort を実装し、createSafetyBoundLocalModelProvider 経由で構成する',
+  };
+}
+
+function isUnsafeProviderStructure(filePath: string, node: ts.Node): boolean {
+  if (referencesCapabilityConstructor(filePath, node)) return true;
+  if (ts.isObjectLiteralExpression(node)) {
+    return (
+      !isDomainCapabilityImplementation(filePath, node) &&
+      unsafeProviderObject(filePath, node)
+    );
+  }
+  return (
+    (ts.isClassDeclaration(node) || ts.isClassExpression(node)) &&
+    unsafeProviderClass(node)
+  );
+}
+
+function localAgentSafetyFindings(
+  filePath: string,
+  content: string
+): Finding[] {
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
+  const structuralFindings: Finding[] = [];
+  const literalFindings: Finding[] = [];
+  function visit(node: ts.Node): void {
+    if (isUnsafeProviderStructure(filePath, node)) {
+      structuralFindings.push(
+        safetyBoundaryFinding(filePath, sourceFile, node)
+      );
+      return;
+    }
+    if (
+      ts.isObjectLiteralExpression(node) &&
+      isDomainCapabilityImplementation(filePath, node)
+    ) {
+      return;
+    }
+    const stringLiteral = ts.isStringLiteralLike(node) ? node : undefined;
+    if (
+      staticStringValue(node) === 'local-agent' &&
+      (!stringLiteral ||
+        (!isProviderKindTypeLiteral(filePath, stringLiteral, sourceFile) &&
+          !isAllowedSessionLiteral(filePath, stringLiteral, sourceFile) &&
+          !isDomainCapabilityImplementation(filePath, stringLiteral)))
+    ) {
+      literalFindings.push(safetyBoundaryFinding(filePath, sourceFile, node));
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  const [firstStructuralFinding] = structuralFindings;
+  return firstStructuralFinding ? [firstStructuralFinding] : literalFindings;
+}
 
 // INVARIANT_NO_GIT_DEPENDENCY: version specifier の許可形 (registry-style のみ)。
 // semver ranges, ^x.y.z, ~x.y.z, x.y.z, *, latest, workspace:* など。
@@ -146,6 +462,35 @@ const RULES: Rule[] = [
             line: i + 1,
             message:
               'テストの .only / .skip / xit / xdescribe をコミット前に外す',
+          });
+        }
+      }
+      return findings;
+    },
+  },
+  {
+    id: 'INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY',
+    description:
+      'Native / Local Agent adapter は AgentModelProvider を直接実装せず Safety Boundary の Completion Port だけを使う',
+    scope: (p) =>
+      isImplSource(p, /\.(ts|tsx)$/) &&
+      /^src\//.test(p) &&
+      p !== 'src/local-agent/model-safety-boundary.ts',
+    check: ({ path: filePath, content }) => {
+      const findings = localAgentSafetyFindings(filePath, content);
+      const lines = content.split('\n');
+      const providerTypeForbidden =
+        /^src\/(local-agent|adapters|infrastructure|native)\//.test(filePath);
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (providerTypeForbidden && /\bAgentModelProvider\b/.test(line)) {
+          findings.push({
+            rule: 'INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY',
+            severity: 'error',
+            file: filePath,
+            line: index + 1,
+            message:
+              'Local Agent Provider を直接実装しない。model-safety-boundary の LocalModelCompletionPort を実装し、createSafetyBoundLocalModelProvider 経由で構成する',
           });
         }
       }
