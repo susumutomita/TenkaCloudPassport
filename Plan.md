@@ -1,5 +1,135 @@
 # Plan.md
 
+### [Issue 27 Facilitator Kit と Local Champion 運用] - 2026-07-18
+
+#### 目的
+
+Core Team が現地へ移動しなくても、初めての Local Champion が Privacy と Product Contract を守り、
+2〜6 名の対面 Lounge を準備、進行、終了できる版管理済み Kit を提供する。
+
+#### 制約
+
+- Champion 候補の発見には公開情報だけを使い、個人の採点、順位、中央名簿を作らない。
+- Product Consent と Research Consent を分離し、Research 不参加、`no-signal`、途中退出を失敗にしない。
+- Lounge 由来データは退出、Host 終了、20 分満了の最早契機で破棄し、Backup へ入れない。
+- 同期 Orientation は 30 分以内、Dry Run 前の説明は 10 分以内に収める。
+- Nearby Transport、配布、実機検証の未達を文書で補完したように扱わず、未検証経路は `Not run` とする。
+- 雇用、報酬、認定資格、Core Team の渡航、中央 Ambassador Database、有料広告を導入しない。
+
+#### 設計判断
+
+中央 CRM は削除要求と個人評価の面を増やし、文書だけを渡して同期確認をなくす案は Privacy 説明の
+取り違えを検出できない。Repository 内の JA / EN Kit を正本にし、30 分以内の Orientation と実在する
+未経験者の Dry Run を段階 Gate として組み合わせる。候補者情報は招待に使った既存 Channel の最小情報だけに
+限定し、中央 Registry へ複製しない。詳細は
+[Facilitator Kit と Local Champion 運用設計](./docs/design/facilitator-kit-and-local-champion.md) と
+[ADR-0022](./docs/adr/0022-decentralized-local-champion-operations.md) を正本とする。
+
+#### タスク
+
+1. 仕様書、設計、ADR、本セクションを実装より先に更新する。
+2. JA / EN の Facilitator Guide、1 Page Checklist、QR 掲示物を作る。
+3. 60 秒紹介、5 分 Setup、20 分 Session、30 / 60 / 90 分 Event Format を固定する。
+4. 6 つの必須 Recovery と 4 つの QR Recovery、Privacy 説明、状態別終了案内、Champion Lifecycle、
+   辞退と削除要求を固定する。
+5. Kit の必須文書、導線、契約語彙を実 file I/O の日本語 BDD Test で検証する。
+6. 全 Gate、独立 Review、Security / Simplify Review を完了する。
+7. 未経験者 1 名の Dry Run を実施し、迷い、判断不能、Privacy 説明漏れを記録して改訂する。
+
+#### 検証手順
+
+- `bun test scripts/facilitator-kit.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Web Export、重複 baseline を含む）。
+- Guide と Checklist の JA / EN 対応、10 Recovery、Privacy の 3 境界、3 Event Format を検査する。
+- Champion 発見軸が公開情報だけを使い、点数、順位、中央 Registry を作らないことを Review する。
+- Dry Run は実在する未経験者の記録を得るまで `Not run` とし、Repository Test を代替証跡にしない。
+
+#### 進捗ログ
+
+- 2026-07-18: Issue 27、Product Contract、Privacy Data Inventory、Retention、Pilot Protocol、Consent
+  Script、Observation Sheet を監査した。Issue 26 の Research Gate を複製せず参照し、Issue 27 は現場導線と
+  Champion Lifecycle に責務を限定する方針を固定した。
+- 2026-07-18: 中央 CRM、同期なしの文書配布、版管理 Kit と短時間 Orientation の 3 案を比較した。
+  個人台帳を作らず、Privacy 誤説明を Dry Run で止められる 3 案目を採用した。
+- 2026-07-18: Kit Version 1.0 の JA / EN Guide、1 Page Checklist、QR Poster、Dry Run Record、Support Matrix、
+  仕様書、ADR を作成した。最初の文書契約 Test は QR Poster の Version 欠落と Checklist の正本用語省略を
+  Red とし、JA / EN の用語と Version を修正して Green にした。
+- 2026-07-18: `/feature` の PM、Designer、QA、User 役レビューを統合した。Designer と User が再現した
+  Product / Research Consent の単一質問、Setup の二重計上、QR Error 不足、状態表示不足、役割 / 端末 / Locale、
+  個人退出の待機圧力を修正した。Guide と Checklist に `P0`〜`P10`、6 必須 Recovery と 4 QR Recovery に
+  `R1`〜`R10`、`NORMAL END` / `NOT STARTED` / `STOP THIS LOUNGE` を JA / EN で固定した。
+- 2026-07-18: Support Matrix は Repository 文書と物理 Capability を分けた。`Verified` への変更には App Commit /
+  Build ID、OS / Device 範囲、Transport / Provider、会場条件、検証月、Evidence URL、Review を要求し、Issue の
+  Close を実機証拠にしない契約へ補強した。
+- 2026-07-18: Designer 再 Review で、2 名以上かつ接続中の全 Participant が Ready になる前に `P7` を
+  開始できる曖昧さと、English の開催前 Gate が日本語 Support Matrix に依存する問題を検出した。All-Ready
+  Gate を JA / EN の Guide、Checklist、Dry Run Record に追加し、English Support Matrix と Record の判定説明を
+  自己完結させた。
+- 2026-07-18: 独立 Code / Security / Simplify Review で、1 回限り Invite を全員が Scan する不可能手順、
+  個人退出による全体終了、任意 Pet Emoji の説明欠落、Camera 拒否 Label、Host 込み人数の英訳、Host Loss の
+  破棄確認、Dry Run Evidence 項目、物理能力 Matrix、語句存在だけの Test False-pass を検出した。
+- 2026-07-18: Participant 1 名ごとの fresh Invite と Secret Rotation、All-Ready、個人退出と Host Loss の分離、
+  Public Passport Field、端末別破棄表示を JA / EN に固定した。Matrix に Build 配布、Provider、Host Loss、印刷を
+  `Not run` で追加し、Dry Run Record に Build、Locale、時間 Bucket、Recovery ID 別判断を追加した。
+- 2026-07-18: 文書契約 Test を構造検査へ強化した。物理 Matrix の状態と Evidence、Record Field Allowlist、
+  Champion と Consent の禁止方向、実 Prefix `TCPQ1:`、画像 / Data URL / Secret 値、Repository containment、
+  実在 Fragment を Fail-closed に検査し、実文書から作る危険変形が Red になることを確認した。
+- 2026-07-18: `/feature` の役割 Review は実装前の約 1,300 行を最終成果物と混在させず、各 Role の Finding、
+  解消状態、Physical `Not run` を示す短い Evidence へ整理した。
+- 2026-07-18: 修正後の独立 Code Review と Security / Simplify Review は、Blocker / High / Medium / Low の
+  新規 Finding なしで `ALLOW` となった。旧 Invite / Handshake だけを Dispose し、認証済み Membership を保持して
+  同じ Lounge で Rotate する R8 Recovery と、実 `jsc_` Join Secret の拒否も再確認した。
+- 2026-07-18: 最終文書契約は 12 Test、554 Expect で Green である。全変更 Markdown の Textlint、Typecheck、
+  staged Architecture Harness、`git diff --cached --check` も Green である。物理 Dry Run、印刷、実 Camera、
+  Nearby Transport、複数実機、Assistive Technology は `Not run` のままである。
+- 2026-07-18: PR Review の 5 指摘を反映した。設計フローに All-Ready 開始条件を明記し、
+  Dry Run Record の口頭補足と Capability を PM 保持契約へ追加した。`P0` の `Not run` を
+  Walkthrough のみに限定し、`P2` の 1 名時表現を明確化した。Consent の禁止方向は
+  Product → Research も Negative Test で検出する。
+- 2026-07-18: Security / Simplify 再 Review で、日本語 Consent の「代わりに使う」と Record の
+  重複 Field / 自由値が検出されない false-pass を確認した。JA / EN の両方向を実際の安全文から
+  危険文へ変形する Negative Test と、全 Record Field の一意性および選択値の検査を追加した。
+- 2026-07-18: 再再 Review で Record の Field 名だけを残した空値の false-pass を再現した。空値も
+  `invalid value` とし、折り返し行を同じ Field の値として最後まで照合する解析と Negative Test へ修正した。
+
+#### 振り返り
+
+- 問題: Issue の箇条書きを Guide へ並べた初稿は、Product と Research を最後の「続けますか」で同時に尋ね、
+  5 分 Setup を 20 分 Script の冒頭でも繰り返していた。6 Recovery も QR の不正、重複、期限切れ、別 Group を
+  区別せず、初めての Facilitator が安全な次操作を一意に選べなかった。
+- 根本原因: 受け入れ項目の存在を文書へ写すことを先に確認し、30 分 Event を入口から退出まで時系列で
+  Simulation していなかった。Product Consent、Research Consent、Invite の期限開始を独立した判断点として
+  Field Action に割り当てていなかった。
+- 予防策: Guide と Checklist で共通の `P0`〜`P10`、Recovery で `R1`〜`R10` を使い、JA / EN と相対 Link を
+  実 file I/O Test で固定する。新しい運用文書は、PM の条件照合だけでなく Designer と初見 User の時系列
+  Simulation を統合前 Gate にする。
+- 問題: Kit 文書の完成と実機利用可能性を同じ Ready 状態にすると、実 Transport や Camera が未検証でも
+  Champion が開催してよいと誤読できる。
+- 根本原因: Repository Gate と Physical Capability Gate の Evidence 所有者を Support Matrix で分けていなかった。
+- 予防策: 物理能力は既定 `Not run` とし、Build / OS / Device / Transport / 会場条件 / 検証月 / Evidence URL /
+  Review が同時に揃う Pull Request だけで `Verified` へ変更する。Issue Close や Green CI を実機 Evidence にしない。
+- 問題: P6 で各 Participant が Ready を選ぶと書いても、P7 の開始条件を Group 全体の Gate として明記しなければ、
+  未 Ready の人を除外した早期開始ができる。English Guide が日本語 Matrix へ Link するだけでは、英語利用者が
+  `Verified` と `Not run` の判断を単独で行えない。
+- 根本原因: Field Action の完了条件を個人操作として書き、前の State Machine が持つ All-Ready invariant を
+  Facilitator の開始判断へ翻訳していなかった。JA / EN 文書の対を File の存在と用語で確認し、参照先の意味が
+  各 Locale で自己完結するかを確認していなかった。
+- 予防策: 状態遷移の Field Guide では、操作だけでなく次 State へ進める人数、接続状態、全員条件、期限時の
+  Fail-closed 動作を Test で固定する。Locale 別の開始導線は、Link 先の判断表と Evidence 条件まで同じ Locale で
+  読めることを契約 Test に含める。
+- 問題: 「fresh QR」と「全員が Scan」という自然言語だけでは、Join Secret が 1 回利用後に `used` となる
+  Handshake 契約を表せず、3 名以上の正常系が成立しなかった。語句存在 Test は矛盾文や秘密値を追加しても
+  Green のままだった。
+- 根本原因: Field Guide を Product の画面順だけで書き、Protocol の `available` → `verifying` → `used` →
+  `rotate` と Group Membership の Leave / Host Loss を結合した Simulation を行っていなかった。Test も肯定語の
+  存在を検査し、表の Status、入力 Field、画像、Payload、Link 境界を構造として検査していなかった。
+- 予防策: Security Capability を含む運用手順は、参加人数分の状態遷移を正本から展開する。文書 Test は
+  Allowlist と禁止構造を両方持ち、実ファイルを危険状態へ変形した Negative Case で False-pass を再現してから
+  Green にする。
+
+---
+
 ### [Issue 26 Privacy-preserving Pilot Measurement] - 2026-07-18
 
 #### 目的
