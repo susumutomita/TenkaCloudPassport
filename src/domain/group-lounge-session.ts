@@ -227,6 +227,41 @@ function assertValidConnectionGeneration(generation: number): void {
   }
 }
 
+function participantForEvent(
+  state: ActiveGroupLounge,
+  participantId: ParticipantId
+): GroupParticipant | null {
+  const participant = state.participants.find(
+    (candidate) => candidate.participantId === participantId
+  );
+  if (participant) return participant;
+  if (state.departedParticipantIds.includes(participantId)) return null;
+  throw new GroupLoungeSessionError(
+    'PARTICIPANT_NOT_FOUND',
+    '指定された Participant は Group Lounge にいません。'
+  );
+}
+
+interface ResolvedConnectionEvent {
+  readonly current: GroupLoungeSession;
+  readonly participant: GroupParticipant | null;
+}
+
+function resolveConnectionEvent(
+  state: GroupLoungeSession,
+  input: ParticipantConnectionEvent
+): ResolvedConnectionEvent {
+  const current = advanceGroupLoungeSession(state, input.clock);
+  if (current.status === 'destroyed') {
+    return { current, participant: null };
+  }
+  assertValidConnectionGeneration(input.connectionGeneration);
+  return {
+    current,
+    participant: participantForEvent(current, input.participantId),
+  };
+}
+
 function hasLoungeExpired(
   state: ActiveGroupLounge,
   clock: ClockSnapshot
@@ -570,18 +605,8 @@ export function markGroupParticipantReady(
     return current;
   }
   if (input.roundId !== current.roundId) return current;
-  const participant = current.participants.find(
-    (candidate) => candidate.participantId === input.participantId
-  );
-  if (!participant) {
-    if (current.departedParticipantIds.includes(input.participantId)) {
-      return current;
-    }
-    throw new GroupLoungeSessionError(
-      'PARTICIPANT_NOT_FOUND',
-      '指定された Participant は Group Lounge にいません。'
-    );
-  }
+  const participant = participantForEvent(current, input.participantId);
+  if (!participant) return current;
   if (participant.connection.status !== 'connected') {
     throw new GroupLoungeSessionError(
       'PARTICIPANT_DISCONNECTED',
@@ -604,21 +629,8 @@ export function disconnectGroupParticipant(
   state: GroupLoungeSession,
   input: ParticipantConnectionEvent
 ): GroupLoungeSession {
-  const current = advanceGroupLoungeSession(state, input.clock);
-  if (current.status === 'destroyed') return current;
-  assertValidConnectionGeneration(input.connectionGeneration);
-  const participant = current.participants.find(
-    (candidate) => candidate.participantId === input.participantId
-  );
-  if (!participant) {
-    if (current.departedParticipantIds.includes(input.participantId)) {
-      return current;
-    }
-    throw new GroupLoungeSessionError(
-      'PARTICIPANT_NOT_FOUND',
-      '指定された Participant は Group Lounge にいません。'
-    );
-  }
+  const { current, participant } = resolveConnectionEvent(state, input);
+  if (current.status === 'destroyed' || !participant) return current;
   if (input.connectionGeneration !== participant.connectionGeneration) {
     return current;
   }
@@ -645,21 +657,8 @@ export function reconnectGroupParticipant(
   state: GroupLoungeSession,
   input: ParticipantConnectionEvent
 ): GroupLoungeSession {
-  const current = advanceGroupLoungeSession(state, input.clock);
-  if (current.status === 'destroyed') return current;
-  assertValidConnectionGeneration(input.connectionGeneration);
-  const participant = current.participants.find(
-    (candidate) => candidate.participantId === input.participantId
-  );
-  if (!participant) {
-    if (current.departedParticipantIds.includes(input.participantId)) {
-      return current;
-    }
-    throw new GroupLoungeSessionError(
-      'PARTICIPANT_NOT_FOUND',
-      '指定された Participant は Group Lounge にいません。'
-    );
-  }
+  const { current, participant } = resolveConnectionEvent(state, input);
+  if (current.status === 'destroyed' || !participant) return current;
   if (input.connectionGeneration !== participant.connectionGeneration + 1) {
     return current;
   }

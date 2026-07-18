@@ -4,6 +4,8 @@ import {
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  createLocalAgentProviderCapability,
+  type LocalAgentModelProvider,
   RULES_MODEL_PROVIDER,
 } from '../domain/agent-model-provider';
 import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
@@ -27,44 +29,44 @@ const INPUT: AgentModelInput = {
   deadlineAtWallClockMs: 4_102_444_800_000,
 };
 
-const LOCAL_SUCCESS_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide() {
-    return { kind: 'bridge', evidenceIds: ['topic:open-source'] };
-  },
-};
+function localProvider(
+  provide: LocalAgentModelProvider['provide']
+): LocalAgentModelProvider {
+  return createLocalAgentProviderCapability(provide);
+}
 
-const LOCAL_SCHEMA_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide() {
+const LOCAL_SUCCESS_PROVIDER = localProvider(function provideSuccess() {
+  return { kind: 'bridge', evidenceIds: ['topic:open-source'] };
+});
+
+const LOCAL_SCHEMA_ERROR_PROVIDER = localProvider(
+  function provideSchemaError() {
     return {
       kind: 'bridge',
       evidenceIds: ['topic:open-source'],
       url: 'https://example.invalid',
     };
-  },
-};
+  }
+);
 
-const LOCAL_CANCELLED_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<never> {
+const LOCAL_CANCELLED_PROVIDER = localProvider(
+  function provideCancelled(): Promise<never> {
     return Promise.reject(
       new AgentModelProviderError('CANCELLED', 'Native context was cancelled.')
     );
-  },
-};
+  }
+);
 
-const LOCAL_UNKNOWN_ERROR_PROVIDER: AgentModelProvider = {
-  kind: 'local-agent',
-  provide(): Promise<never> {
+const LOCAL_UNKNOWN_ERROR_PROVIDER = localProvider(
+  function provideUnknownError(): Promise<never> {
     return Promise.reject(new Error('sensitive raw model failure'));
-  },
-};
+  }
+);
 
 const INVALID_RULES_PROVIDER: AgentModelProvider = {
-  kind: 'rules',
+  ...RULES_MODEL_PROVIDER,
   provide() {
-    return { kind: 'bridge', evidenceIds: [] };
+    return { kind: 'bridge', evidenceIds: [] } as const;
   },
 };
 
@@ -155,15 +157,12 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
   it('同じ Encounter の同時呼び出しは実行中 Promise を共有し、Provider を 1 回だけ呼ぶ', async () => {
     let calls = 0;
     let completeProvider: (() => void) | undefined;
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return new Promise((resolve) => {
-          completeProvider = () => resolve({ kind: 'no-signal' });
-        });
-      },
-    };
+    const provider = localProvider(function provideConcurrent() {
+      calls += 1;
+      return new Promise((resolve) => {
+        completeProvider = () => resolve({ kind: 'no-signal' });
+      });
+    });
     const runner = createAgentProviderSessionRunner();
     const request = {
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -189,15 +188,12 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     let didReenter = false;
     let completeProvider: (() => void) | undefined;
     let nested: ReturnType<AgentProviderSessionRunner['run']> | undefined;
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return new Promise((resolve) => {
-          completeProvider = () => resolve({ kind: 'no-signal' });
-        });
-      },
-    };
+    const provider = localProvider(function provideReentrant() {
+      calls += 1;
+      return new Promise((resolve) => {
+        completeProvider = () => resolve({ kind: 'no-signal' });
+      });
+    });
     const runner = createAgentProviderSessionRunner();
     const request: AgentProviderSessionRequest = {
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -222,12 +218,9 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
   });
 
   it('完了しない Local Provider は Deadline で timeout になり、Rules へ 1 回だけ切り替わる', async () => {
-    const neverSettlesProvider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        return new Promise(() => undefined);
-      },
-    };
+    const neverSettlesProvider = localProvider(function provideNeverSettles() {
+      return new Promise(() => undefined);
+    });
     const runner = createAgentProviderSessionRunner();
     const result = await runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -243,13 +236,10 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
   it('開始前に Deadline を過ぎていれば Local Provider を呼ばず timeout にする', async () => {
     let calls = 0;
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return { kind: 'no-signal' };
-      },
-    };
+    const provider = localProvider(function provideExpired() {
+      calls += 1;
+      return { kind: 'no-signal' };
+    });
     const runner = createAgentProviderSessionRunner();
     const result = await runner.run({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -265,19 +255,16 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
   it('Deadline 後の Local Provider 遅延完了は確定済み Rules Outcome を上書きしない', async () => {
     let calls = 0;
     let completeProvider: (() => void) | undefined;
-    const provider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide() {
-        calls += 1;
-        return new Promise((resolve) => {
-          completeProvider = () =>
-            resolve({
-              kind: 'bridge',
-              evidenceIds: ['topic:open-source'],
-            });
-        });
-      },
-    };
+    const provider = localProvider(function provideLateCompletion() {
+      calls += 1;
+      return new Promise((resolve) => {
+        completeProvider = () =>
+          resolve({
+            kind: 'bridge',
+            evidenceIds: ['topic:open-source'],
+          });
+      });
+    });
     const runner = createAgentProviderSessionRunner();
     const request = {
       state: INITIAL_PROVIDER_RUNTIME_STATE,
@@ -388,13 +375,12 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
 
   it('同じ Encounter の再実行は確定済み Outcome を返し、Provider を再度呼ばない', async () => {
     let calls = 0;
-    const countingProvider: AgentModelProvider = {
-      kind: 'local-agent',
-      provide(): { readonly kind: 'no-signal' } {
-        calls += 1;
-        return { kind: 'no-signal' };
-      },
-    };
+    const countingProvider = localProvider(function provideCounting(): {
+      readonly kind: 'no-signal';
+    } {
+      calls += 1;
+      return { kind: 'no-signal' };
+    });
     const first = await runAgentProviderSession({
       state: INITIAL_PROVIDER_RUNTIME_STATE,
       ledger: EMPTY_PROVIDER_RUN_LEDGER,
