@@ -9,8 +9,8 @@
 - [ ] `P0` I checked build / OS / transport in the [support matrix](./README.md#kit-version-10-support-matrix-english) and
   depend on no `Not run` capability.
 - [ ] `P1` Kit, devices, [QR poster](./qr-poster.en.md), and exit route are ready.
-- [ ] `P2` Two to six people in total, including the Host, have their own devices and confirmed the Group locale. One uses a
-  walkthrough; seven or more split.
+- [ ] `P2` Two to six people in total, including the Host, have their own devices and confirmed the Group locale. If only one
+  person is present, use a walkthrough; seven or more split.
 - [ ] `P3` I read the Product introduction and said `no-signal` and leaving are not failures.
 - [ ] `P4` Research used a separate consent decision. Refusal or no answer keeps counters off.
 - [ ] `P5` I read Product privacy; each Owner controlled Preview, sharing, and camera choice.

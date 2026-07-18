@@ -191,6 +191,13 @@ const consentContractViolations = (content: string): readonly string[] => {
     /Research Consent replaces Product Consent/i,
     /Research Consent (?:also grants|includes) Product Consent/i,
     /Research Consent で Product Consent を(?:代替|取得|許可)/,
+    /Research Consent を Product Consent の代わりに(?:使う|用いる|扱う)/,
+    /use Research Consent (?:as|instead of) Product Consent/i,
+    /Product Consent replaces Research Consent/i,
+    /Product Consent (?:also grants|includes) Research Consent/i,
+    /Product Consent で Research Consent を(?:代替|取得|許可)/,
+    /Product Consent を Research Consent の代わりに(?:使う|用いる|扱う)/,
+    /use Product Consent (?:as|instead of) Research Consent/i,
   ] as const;
   return patterns.filter((pattern) => pattern.test(content)).map(String);
 };
@@ -223,13 +230,98 @@ const allowedRecordFieldLabelSet: ReadonlySet<string> = new Set(
   allowedRecordFieldLabels
 );
 
+const recordFieldEntries = (
+  content: string
+): readonly (readonly [string, string])[] => {
+  const lines = content.split('\n');
+  const entries: [string, string][] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^- ([^:\n]+):[ \t]*(.*)$/);
+    if (match === null) continue;
+    const valueLines = [match[2].trim()];
+    while (index + 1 < lines.length && /^ {2}\S/.test(lines[index + 1])) {
+      index += 1;
+      valueLines.push(lines[index].trim());
+    }
+    entries.push([match[1].trim(), normalizeWhitespace(valueLines.join(' '))]);
+  }
+  return entries;
+};
+
+const constrainedRecordFieldValues = [
+  ['Kit Version', /^1\.0。$/],
+  ['Current Status', /^`Not run`。$/],
+  ['Physical Gate', /^Repository Test で代替しない。$/],
+  ['Kit Commit', /^`_+`。$/],
+  [
+    'App Build ID / Version',
+    /^`Not run` または公開 Build 識別子だけを書く \/ Write only `Not run` or a public build identifier\.$/,
+  ],
+  [
+    'Build / OS / Transport',
+    /^`Not run`、または公開 Support Matrix の項目名だけを書く \/ Write only `Not run` or the name of a capability in the public Support Matrix\.$/,
+  ],
+  ['実施月 / Month', /^`YYYY-MM`。$/],
+  [
+    '読み上げ Locale / Read-aloud Locale',
+    /^`JA \/ EN \/ JA \+ EN` から選ぶ \/ Choose one\.$/,
+  ],
+  [
+    'Orientation',
+    /^`30 分以内 \/ 30 分超 \/ Not run` または `Within 30 minutes \/ Over 30 minutes \/ Not run` から選ぶ \/ Choose one\.$/,
+  ],
+  [
+    '事前説明 / Explanation',
+    /^`0〜5 分 \/ 6〜10 分 \/ 10 分超` または `0–5 minutes \/ 6–10 minutes \/ over 10 minutes` から選ぶ \/ Choose one range\.$/,
+  ],
+  [
+    '60 秒紹介 / 60-second introduction',
+    /^`上限内 \/ 超過 \/ Not run` または `Within limit \/ Over \/ Not run` から選ぶ \/ Choose one\.$/,
+  ],
+  [
+    '5 分 Setup / Five-minute setup',
+    /^`上限内 \/ 超過 \/ Not run` または `Within limit \/ Over \/ Not run` から選ぶ \/ Choose one\.$/,
+  ],
+  [
+    '口頭補足 / Oral hints after start',
+    /^`0 件 \/ 1 件以上` または `0 \/ 1 or more` から選ぶ \/ Choose one\.$/,
+  ],
+  [
+    'Event Format',
+    /^`30 分 \/ 60 分 \/ 90 分` または `30 \/ 60 \/ 90 minutes` から選ぶ \/ Choose one\.$/,
+  ],
+  [
+    'Format Timing',
+    /^`上限内 \/ 超過 \/ Not run` または `Within limit \/ Over \/ Not run` から選ぶ \/ Choose one\. 正確な開始、終了、秒数を書かない \/ Never write exact start, end, or seconds\.$/,
+  ],
+  [
+    'Capability',
+    /^`Tabletop \/ Verified physical path \/ Not run` から選ぶ。$/,
+  ],
+  ['判定 / Decision', /^`Pass \/ Revise and repeat \/ Not run`。$/],
+  ['改訂 Pull Request / Revision PR', /^`Not applicable \/ URL`。$/],
+  ['再実施 / Repeat', /^`Not run \/ Pass \/ Revise and repeat`。$/],
+] as const satisfies readonly (readonly [string, RegExp])[];
+
 const recordFieldViolations = (content: string): readonly string[] => {
   const labels = recordFieldLabels(content);
+  const entries = recordFieldEntries(content);
   const unknown = labels.filter(
     (label) => !allowedRecordFieldLabelSet.has(label)
   );
   const missing = allowedRecordFieldLabels.filter(
     (label) => !labels.includes(label)
+  );
+  const duplicate = allowedRecordFieldLabels.filter(
+    (label) => labels.filter((candidate) => candidate === label).length !== 1
+  );
+  const invalidValues = constrainedRecordFieldValues.flatMap(
+    ([label, pattern]) => {
+      const entry = entries.find(([candidate]) => candidate === label);
+      return entry === undefined || !pattern.test(entry[1])
+        ? [`invalid value:${label}`]
+        : [];
+    }
   );
   const revisionSection =
     content.split('## Kit 改訂入力 / Revision Input')[1] ?? '';
@@ -273,6 +365,8 @@ const recordFieldViolations = (content: string): readonly string[] => {
   return [
     ...unknown.map((label) => `unknown:${label}`),
     ...missing.map((label) => `missing:${label}`),
+    ...duplicate.map((label) => `not unique:${label}`),
+    ...invalidValues,
     ...revisionUnknown.map((label) => `unknown revision category:${label}`),
     ...revisionMissing.map((label) => `missing revision category:${label}`),
     ...forbiddenInputLines.map((line) => `forbidden input:${line.trim()}`),
@@ -442,6 +536,7 @@ describe('Facilitator Kit 文書契約', () => {
 
     expectTerms(documents[0], [
       'Host 以外の Participant ごとに',
+      'Verified なら Product セッションへ進め、`Not run` なら Walkthrough だけに限定した',
       'Product 参加は `NOT STARTED`',
       '全残存端末で「この Lounge のデータを端末から破棄しました」を確認',
       '旧 Invite / Handshake だけを Dispose',
@@ -449,6 +544,7 @@ describe('Facilitator Kit 文書契約', () => {
     ]);
     expectTerms(documents[1], [
       'For each non-Host participant',
+      'Verified allows a Product Lounge; `Not run` limits the path to a walkthrough',
       'Product participation is `NOT STARTED`',
       'Confirm “Discarded this Lounge’s data from this device” on every remaining device',
       'disposes only the old Invite / Handshake',
@@ -456,6 +552,7 @@ describe('Facilitator Kit 文書契約', () => {
     ]);
     expectTerms(documents[2], [
       'Host を含む合計 2〜6 名',
+      '1 名だけの場合は\n  Walkthrough',
       '1 名ずつ fresh Invite',
       'Product 参加は `NOT STARTED`',
       '全残存端末の破棄完了表示',
@@ -464,6 +561,7 @@ describe('Facilitator Kit 文書契約', () => {
     ]);
     expectTerms(documents[3], [
       'Two to six people in total, including the Host',
+      'If only one\n  person is present, use a walkthrough',
       'one fresh Invite to each non-Host participant in turn',
       'Product participation is `NOT STARTED`',
       'every remaining device shows discard completion',
@@ -499,6 +597,31 @@ describe('Facilitator Kit 文書契約', () => {
       'Research Consent replaces Product Consent.'
     );
     expect(consentContractViolations(combinedConsent)).not.toEqual([]);
+    const combinedJapaneseConsent = japanese.replace(
+      'Research Consent を Product Consent の代わりに使わない。',
+      'Research Consent を Product Consent の代わりに使う。'
+    );
+    expect(consentContractViolations(combinedJapaneseConsent)).not.toEqual([]);
+    expect(
+      consentContractViolations(
+        `${english}\nProduct Consent includes Research Consent.`
+      )
+    ).not.toEqual([]);
+    expect(
+      consentContractViolations(
+        `${japanese}\nProduct Consent で Research Consent を許可します。`
+      )
+    ).not.toEqual([]);
+    expect(
+      consentContractViolations(
+        `${english}\nUse Product Consent instead of Research Consent.`
+      )
+    ).not.toEqual([]);
+    expect(
+      consentContractViolations(
+        `${japanese}\nProduct Consent を Research Consent の代わりに使う。`
+      )
+    ).not.toEqual([]);
   });
 
   it('Setup を Invite 前の 1 回に限定し 3 状態と個人退出を区別する', async () => {
@@ -694,7 +817,20 @@ describe('Facilitator Kit 文書契約', () => {
   });
 
   it('Dry Run を実在者の未完了 Gate とし改訂入力を分類だけに限定する', async () => {
-    const record = await readKit('dry-run-record.md');
+    const [record, design, productManagerReview] = await Promise.all([
+      readKit('dry-run-record.md'),
+      readFile(
+        join(
+          repositoryRoot,
+          'docs/design/facilitator-kit-and-local-champion.md'
+        ),
+        'utf8'
+      ),
+      readFile(
+        join(repositoryRoot, 'docs/specs/facilitator-kit-pm-review.md'),
+        'utf8'
+      ),
+    ]);
 
     expectTerms(record, [
       'Current Status: `Not run`',
@@ -715,6 +851,15 @@ describe('Facilitator Kit 文書契約', () => {
       'Recovery 判断 / Recovery Decisions',
       'Setup の二重実施',
       'Revise and repeat',
+    ]);
+    expect(design).toContain(
+      '2 名以上が接続し、接続中の全 Participant が自分で Ready を選ぶまで `P7` へ進まない'
+    );
+    expectTerms(productManagerReview, [
+      '`口頭補足 / Oral hints after start` は `0 / 1 or more` だけを保持',
+      '`1 or more` は\n  `Revise and repeat` を必須',
+      '`Capability` は `Tabletop / Verified physical path / Not run` だけを保持',
+      'Dry Run の結果から推測しない',
     ]);
     expect(recordFieldViolations(record)).toEqual([]);
     for (let recovery = 1; recovery <= 10; recovery += 1) {
@@ -737,6 +882,48 @@ describe('Facilitator Kit 文書契約', () => {
     );
     expect(recordFieldViolations(recordWithFreeText)).toContain(
       'unknown revision category:自由記述 / Free-text notes'
+    );
+    const recordWithDuplicateStatus = record.replace(
+      '- Current Status: `Not run`。',
+      '- Current Status: `Not run`。\n- Current Status: `Pass`。'
+    );
+    expect(recordFieldViolations(recordWithDuplicateStatus)).toContain(
+      'not unique:Current Status'
+    );
+    const recordWithInvalidStatus = record.replace(
+      '- Current Status: `Not run`。',
+      '- Current Status: `Pass`。'
+    );
+    expect(recordFieldViolations(recordWithInvalidStatus)).toContain(
+      'invalid value:Current Status'
+    );
+    const recordWithFreeTextCapability = record.replace(
+      '- Capability: `Tabletop / Verified physical path / Not run` から選ぶ。',
+      '- Capability: Camera worked well.'
+    );
+    expect(recordFieldViolations(recordWithFreeTextCapability)).toContain(
+      'invalid value:Capability'
+    );
+    const recordWithFreeTextHints = record.replace(
+      '- 口頭補足 / Oral hints after start: `0 件 / 1 件以上` または `0 / 1 or more` から選ぶ / Choose one.',
+      '- 口頭補足 / Oral hints after start: Participant needed help.'
+    );
+    expect(recordFieldViolations(recordWithFreeTextHints)).toContain(
+      'invalid value:口頭補足 / Oral hints after start'
+    );
+    const recordWithEmptyCapability = record.replace(
+      '- Capability: `Tabletop / Verified physical path / Not run` から選ぶ。',
+      '- Capability:'
+    );
+    expect(recordFieldViolations(recordWithEmptyCapability)).toContain(
+      'invalid value:Capability'
+    );
+    const recordWithEmptyHints = record.replace(
+      '- 口頭補足 / Oral hints after start: `0 件 / 1 件以上` または `0 / 1 or more` から選ぶ / Choose one.',
+      '- 口頭補足 / Oral hints after start:'
+    );
+    expect(recordFieldViolations(recordWithEmptyHints)).toContain(
+      'invalid value:口頭補足 / Oral hints after start'
     );
   });
 

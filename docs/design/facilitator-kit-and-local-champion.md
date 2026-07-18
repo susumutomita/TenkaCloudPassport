@@ -61,6 +61,7 @@ QR 境界の不正、重複、期限切れ、別 Group / 非対応を `R7`〜`R1
    Participant 1 名だけが Scan し、認証成功で旧 QR を取り下げる。次の Participant には同じ Lounge 内で
    Secret を Rotate した別の fresh Invite を表示し、予定した Group が揃うまで 1 名ずつ繰り返す。写真、
    事前印刷、同じ QR、別 Group の QR を再利用しない。最初の Invite 生成時点から最大 20 分の期限を数える。
+   2 名以上が接続し、接続中の全 Participant が自分で Ready を選ぶまで `P7` へ進まない。
 5. `P6`〜`P9` を 20 分以内で進める。`no-signal`、回答しない、個人退出は `NORMAL END` として直ちに扱い、
    退出する本人を Group 終了まで待たせない。
 6. `P10` で任意の次回案内だけを読む。Facilitator が連絡先を集めたり参加を推測したりしない。

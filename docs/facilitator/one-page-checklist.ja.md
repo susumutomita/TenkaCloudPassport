@@ -9,8 +9,8 @@
 - [ ] `P0` Build / OS / Transport を [Support Matrix](./README.md#kit-version-10-support-matrix) で確認した。
   `Not run` の能力へ依存していない。
 - [ ] `P1` Kit、端末、[QR 掲示物](./qr-poster.ja.md)、退出経路が準備済みである。
-- [ ] `P2` Host を含む合計 2〜6 名が自分の端末を持ち、Group の Locale を確認した。1 名は Walkthrough、
-  7 名以上は別 Host / Lounge に分けた。
+- [ ] `P2` Host を含む合計 2〜6 名が自分の端末を持ち、Group の Locale を確認した。1 名だけの場合は
+  Walkthrough とし、7 名以上は別 Host / Lounge に分けた。
 - [ ] `P3` 60 秒の Product 紹介を読み、`no-signal` と退出は失敗でないと伝えた。
 - [ ] `P4` Research は別 Consent で判断した。不参加または未回答なら Counter OFF のままである。
 - [ ] `P5` Product Privacy Script を読み、Owner が自分で Preview、共有、Camera を選んだ。

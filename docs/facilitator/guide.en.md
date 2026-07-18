@@ -30,7 +30,7 @@ returns to `P2`.
 
 | ID | Completion state |
 | --- | --- |
-| `P0` | Build and venue capabilities are marked Verified or `Not run`. |
+| `P0` | Verified allows a Product Lounge; `Not run` limits the path to a walkthrough. |
 | `P1` | Kit, devices, QR poster, and exit route are ready. |
 | `P2` | A group of two to six, including a Host, is formed. |
 | `P3` | The 60-second Product introduction is complete. |

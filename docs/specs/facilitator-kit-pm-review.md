@@ -25,6 +25,10 @@ Record は次だけを保持する。
 - Read-aloud Locale、Orientation 30 分以内、説明 10 分以内、紹介 60 秒以内、Setup 5 分以内の Bucket である。
 - Event Format と上限内 / 超過、`R1`〜`R10` の安全側判断 / 判断不能 / `Not run` である。
 - 迷い、Consent 混同、Privacy 説明漏れ、状態 Label 混同の件数である。
+- `口頭補足 / Oral hints after start` は `0 / 1 or more` だけを保持し、内容は書かない。`1 or more` は
+  `Revise and repeat` を必須にするが、個人評価には使わない。
+- `Capability` は `Tabletop / Verified physical path / Not run` だけを保持する。`Verified physical path` は
+  Support Matrix の物理 Evidence がある場合だけ選び、Dry Run の結果から推測しない。
 
 氏名、連絡先、会場、正確な日時、端末 ID、Lounge ID、Passport、Bridge、会話、Incident 内容は保持しない。
 物理 Dry Run の `Pass` が得られるまで Issue の最終受け入れ条件を未達として扱う。

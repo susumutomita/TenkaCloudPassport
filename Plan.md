@@ -83,6 +83,15 @@ Core Team が現地へ移動しなくても、初めての Local Champion が Pr
 - 2026-07-18: 最終文書契約は 12 Test、554 Expect で Green である。全変更 Markdown の Textlint、Typecheck、
   staged Architecture Harness、`git diff --cached --check` も Green である。物理 Dry Run、印刷、実 Camera、
   Nearby Transport、複数実機、Assistive Technology は `Not run` のままである。
+- 2026-07-18: PR Review の 5 指摘を反映した。設計フローに All-Ready 開始条件を明記し、
+  Dry Run Record の口頭補足と Capability を PM 保持契約へ追加した。`P0` の `Not run` を
+  Walkthrough のみに限定し、`P2` の 1 名時表現を明確化した。Consent の禁止方向は
+  Product → Research も Negative Test で検出する。
+- 2026-07-18: Security / Simplify 再 Review で、日本語 Consent の「代わりに使う」と Record の
+  重複 Field / 自由値が検出されない false-pass を確認した。JA / EN の両方向を実際の安全文から
+  危険文へ変形する Negative Test と、全 Record Field の一意性および選択値の検査を追加した。
+- 2026-07-18: 再再 Review で Record の Field 名だけを残した空値の false-pass を再現した。空値も
+  `invalid value` とし、折り返し行を同じ Field の値として最後まで照合する解析と Negative Test へ修正した。
 
 #### 振り返り
 
