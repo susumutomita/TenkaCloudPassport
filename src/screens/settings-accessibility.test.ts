@@ -51,4 +51,83 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).toContain("from '../app/i18n/locale'");
     expect(text).toContain('LOCALES');
   });
+
+  it('Issue 18: Picker 選択後に Size と警告を表示し、Owner 確定まで Import を開始しない', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      'modelManagement.selectCandidate',
+      'modelManagement.candidate',
+      't.candidateSummary(',
+      't.candidateWarning',
+      'modelManagement.confirmImport',
+    ]);
+    expect(text).toContain(
+      'readableBytes(modelManagement.candidate.sizeBytes)'
+    );
+    expectInOrder(text, [
+      'modelManagement.importInProgress',
+      't.cancelRunningImportButton',
+      'modelManagement.cancelImport',
+    ]);
+  });
+
+  it('Issue 18: supported / caution / blocked と active 状態を示し、blocked は再評価なしに Context を開始しない', async () => {
+    const text = await source();
+
+    expect(text).toContain("model.risk.level === 'supported'");
+    expect(text).toContain("model.risk.level === 'caution'");
+    expect(text).toContain("model.risk.level === 'blocked'");
+    expect(text).toContain('t.reassessBlockedModelButton');
+    expect(text).toContain("model.risk.level === 'blocked'");
+    expect(text).toContain('t.confirmCautionButton');
+    expect(text).toContain('t.blockedDescription');
+    expect(text).toContain('riskBasis(model, t)');
+    expect(text).toContain('model.risk.estimatedWorkingSetBytes');
+    expect(text).toContain('model.risk.effectiveMemoryBytes');
+    expect(text).toContain('model.risk.ratioPermille');
+    expect(text).toContain('model.risk.reasons.map(');
+  });
+
+  it('Issue 18: Unload / Delete と内容非保持 Benchmark を表示し、File URI や digest は画面へ出さない', async () => {
+    const text = await source();
+
+    expect(text).toContain('onUnload={modelManagement.unload}');
+    expect(text).toContain('onDelete={modelManagement.deleteModel}');
+    expect(text).toContain('t.benchmarkSummary(');
+    expect(text).toContain('latestImport?.importDurationMs');
+    expect(text).toContain('latestExecution?.loadDurationMs');
+    expect(text).toContain('latestExecution?.firstTokenDurationMs');
+    expect(text).toContain('latestExecution?.completionDurationMs');
+    expect(text).toContain('latestResource.peakProcessMemoryBytes');
+    expect(text).toContain('latestResource.thermalStateBefore');
+    expect(text).toContain('latestResource.thermalStateAfter');
+    expect(text).toContain('latestResource.batteryDeltaPermille');
+    expect(text).not.toContain('model.privateUri');
+    expect(text).not.toContain(
+      't.importedModelSummary(\n                    model.sha256'
+    );
+  });
+
+  it('Issue 18: 長時間処理と Error を Live Region で読み上げ、全操作に disabled 状態を付ける', async () => {
+    const text = await source();
+
+    expect(text).toContain('accessibilityLiveRegion="polite"');
+    expect(text).toContain('accessibilityLiveRegion="assertive"');
+    expect(text).toContain('disabled={modelManagement.busy}');
+  });
+
+  it('Issue 18: 進行中の Local Model 判定を終える操作は影響を説明してから Confirm / Cancel を提示する', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      'modelManagement.pendingProviderOperation',
+      't.providerOperationTitle',
+      't.providerOperationDescription',
+      't.confirmProviderOperationButton',
+      'modelManagement.confirmProviderOperation',
+      't.cancelProviderOperationButton',
+      'modelManagement.cancelProviderOperation',
+    ]);
+  });
 });

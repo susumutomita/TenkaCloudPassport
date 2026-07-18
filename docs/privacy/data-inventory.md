@@ -69,8 +69,9 @@ Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容
 | Bridge | `L3` | 端末内 Pet が確認済みの手掛かりから生成し、検証する。 | 最大 1 件の主要 Bridge と根拠に使った一時参照である。 | アプリのメモリと Owner の画面だけである。 | 自分の Owner だけである。 | Owner が表示を閉じるまで、かつ Lounge セッションの期限内である。 | 画面を閉じる操作、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
 | `no-signal` と `retired` | `L3` | 端末内 Pet の状態機械が生成する。 | 現在の参加に限る結果と終端状態である。 | アプリのメモリと Owner の画面だけである。 | 自分の Owner と終了同期が必要な参加 Pet である。 | Lounge セッションと同じである。 | 画面終了、退出、Host 終了、20 分満了、プロセス終了のうち最も早い時点である。 | 否である。 |
 | 端末設定 | `L1` | Owner の設定操作とアプリが生成する。 | 言語、アクセシビリティ、選択中のモデル digest、カタログ版である。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | 設定の変更または初期化までである。 | 設定初期化、モデル解除、アプリ削除である。 | 可である。ただし端末パスは含めない。 |
-| GGUF モデルファイル | `L0` | Owner が信頼できる入手元から手動で端末へ配置する。 | モデル本体、サイズ、検証用 digest である。 | OS のアプリ専用モデル領域である。 | 端末内推論 runtime だけである。 | Owner が置換または削除するまでである。 | モデル削除、検証失敗時の隔離、アプリ削除である。 | 否である。 |
+| GGUF モデルファイル | `L0` | Owner が Files から手動で選ぶ。アプリは入手元を信頼済みと判定しない。 | モデル本体である。Size と digest は private Manifest に分離する。 | OS のアプリ専用モデル領域である。 | 端末内推論 runtime だけである。 | Owner が置換または削除するまでである。 | モデル削除、検証失敗時の隔離、アプリ削除である。 | 否である。 |
 | モデル検証記録 | `L1` | アプリが GGUF の検証時に生成する。 | digest、サイズ、検証結果、検証したアプリ版である。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | モデルの置換またはアプリ更新後の再検証までである。 | モデル削除、置換、設定初期化、アプリ削除である。 | 可である。 |
+| Local Model Benchmark | `L1` | Owner が開始した Import または端末内推論に伴いアプリが生成する。 | Model digest、Import / Load / First Token / Completion 時間、Peak Process Memory、Thermal、Battery Delta である。推論内容と端末識別子は含まない。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | Model ごとに直近 20 件である。 | Model 削除、計測記録削除、設定初期化、アプリ削除である。 | 否である。 |
 | 手動 JSON バックアップ | `L4` | Owner が Export を明示実行する。 | バックアップ schema 版、Local Private Profile、端末設定、モデル検証記録である。 | Owner がファイル選択画面で指定した保存先である。 | Owner と保存先を扱えるアプリまたはサービスである。 | Export 後は Owner が削除するまでである。 | Owner が保存先から削除する。アプリ内一時データは完了、取消、失敗、再起動で破棄する。 | 対象そのものである。 |
 | 実行時 Security Signal | `L3` | schema、認証、Replay、モデル出力の検証失敗が生成する。 | 内容を持たない失敗種別と現在の Lounge 内回数である。 | アプリのメモリだけである。 | Owner の警告画面だけである。 | Lounge セッションと同じである。 | 退出、Host 終了、20 分満了、プロセス終了のうち最も早い時点である。 | 否である。 |
 
@@ -112,6 +113,7 @@ QR の外枠は Public Passport に加え、使い捨て Lounge nonce、参加 c
 - Lounge セッション、暗号鍵、Replay 防止状態、Owner Question、Owner Answer である。
 - Pet Message、端末内推論データ、Bridge、`no-signal`、`retired`、Security Signal である。
 - GGUF モデル本体、端末の絶対パス、OS またはネットワークの識別子である。
+- Local Model Benchmark、process memory sample、Thermal State、Battery Delta である。
 - GitHub Token、Analytics データ、外部推論 API の設定値である。
 
 Import は同じ strict schema で未知フィールドを拒否する。バックアップ内のデータから

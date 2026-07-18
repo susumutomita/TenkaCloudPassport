@@ -2273,3 +2273,70 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
   user-facing timeout Outcome と Native Lane teardown 所有権を分離し、Abort を無視する Provider でも期限で
   Rules を返す一方、旧 Context が残る限り次 Context を開始しない回帰 Test を追加した。Lane 待機側も自身の
   Deadline で Rules へ戻る。
+
+### [Issue 18 GGUF Import・整合性確認・Resource Guard・Benchmark を実装する] - 2026-07-18
+
+#### 目的
+
+Owner が Files から選んだ GGUF を、Size 確認後だけ private directory へ transactional に取り込み、SHA-256、
+互換 Metadata、Device Memory Risk を Context 初期化前に確認する。内容非保持 Benchmark と明示 Unload / Delete
+までを同じ Model lifecycle として完成させる。
+
+#### 制約
+
+- Model を自動 Download または同梱せず、Document Picker の選択だけで cache copy を開始しない。
+- SHA-256 は byte 同一性にだけ使い、Model の安全性、品質、出所を証明する表示に使わない。
+- GGUF 全体を JavaScript memory へ展開せず、chunked hash と native copy を使う。
+- Blocked は Context 初期化 0 回、Caution は Owner のその場の明示確認後だけ activate する。
+- Benchmark は Passport、Prompt、Answer、Bridge、Model Output、Error 本文、File URI、端末 ID を持たない。
+- 4B / 8B の 2 Model と物理 iPhone / Android arm64 の 4 組合せは実機だけで完了判定する。
+
+#### 設計判断
+
+1. Candidate selection、private copy、copied size、chunked SHA-256、`loadLlamaModelInfo`、Risk、atomic Manifest の
+   順に進める。失敗時は cache を破棄し、永続 Manifest を正本とする reconcile で incoming / final File を整合させる。
+2. Model Size の 20% reserve と 2,048 token Context reserve を effective device memory と比較し、45% 以下を
+   supported、60% 以下を caution、それ以外または Metadata / Memory 不明を blocked とする。
+3. Manifest と Benchmark を versioned strict schema にし、Raw GGUF Metadata と推論内容を保存しない。
+4. Process RSS、Thermal、Battery の必要最小値だけを local Expo module から取得し、識別子 API を設けない。
+5. Unload / Delete は Runner の Abort に加えて Native teardown 完了を待つ。Delete は File を staged rename し、
+   Manifest から record を外した後に最終削除する。失敗時は restore または次回 load の reconcile で整合させる。
+
+詳細は [GGUF Import・Resource Guard・Benchmark の設計](./docs/design/gguf-model-lifecycle.md) と
+[ADR-0014](./docs/adr/0014-private-gguf-lifecycle-and-resource-guard.md) を正本とする。
+
+#### タスク
+
+1. 設計書、ADR、Data / Privacy / Threat / Native Build 文書、本 Plan を先に更新する。
+2. Model Manifest、Metadata projection、Risk、incremental SHA-256 を日本語 BDD Test 先行で実装する。
+3. Expo Document Picker / FileSystem と `llama.rn` inspector、local device telemetry module を実装する。
+4. Model Management UI と active Provider composition を配線し、Caution confirmation、Unload / Delete を実装する。
+5. 内容非保持 Benchmark を Import と Provider lifecycle へ接続する。
+6. 全品質ゲートとレビューを通し、物理端末 Matrix を記録する。
+
+#### 検証手順
+
+- Cancel、空き容量不足、読取権限失効、同名 / 同 digest、Copy 中断、Size 不一致、破損 / 不互換 GGUF を
+  それぞれ型付き Error にする。
+- supported / caution / blocked の境界と、blocked の Context 初期化 0 回、caution 未確認 0 回を Test する。
+- SHA-256 known vectors と大きな File の chunk 境界を検証し、全 File を一括読込しない。
+- Benchmark strict schema が推論内容と端末識別子を拒否することを検証する。
+- Unload / Delete が Native teardown 後にだけ active selection / File / record を消すことを検証する。
+- staged harness、`make before-commit`、code review、security review、simplify を指定順序で通す。
+
+#### 進捗ログ
+
+- 2026-07-18: Picker の既定 cache copy、File 全体の `arrayBuffer()` hash、Model 名 allowlist を比較し、
+  Size 確認後の private transaction、chunked SHA-256、Native Metadata と Device Memory による Risk を採用した。
+  設計書、ADR-0014、Data / Privacy / Threat / Native Build 文書、本 Plan を実装前に更新した。
+- 2026-07-18: strict Manifest、incremental SHA-256、private File transaction、GGUF Metadata projection、Resource Risk、
+  content-free Benchmark、managed Provider composition、Settings UI を実装した。Import の実行中 Cancel、二重操作 guard、
+  Telemetry 失敗時の fail-closed、staged Delete / restore / crash reconcile を日本語 BDD Test で固定した。
+- 2026-07-18: 独立 Review の指摘を受け、inactive Model の activate 直前 SHA-256 再検証、atomic Manifest の commit 後失敗を
+  含む曖昧な結果からの reconcile、incoming cleanup 失敗時の cache 無効化、read handle close 失敗の型付き正規化を追加した。
+  Hook は Import 失敗直後にも元 Error を維持して best-effort reconcile を実行する。blocked の再評価導線、最新 Risk の
+  refresh、内容非保持 Report 全項目の Settings 表示も実行テストで固定した。
+- 2026-07-18: local Expo Telemetry module に iOS Podspec と Android Gradle Library / Manifest を追加し、Apple / Android
+  autolinking の両方で `TenkaDeviceResourceTelemetryModule` が解決されることを確認した。Swift の Mach RSS 部分は
+  `swiftc -typecheck` を通したが、この環境には Full Xcode、CocoaPods、Android SDK、物理端末が無いため Native Build と
+  4B / 8B Compatibility Matrix は未完了である。

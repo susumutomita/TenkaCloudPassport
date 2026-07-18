@@ -5,6 +5,10 @@ import {
   buildEncounterEvidence,
 } from '../domain/agent-model-provider';
 import type { LocalModelConfiguration } from './local-model-configuration';
+import type {
+  ModelBenchmarkRecorder,
+  ModelBenchmarkSession,
+} from './model-benchmark';
 
 export interface LlamaMessage {
   readonly role: 'system' | 'user';
@@ -211,14 +215,18 @@ async function completeContext(
   context: LlamaContextPort,
   input: AgentModelInput,
   configuration: LocalModelConfiguration,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  benchmark: ModelBenchmarkSession | null
 ): Promise<unknown> {
   if (signal?.aborted) throw cancelledError();
   const cancellation = observeCompletionCancellation(context, signal);
   try {
     const result = await context.completion(
       completionParameters(input, configuration),
-      cancellation.onToken
+      () => {
+        benchmark?.markFirstToken();
+        cancellation.onToken();
+      }
     );
     await cancellation.waitForStop();
     if (signal?.aborted) throw cancelledError();
@@ -240,15 +248,44 @@ async function captureCompletion(
   context: LlamaContextPort,
   input: AgentModelInput,
   configuration: LocalModelConfiguration,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  benchmark: ModelBenchmarkSession | null
 ): Promise<CompletionAttempt> {
   try {
     return {
       kind: 'success',
-      output: await completeContext(context, input, configuration, signal),
+      output: await completeContext(
+        context,
+        input,
+        configuration,
+        signal,
+        benchmark
+      ),
     };
   } catch (error: unknown) {
     return { kind: 'failure', error: normalizeNativeError(error) };
+  }
+}
+
+async function startBenchmark(
+  recorder: ModelBenchmarkRecorder | undefined
+): Promise<ModelBenchmarkSession | null> {
+  if (!recorder) return null;
+  try {
+    return await recorder.start();
+  } catch {
+    return null;
+  }
+}
+
+async function finishBenchmark(
+  benchmark: ModelBenchmarkSession | null,
+  outcome: 'success' | 'cancelled' | 'failed'
+): Promise<void> {
+  try {
+    await benchmark?.finish(outcome);
+  } catch {
+    // 内容を持たない計測の失敗で、推論結果や型付き Provider 失敗を上書きしない。
   }
 }
 
@@ -256,22 +293,37 @@ async function executeLlamaProvider(
   input: AgentModelInput,
   configuration: LocalModelConfiguration,
   loadModule: LlamaModuleLoader,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  recorder: ModelBenchmarkRecorder | undefined
 ): Promise<unknown> {
-  const context = await initializeContext(configuration, loadModule, signal);
-  const completion = await captureCompletion(
-    context,
-    input,
-    configuration,
-    signal
-  );
+  const benchmark = recorder ? await startBenchmark(recorder) : null;
   try {
-    await context.release();
-  } catch {
-    throw loadError();
+    const context = await initializeContext(configuration, loadModule, signal);
+    benchmark?.markLoaded();
+    const completion = await captureCompletion(
+      context,
+      input,
+      configuration,
+      signal,
+      benchmark
+    );
+    if (completion.kind === 'success') benchmark?.markCompletion();
+    try {
+      await context.release();
+    } catch {
+      throw loadError();
+    }
+    if (completion.kind === 'failure') throw completion.error;
+    await finishBenchmark(benchmark, 'success');
+    return completion.output;
+  } catch (error: unknown) {
+    const normalized = normalizeNativeError(error);
+    await finishBenchmark(
+      benchmark,
+      normalized.code === 'CANCELLED' ? 'cancelled' : 'failed'
+    );
+    throw normalized;
   }
-  if (completion.kind === 'failure') throw completion.error;
-  return completion.output;
 }
 
 /**
@@ -280,7 +332,8 @@ async function executeLlamaProvider(
  */
 export function createLlamaAgentModelProvider(
   configuration: LocalModelConfiguration,
-  loadModule: LlamaModuleLoader
+  loadModule: LlamaModuleLoader,
+  recorder?: ModelBenchmarkRecorder
 ): AgentModelProvider {
   return {
     kind: 'local-agent',
@@ -289,7 +342,8 @@ export function createLlamaAgentModelProvider(
         input,
         configuration,
         loadModule,
-        options?.signal
+        options?.signal,
+        recorder
       );
     },
   };

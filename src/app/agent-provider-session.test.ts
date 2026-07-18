@@ -204,6 +204,128 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     expect(runner.cancel('encounter-unknown')).toBe(false);
   });
 
+  it('cancelAndWait は Deadline Outcome 後も Native teardown 完了まで解決しない', async () => {
+    let finishTeardown: (() => void) | undefined;
+    const teardown = new Promise<void>((resolve) => {
+      finishTeardown = resolve;
+    });
+    let markAbortObserved: (() => void) | undefined;
+    const abortObserved = new Promise<void>((resolve) => {
+      markAbortObserved = resolve;
+    });
+    const provider: AgentModelProvider = {
+      kind: 'local-agent',
+      async provide(_input, options) {
+        await new Promise<void>((resolve) => {
+          options?.signal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        markAbortObserved?.();
+        await teardown;
+        throw new AgentModelProviderError('CANCELLED', 'Context released.');
+      },
+    };
+    const runner = createAgentProviderSessionRunner();
+    const outcome = runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-cancel-and-wait',
+      provider,
+      input: { ...INPUT, deadlineAtWallClockMs: Date.now() + 10 },
+    });
+    await abortObserved;
+    expect((await outcome).outcome.switchReason).toBe('timeout');
+
+    let waitResolved = false;
+    const wait = runner
+      .cancelAndWait('encounter-cancel-and-wait')
+      .then((found) => {
+        waitResolved = true;
+        return found;
+      });
+    await Promise.resolve();
+    expect(waitResolved).toBe(false);
+
+    finishTeardown?.();
+    expect(await wait).toBe(true);
+    expect(await runner.cancelAndWait('encounter-cancel-and-wait')).toBe(false);
+  });
+
+  it('cancelAndWait は実行中 Encounter を Cancel して Native teardown 完了を待つ', async () => {
+    let observedSignal: AbortSignal | undefined;
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const provider: AgentModelProvider = {
+      kind: 'local-agent',
+      async provide(_input, options) {
+        observedSignal = options?.signal;
+        markStarted?.();
+        await new Promise<void>((resolve) => {
+          options?.signal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        throw new AgentModelProviderError('CANCELLED', 'Context released.');
+      },
+    };
+    const runner = createAgentProviderSessionRunner();
+    const outcome = runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-active-cancel-and-wait',
+      provider,
+      input: INPUT,
+    });
+    await started;
+
+    expect(await runner.cancelAndWait('encounter-active-cancel-and-wait')).toBe(
+      true
+    );
+    expect(observedSignal?.aborted).toBe(true);
+    expect((await outcome).outcome.switchReason).toBe('cancelled');
+  });
+
+  it('cancelAndWait は Native teardown を持たない実行中 Provider の確定も待つ', async () => {
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let finishProvider: (() => void) | undefined;
+    const providerFinished = new Promise<void>((resolve) => {
+      finishProvider = resolve;
+    });
+    const provider: AgentModelProvider = {
+      kind: 'rules',
+      async provide(input) {
+        markStarted?.();
+        await providerFinished;
+        return RULES_MODEL_PROVIDER.provide(input);
+      },
+    };
+    const runner = createAgentProviderSessionRunner();
+    const outcome = runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'encounter-rules-cancel-and-wait',
+      provider,
+      input: INPUT,
+    });
+    await started;
+
+    let resolved = false;
+    const wait = runner
+      .cancelAndWait('encounter-rules-cancel-and-wait')
+      .then((result) => {
+        resolved = true;
+        return result;
+      });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    finishProvider?.();
+    expect(await wait).toBe(true);
+    expect((await outcome).outcome.switchReason).toBeNull();
+  });
+
   it('Provider 開始前の即時 Cancel は Native Provider を呼ばず Rules へ切り替える', async () => {
     let calls = 0;
     const provider: AgentModelProvider = {

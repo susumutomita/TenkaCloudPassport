@@ -10,6 +10,10 @@ import {
   type LlamaModulePort,
 } from './llama-agent-model-provider';
 import type { LocalModelConfiguration } from './local-model-configuration';
+import type {
+  ModelBenchmarkRecorder,
+  ModelBenchmarkSession,
+} from './model-benchmark';
 
 const CONFIGURATION: LocalModelConfiguration = {
   modelPath: 'file:///data/user/0/cloud.tenka.passport/model.gguf',
@@ -96,6 +100,123 @@ async function expectProviderError(
 }
 
 describe('llama.rn AgentModelProvider', () => {
+  it('Benchmark へ内容を渡さず Load・First Token・成功の順だけを通知する', async () => {
+    const events: string[] = [];
+    const session: ModelBenchmarkSession = {
+      markLoaded() {
+        events.push('loaded');
+      },
+      markFirstToken() {
+        events.push('first-token');
+      },
+      markCompletion() {
+        events.push('completion');
+      },
+      async finish(outcome) {
+        events.push(`finish:${outcome}`);
+      },
+    };
+    const recorder: ModelBenchmarkRecorder = {
+      async start() {
+        events.push('start');
+        return session;
+      },
+    };
+    const provider = createLlamaAgentModelProvider(
+      CONFIGURATION,
+      async () => {
+        events.push('load-module');
+        return new RecordingLlamaModule(new RecordingLlamaContext());
+      },
+      recorder
+    );
+
+    await provider.provide(INPUT);
+
+    expect(events).toEqual([
+      'start',
+      'load-module',
+      'loaded',
+      'first-token',
+      'completion',
+      'finish:success',
+    ]);
+  });
+
+  it('Benchmark は Provider の cancelled / failed を区別する', async () => {
+    const outcomes: string[] = [];
+    const recorder: ModelBenchmarkRecorder = {
+      async start() {
+        return {
+          markLoaded: () => undefined,
+          markFirstToken: () => undefined,
+          markCompletion: () => undefined,
+          async finish(outcome) {
+            outcomes.push(outcome);
+          },
+        };
+      },
+    };
+    const failed = createLlamaAgentModelProvider(
+      CONFIGURATION,
+      async () => {
+        throw new Error('load failed');
+      },
+      recorder
+    );
+    await expectProviderError(async () => failed.provide(INPUT), 'LOAD_ERROR');
+
+    const cancelled = createLlamaAgentModelProvider(
+      CONFIGURATION,
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      recorder
+    );
+    const controller = new AbortController();
+    controller.abort();
+    await expectProviderError(
+      async () => cancelled.provide(INPUT, { signal: controller.signal }),
+      'CANCELLED'
+    );
+    expect(outcomes).toEqual(['failed', 'cancelled']);
+  });
+
+  it('Benchmark start / finish の失敗は推論結果を上書きしない', async () => {
+    const startFailure = createLlamaAgentModelProvider(
+      CONFIGURATION,
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      {
+        async start() {
+          throw new Error('benchmark unavailable');
+        },
+      }
+    );
+    expect(await startFailure.provide(INPUT)).toEqual({
+      kind: 'bridge',
+      evidenceIds: ['topic:open-source'],
+    });
+
+    const finishFailure = createLlamaAgentModelProvider(
+      CONFIGURATION,
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      {
+        async start() {
+          return {
+            markLoaded: () => undefined,
+            markFirstToken: () => undefined,
+            markCompletion: () => undefined,
+            async finish() {
+              throw new Error('benchmark write failed');
+            },
+          };
+        },
+      }
+    );
+    expect(await finishFailure.provide(INPUT)).toEqual({
+      kind: 'bridge',
+      evidenceIds: ['topic:open-source'],
+    });
+  });
+
   it('設定値で Context を初期化し、System と信頼できない JSON Data を別 Message にする', async () => {
     const context = new RecordingLlamaContext();
     const module = new RecordingLlamaModule(context);

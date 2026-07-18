@@ -262,6 +262,63 @@ export interface AppMessages {
       selected: boolean
     ) => string;
     readonly languageOptionHint: string;
+    readonly modelSectionTitle: string;
+    readonly modelDescription: string;
+    readonly modelBusy: string;
+    readonly selectModelButton: string;
+    readonly selectModelHint: string;
+    readonly candidateSummary: (name: string, size: string) => string;
+    readonly candidateWarning: string;
+    readonly confirmImportButton: string;
+    readonly cancelImportButton: string;
+    readonly cancelRunningImportButton: string;
+    readonly importedModelSummary: (
+      name: string,
+      size: string,
+      architecture: string,
+      risk: string,
+      active: boolean
+    ) => string;
+    readonly riskSupported: string;
+    readonly riskCaution: string;
+    readonly riskBlocked: string;
+    readonly riskBasis: (
+      estimatedMemory: string,
+      effectiveMemory: string,
+      ratio: string,
+      reasons: string
+    ) => string;
+    readonly riskMemoryUnavailable: string;
+    readonly riskReasonMemoryUnavailable: string;
+    readonly riskReasonSupported: string;
+    readonly riskReasonCaution: string;
+    readonly riskReasonBlocked: string;
+    readonly riskReasonThermal: string;
+    readonly activateModelButton: string;
+    readonly reassessBlockedModelButton: string;
+    readonly unloadModelButton: string;
+    readonly deleteModelButton: string;
+    readonly providerOperationTitle: string;
+    readonly providerOperationDescription: string;
+    readonly confirmProviderOperationButton: string;
+    readonly cancelProviderOperationButton: string;
+    readonly cautionTitle: string;
+    readonly cautionDescription: string;
+    readonly confirmCautionButton: string;
+    readonly blockedDescription: string;
+    readonly benchmarkSummary: (
+      count: number,
+      importMs: number | null,
+      loadMs: number | null,
+      firstTokenMs: number | null,
+      completionMs: number | null,
+      peakMemory: string,
+      thermalBefore: string,
+      thermalAfter: string,
+      batteryDeltaPermille: number | null,
+      outcome: string
+    ) => string;
+    readonly modelError: (code: string) => string;
     readonly backButton: string;
   };
   readonly clueSelector: {
@@ -651,6 +708,62 @@ const ja: AppMessages = {
     languageOptionAccessibilityLabel: (label, selected) =>
       `表示言語 ${label}${selected ? '、選択中' : ''}`,
     languageOptionHint: 'この端末の表示言語をこの言語に切り替えます。',
+    modelSectionTitle: '端末内 Local Model',
+    modelDescription:
+      'Development Build だけで利用できます。GGUF は選択後に Size を確認し、確定した場合だけアプリ専用領域へ Copy します。',
+    modelBusy: 'Local Model の端末内処理を実行中です。',
+    selectModelButton: 'GGUF File を選択',
+    selectModelHint:
+      'OS の Document Picker を開きます。選択しただけではアプリ専用領域へ Copy しません。',
+    candidateSummary: (name, size) => `選択候補: ${name}、${size}`,
+    candidateWarning:
+      'この Size の File を端末内へ Copy します。SHA-256 は安全性や出所を証明しません。',
+    confirmImportButton: 'この GGUF を端末内へ取り込む',
+    cancelImportButton: '取り込みをやめる',
+    cancelRunningImportButton: '実行中の取り込みを中止する',
+    importedModelSummary: (name, size, architecture, risk, active) =>
+      `${name}、${size}、${architecture}、${risk}${active ? '、使用中' : ''}`,
+    riskSupported: '利用可能',
+    riskCaution: '注意確認が必要',
+    riskBlocked: '現在の端末状態では利用不可',
+    riskBasis: (estimatedMemory, effectiveMemory, ratio, reasons) =>
+      `推定 Working Set ${estimatedMemory} / 利用可能な Memory 基準 ${effectiveMemory}（比率 ${ratio}）。根拠: ${reasons}`,
+    riskMemoryUnavailable: '取得不能',
+    riskReasonMemoryUnavailable: 'Memory 上限情報を取得できない',
+    riskReasonSupported: 'Memory 使用比率 45% 以下',
+    riskReasonCaution: 'Memory 使用比率 45% 超 60% 以下',
+    riskReasonBlocked: 'Memory 使用比率 60% 超',
+    riskReasonThermal: 'Thermal 状態が serious または critical',
+    activateModelButton: 'この Model を使用する',
+    reassessBlockedModelButton: '端末状態を再評価して、利用可能なら使用する',
+    unloadModelButton: 'Local Model を Unload',
+    deleteModelButton: 'Model File と計測記録を削除',
+    providerOperationTitle: '進行中の Local Model 判定を終了します。',
+    providerOperationDescription:
+      'この操作を続けると、現在の Lounge で実行中の Local Model 判定を Cancel し、Native Context の解放完了を待ってから Model を変更します。Lounge 自体は破棄しません。',
+    confirmProviderOperationButton: '判定を終了して操作を続ける',
+    cancelProviderOperationButton: '現在の判定を続ける',
+    cautionTitle: 'Resource 使用量を確認してください。',
+    cautionDescription:
+      '推定値は OS、他 App、GPU と共有されるため保証ではありません。現在の Risk snapshot に対してだけ確認します。',
+    confirmCautionButton: 'Risk を確認してこの Model を使用する',
+    blockedDescription:
+      'Memory 情報、推定使用量、または Thermal 状態により Context 初期化を停止しました。File は削除できます。',
+    benchmarkSummary: (
+      count,
+      importMs,
+      loadMs,
+      firstTokenMs,
+      completionMs,
+      peakMemory,
+      thermalBefore,
+      thermalAfter,
+      batteryDeltaPermille,
+      outcome
+    ) =>
+      `内容を保存しない計測 ${count} 件。直近: Import ${importMs ?? '-'} ms、Load ${loadMs ?? '-'} ms、First Token ${firstTokenMs ?? '-'} ms、完了 ${completionMs ?? '-'} ms、Peak Memory ${peakMemory}、Thermal ${thermalBefore} → ${thermalAfter}、Battery ${batteryDeltaPermille ?? '-'} permille、結果 ${outcome}。`,
+    modelError: (code) =>
+      `Local Model の処理を完了できませんでした（${code}）。File URI や推論内容は記録していません。`,
     backButton: '戻る',
   },
   clueSelector: {
@@ -1065,6 +1178,63 @@ const en: AppMessages = {
     languageOptionAccessibilityLabel: (label, selected) =>
       `Display language ${label}${selected ? ', selected' : ''}`,
     languageOptionHint: 'Switches this device’s display language to this one.',
+    modelSectionTitle: 'On-device local models',
+    modelDescription:
+      'Available only in a Development Build. After selection, the app shows the GGUF size and copies it into private storage only after confirmation.',
+    modelBusy: 'Processing the local model on this device.',
+    selectModelButton: 'Choose a GGUF file',
+    selectModelHint:
+      'Opens the OS document picker. Selection alone does not copy the file into app-private storage.',
+    candidateSummary: (name, size) => `Selected candidate: ${name}, ${size}`,
+    candidateWarning:
+      'This file size will be copied on-device. SHA-256 does not prove safety or provenance.',
+    confirmImportButton: 'Import this GGUF on-device',
+    cancelImportButton: 'Cancel import',
+    cancelRunningImportButton: 'Stop the import in progress',
+    importedModelSummary: (name, size, architecture, risk, active) =>
+      `${name}, ${size}, ${architecture}, ${risk}${active ? ', active' : ''}`,
+    riskSupported: 'Supported',
+    riskCaution: 'Confirmation required',
+    riskBlocked: 'Blocked for the current device state',
+    riskBasis: (estimatedMemory, effectiveMemory, ratio, reasons) =>
+      `Estimated working set ${estimatedMemory} / effective memory basis ${effectiveMemory} (ratio ${ratio}). Basis: ${reasons}`,
+    riskMemoryUnavailable: 'unavailable',
+    riskReasonMemoryUnavailable: 'memory ceiling information is unavailable',
+    riskReasonSupported: 'memory ratio is at most 45%',
+    riskReasonCaution: 'memory ratio is over 45% and at most 60%',
+    riskReasonBlocked: 'memory ratio is over 60%',
+    riskReasonThermal: 'thermal state is serious or critical',
+    activateModelButton: 'Use this model',
+    reassessBlockedModelButton:
+      'Reassess device state and use the model if supported',
+    unloadModelButton: 'Unload local model',
+    deleteModelButton: 'Delete model file and measurements',
+    providerOperationTitle: 'This ends the in-progress local model decision.',
+    providerOperationDescription:
+      'Continuing cancels the local model decision running in the current Lounge, waits for native context teardown, and then changes the model. The Lounge itself is not discarded.',
+    confirmProviderOperationButton: 'End the decision and continue',
+    cancelProviderOperationButton: 'Keep the current decision running',
+    cautionTitle: 'Review resource usage.',
+    cautionDescription:
+      'The estimate is not a guarantee because memory is shared with the OS, other apps, and the GPU. Confirmation applies only to the current risk snapshot.',
+    confirmCautionButton: 'Accept this risk and use the model',
+    blockedDescription:
+      'Context initialization was stopped because of memory information, estimated usage, or thermal state. You can still delete the file.',
+    benchmarkSummary: (
+      count,
+      importMs,
+      loadMs,
+      firstTokenMs,
+      completionMs,
+      peakMemory,
+      thermalBefore,
+      thermalAfter,
+      batteryDeltaPermille,
+      outcome
+    ) =>
+      `${count} content-free measurements. Latest: import ${importMs ?? '-'} ms, load ${loadMs ?? '-'} ms, first token ${firstTokenMs ?? '-'} ms, completion ${completionMs ?? '-'} ms, peak memory ${peakMemory}, thermal ${thermalBefore} → ${thermalAfter}, battery ${batteryDeltaPermille ?? '-'} permille, outcome ${outcome}.`,
+    modelError: (code) =>
+      `The local model operation could not finish (${code}). No file URI or inference content was recorded.`,
     backButton: 'Back',
   },
   clueSelector: {

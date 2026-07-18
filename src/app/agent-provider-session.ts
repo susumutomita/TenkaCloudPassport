@@ -87,6 +87,11 @@ export interface AgentProviderSessionRunner {
   ) => Promise<AgentProviderSessionResult>;
   /** 実行中 Encounter だけを取り消す。確定済み・未知 Key は false の no-op。 */
   readonly cancel: (encounterKey: string) => boolean;
+  /**
+   * 実行中または期限後 teardown 中の Encounter を取り消し、Native Context の停止・解放完了を待つ。
+   * Model File の Unload / Delete はこの境界を通過した後だけ実行する。
+   */
+  readonly cancelAndWait: (encounterKey: string) => Promise<boolean>;
 }
 
 function settledState(outcome: ProviderRunOutcome): ProviderRuntimeState {
@@ -280,6 +285,7 @@ export function createAgentProviderSessionRunner(
       readonly cancellation: ProviderCancellation;
     }
   >();
+  const nativeTeardowns = new Map<string, Promise<void>>();
   let nativeLaneTail: Promise<void> = Promise.resolve();
 
   function run(
@@ -303,11 +309,19 @@ export function createAgentProviderSessionRunner(
     };
     let waitForNativeLane = Promise.resolve();
     let releaseNativeLane: (() => void) | undefined;
+    let finishNativeTeardown: (() => void) | undefined;
     if (request.provider.kind === 'local-agent') {
       waitForNativeLane = nativeLaneTail;
       nativeLaneTail = new Promise<void>((resolve) => {
         releaseNativeLane = resolve;
       });
+      const nativeTeardown = new Promise<void>((resolve) => {
+        finishNativeTeardown = () => {
+          nativeTeardowns.delete(request.encounterKey);
+          resolve();
+        };
+      });
+      nativeTeardowns.set(request.encounterKey, nativeTeardown);
     }
     let pending: Promise<AgentProviderSessionResult>;
     const nativeLaneAcquisition =
@@ -321,7 +335,10 @@ export function createAgentProviderSessionRunner(
     pending = nativeLaneAcquisition
       .then(async (acquiredNativeLane) => {
         if (!acquiredNativeLane) {
-          void waitForNativeLane.then(() => releaseNativeLane?.());
+          void waitForNativeLane.then(() => {
+            releaseNativeLane?.();
+            finishNativeTeardown?.();
+          });
           return executeAgentProviderSession({
             ...request,
             ledger,
@@ -335,7 +352,10 @@ export function createAgentProviderSessionRunner(
             cancellation,
           });
         } finally {
-          void cancellation.teardown.then(() => releaseNativeLane?.());
+          void cancellation.teardown.then(() => {
+            releaseNativeLane?.();
+            finishNativeTeardown?.();
+          });
         }
       })
       .then((result) => {
@@ -359,5 +379,20 @@ export function createAgentProviderSessionRunner(
     return requestProviderCancellation(active.cancellation, 'cancelled');
   }
 
-  return { run, cancel };
+  async function cancelAndWait(encounterKey: string): Promise<boolean> {
+    const active = inFlight.get(encounterKey);
+    const nativeTeardown = nativeTeardowns.get(encounterKey);
+    if (!active && !nativeTeardown) return false;
+    if (active) {
+      requestProviderCancellation(active.cancellation, 'cancelled');
+    }
+    if (nativeTeardown) {
+      await nativeTeardown;
+    } else {
+      await active?.promise;
+    }
+    return true;
+  }
+
+  return { run, cancel, cancelAndWait };
 }

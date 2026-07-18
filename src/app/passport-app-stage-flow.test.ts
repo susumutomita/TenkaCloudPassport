@@ -134,12 +134,26 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerStatus={providerRuntimeState.status}');
   });
 
+  it('Issue 18: 進行中の判定を伴う Model 操作は Native Context の解放完了を待つ', async () => {
+    const text = await source();
+    const teardownBody = functionBody(text, 'waitForActiveProviderTeardown');
+
+    expect(teardownBody).toContain(
+      'providerRunner.cancelAndWait(encounterKey)'
+    );
+    expect(teardownBody).not.toContain('activeEncounterKeyRef.current = null');
+    expect(text).toContain(
+      'waitForNativeTeardown: waitForActiveProviderTeardown'
+    );
+    expect(text).toContain('hasActiveProviderRun: providerRunInFlight');
+  });
+
   it('開始操作は共通 Provider Runner を通し、検証済み Decision だけを Lounge へ適用する', async () => {
     const text = await source();
     const body = functionBody(text, 'startPetInteraction');
 
     expect(body).toContain('providerRunner');
-    expect(body).toContain('provider: agentModelProvider');
+    expect(body).toContain('provider: localModels.provider');
     expect(body).toContain('applyAgentModelDecision');
     expect(body).toContain('activeEncounterKeyRef.current !== encounterKey');
   });

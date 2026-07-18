@@ -43,6 +43,7 @@ import {
   createSessionIdentifiers,
   type ParticipantId,
 } from '../domain/session-identifiers';
+import type { LocalModelManagementPort } from '../local-agent/local-model-management';
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
@@ -100,12 +101,15 @@ import {
 import { readableError } from './readable-error';
 import { createReducedMotionPort } from './reduced-motion-port';
 import { type BackupFlow, useBackupFlow } from './use-backup-flow';
+import { useLocalModelManagement } from './use-local-model-management';
 
 interface PassportAppProps {
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
   readonly agentModelProvider?: AgentModelProvider;
+  /** Development Build だけが app-private GGUF lifecycle を注入する。 */
+  readonly localModelManagement?: LocalModelManagementPort | null;
 }
 
 type SetupStage =
@@ -389,6 +393,7 @@ export default function PassportApp({
   localProfileStorage,
   backupSharePort,
   agentModelProvider = RULES_MODEL_PROVIDER,
+  localModelManagement = null,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
   // 完走させる（docs/design/qr-invite-and-ready-flow.md）。5 状態すべての UI 分岐は
@@ -439,6 +444,7 @@ export default function PassportApp({
   );
   const [providerRuntimeState, setProviderRuntimeState] =
     useState<ProviderRuntimeState>(INITIAL_PROVIDER_RUNTIME_STATE);
+  const [providerRunInFlight, setProviderRunInFlight] = useState(false);
   const [providerRunner] = useState(() => createAgentProviderSessionRunner());
   const activeEncounterKeyRef = useRef<string | null>(null);
   const [loungeRoom, setLoungeRoom] = useState<LoungeRoomState | null>(null);
@@ -465,8 +471,21 @@ export default function PassportApp({
     const encounterKey = activeEncounterKeyRef.current;
     activeEncounterKeyRef.current = null;
     if (encounterKey) providerRunner.cancel(encounterKey);
+    setProviderRunInFlight(false);
     setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
   }, [providerRunner]);
+  const waitForActiveProviderTeardown = useCallback(async (): Promise<void> => {
+    const encounterKey = activeEncounterKeyRef.current;
+    if (encounterKey) await providerRunner.cancelAndWait(encounterKey);
+    setProviderRunInFlight(false);
+    setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
+  }, [providerRunner]);
+  const localModels = useLocalModelManagement({
+    management: localModelManagement,
+    fallbackProvider: agentModelProvider,
+    waitForNativeTeardown: waitForActiveProviderTeardown,
+    hasActiveProviderRun: providerRunInFlight,
+  });
 
   useEffect(() => {
     return () => {
@@ -927,12 +946,13 @@ export default function PassportApp({
       ),
     };
     setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
+    setProviderRunInFlight(true);
     setErrorMessage(null);
     void providerRunner
       .run({
         state: INITIAL_PROVIDER_RUNTIME_STATE,
         encounterKey,
-        provider: agentModelProvider,
+        provider: localModels.provider,
         input,
         onStateChange(state) {
           if (activeEncounterKeyRef.current === encounterKey) {
@@ -956,6 +976,11 @@ export default function PassportApp({
       .catch(() => {
         if (activeEncounterKeyRef.current === encounterKey) {
           setProviderRuntimeState({ status: 'failed' });
+        }
+      })
+      .finally(() => {
+        if (activeEncounterKeyRef.current === encounterKey) {
+          setProviderRunInFlight(false);
         }
       });
   }
@@ -1060,6 +1085,7 @@ export default function PassportApp({
     return (
       <SettingsScreen
         locale={locale}
+        modelManagement={localModels.view}
         onBack={closeSettings}
         onChangeLocale={setLocale}
       />
