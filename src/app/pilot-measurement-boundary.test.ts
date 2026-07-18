@@ -20,6 +20,13 @@ function selfReportScreenSource(): Promise<string> {
   );
 }
 
+function pilotScreenSource(): Promise<string> {
+  return readSourceFile(
+    import.meta.url,
+    '../screens/PilotMeasurementScreen.tsx'
+  );
+}
+
 describe('Pilot Measurement の自動収集禁止境界', () => {
   it('Repository の Event Aggregate JSON Schema も Runtime と同じ固定 field と最低単位を持つ', async () => {
     const raw = await Bun.file(
@@ -56,6 +63,7 @@ describe('Pilot Measurement の自動収集禁止境界', () => {
     const sources = [
       await measurementSource(),
       await flowSource(),
+      await pilotScreenSource(),
       await selfReportScreenSource(),
     ];
     for (const source of sources) {

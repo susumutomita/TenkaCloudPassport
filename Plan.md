@@ -62,6 +62,21 @@ Self-report は Lounge 本文を破棄してから別画面で 1 回だけ提示
   できない説明へ揃えた。`make before-commit` は 805 tests、Functions / Lines 100%、Web Export を含め成功し、
   手動 Security / Simplify Review でも自動送信、永続化、Error 反射、重複 baseline 超過がないことを確認した。
   第三者 Dry Run は実在する第三者の証跡が得られるまで、コード外の未完了 Gate として残す。
+- 2026-07-18: PR Review の5指摘を反映した。Process 横断 Counter を `L3P` に分離し、Handshake 成立前の
+  Start 漏れを閉じ、成功した Share の Preview を一回で消費する。Share Controller Test は本番
+  `WebBackupSharePort` と実 file I/O へ置き換えた。release marker 待機は OS watch 通知に依存せず、期限付き
+  実 file polling とした。再実行した `make before-commit` は 807 tests、Functions / Lines 100%、Web Export、
+  重複 ratchet を含め成功した。
+
+#### 振り返り
+
+- 問題: Research Consent 後、Handshake 成立前に Start を加算すると、Handshake の失敗や世代交代で破棄した
+  Lounge が未完了 Measurement として残る。また、共有成功後にも同じ Preview を再共有できた。
+- 根本原因: Product Flow の開始要求と、計測上の Session 成立点を同一視していた。一回限り Share の契約も
+  Share Port 呼び出し回数だけに置き、成功後の Preview lifecycle に明示していなかった。
+- 予防策: Handshake 成立と現在世代の確認後だけ Start を加算する順序を source-level 回帰 Test で固定する。
+  `shared` / `saved-to-file` 後は Preview を消費し、取消・失敗時だけ再試行可能にする。Process 横断集計は
+  Lounge 限定の `L3` と分けた `L3P` として台帳に明記する。
 
 ---
 

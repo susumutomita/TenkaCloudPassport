@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'bun:test';
-import type {
-  BackupShareOutcome,
-  BackupSharePort,
-  BackupShareRequest,
-} from './backup-share-port';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import {
+  acceptNativeShare,
+  fileBackedNativeSharePort,
+  fileDownloadSharePort,
+  nativeShareAttemptCount,
+  nativeShareContent,
+  releaseNativeShare,
+} from './backup-share-test-kit';
 import {
   createPilotMeasurementController,
   PILOT_AGGREGATE_MAX_COUNT,
@@ -13,36 +18,14 @@ import {
   PilotMeasurementError,
   parsePilotEventAggregate,
 } from './pilot-measurement';
+import { trackTemporaryDirectories } from './storage-test-kit';
 
-class InMemorySharePort implements BackupSharePort {
-  readonly requests: BackupShareRequest[] = [];
-  outcome: BackupShareOutcome = { kind: 'shared' };
-  failure: Error | null = null;
+const { create: newTemporaryDirectory } = trackTemporaryDirectories();
 
-  async share(request: BackupShareRequest): Promise<BackupShareOutcome> {
-    this.requests.push(request);
-    if (this.failure) throw this.failure;
-    return this.outcome;
-  }
-}
-
-class DeferredSharePort implements BackupSharePort {
-  readonly requests: BackupShareRequest[] = [];
-  private resolveOutcome: ((outcome: BackupShareOutcome) => void) | null = null;
-
-  share(request: BackupShareRequest): Promise<BackupShareOutcome> {
-    this.requests.push(request);
-    return new Promise((resolve) => {
-      this.resolveOutcome = resolve;
-    });
-  }
-
-  finish(outcome: BackupShareOutcome): void {
-    const resolve = this.resolveOutcome;
-    if (!resolve) throw new Error('共有処理が開始されていません。');
-    this.resolveOutcome = null;
-    resolve(outcome);
-  }
+function newController(): ReturnType<typeof createPilotMeasurementController> {
+  return createPilotMeasurementController(
+    fileDownloadSharePort(newTemporaryDirectory())
+  );
 }
 
 function completeSession(
@@ -68,7 +51,7 @@ function completeSession(
 }
 
 function exportableAggregate(): PilotEventAggregate {
-  const controller = createPilotMeasurementController(new InMemorySharePort());
+  const controller = newController();
   for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
     completeSession(controller);
   }
@@ -80,9 +63,7 @@ function exportableAggregate(): PilotEventAggregate {
 
 describe('Pilot Measurement の Memory-only Aggregate', () => {
   it('Start、Ready、Outcome、Provider、Self-report を個別 Event なしの Counter にする', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     controller.setResearchEnabled(true);
 
     controller.start();
@@ -118,9 +99,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('Ready → Bridge の境界値だけを 4 Bucket へ変換し、正確な duration を残さない', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     for (const durationMs of [
       29_999, 30_000, 89_999, 90_000, 179_999, 180_000,
     ]) {
@@ -147,9 +126,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('no-signal は duration と Self-report 対象にせず、Fallback を排他的に 1 件数える', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     completeSession(controller, {
       outcome: 'no-signal',
       provider: 'fallback',
@@ -172,9 +149,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('未回答と回答しないを Yes / No に推測せず、Self-report は 1 回だけ受理する', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     completeSession(controller);
     completeSession(controller);
     controller.start();
@@ -196,9 +171,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('順序外、二重 Event、離脱後 Event を no-op にして完了を捏造しない', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
 
     controller.ready(1);
     controller.outcome({ kind: 'bridge', provider: 'rules', monotonicMs: 2 });
@@ -224,9 +197,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('不正 Clock は固定 Error で拒否し、Counter を部分更新しない', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     controller.setResearchEnabled(true);
     controller.start();
     expect(() => controller.ready(Number.NaN)).toThrow(PilotMeasurementError);
@@ -245,10 +216,10 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('新しい Controller は前 Process の Counter と未回答を復元しない', () => {
-    const first = createPilotMeasurementController(new InMemorySharePort());
+    const first = newController();
     completeSession(first);
 
-    const restarted = createPilotMeasurementController(new InMemorySharePort());
+    const restarted = newController();
     expect(restarted.view().aggregate.startReady.started).toBe(0);
     restarted.selfReport('started-conversation');
     expect(
@@ -259,9 +230,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('Research を無効にすると進行中 Session を破棄し、Product Event を集計しない', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     controller.setResearchEnabled(true);
     controller.start();
     controller.ready(100);
@@ -278,9 +247,7 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
   });
 
   it('Schema の Count 上限後は Product を例外で止めず Research だけを無効化する', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     controller.setResearchEnabled(true);
     for (let count = 0; count <= PILOT_AGGREGATE_MAX_COUNT; count += 1) {
       controller.start();
@@ -298,8 +265,10 @@ describe('Pilot Measurement の Memory-only Aggregate', () => {
 
 describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
   it('Outcome 5 件未満では Preview JSON と Share Port 呼出を作らない', async () => {
-    const sharePort = new InMemorySharePort();
-    const controller = createPilotMeasurementController(sharePort);
+    const root = newTemporaryDirectory();
+    const controller = createPilotMeasurementController(
+      fileDownloadSharePort(root)
+    );
     for (
       let count = 0;
       count < PILOT_MINIMUM_AGGREGATION_UNIT - 1;
@@ -311,19 +280,24 @@ describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
     controller.refreshPreview();
     expect(controller.view().preview).toBeNull();
     await controller.share();
-    expect(sharePort.requests).toHaveLength(0);
+    expect(
+      existsSync(path.join(root, 'tenkacloud-passport-pilot-aggregate.json'))
+    ).toBe(false);
   });
 
-  it('5 Outcome で固定 field の Preview を作り、明示 Share からだけ同じ JSON を渡す', async () => {
-    const sharePort = new InMemorySharePort();
-    const controller = createPilotMeasurementController(sharePort);
+  it('5 Outcome で固定 field の Preview を作り、一回限りの明示 Share だけが同じ JSON を渡す', async () => {
+    const root = newTemporaryDirectory();
+    acceptNativeShare(root);
+    const controller = createPilotMeasurementController(
+      fileBackedNativeSharePort(root)
+    );
     for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
       completeSession(controller, {
         outcome: count === 4 ? 'no-signal' : 'bridge',
       });
     }
 
-    expect(sharePort.requests).toHaveLength(0);
+    expect(nativeShareAttemptCount(root)).toBe(0);
     controller.refreshPreview();
     const preview = controller.view().preview;
     expect(preview).not.toBeNull();
@@ -349,18 +323,19 @@ describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
     expect(parsePilotEventAggregate(preview.json)).toEqual(preview.aggregate);
 
     await controller.share();
-    expect(sharePort.requests).toEqual([
-      {
-        fileName: 'tenkacloud-passport-pilot-aggregate.json',
-        json: preview.json,
-      },
-    ]);
+    expect(nativeShareAttemptCount(root)).toBe(1);
+    expect(nativeShareContent(root)).toBe(preview.json);
     expect(controller.view().notice).toBe('shared');
+    expect(controller.view().preview).toBeNull();
+    await controller.share();
+    expect(nativeShareAttemptCount(root)).toBe(1);
   });
 
   it('Preview 後の新 Event は Preview を無効化し、再 Preview まで古い JSON を共有しない', async () => {
-    const sharePort = new InMemorySharePort();
-    const controller = createPilotMeasurementController(sharePort);
+    const root = newTemporaryDirectory();
+    const controller = createPilotMeasurementController(
+      fileBackedNativeSharePort(root)
+    );
     for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
       completeSession(controller);
     }
@@ -370,12 +345,14 @@ describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
     controller.start();
     expect(controller.view().preview).toBeNull();
     await controller.share();
-    expect(sharePort.requests).toHaveLength(0);
+    expect(nativeShareAttemptCount(root)).toBe(0);
   });
 
   it('共有中の二重操作は Port を 1 回だけ呼び、dismissed / saved を区別する', async () => {
-    const deferred = new DeferredSharePort();
-    const controller = createPilotMeasurementController(deferred);
+    const root = newTemporaryDirectory();
+    const controller = createPilotMeasurementController(
+      fileBackedNativeSharePort(root, { waitForRelease: true })
+    );
     for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
       completeSession(controller);
     }
@@ -384,26 +361,38 @@ describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
     const first = controller.share();
     const second = controller.share();
     expect(controller.view().sharing).toBe(true);
-    expect(deferred.requests).toHaveLength(1);
-    deferred.finish({ kind: 'dismissed' });
+    expect(nativeShareAttemptCount(root)).toBe(1);
+    releaseNativeShare(root);
     await Promise.all([first, second]);
     expect(controller.view().notice).toBe('dismissed');
+    expect(controller.view().preview).not.toBeNull();
 
-    const savedPort = new InMemorySharePort();
-    savedPort.outcome = { kind: 'saved-to-file', destination: 'owner-choice' };
-    const saved = createPilotMeasurementController(savedPort);
+    const savedRoot = newTemporaryDirectory();
+    const saved = createPilotMeasurementController(
+      fileDownloadSharePort(savedRoot)
+    );
     for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
       completeSession(saved);
     }
     saved.refreshPreview();
+    const savedPreview = saved.view().preview;
+    if (!savedPreview) throw new Error('保存対象の Preview が必要です。');
     await saved.share();
     expect(saved.view().notice).toBe('saved');
+    expect(saved.view().preview).toBeNull();
+    expect(
+      readFileSync(
+        path.join(savedRoot, 'tenkacloud-passport-pilot-aggregate.json'),
+        'utf8'
+      )
+    ).toBe(savedPreview.json);
   });
 
   it('Share 失敗は本文を保持せず固定 Error 状態にし、Reset は Aggregate と Preview を消す', async () => {
-    const sharePort = new InMemorySharePort();
-    sharePort.failure = new Error('secret destination /private/path');
-    const controller = createPilotMeasurementController(sharePort);
+    const root = newTemporaryDirectory();
+    const controller = createPilotMeasurementController(
+      fileDownloadSharePort(path.join(root, '存在しない保存先'))
+    );
     for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
       completeSession(controller);
     }
@@ -411,9 +400,8 @@ describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
 
     await controller.share();
     expect(controller.view().error).toBe(true);
-    expect(JSON.stringify(controller.view())).not.toContain(
-      'secret destination'
-    );
+    expect(controller.view().preview).not.toBeNull();
+    expect(JSON.stringify(controller.view())).not.toContain(root);
     controller.reset();
     expect(controller.view().aggregate.startReady.started).toBe(0);
     expect(controller.view().preview).toBeNull();
@@ -475,9 +463,7 @@ describe('Pilot Event Aggregate の strict JSON と手動 Share', () => {
   });
 
   it('Export JSON は正確な時刻、ID、場所、内容、Network metadata を含まない', () => {
-    const controller = createPilotMeasurementController(
-      new InMemorySharePort()
-    );
+    const controller = newController();
     for (let count = 0; count < PILOT_MINIMUM_AGGREGATION_UNIT; count += 1) {
       completeSession(controller);
     }

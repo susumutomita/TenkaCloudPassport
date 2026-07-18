@@ -186,6 +186,24 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(hostBody).toContain('handshake.host.dispose()');
   });
 
+  it('Pilot Start は現在世代の Handshake 成立後だけ加算し、失敗・破棄済み Lounge を数えない', async () => {
+    const hostBody = functionBody(await source(), 'hostLounge');
+    const handshakeRequest = hostBody.indexOf('issueLoungeHandshake({');
+    const handshakeSuccess = hostBody.indexOf('.then((handshake) =>');
+    const pilotStart = hostBody.indexOf('pilotMeasurementFlow.start()');
+
+    expect(handshakeRequest).toBeGreaterThan(-1);
+    expect(handshakeSuccess).toBeGreaterThan(handshakeRequest);
+    expect(pilotStart).toBeGreaterThan(handshakeSuccess);
+    expectInOrder(hostBody.slice(handshakeSuccess), [
+      'inviteFlowGenerationRef.current !== flowGeneration',
+      'handshake.host.dispose()',
+      'return;',
+      'pilotMeasurementFlow.start()',
+      'qrScannerPort.publish(',
+    ]);
+  });
+
   it('Model 未導入の既定 Provider Status を Active Lounge へ明示的に渡す', async () => {
     const text = await source();
 

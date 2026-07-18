@@ -1004,7 +1004,6 @@ export default function PassportApp({
           clock,
         }
       );
-      pilotMeasurementFlow.start();
       const transportFingerprint = inProcessTransportFingerprint(
         identifiers.loungeId
       );
@@ -1024,6 +1023,7 @@ export default function PassportApp({
             handshake.host.dispose();
             return;
           }
+          pilotMeasurementFlow.start();
           qrScannerPort.publish(
             encodeQrPayload({
               kind: 'lounge-invite',

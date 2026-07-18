@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`Pilot Event Aggregate の strict JSON と手動 Share 5 Outcome で固定 field の Preview を作り、明示 Share からだけ同じ JSON を渡す 1`] = `
+exports[`Pilot Event Aggregate の strict JSON と手動 Share 5 Outcome で固定 field の Preview を作り、一回限りの明示 Share だけが同じ JSON を渡す 1`] = `
 {
   "aggregateSchemaVersion": 1,
   "conversationStartSelfReport": {

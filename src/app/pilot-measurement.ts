@@ -538,6 +538,7 @@ export function createPilotMeasurementController(
           : result.kind === 'dismissed'
             ? 'dismissed'
             : 'saved';
+      if (result.kind !== 'dismissed') preview = null;
       error = false;
     } catch {
       notice = null;
