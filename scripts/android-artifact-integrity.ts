@@ -1,13 +1,28 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { rename, unlink, writeFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import {
+  chmod,
+  mkdtemp,
+  rename,
+  rmdir,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import {
   assertOpenedFilePathUnchanged,
+  copyStableFile,
+  digestStableFile,
   openStableFileForRead,
   type StableFileReadPolicy,
+  sameStableFileSnapshot,
+  stableFileSnapshot,
 } from './android-artifact-file-guard';
-import { AndroidArtifactIntegrityError } from './android-artifact-integrity-error';
+import {
+  AndroidArtifactIntegrityError,
+  reportAndroidArtifactCliFailure,
+} from './android-artifact-integrity-error';
 
 export {
   AndroidArtifactIntegrityError,
@@ -21,50 +36,38 @@ export interface AndroidArtifactIntegrityResult {
   readonly checksumPath: string;
 }
 
+export interface AndroidArtifactSnapshot {
+  readonly apkFileName: string;
+  readonly byteLength: number;
+  readonly path: string;
+  readonly sha256: string;
+  readonly dispose: () => Promise<void>;
+}
+
+export interface AndroidReleaseAppIdentity {
+  readonly packageId: string;
+  readonly versionCode: number;
+}
+
+export interface AndroidArtifactIntegrityHooks {
+  readonly afterChecksumPublished?: () => Promise<void>;
+  readonly afterInitialChecksumRead?: () => Promise<void>;
+}
+
 const SAFE_APK_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.apk$/;
 const CHECKSUM_RECORD =
   /^([0-9a-f]{64}) {2}([A-Za-z0-9][A-Za-z0-9._-]*\.apk)\n$/;
 const MAX_CHECKSUM_RECORD_BYTES = 512;
 const MAX_APP_CONFIG_BYTES = 128 * 1024;
+const MAX_RELEASE_MANIFEST_BYTES = 4 * 1024;
+const MAX_APK_BYTES = 512 * 1024 * 1024;
 const CANONICAL_NON_NEGATIVE_INTEGER = /^(?:0|[1-9][0-9]*)$/;
+const ANDROID_PACKAGE_ID =
+  /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
 const INVALID_ANDROID_VERSION_CODE_MESSAGE =
   'Expo app config must contain a positive integer Android versionCode.';
 const INVALID_PREVIOUS_VERSION_CODE_MESSAGE =
   'Previous Android versionCode must be a non-negative integer.';
-
-interface FileSnapshot {
-  readonly device: bigint;
-  readonly inode: bigint;
-  readonly size: bigint;
-  readonly modifiedAtNanoseconds: bigint;
-  readonly changedAtNanoseconds: bigint;
-}
-
-function fileSnapshot(status: {
-  readonly dev: bigint;
-  readonly ino: bigint;
-  readonly size: bigint;
-  readonly mtimeNs: bigint;
-  readonly ctimeNs: bigint;
-}): FileSnapshot {
-  return {
-    device: status.dev,
-    inode: status.ino,
-    size: status.size,
-    modifiedAtNanoseconds: status.mtimeNs,
-    changedAtNanoseconds: status.ctimeNs,
-  };
-}
-
-function sameFileSnapshot(left: FileSnapshot, right: FileSnapshot): boolean {
-  return (
-    left.device === right.device &&
-    left.inode === right.inode &&
-    left.size === right.size &&
-    left.modifiedAtNanoseconds === right.modifiedAtNanoseconds &&
-    left.changedAtNanoseconds === right.changedAtNanoseconds
-  );
-}
 
 function errorCode(error: unknown): unknown {
   if (error === null || typeof error !== 'object' || !('code' in error)) {
@@ -85,6 +88,41 @@ async function discardTemporaryFile(path: string): Promise<void> {
   }
 }
 
+async function discardTemporaryDirectory(path: string): Promise<void> {
+  try {
+    await rmdir(path);
+  } catch (error) {
+    if (!isFileNotFound(error)) throw error;
+  }
+}
+
+function apkReadPolicy(): StableFileReadPolicy {
+  return {
+    noFollowFlag: constants.O_NOFOLLOW,
+    symbolicLinkMessage:
+      'Android release artifact must not be a symbolic link.',
+    invalidCode: 'INVALID_APK_PATH',
+    invalidMessage: 'Android release artifact must be a regular .apk file.',
+    changedCode: 'ARTIFACT_CHANGED',
+    changedMessage: 'Android release artifact changed while it was being read.',
+  };
+}
+
+function assertValidApkSize(size: bigint): void {
+  if (size === 0n) {
+    throw new AndroidArtifactIntegrityError(
+      'EMPTY_ARTIFACT',
+      'Android release artifact must not be empty.'
+    );
+  }
+  if (size > BigInt(MAX_APK_BYTES)) {
+    throw new AndroidArtifactIntegrityError(
+      'INVALID_APK_PATH',
+      'Android release artifact exceeds the 512 MiB verification limit.'
+    );
+  }
+}
+
 async function hashArtifact(
   path: string
 ): Promise<{ readonly byteLength: number; readonly sha256: string }> {
@@ -95,53 +133,67 @@ async function hashArtifact(
       'Android release artifact must use a safe .apk file name.'
     );
   }
-  const policy: StableFileReadPolicy = {
-    noFollowFlag: constants.O_NOFOLLOW,
-    symbolicLinkMessage:
-      'Android release artifact must not be a symbolic link.',
-    invalidCode: 'INVALID_APK_PATH',
-    invalidMessage: 'Android release artifact must be a regular .apk file.',
-    changedCode: 'ARTIFACT_CHANGED',
-    changedMessage: 'Android release artifact changed while it was being read.',
-  };
-  const { handle, identity } = await openStableFileForRead(path, policy);
+  const policy = apkReadPolicy();
+  const result = await digestStableFile(path, policy, assertValidApkSize);
+  return { byteLength: Number(result.byteLength), sha256: result.sha256 };
+}
+
+export async function inspectAndroidArtifact(
+  path: string
+): Promise<Omit<AndroidArtifactIntegrityResult, 'checksumPath'>> {
+  return { apkFileName: basename(path), ...(await hashArtifact(path)) };
+}
+
+export async function createAndroidArtifactSnapshot(
+  sourcePath: string
+): Promise<AndroidArtifactSnapshot> {
+  const apkFileName = basename(sourcePath);
+  if (!SAFE_APK_NAME.test(apkFileName)) {
+    throw new AndroidArtifactIntegrityError(
+      'INVALID_APK_PATH',
+      'Android release artifact must use a safe .apk file name.'
+    );
+  }
+  const directory = await mkdtemp(
+    join(tmpdir(), 'tenka-android-release-snapshot-')
+  );
+  await chmod(directory, 0o700);
+  const snapshotPath = join(directory, apkFileName);
+  const policy = apkReadPolicy();
   try {
-    const status = await handle.stat({ bigint: true });
-    if (status.size === 0n) {
-      throw new AndroidArtifactIntegrityError(
-        'EMPTY_ARTIFACT',
-        'Android release artifact must not be empty.'
-      );
-    }
-
-    if (status.size > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new AndroidArtifactIntegrityError(
-        'INVALID_APK_PATH',
-        'Android release artifact is too large to verify safely.'
-      );
-    }
-
-    const before = fileSnapshot(status);
-    const hash = createHash('sha256');
-    let byteLength = 0;
-    for await (const chunk of handle.createReadStream({ autoClose: false })) {
-      hash.update(chunk);
-      byteLength += chunk.length;
-    }
-    const after = fileSnapshot(await handle.stat({ bigint: true }));
+    const copied = await copyStableFile(
+      sourcePath,
+      snapshotPath,
+      policy,
+      0o400,
+      assertValidApkSize
+    );
+    const inspected = await inspectAndroidArtifact(snapshotPath);
     if (
-      BigInt(byteLength) !== status.size ||
-      !sameFileSnapshot(before, after)
+      BigInt(inspected.byteLength) !== copied.byteLength ||
+      inspected.sha256 !== copied.sha256 ||
+      inspected.apkFileName !== apkFileName
     ) {
       throw new AndroidArtifactIntegrityError(
-        policy.changedCode,
-        policy.changedMessage
+        'ARTIFACT_CHANGED',
+        'Android release artifact snapshot changed after it was created.'
       );
     }
-    await assertOpenedFilePathUnchanged(path, identity, policy);
-    return { byteLength, sha256: hash.digest('hex') };
-  } finally {
-    await handle.close();
+    let disposed = false;
+    return {
+      ...inspected,
+      path: snapshotPath,
+      async dispose() {
+        if (disposed) return;
+        disposed = true;
+        await discardTemporaryFile(snapshotPath);
+        await discardTemporaryDirectory(directory);
+      },
+    };
+  } catch (error) {
+    await discardTemporaryFile(snapshotPath);
+    await discardTemporaryDirectory(directory);
+    throw error;
   }
 }
 
@@ -149,9 +201,15 @@ async function readBoundedStableTextFile(
   path: string,
   maximumBytes: number,
   symbolicLinkMessage: string,
-  invalidCode: 'INVALID_CHECKSUM_RECORD' | 'INVALID_ANDROID_VERSION_CODE',
+  invalidCode:
+    | 'INVALID_CHECKSUM_RECORD'
+    | 'INVALID_ANDROID_VERSION_CODE'
+    | 'INVALID_RELEASE_MANIFEST',
   invalidMessage: string,
-  changedCode: 'CHECKSUM_RECORD_CHANGED' | 'ANDROID_CONFIG_CHANGED',
+  changedCode:
+    | 'CHECKSUM_RECORD_CHANGED'
+    | 'ANDROID_CONFIG_CHANGED'
+    | 'INVALID_RELEASE_MANIFEST',
   changedMessage: string
 ): Promise<string> {
   const policy: StableFileReadPolicy = {
@@ -168,7 +226,7 @@ async function readBoundedStableTextFile(
     if (status.size > BigInt(maximumBytes)) {
       throw new AndroidArtifactIntegrityError(invalidCode, invalidMessage);
     }
-    const before = fileSnapshot(status);
+    const before = stableFileSnapshot(status);
     const expectedBytes = Number(status.size);
     const contents = Buffer.alloc(expectedBytes);
     let bytesRead = 0;
@@ -184,8 +242,8 @@ async function readBoundedStableTextFile(
       }
       bytesRead += result.bytesRead;
     }
-    const after = fileSnapshot(await handle.stat({ bigint: true }));
-    if (!sameFileSnapshot(before, after)) {
+    const after = stableFileSnapshot(await handle.stat({ bigint: true }));
+    if (!sameStableFileSnapshot(before, after)) {
       throw new AndroidArtifactIntegrityError(changedCode, changedMessage);
     }
     await assertOpenedFilePathUnchanged(path, identity, policy);
@@ -207,14 +265,28 @@ async function readChecksumFile(path: string): Promise<string> {
   );
 }
 
+export async function readAndroidReleaseManifestText(
+  path: string
+): Promise<string> {
+  return readBoundedStableTextFile(
+    path,
+    MAX_RELEASE_MANIFEST_BYTES,
+    'Android release manifest must not be a symbolic link.',
+    'INVALID_RELEASE_MANIFEST',
+    'Android release manifest is invalid.',
+    'INVALID_RELEASE_MANIFEST',
+    'Android release manifest changed while it was being read.'
+  );
+}
+
 function property(value: unknown, key: string): unknown {
   if (value === null || typeof value !== 'object') return undefined;
   return Reflect.get(value, key);
 }
 
-export async function readAndroidReleaseVersionCode(
+export async function readAndroidReleaseAppIdentity(
   appConfigPath: string
-): Promise<number> {
+): Promise<AndroidReleaseAppIdentity> {
   const rawConfig = await readBoundedStableTextFile(
     appConfigPath,
     MAX_APP_CONFIG_BYTES,
@@ -224,6 +296,18 @@ export async function readAndroidReleaseVersionCode(
     'ANDROID_CONFIG_CHANGED',
     'Expo app config changed while it was being read.'
   );
+  return parseAndroidReleaseAppIdentityText(rawConfig);
+}
+
+export function parseAndroidReleaseAppIdentityText(
+  rawConfig: string
+): AndroidReleaseAppIdentity {
+  if (Buffer.byteLength(rawConfig, 'utf8') > MAX_APP_CONFIG_BYTES) {
+    throw new AndroidArtifactIntegrityError(
+      'INVALID_ANDROID_VERSION_CODE',
+      INVALID_ANDROID_VERSION_CODE_MESSAGE
+    );
+  }
   let config: unknown;
   try {
     config = JSON.parse(rawConfig);
@@ -237,6 +321,10 @@ export async function readAndroidReleaseVersionCode(
     property(property(config, 'expo'), 'android'),
     'versionCode'
   );
+  const packageId = property(
+    property(property(config, 'expo'), 'android'),
+    'package'
+  );
   if (
     typeof versionCode !== 'number' ||
     !Number.isSafeInteger(versionCode) ||
@@ -247,7 +335,19 @@ export async function readAndroidReleaseVersionCode(
       INVALID_ANDROID_VERSION_CODE_MESSAGE
     );
   }
-  return versionCode;
+  if (typeof packageId !== 'string' || !ANDROID_PACKAGE_ID.test(packageId)) {
+    throw new AndroidArtifactIntegrityError(
+      'INVALID_ANDROID_PACKAGE_ID',
+      'Expo app config must contain a valid Android package ID.'
+    );
+  }
+  return { packageId, versionCode };
+}
+
+export async function readAndroidReleaseVersionCode(
+  appConfigPath: string
+): Promise<number> {
+  return (await readAndroidReleaseAppIdentity(appConfigPath)).versionCode;
 }
 
 export function assertAndroidReleaseVersionIncrement(
@@ -292,7 +392,10 @@ function parsePreviousVersionCode(value: string): number {
   return versionCode;
 }
 
-async function atomicWrite(path: string, contents: string): Promise<void> {
+export async function atomicWriteTextFile(
+  path: string,
+  contents: string
+): Promise<void> {
   const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporaryPath, contents, { encoding: 'utf8', flag: 'wx' });
@@ -311,7 +414,14 @@ function parseChecksumRecord(record: string, expectedFileName: string): string {
       'Android artifact checksum record is invalid.'
     );
   }
-  const [, sha256, fileName] = match;
+  const sha256 = match[1];
+  const fileName = match[2];
+  if (sha256 === undefined || fileName === undefined) {
+    throw new AndroidArtifactIntegrityError(
+      'INVALID_CHECKSUM_RECORD',
+      'Android artifact checksum record is invalid.'
+    );
+  }
   if (fileName !== expectedFileName) {
     throw new AndroidArtifactIntegrityError(
       'ARTIFACT_NAME_MISMATCH',
@@ -322,25 +432,61 @@ function parseChecksumRecord(record: string, expectedFileName: string): string {
 }
 
 export async function createAndroidArtifactChecksum(
-  apkPath: string
+  apkPath: string,
+  hooks: Pick<AndroidArtifactIntegrityHooks, 'afterChecksumPublished'> = {}
 ): Promise<AndroidArtifactIntegrityResult> {
   const apkFileName = basename(apkPath);
-  const { byteLength, sha256 } = await hashArtifact(apkPath);
+  const first = await hashArtifact(apkPath);
   const checksumPath = `${apkPath}.sha256`;
-  await atomicWrite(checksumPath, `${sha256}  ${apkFileName}\n`);
-  return { apkFileName, byteLength, sha256, checksumPath };
+  const checksumRecord = `${first.sha256}  ${apkFileName}\n`;
+  await atomicWriteTextFile(checksumPath, checksumRecord);
+  let afterPublish: Awaited<ReturnType<typeof hashArtifact>>;
+  let checksumAfterPublish: string;
+  try {
+    await hooks.afterChecksumPublished?.();
+    afterPublish = await hashArtifact(apkPath);
+    checksumAfterPublish = await readChecksumFile(checksumPath);
+  } catch (error) {
+    await discardTemporaryFile(checksumPath);
+    throw error;
+  }
+  if (
+    first.sha256 !== afterPublish.sha256 ||
+    first.byteLength !== afterPublish.byteLength
+  ) {
+    await discardTemporaryFile(checksumPath);
+    throw new AndroidArtifactIntegrityError(
+      'ARTIFACT_CHANGED',
+      'Android release artifact changed while it was being read.'
+    );
+  }
+  if (checksumAfterPublish !== checksumRecord) {
+    await discardTemporaryFile(checksumPath);
+    throw new AndroidArtifactIntegrityError(
+      'CHECKSUM_RECORD_CHANGED',
+      'Android checksum record changed while it was being read.'
+    );
+  }
+  return { apkFileName, ...afterPublish, checksumPath };
 }
 
 export async function verifyAndroidArtifactChecksum(
   apkPath: string,
-  checksumPath: string
+  checksumPath: string,
+  hooks: Pick<AndroidArtifactIntegrityHooks, 'afterInitialChecksumRead'> = {}
 ): Promise<AndroidArtifactIntegrityResult> {
   const apkFileName = basename(apkPath);
-  const expectedSha256 = parseChecksumRecord(
-    await readChecksumFile(checksumPath),
-    apkFileName
-  );
+  const checksumBefore = await readChecksumFile(checksumPath);
+  const expectedSha256 = parseChecksumRecord(checksumBefore, apkFileName);
+  await hooks.afterInitialChecksumRead?.();
   const { byteLength, sha256 } = await hashArtifact(apkPath);
+  const checksumAfter = await readChecksumFile(checksumPath);
+  if (checksumAfter !== checksumBefore) {
+    throw new AndroidArtifactIntegrityError(
+      'CHECKSUM_RECORD_CHANGED',
+      'Android checksum record changed while it was being read.'
+    );
+  }
   if (sha256 !== expectedSha256) {
     throw new AndroidArtifactIntegrityError(
       'CHECKSUM_MISMATCH',
@@ -400,11 +546,9 @@ if (import.meta.main) {
   try {
     await runCli(Bun.argv.slice(2));
   } catch (error) {
-    if (error instanceof AndroidArtifactIntegrityError) {
-      console.error(`${error.code}: ${error.message}`);
-    } else {
-      console.error('UNEXPECTED_ERROR: Android artifact verification failed.');
-    }
-    process.exitCode = 1;
+    reportAndroidArtifactCliFailure(
+      error,
+      'Android artifact verification failed.'
+    );
   }
 }

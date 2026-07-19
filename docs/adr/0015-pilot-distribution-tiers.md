@@ -28,10 +28,25 @@ Android の直接配布 APK は同じ Package ID / App Signing Certificate、追
 Facilitator へ渡さず、暗号化保管、分離バックアップ、Restore 演習、Fingerprint 台帳を必須にする。低い
 `versionCode` への Downgrade ではなく、同じ Certificate と高い `versionCode` の修正版を Rollback 経路とする。
 
+Release Gate は目視した設定と任意 APK の hash を別々に扱わない。Clean な annotated Git Tag / HEAD から生成した
+provenance を prebuild 後の Android raw resource へ埋め込み、署名済み APK から Android SDK の `apkanalyzer` で
+Package ID、versionCode、埋込 provenance を抽出する。`apksigner` が返す単一 Signer Certificate SHA-256、APK の
+SHA-256、File 名、byte length、Source Tag / Commit を strict versioned release manifest にまとめ、追跡済み
+`app.json`、公開 Fingerprint、現在の Git Tag / HEAD と完全一致した Artifact だけを Tier B 候補にする。checksum の
+作成と検証は APK hash の前後で相手 File を再検査し、片方だけを差し替える競合を fail closed にする。
+Identity 抽出は checksum 済み APK の private read-only snapshot だけを用い、Tag / HEAD Commit の `app.json`
+blob と照合する。Git は canonical executable、replace 無効、sanitized environment に固定する。Android SDK は
+launcher ではなく、承認済み Java Runtime と SDK dependency tree の SHA-256 を strict manifest に結合し、
+`apkanalyzer` classpath / `apksigner.jar` を Java から直接実行する。実行前後に dependency tree を再検証し、Tool
+timeout、出力上限、APK 512 MiB 上限を超える場合も配布候補を作らない。
+
 ## Consequences
 
 - **Good**: Rules による初期仮説を費用待ちにせず、Native 能力と配布能力を誇張せずに段階検証できる。
+- **Good**: Android Release Gate は APK と SDK / Java tree を別々の private read-only snapshot へ固定し、可変な
+  元 Path や macOS system Git shim の出力を Binary identity の正本にしない。
 - **Bad**: Tier ごとに Matrix と説明を維持し、Core Pilot では Tester の Native Setup が必要になる。
+- **Bad**: SDK / Java snapshot のため、承認済み最小 tree と同容量までの一時 Disk と copy 時間が必要になる。
 - **Tradeoff**: 最初から Store だけを使う案と Expo Go だけを使う案を捨てる。Personal Team の公式制約、
   Pilot の参加者構成、Apple / Android の配布契約、Issue 17 / 20 の Device Matrix が変わった場合に再検討する。
 

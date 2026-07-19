@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "include": [
+    "android-*.ts",
     "llama-native-artifacts.ts",
     "llama-native-artifacts.test.ts",
     "nearby-transport-static-screening.ts",

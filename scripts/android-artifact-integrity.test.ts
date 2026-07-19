@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
+  access,
   mkdir,
   mkdtemp,
   open,
@@ -8,6 +9,7 @@ import {
   rename,
   rmdir,
   symlink,
+  truncate,
   unlink,
   writeFile,
 } from 'node:fs/promises';
@@ -22,6 +24,8 @@ import {
   AndroidArtifactIntegrityError,
   assertAndroidReleaseVersionIncrement,
   createAndroidArtifactChecksum,
+  createAndroidArtifactSnapshot,
+  inspectAndroidArtifact,
   readAndroidReleaseVersionCode,
   verifyAndroidArtifactChecksum,
 } from './android-artifact-integrity';
@@ -161,7 +165,9 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     const exactConfigPath = join(directory, 'exact-app.json');
     const oversizedConfigPath = join(directory, 'oversized-app.json');
     const validConfig = JSON.stringify({
-      expo: { android: { versionCode: 1 } },
+      expo: {
+        android: { package: 'cloud.tenka.passport', versionCode: 1 },
+      },
     });
     await writeFile(exactConfigPath, validConfig.padEnd(128 * 1024, ' '));
     await writeFile(
@@ -213,6 +219,113 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     await expect(
       verifyAndroidArtifactChecksum(apkPath, created.checksumPath)
     ).resolves.toEqual(created);
+  });
+
+  it('APK を private immutable snapshot に固定し、元 File の後続変更と分離する', async () => {
+    const directory = await temporaryDirectory();
+    const apkPath = join(directory, 'passport.apk');
+    await writeFile(apkPath, 'signed apk bytes');
+
+    const snapshot = await createAndroidArtifactSnapshot(apkPath);
+    try {
+      expect(snapshot.path.startsWith(`${directory}/`)).toBe(false);
+      expect(snapshot).toMatchObject({
+        apkFileName: 'passport.apk',
+        byteLength: 16,
+        sha256: EXPECTED_SHA256,
+      });
+      await writeFile(apkPath, 'changed apk bytes');
+      await expect(inspectAndroidArtifact(snapshot.path)).resolves.toEqual({
+        apkFileName: 'passport.apk',
+        byteLength: 16,
+        sha256: EXPECTED_SHA256,
+      });
+      await expect(writeFile(snapshot.path, 'replacement')).rejects.toThrow();
+    } finally {
+      await snapshot.dispose();
+      await snapshot.dispose();
+    }
+    await expect(access(snapshot.path)).rejects.toThrow();
+  });
+
+  it('512 MiB を超える sparse APK は snapshot 作成前に拒否する', async () => {
+    const directory = await temporaryDirectory();
+    const apkPath = join(directory, 'oversized.apk');
+    await writeFile(apkPath, '');
+    await truncate(apkPath, 512 * 1024 * 1024 + 1);
+
+    await expect(createAndroidArtifactSnapshot(apkPath)).rejects.toEqual(
+      new AndroidArtifactIntegrityError(
+        'INVALID_APK_PATH',
+        'Android release artifact exceeds the 512 MiB verification limit.'
+      )
+    );
+  });
+
+  it('checksum 公開後に APK が差し替わると record を残さず拒否する', async () => {
+    const directory = await temporaryDirectory();
+    const apkPath = join(directory, 'passport.apk');
+    await writeFile(apkPath, 'signed apk bytes');
+
+    await expect(
+      createAndroidArtifactChecksum(apkPath, {
+        afterChecksumPublished: async () => {
+          await writeFile(apkPath, 'changed apk bytes');
+        },
+      })
+    ).rejects.toEqual(
+      new AndroidArtifactIntegrityError(
+        'ARTIFACT_CHANGED',
+        'Android release artifact changed while it was being read.'
+      )
+    );
+    expect(await readdir(directory)).toEqual(['passport.apk']);
+  });
+
+  it('checksum 公開後に record が差し替わると成功せず record を残さない', async () => {
+    const directory = await temporaryDirectory();
+    const apkPath = join(directory, 'passport.apk');
+    await writeFile(apkPath, 'signed apk bytes');
+
+    await expect(
+      createAndroidArtifactChecksum(apkPath, {
+        afterChecksumPublished: async () => {
+          await writeFile(
+            `${apkPath}.sha256`,
+            `${'0'.repeat(64)}  passport.apk\n`
+          );
+        },
+      })
+    ).rejects.toEqual(
+      new AndroidArtifactIntegrityError(
+        'CHECKSUM_RECORD_CHANGED',
+        'Android checksum record changed while it was being read.'
+      )
+    );
+    expect(await readdir(directory)).toEqual(['passport.apk']);
+  });
+
+  it('初回 checksum 読取後に record が差し替わると旧 record で成功しない', async () => {
+    const directory = await temporaryDirectory();
+    const apkPath = join(directory, 'passport.apk');
+    await writeFile(apkPath, 'signed apk bytes');
+    const created = await createAndroidArtifactChecksum(apkPath);
+
+    await expect(
+      verifyAndroidArtifactChecksum(apkPath, created.checksumPath, {
+        afterInitialChecksumRead: async () => {
+          await writeFile(
+            created.checksumPath,
+            `${'0'.repeat(64)}  passport.apk\n`
+          );
+        },
+      })
+    ).rejects.toEqual(
+      new AndroidArtifactIntegrityError(
+        'CHECKSUM_RECORD_CHANGED',
+        'Android checksum record changed while it was being read.'
+      )
+    );
   });
 
   it('checksum 作成後に APK byte が変わると型付き不一致で拒否する', async () => {
