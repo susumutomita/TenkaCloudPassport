@@ -52,6 +52,40 @@ Package / Library Candidate の source locator は exact version、lock resoluti
 System Framework Candidate は SDK / API version、OS major、公開 Build locator とする。非公開の System Framework に
 upstream source commit を要求せず、Package Candidate で commit または lock resolution を省略しない。
 
+### Machine-readable static screening
+
+[Static Screening Manifest](../evidence/nearby-transport-static-screening.json) を 7 Static Gate の入力と導出 Status の
+正本とします。[Evidence Record](../evidence/nearby-transport-spike-record.md#static-screening-record) の Table は人が読む要約であり、
+Manifest と異なる Status を手入力しません。Decision record は引き続き Phase A / B と選定状態の唯一の正本です。
+
+Manifest は次を fail-closed で検証する。
+
+- Schema version、review month、package.json / bun.lock SHA-256、Expo / React Native / Platform SDK baseline、
+  4 Candidate の exact ID と順序を固定する。
+- Candidate ごとに exact route、Package または System Framework の provenance、公式 HTTPS source、7 Gate の
+  `Pass` / `Fail` / `Not run`、根拠、参照 source ID を持つ。
+- Source ID ごとに公式 URL を固定し、GitHub source は mutable tag ではなく 40 桁 commit の immutable path を使う。
+- Package provenance は exact semver、40 桁 source commit、tag、Native resolution を記録する。未解決値または
+  floating resolution 自体は棄却根拠として記録できるが、Official source または License Gate を `Pass` にできない。
+- package.json と bun.lock は SHA-256 だけでなく、root workspace declaration と一意な package resolution を
+  JSON / JSONC 構造から検証する。comment 内の文字列や重複 package record を resolution 証拠にしない。
+- System Framework provenance は iOS の Xcode / minimum OS / Framework と Android の compile / target SDK、minimum API、
+  API route を構造化し、Repository baseline と一致させる。source commit の代替として公開 SDK locator を使う。
+- 公式 Source catalog は Source ID / URL と根拠にできる Gate class を一元管理する。評価済み Gate は同じ Candidate
+  source class かつ同じ Gate class の Source だけを参照する。`Pass` は Gate 共通の evidence role を満たし、
+  cross-platform Gate は shared route または iOS / Android 両方の role を必要とする。既知の不足を明示した
+  Candidate / Gate は `Pass` にしない。
+- Unknown field、重複 ID、source ID と異なる URL、欠落 source、導出 Status field の入力、128 KiB 超過、
+  16 階層超過を拒否する。
+- Candidate Status と Static Screening Status は Manifest に保存せず、7 Gate と 4 Candidate から本 Protocol の
+  優先順位で一度だけ導出する。Evidence Record の全 Static Cell は同じ Manifest から投影する。
+
+検証は Network を使わず、Repository に固定した Manifest だけを読む。
+
+```bash
+bun scripts/nearby-transport-static-screening.ts docs/evidence/nearby-transport-static-screening.json
+```
+
 ## Phase B physical evaluation rubric
 
 | Gate | Pass threshold | Failure condition |
@@ -215,12 +249,22 @@ Certificate、Spike secret は commit しない。
 
 ## Primary sources reviewed
 
+- Expo SDK 57 platform baseline: https://docs.expo.dev/versions/v57.0.0/
+- Expo Modules API: https://docs.expo.dev/modules/module-api/
+- Expo New Architecture: https://docs.expo.dev/guides/new-architecture/
 - Expo Development Builds: https://docs.expo.dev/develop/development-builds/introduction/
 - React Native WebRTC DataChannel: https://react-native-webrtc.github.io/handbook/guides/basic-usage.html
 - React Native WebRTC and Expo: https://react-native-webrtc.github.io/handbook/guides/extra-steps/expo.html
+- React Native WebRTC 124.0.7 source: https://github.com/react-native-webrtc/react-native-webrtc/commit/5ecc86111c2f8e0d152d719f8b7b357a601150b6
+- React Native WebRTC Android provenance: https://github.com/react-native-webrtc/react-native-webrtc/blob/5ecc86111c2f8e0d152d719f8b7b357a601150b6/android/build.gradle
+- React Native WebRTC iOS provenance: https://github.com/react-native-webrtc/react-native-webrtc/blob/5ecc86111c2f8e0d152d719f8b7b357a601150b6/react-native-webrtc.podspec
+- Apple Local Network TLS: https://developer.apple.com/documentation/network/creating-an-identity-for-local-network-tls
 - Apple Multipeer Connectivity: https://developer.apple.com/documentation/multipeerconnectivity
 - Apple Bonjour: https://developer.apple.com/documentation/network/bonjour
 - Android Network Service Discovery: https://developer.android.com/develop/connectivity/wifi/use-nsd
+- Android NsdManager: https://developer.android.com/reference/android/net/nsd/NsdManager
+- Android SSLSocket: https://developer.android.com/reference/javax/net/ssl/SSLSocket
+- Android unsafe TrustManager guidance: https://developer.android.com/privacy-and-security/risks/unsafe-trustmanager
 - Google Nearby Connections Overview: https://developers.google.com/nearby/connections/overview
 - Google Nearby Connections Strategies: https://developers.google.com/nearby/connections/strategies
 - Google Nearby Connections for Swift: https://developers.google.com/nearby/connections/swift/get-started
