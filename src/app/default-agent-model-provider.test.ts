@@ -66,10 +66,27 @@ describe('AgentModelProvider の Platform Composition', () => {
 
     expect(app).toContain('createDefaultAgentModelProvider(localDataLeases)');
     expect(app).toContain('agentModelProvider={agentModelProvider}');
+    expect(app).toContain('DEFAULT_DISTRIBUTION_CAPABILITY');
+    expect(app).toContain(
+      'distributionCapability={DEFAULT_DISTRIBUTION_CAPABILITY}'
+    );
     expect(app).toContain('createDefaultLocalModelManagement(localDataLeases)');
     expect(app).toContain(
       'localModelManagement={localModelComposition?.management ?? null}'
     );
+  });
+
+  it('Issue 28: Web / Expo Go / Native Build の Runtime capability を Platform Composition で分離する', async () => {
+    const fallback = await source('default-distribution-capability.ts');
+    const web = await source('default-distribution-capability.web.ts');
+    const native = await source('default-distribution-capability.native.ts');
+
+    expect(fallback).toContain("distributionCapabilityForRuntime('expo-go')");
+    expect(web).toContain("distributionCapabilityForRuntime('web')");
+    expect(native).toMatch(
+      /isRunningInExpoGo\(\)\s*\?\s*'expo-go'\s*:\s*'native-build'/
+    );
+    expect(native).not.toContain("'development-build'");
   });
 
   it('Issue 18: Web / Expo Go は管理を無効化し、Development Build だけが private lifecycle を組み立てる', async () => {

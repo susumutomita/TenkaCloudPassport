@@ -82,6 +82,7 @@ import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
 import type { DiagnosticErrorSignal } from './diagnostic-recovery';
 import type { DiagnosticTransportState } from './diagnostic-report';
+import type { DistributionCapability } from './distribution-capability';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { inProcessTransportFingerprint } from './in-process-transport-binding';
@@ -148,6 +149,7 @@ interface PassportAppProps {
   readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
+  readonly distributionCapability: DistributionCapability;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
   readonly agentModelProvider?: AgentModelProvider;
   /** Development Build だけが app-private GGUF lifecycle を注入する。 */
@@ -487,6 +489,7 @@ const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
 interface UtilityStageGateProps {
   readonly stage: SetupStage;
   readonly diagnosticsFlow: LocalDiagnosticsFlow;
+  readonly distributionCapability: DistributionCapability;
   readonly pilotMeasurementFlow: PilotMeasurementFlow;
   readonly hasLounge: boolean;
   readonly hasProfile: boolean;
@@ -499,6 +502,7 @@ interface UtilityStageGateProps {
 function UtilityStageGate({
   stage,
   diagnosticsFlow,
+  distributionCapability,
   pilotMeasurementFlow,
   hasLounge,
   hasProfile,
@@ -525,6 +529,7 @@ function UtilityStageGate({
   if (stage === 'settings') {
     return (
       <SettingsScreen
+        distributionCapability={distributionCapability}
         locale={locale}
         modelManagement={modelManagement}
         onBack={onCloseSettings}
@@ -541,6 +546,7 @@ export default function PassportApp({
   appVersion,
   localProfileStorage,
   backupSharePort,
+  distributionCapability,
   agentModelProvider = RULES_MODEL_PROVIDER,
   localModelManagement = null,
   localModelMutationLeases = null,
@@ -1668,6 +1674,7 @@ export default function PassportApp({
     return (
       <UtilityStageGate
         diagnosticsFlow={diagnosticsFlow}
+        distributionCapability={distributionCapability}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}
