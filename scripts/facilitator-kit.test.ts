@@ -113,8 +113,6 @@ const supportMatrixViolations = (content: string): readonly string[] => {
   const allowedCapabilitySet: ReadonlySet<string> = new Set([
     ...physicalCapabilities.map(([capability]) => capability),
     ...repositoryRows.map(([capability]) => capability),
-    '能力',
-    'Capability',
   ]);
   const unexpectedRows = markdownTableRowsInDocument(supportSection)
     .filter((row) => !allowedCapabilitySet.has(row[0]))
@@ -303,9 +301,9 @@ const recordFieldViolations = (content: string): readonly string[] => {
   );
   const revisionSection =
     content.split('## Kit 改訂入力 / Revision Input')[1] ?? '';
-  const revisionRows = markdownTableRowsInDocument(revisionSection)
-    .map((cells) => cells[0])
-    .filter((label) => label !== '分類 / Category');
+  const revisionRows = markdownTableRowsInDocument(revisionSection).map(
+    (cells) => cells[0]
+  );
   const allowedRevisionRows = [
     '文書の場所に迷った / Navigation confusion',
     '手順の意味に迷った / Instruction confusion',
@@ -444,8 +442,8 @@ describe('Facilitator Kit 文書契約', () => {
       'Real iOS / Android camera QR: status must be `Not run`'
     );
     const inventedCapability = index.replace(
-      '## 現場で使う文書',
-      '| Participant Registry | Event | Verified | Stored centrally. |\n\n## 現場で使う文書'
+      '| 未経験者による Kit Dry Run | Kit Version 1.0 | `Not run` |',
+      '| Participant Registry | Event | Verified | Stored centrally. |\n| 未経験者による Kit Dry Run | Kit Version 1.0 | `Not run` |'
     );
     expect(supportMatrixViolations(inventedCapability)).toContain(
       'Participant Registry: unexpected capability row'

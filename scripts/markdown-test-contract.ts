@@ -95,31 +95,62 @@ export function parseMarkdownTableLine(
   };
 }
 
+function tableHeaderColumns(
+  header: ParsedMarkdownTableLine | null,
+  delimiter: ParsedMarkdownTableLine | null
+): number | null {
+  if (header?.kind !== 'row' || delimiter?.kind !== 'delimiter') return null;
+  if (header.cells.length !== delimiter.cells.length) {
+    throw new Error('Table の列数が一致しません');
+  }
+  return header.cells.length;
+}
+
+/** Returns data rows from each well-formed Markdown table and excludes headers. */
 export function markdownTableRowsInDocument(
   document: string
 ): readonly (readonly string[])[] {
-  return proseLines(document).flatMap((line) => {
-    const parsed = parseMarkdownTableLine(line);
-    return parsed?.kind === 'row' ? [parsed.cells] : [];
-  });
+  const lines = proseLines(document);
+  const rows: (readonly string[])[] = [];
+  let tableColumns: number | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const parsed = parseMarkdownTableLine(lines[index]);
+    if (tableColumns === null) {
+      const headerColumns = tableHeaderColumns(
+        parsed,
+        parseMarkdownTableLine(lines[index + 1] ?? '')
+      );
+      if (headerColumns !== null) {
+        tableColumns = headerColumns;
+        index += 1;
+      }
+      continue;
+    }
+    if (parsed === null) {
+      tableColumns = null;
+      continue;
+    }
+    if (parsed.kind !== 'row' || parsed.cells.length !== tableColumns) {
+      throw new Error('Table の Data 行が不正です');
+    }
+    rows.push(parsed.cells);
+  }
+  return rows;
 }
 
 export function markdownSection(document: string, heading: string): string {
   const lines = proseLines(document);
-  const headingIndexes = lines.flatMap((line, index) =>
-    parseMarkdownHeading(line)?.text === heading ? [index] : []
-  );
-  if (headingIndexes.length === 0) {
+  const matchingHeadings = lines.flatMap((line, index) => {
+    const parsed = parseMarkdownHeading(line);
+    return parsed?.text === heading ? [{ index, level: parsed.level }] : [];
+  });
+  if (matchingHeadings.length === 0) {
     throw new Error(`必須 Section がありません: ${heading}`);
   }
-  if (headingIndexes.length > 1) {
+  if (matchingHeadings.length > 1) {
     throw new Error(`Section が重複しています: ${heading}`);
   }
-  const headingIndex = headingIndexes[0];
-  const headingLevel = parseMarkdownHeading(lines[headingIndex])?.level;
-  if (headingLevel === undefined) {
-    throw new Error(`必須 Section がありません: ${heading}`);
-  }
+  const [{ index: headingIndex, level: headingLevel }] = matchingHeadings;
   const start = headingIndex + 1;
   const nextHeadingOffset = lines.slice(start).findIndex((line) => {
     const parsed = parseMarkdownHeading(line);

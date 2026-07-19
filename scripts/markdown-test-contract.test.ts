@@ -141,8 +141,19 @@ describe('Markdown 文書 Test Contract', () => {
         'raw HTML block は Evidence Contract で許可しません'
       );
     }
-    expect(markdownTableRowsInDocument(`${fenced}\n| Real | Row |`)).toEqual([
+    const visibleTables = [
+      fenced,
+      '| Header | Value |',
+      '| --- | --- |',
+      '| Real | Row |',
+      '',
+      '| Second | Table |',
+      '| --- | --- |',
+      '| More | Data |',
+    ].join('\n');
+    expect(markdownTableRowsInDocument(visibleTables)).toEqual([
       ['Real', 'Row'],
+      ['More', 'Data'],
     ]);
     expect(parseMarkdownTableLine('   | A | B |')?.cells).toEqual(['A', 'B']);
     expect(parseMarkdownTableLine('    | A | B |')).toBeNull();
@@ -162,6 +173,8 @@ describe('Markdown 文書 Test Contract', () => {
 
   it('列数不一致、Data 行なし、途中で分断された行を拒否する', () => {
     const mismatched = '## Evidence\n\n| A | B |\n| --- | --- |\n| only-one |';
+    const delimiterMismatch =
+      '## Evidence\n\n| A | B |\n| --- | --- | --- |\n| 1 | 2 | 3 |';
     const empty = '## Evidence\n\n| A | B |\n| --- | --- |';
     const interrupted = [
       '## Evidence',
@@ -172,15 +185,37 @@ describe('Markdown 文書 Test Contract', () => {
       '',
       '| 3 | 4 |',
     ].join('\n');
+    const embeddedHeader = [
+      '## Evidence',
+      '',
+      '| A | B |',
+      '| --- | --- |',
+      '| 1 | 2 |',
+      '| Hidden | Header |',
+      '| --- | --- |',
+      '| 3 | 4 |',
+    ].join('\n');
 
     expect(() => markdownTable(mismatched, 'Evidence')).toThrow(
       'Table の Data 行が不正です'
+    );
+    expect(() => markdownTableRowsInDocument(mismatched)).toThrow(
+      'Table の Data 行が不正です'
+    );
+    expect(() => markdownTable(delimiterMismatch, 'Evidence')).toThrow(
+      'Table の列数が一致しません'
+    );
+    expect(() => markdownTableRowsInDocument(delimiterMismatch)).toThrow(
+      'Table の列数が一致しません'
     );
     expect(() => markdownTable(empty, 'Evidence')).toThrow(
       'Table に Data 行がありません'
     );
     expect(() => markdownTable(interrupted, 'Evidence')).toThrow(
       'Table 行が連続していません'
+    );
+    expect(() => markdownTableRowsInDocument(embeddedHeader)).toThrow(
+      'Table の Data 行が不正です'
     );
   });
 });

@@ -648,6 +648,22 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
 - 2026-07-19: 追加の adversarial review で CommonMark fence / raw HTML による Evidence spoof、Offline の
   Atomic Evidence 欠落、System Framework の source locator、状態正本の drift を修正した。最終 Code、Security、
   Simplify Review は Blocker / High / Medium / Low すべて 0 件である。Physical Matrix と Packet Capture は `Not run` である。
+- 2026-07-19: GitHub 外部 Review の Candidate Status 優先順位、Plan の振り返り、Table header 除外、到達不能分岐、
+  列数不一致 Test を反映した。再レビューで検出した Table 内 row + delimiter の header 再同期 fail-open も、Table 内では
+  再同期せず拒否する回帰 Test とともに修正した。Code / Security / Simplify の最終再レビューは全 severity 0 件、
+  focused 文書契約 Test は 28 件成功である。Physical Matrix と Packet Capture は引き続き `Not run` である。
+
+#### 振り返り
+
+- 問題: 初期案は Phase A / B の対象と完了条件が曖昧で、Static Review だけでも完了に見えた。Evidence Bundle は
+  Build、Capture、Analyzer、Review を同じ実行へ結び付けず、Capture Coverage と状態の正本も不足していた。
+  Markdown parser は code fence、raw HTML、分断 Table を証跡として取り込める fail-open 経路を持っていた。
+- 根本原因: 候補調査、物理測定、選定判断を 1 つの表現へ集約し、欠落時の状態遷移、Atomic Evidence、Bundle の
+  一意性、Capture の Positive control、parser の adversarial input を最初の不変条件として列挙していなかった。
+- 予防策: Phase A は全 4 候補の全 Gate が判定済みになるまで `Not run`、Phase B は通過した 1 候補だけを対象とし、
+  Bundle Metadata と Decision Record をそれぞれ証拠 Binding と選定状態の唯一の正本にする。Capture は対象 flow の
+  非 0 packet / byte、送受信 Counter、Sensitive Field Manifest、Positive control を必須にし、Markdown 契約は
+  CommonMark の偽装入力を Red にして fail-closed で検証する。
 
 ---
 

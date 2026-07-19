@@ -22,8 +22,9 @@
 - 必須 Field の欠落、Bundle ID の不一致、`Not run`、判定不能、Gate failure のいずれかがあれば
   Selection Status を `Undecided` のままにする。
 
-Phase A の Candidate Status は、7 Static Gate がすべて `Pass` なら `Pass`、1 件でも `Fail` なら `Fail`、
-未判定または不明が 1 件でもあれば `Not run` とする。Static Screening Status は、4 Candidate の全 Gate が
+Phase A の Candidate Status は、未判定または不明が 1 件でもあれば `Fail` の有無にかかわらず `Not run`、
+7 Static Gate がすべて判定済みで、すべて `Pass` なら `Pass`、それ以外は `Fail` とする。
+Static Screening Status は、4 Candidate の全 Gate が
 判定済みで、各 Candidate が `Pass` または `Fail`、かつ 1 Candidate 以上が `Pass` の場合だけ `Complete` とする。
 全 Candidate が `Fail` なら `No viable candidate` とし、Phase B へ進まない。Phase A で正しく棄却した Candidate の
 `Fail` は、通過 Candidate の Phase B 実行を妨げない。

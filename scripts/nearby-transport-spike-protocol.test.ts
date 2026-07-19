@@ -104,6 +104,9 @@ describe('Nearby Transport 実機 Spike Protocol 文書契約', () => {
       '各 Candidate が `Pass` または `Fail`、かつ 1 Candidate 以上が `Pass`'
     );
     expect(protocol).toContain(
+      '未判定または不明が 1 件でもあれば `Fail` の有無にかかわらず `Not run`'
+    );
+    expect(protocol).toContain(
       'Phase A で正しく棄却した Candidate の\n`Fail` は、通過 Candidate の Phase B 実行を妨げない'
     );
     expect(protocol).toContain(
