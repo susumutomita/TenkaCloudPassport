@@ -3,6 +3,7 @@ import {
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  type AgentModelProviderOptions,
   assertAgentModelProviderCapability,
   normalizeAgentModelFailureCode,
   validateAgentModelProviderOutput,
@@ -50,6 +51,8 @@ export type ProviderAttemptResult =
       readonly kind: 'failure';
       readonly providerKind: AgentModelProvider['kind'];
       readonly reason: ProviderSwitchReason;
+      /** Native release が失敗し、Process 再起動まで次 Context を開始できない。 */
+      readonly nativeLaneQuarantined?: true;
     };
 
 /**
@@ -59,11 +62,12 @@ export type ProviderAttemptResult =
  */
 export async function attemptProvider(
   provider: AgentModelProvider,
-  input: AgentModelInput
+  input: AgentModelInput,
+  options?: AgentModelProviderOptions
 ): Promise<ProviderAttemptResult> {
   try {
     assertAgentModelProviderCapability(provider);
-    const output = await provider.provide(input);
+    const output = await provider.provide(input, options);
     const decision = validateAgentModelProviderOutput(input, output);
     return { kind: 'success', providerKind: provider.kind, decision };
   } catch (error) {
@@ -72,6 +76,9 @@ export async function attemptProvider(
         kind: 'failure',
         providerKind: provider.kind,
         reason: switchReasonFromFailureCode(error.code),
+        ...(error.nativeLaneQuarantined
+          ? { nativeLaneQuarantined: true as const }
+          : {}),
       };
     }
     throw error;

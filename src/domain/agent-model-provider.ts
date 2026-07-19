@@ -119,12 +119,22 @@ export function normalizeAgentModelFailureCode(
  */
 export class AgentModelProviderError extends Error {
   readonly code: AgentModelFailureCode;
+  readonly nativeLaneQuarantined: boolean;
 
-  constructor(code: AgentModelFailureCode, message: string) {
+  constructor(
+    code: AgentModelFailureCode,
+    message: string,
+    options: { readonly nativeLaneQuarantined?: true } = {}
+  ) {
     super(message);
     this.name = 'AgentModelProviderError';
     this.code = code;
+    this.nativeLaneQuarantined = options.nativeLaneQuarantined === true;
   }
+}
+
+export interface AgentModelProviderOptions {
+  readonly signal?: AbortSignal;
 }
 
 const AGENT_MODEL_PROVIDER_BRAND: unique symbol = Symbol(
@@ -136,14 +146,20 @@ const AGENT_MODEL_PROVIDER_CAPABILITIES = new WeakSet<object>();
 export interface RulesAgentModelProvider {
   readonly kind: 'rules';
   readonly [AGENT_MODEL_PROVIDER_BRAND]: 'rules';
-  provide(input: AgentModelInput): AgentModelProviderOutput;
+  provide(
+    input: AgentModelInput,
+    options?: AgentModelProviderOptions
+  ): AgentModelProviderOutput;
 }
 
 export interface LocalAgentModelProvider {
   readonly kind: 'local-agent';
   readonly [AGENT_MODEL_PROVIDER_BRAND]: 'local-agent';
   /** Native 境界の実値は TypeScript の型を信用せず、必ず Runtime Validator へ渡す。 */
-  provide(input: AgentModelInput): unknown | Promise<unknown>;
+  provide(
+    input: AgentModelInput,
+    options?: AgentModelProviderOptions
+  ): unknown | Promise<unknown>;
 }
 
 export type AgentModelProvider =

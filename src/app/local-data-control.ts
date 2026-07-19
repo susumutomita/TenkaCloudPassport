@@ -1,6 +1,7 @@
 import type { LocalPrivateProfile } from '../domain/passport';
 import type { DiagnosticModelArchitecture } from './diagnostic-report';
 import type { LocalDeletionJournalPort } from './local-deletion-journal';
+import type { LocalModelMutationLease } from './local-model-mutation-lease';
 import type {
   LocalProfileStoragePort,
   LocalProfileStorageUsage,
@@ -10,6 +11,7 @@ export interface LocalModelInstallation {
   readonly architecture: DiagnosticModelArchitecture;
   readonly sizeBytes: number;
   readonly digest: string;
+  readonly count: number;
 }
 
 export interface LocalModelStoragePort {
@@ -50,19 +52,22 @@ interface LocalDataExclusiveLease {
 
 type ExclusiveLeaseAttempt =
   | { readonly kind: 'acquired'; readonly lease: LocalDataExclusiveLease }
-  | { readonly kind: 'busy'; readonly activeUse: LocalDataUse | 'exclusive' };
+  | {
+      readonly kind: 'busy';
+      readonly activeUse: LocalDataUse | 'exclusive' | 'recovery';
+    };
 
 export class LocalModelContextLeaseRegistry {
   #activeModelContextCount: number;
   #activeProfileWriteCount: number;
   #exclusive: boolean;
-  #modelAcquisitionBlocked: boolean;
+  #useAcquisitionBlocked: boolean;
 
   constructor(blockedUntilRecovery = true) {
     this.#activeModelContextCount = 0;
     this.#activeProfileWriteCount = 0;
     this.#exclusive = false;
-    this.#modelAcquisitionBlocked = blockedUntilRecovery;
+    this.#useAcquisitionBlocked = blockedUntilRecovery;
   }
 
   acquire(): LocalModelContextLease {
@@ -73,10 +78,17 @@ export class LocalModelContextLeaseRegistry {
     return this.acquireUse('profile-write');
   }
 
+  acquireMutation(): LocalModelMutationLease {
+    const attempt = this.tryAcquireExclusive();
+    if (attempt.kind === 'busy') throw new LocalDataAccessBlockedError();
+    return attempt.lease;
+  }
+
   private acquireUse(use: LocalDataUse): LocalModelContextLease {
     if (
       this.#exclusive ||
-      (use === 'model-context' && this.#modelAcquisitionBlocked)
+      this.#useAcquisitionBlocked ||
+      (use === 'model-context' && this.#activeModelContextCount > 0)
     ) {
       throw new LocalDataAccessBlockedError();
     }
@@ -97,15 +109,23 @@ export class LocalModelContextLeaseRegistry {
     return this.#activeModelContextCount > 0;
   }
 
-  blockModelContextsUntilRecovery(): void {
-    this.#modelAcquisitionBlocked = true;
+  blockUsesUntilRecovery(): void {
+    this.#useAcquisitionBlocked = true;
   }
 
-  allowModelContextsAfterRecovery(): void {
-    this.#modelAcquisitionBlocked = false;
+  allowUsesAfterRecovery(): void {
+    this.#useAcquisitionBlocked = false;
   }
 
   tryAcquireExclusive(): ExclusiveLeaseAttempt {
+    if (this.#useAcquisitionBlocked) {
+      return { kind: 'busy', activeUse: 'recovery' };
+    }
+    return this.tryAcquireExclusiveForRecovery();
+  }
+
+  /** LocalDataControl の起動回復だけが recovery lock 内で排他 lease を取得する。 */
+  tryAcquireExclusiveForRecovery(): ExclusiveLeaseAttempt {
     if (this.#activeModelContextCount > 0) {
       return { kind: 'busy', activeUse: 'model-context' };
     }
@@ -219,7 +239,7 @@ function previewFrom(
     profileCount: profile.count,
     settingsCount: 0,
     backupCacheCount: 0,
-    modelCount: model ? 1 : 0,
+    modelCount: model?.count ?? 0,
     totalBytes: profile.bytes + (model?.sizeBytes ?? 0),
     model,
   };
@@ -256,6 +276,15 @@ export function createLocalDataControl({
     throw storageFailure();
   }
 
+  function acquireRecoveryExclusive(): LocalDataExclusiveLease {
+    const attempt = modelContexts.tryAcquireExclusiveForRecovery();
+    if (attempt.kind === 'acquired') return attempt.lease;
+    if (attempt.activeUse === 'model-context') {
+      throw new LocalDataControlError('MODEL_IN_USE', false);
+    }
+    throw storageFailure();
+  }
+
   async function commitDeletion(
     lease: LocalDataExclusiveLease
   ): Promise<boolean> {
@@ -269,7 +298,7 @@ export function createLocalDataControl({
         committedDeletionLease = lease;
         return true;
       } catch {
-        modelContexts.blockModelContextsUntilRecovery();
+        modelContexts.blockUsesUntilRecovery();
         return false;
       }
     }
@@ -280,11 +309,11 @@ export function createLocalDataControl({
       await profileStorage.remove();
       await modelStorage.remove();
       const remaining = await preview();
-      if (remaining.profileCount !== 0 || remaining.modelCount !== 0) {
+      if (remaining.profileCount !== 0 || remaining.model !== null) {
         throw new Error('remaining local data');
       }
       await deletionJournal.clear();
-      modelContexts.allowModelContextsAfterRecovery();
+      modelContexts.allowUsesAfterRecovery();
       committedDeletionLease?.release();
       committedDeletionLease = null;
     } catch {
@@ -331,7 +360,7 @@ export function createLocalDataControl({
       return before;
     },
     async recoverPendingDeletion(): Promise<'not-pending' | 'recovered'> {
-      const lease = committedDeletionLease ?? acquireExclusive();
+      const lease = committedDeletionLease ?? acquireRecoveryExclusive();
       let pending: boolean;
       try {
         pending = await deletionJournal.isPending();
@@ -343,7 +372,7 @@ export function createLocalDataControl({
         throw storageFailure();
       }
       if (!pending) {
-        modelContexts.allowModelContextsAfterRecovery();
+        modelContexts.allowUsesAfterRecovery();
         lease.release();
         committedDeletionLease = null;
         return 'not-pending';

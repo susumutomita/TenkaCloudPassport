@@ -37,6 +37,7 @@ export interface LocalDiagnosticsFlow {
   readonly notice: DiagnosticNoticeKind | null;
   readonly error: DiagnosticErrorSignal | null;
   readonly open: () => void;
+  readonly enterRecovery: (cause: unknown) => void;
   readonly close: () => void;
   readonly refresh: () => Promise<void>;
   readonly share: () => Promise<void>;
@@ -58,7 +59,9 @@ interface UseLocalDiagnosticsFlowParams {
   readonly onClose: () => void;
   readonly onEndAndForgetLounge: () => void;
   readonly onPassportReset: () => void;
+  readonly onModelRemoved: () => void;
   readonly onAllDataDeleted: (recoveryRequired: boolean) => void;
+  readonly onRetryStartupRecovery: () => Promise<'not-pending' | 'recovered'>;
   readonly onError: (error: DiagnosticErrorSignal) => void;
 }
 
@@ -72,6 +75,10 @@ function reportStorage(preview: LocalDataPreview) {
   };
 }
 
+function reportModel(preview: LocalDataPreview) {
+  return preview.model && preview.model.count > 0 ? preview.model : null;
+}
+
 export function useLocalDiagnosticsFlow({
   localDataControl,
   backupSharePort,
@@ -80,7 +87,9 @@ export function useLocalDiagnosticsFlow({
   onClose,
   onEndAndForgetLounge,
   onPassportReset,
+  onModelRemoved,
   onAllDataDeleted,
+  onRetryStartupRecovery,
   onError,
 }: UseLocalDiagnosticsFlowParams): LocalDiagnosticsFlow {
   const [diagnosticPreview, setDiagnosticPreview] =
@@ -113,6 +122,16 @@ export function useLocalDiagnosticsFlow({
     [onError]
   );
 
+  const retryRecovery = useCallback(
+    async (generation: number): Promise<void> => {
+      const recovery = await onRetryStartupRecovery();
+      if (refreshGeneration.current !== generation) return;
+      setRecoveryRequired(false);
+      if (recovery === 'recovered') setNotice('all-deleted');
+    },
+    [onRetryStartupRecovery]
+  );
+
   const refresh = useCallback(async (): Promise<void> => {
     const generation = refreshGeneration.current + 1;
     refreshGeneration.current = generation;
@@ -120,17 +139,13 @@ export function useLocalDiagnosticsFlow({
     setError(null);
     try {
       if (recoveryRequired) {
-        await localDataControl.recoverPendingDeletion();
-        if (refreshGeneration.current !== generation) return;
-        setRecoveryRequired(false);
-        setNotice('all-deleted');
-        onAllDataDeleted(false);
+        await retryRecovery(generation);
         return;
       }
       const data = await localDataControl.preview();
       const preview = createDiagnosticReportPreview({
         ...runtimeSnapshot,
-        model: data.model,
+        model: reportModel(data),
         storage: reportStorage(data),
       });
       if (refreshGeneration.current !== generation) return;
@@ -147,8 +162,8 @@ export function useLocalDiagnosticsFlow({
   }, [
     applyError,
     localDataControl,
-    onAllDataDeleted,
     recoveryRequired,
+    retryRecovery,
     runtimeSnapshot,
   ]);
 
@@ -160,6 +175,18 @@ export function useLocalDiagnosticsFlow({
     onOpen();
     void refresh();
   }, [invalidatePreview, onOpen, recoveryRequired, refresh]);
+
+  const enterRecovery = useCallback(
+    (cause: unknown): void => {
+      invalidatePreview();
+      setNotice(null);
+      setDeleteAllConfirmationRequested(false);
+      setRecoveryRequired(true);
+      applyError(cause);
+      onOpen();
+    },
+    [applyError, invalidatePreview, onOpen]
+  );
 
   const close = useCallback((): void => {
     if (busy || recoveryRequired) return;
@@ -236,6 +263,7 @@ export function useLocalDiagnosticsFlow({
     setBusy(true);
     try {
       await localDataControl.removeModel();
+      onModelRemoved();
       setNotice('model-removed');
       await refresh();
     } catch (cause: unknown) {
@@ -243,7 +271,14 @@ export function useLocalDiagnosticsFlow({
     } finally {
       setBusy(false);
     }
-  }, [applyError, busy, localDataControl, recoveryRequired, refresh]);
+  }, [
+    applyError,
+    busy,
+    localDataControl,
+    onModelRemoved,
+    recoveryRequired,
+    refresh,
+  ]);
 
   const requestDeleteAll = useCallback((): void => {
     if (recoveryRequired) return;
@@ -298,6 +333,7 @@ export function useLocalDiagnosticsFlow({
     notice,
     error,
     open,
+    enterRecovery,
     close,
     refresh,
     share,

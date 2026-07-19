@@ -12,6 +12,10 @@ function flowSource(): Promise<string> {
   return readSourceFile(import.meta.url, 'use-local-diagnostics-flow.ts');
 }
 
+function startupRecoverySource(): Promise<string> {
+  return readSourceFile(import.meta.url, 'startup-local-recovery.ts');
+}
+
 function compositionSource(): Promise<string> {
   return readSourceFile(import.meta.url, '../../App.tsx');
 }
@@ -48,20 +52,22 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
       'const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(',
       'createDefaultLocalProfileStorage()',
       'const backupSharePort = createDefaultBackupSharePort()',
+      'const agentModelProvider = createDefaultAgentModelProvider(localDataLeases)',
       'const localDataControl = createLocalDataControl({',
       'profileStorage: localProfileStorage',
       'modelContexts: localDataLeases',
       'deletionJournal: localDeletionJournal',
+      'agentModelProvider={agentModelProvider}',
       'localDataControl={localDataControl}',
     ]);
     expect(text).toContain('appVersion={packageManifest.version}');
   });
 
   it('起動時は tombstone recovery を Profile load より先に完了する', async () => {
-    const text = await appSource();
+    const text = await startupRecoverySource();
 
     expectInOrder(text, [
-      '.recoverPendingDeletion()',
+      'localDataControl.recoverPendingDeletion()',
       'localProfileStorage.load()',
     ]);
   });
@@ -99,9 +105,22 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
     expect(flow).toContain('invalidatePreview();');
     expect(flow).toContain('onAllDataDeleted(true)');
     expect(flow).toContain('setRecoveryRequired(true)');
-    expect(flow).toContain('localDataControl.recoverPendingDeletion()');
+    expect(flow).toContain('const enterRecovery = useCallback(');
+    expect(flow).toContain('await onRetryStartupRecovery()');
+    expect(app).toContain('const retryStartupRecovery = useCallback(');
+    expect(app).toContain('onRetryStartupRecovery: retryStartupRecovery');
     expect(screen).toContain('t.retryRecoveryButton');
     expect(app).toContain('if (!recoveryRequired)');
+  });
+
+  it('壊れた Manifest だけでも Model 件数を偽らず削除対象 1 件として扱う', async () => {
+    const flow = await flowSource();
+    const screen = await screenSource();
+
+    expect(flow).toContain('preview.model && preview.model.count > 0');
+    expect(screen).toContain(
+      'Math.max(preview.modelCount, preview.model ? 1 : 0)'
+    );
   });
 
   it('Settings から Diagnostic 画面へ進み、戻ると元の状態を変更しない', async () => {

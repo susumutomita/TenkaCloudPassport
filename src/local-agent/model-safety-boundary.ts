@@ -3,6 +3,7 @@ import {
   type AgentModelInput,
   type AgentModelProvider,
   AgentModelProviderError,
+  type AgentModelProviderOptions,
   buildEncounterEvidence,
   type ConsentedOwnerAnswer,
   createLocalAgentProviderCapability,
@@ -90,7 +91,10 @@ export interface LocalModelRequest {
 }
 
 export interface LocalModelCompletionPort {
-  complete(request: LocalModelRequest): unknown | Promise<unknown>;
+  complete(
+    request: LocalModelRequest,
+    options?: AgentModelProviderOptions
+  ): unknown | Promise<unknown>;
 }
 
 export type LocalModelInputFailureReason =
@@ -457,8 +461,8 @@ export function createSafetyBoundLocalModelProvider(
   port: LocalModelCompletionPort
 ): AgentModelProvider {
   return createLocalAgentProviderCapability(
-    function provideSafetyBoundLocalModel(input) {
-      return port.complete(createLocalModelRequest(input));
+    function provideSafetyBoundLocalModel(input, options) {
+      return port.complete(createLocalModelRequest(input), options);
     }
   );
 }

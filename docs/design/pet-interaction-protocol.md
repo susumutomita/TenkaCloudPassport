@@ -213,3 +213,8 @@ Owner の生の回答（`'yes' | 'no' | 'decline'`）を受け取って純粋に
   [Agent Model Provider Contract の設計](./agent-model-provider-contract.md) を参照する。
   `pet-interaction-flow.ts` をこの新しい Contract の上へ再配線するかどうかは、Issue 17 の
   Local Agent 接続が完了した時点で改めて判断する。
+- **追記（Issue 17）**: `PassportApp` の「会話の糸を探す」操作を
+  `createAgentProviderSessionRunner()` と `AgentModelProvider` へ再配線した。検証済み Bridge は既存
+  Bridge constructor で Retired Lounge へ収束し、Provider の保守的な `no-signal` は本書の
+  `RULES_INTERACTION_PROVIDER` / Owner Question へ戻る。Lounge Exit / Expire / Unmount は Encounter
+  Key の `AbortSignal` を Cancel し、遅延結果を現在の Lounge へ適用しない。

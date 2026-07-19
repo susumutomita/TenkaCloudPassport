@@ -40,6 +40,11 @@ Output、Model File Name / Full Path、IP / SSID / 位置 / 連絡先、Token / 
 Byte 数だけを返す。個別操作は `resetPassport()` と `removeModel()` に分ける。Settings と Backup Cache は
 現在永続保存しないため件数 0 であり、将来保存を追加する変更が同じ Port と test を拡張する。
 
+GGUF lifecycle が有効な Development Build では、`LocalModelStoragePort` は versioned Manifest の全 Model を
+数え、Size を合計する。Diagnostic の Model 欄には active Model、無ければ先頭 Model の architecture と digest
+だけを代表値として載せ、`modelCount` は実件数を保持する。`removeModel()` と全削除は排他的 lease の内側で
+Manifest snapshot の全 Model を順に staged delete し、途中失敗は tombstone recovery で残件を再試行する。
+
 全削除の順序は次のとおりとする。
 
 1. Profile write と Model Context が参加する共有 lease を排他取得し、全 Resource を inspect する。
@@ -55,7 +60,18 @@ Profile save と Backup import は Composition Root で共有 lease に接続し
 UI でも書込中の Settings / Diagnostic 遷移と削除中の Back を無効化するが、画面状態だけを排他の根拠に
 しない。tombstone が残る commit 後中断では排他 lease を保持し、同じ Process の回復または再起動時の
 回復が完了するまで Profile write と Model Context 取得を拒否する。fresh process の Model lease registry
-も recovery-locked で開始し、marker 不在または削除完了を確認した後だけ Context 取得を解放する。
+も recovery-locked で開始し、marker 不在または削除完了を確認した後だけ Context 取得と Model mutation を解放する。
+起動回復が失敗した場合は通常画面と Model 管理を開始せず、Back を閉じた Diagnostic Recovery 専用状態に留める。
+明示再試行が成功した場合だけ通常画面と Model lifecycle の初回 load を解放する。再試行結果は
+`recovered` と `not-pending` を区別する。`recovered` は削除完了として空の Profile 初期画面へ戻すが、
+`not-pending` は既存 Profile を Storage から再読込して通常の起動復元を完了する。journal の一時的な
+読取失敗だけで React state を空にしたり、永続 Profile を空 Profile で上書きできる状態へ進めてはならない。
+Development Build の `llama.rn` Completion Port も同じ registry を Composition Root から受け取り、
+`initLlama` 前から `context.release()` 成功まで lease を保持する。Release が reject した場合は Context 消滅を
+証明できないため lease を保持し、`MODEL_IN_USE` として削除を拒否したまま Process 再起動を Recovery とする。
+Registry は Process 内で Model Context lease を同時に 1 本だけ許し、別 Runner / App remount 相当の再取得も
+active lease が残る限り拒否する。Import、Activate、Unload、Delete は同じ Registry の mutation lease を必須とし、
+recovery lock、実行中 Context、全削除 lease のいずれかがあれば File / Manifest を一度も変更しない。
 
 2 以降で失敗した Error は `committed: true` を持ち、UI は内容を保持せず Diagnostic の Recovery 専用
 safe-state に留まる。Back、Share、他の削除操作を閉じ、明示した再試行だけが同じ Control の
@@ -75,8 +91,13 @@ Error Code ごとに表示する。`End and forget Lounge`、`Reset Passport`、
 Lounge 破棄、全削除で即時失効させ、遅延中の
 refresh は generation で破棄する。状態変更後は新しい runtime snapshot から明示 refresh した Report
 だけを Share できる。
+`End and forget Lounge` と全削除は実行中 Provider の Signal、active Encounter Key、Runner Ledger も
+同じ遷移で破棄し、遅延 Model Outcome が Lounge や Evidence を復活させない。
 現在の表示言語と OS の Reduce Motion は永続 Resource ではなく、Process を越えて復元しない。実 Model と
 永続 Settings を追加する後続変更は、同じ全削除 callback と Resource Port の両方へ接続しなければならない。
+壊れた Manifest だけが残り GGUF payload が 0 件の場合も、exact managed store の存在を削除 Preview に残す。
+Manifest の strict load が空として成功する場合も、temp を含む exact managed store の列挙結果を優先する。
+これは Model 件数 0 のまま削除対象 1 件として扱い、Owner が個別 purge または全削除を選べるようにする。
 再起動相当の test は同じ実 File / Web Storage を新しい Adapter で開き、Profile と tombstone の両方が
 復元されないことを確認する。Storage Failure と中断は失敗専用の本物の Port 実装で再現し、Mock framework
 は使わない。

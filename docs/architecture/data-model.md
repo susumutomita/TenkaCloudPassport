@@ -28,12 +28,17 @@ Local Private Profile と Public Passport は別型です。Public Passport は 
 | Match Evidence | `L3` | `schemaVersion: 1` | 確認済み手掛かりと同意済み回答の参照である。 | Agent Decision 内だけである。 |
 | Bridge | `L3` | `schemaVersion: 1` | 表示 template key と Match Evidence である。 | 自分の Owner だけである。 |
 | Agent Decision | `L3` | `schemaVersion: 1` | Bridge または `no-signal` の終端判断である。 | 必要な終了同期以外は共有しない。 |
+| Local Model Manifest | `L1` | `schemaVersion: 1` | Imported GGUF の digest、Size、互換 Metadata、Risk、active 選択である。 | 共有しない。 |
+| Local Benchmark Report | `L1` | `schemaVersion: 1` | Model digest、duration、Peak Process Memory、Thermal、Battery Delta である。 | 共有しない。 |
 | Peer Envelope | `L3` | `protocolVersion: { major: 1, minor: 2 }` | Lounge ID、送信 Participant ID、Message ID、sequence、送信 / 満了時刻、許可済み payload である。 | 認証済み Pet だけである。 |
 | Backup | `L4` | `backupSchemaVersion: 2` | Local Private Profile、端末設定、モデル検証記録である。 | Owner が選んだ保存先だけである。 |
 
 Public Passport、Peer Envelope、バックアップに Local ID、更新日時、端末 ID、連絡先、位置情報、URL、
 保存先パスを設けない。Peer Envelope の payload に Raw LLM Prompt、system prompt、Chain of Thought、
 token buffer、任意の自由記述を設けない。strict schema はこの allowlist にない key を入力全体の失敗にする。
+Local Benchmark Report に Passport、Prompt、Answer、Bridge、Model Output、Error 本文、File URI、端末 ID、
+端末名を設けない。Model Manifest の private URI は端末内 runtime だけが読み、画面、バックアップ、Report、ログへ
+投影しない。
 
 ## 上限
 
@@ -50,6 +55,9 @@ token buffer、任意の自由記述を設けない。strict schema はこの al
 | Version、ID、catalog 値以外の短い文字列 | 96 UTF-16 code unit である。 | 表示 key と app version を bounded にする。自由記述は許可しない。 |
 | Peer Envelope の UTF-8 JSON | 4 KiB である。 | 過大な Pet Message を検証前に拒否する。 |
 | バックアップの UTF-8 JSON | 64 KiB である。 | カタログ選択と設定だけの allowlist を超える入力を拒否する。 |
+| Local Model Manifest の Model | 8 件である。 | 数 GiB File と検証記録の無制限蓄積を避ける。 |
+| Model File Name | UTF-8 128 byte である。 | 画面表示と private path construction を bounded にする。 |
+| Local Benchmark Report | Model ごとに直近 20 件である。 | 時系列 Telemetry の無制限蓄積を避ける。 |
 | 外部 JSON のネスト深度 | 8 である。 | 深い再帰入力を Schema 検証前に拒否する。 |
 | `sequence` | `0` 以上 `2,147,483,647` 以下である。 | 単調増加整数へ限定し、数値精度と無制限増加を避ける。 |
 

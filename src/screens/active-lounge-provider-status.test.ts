@@ -38,4 +38,11 @@ describe('Active Lounge 画面の Provider 切替 Status 表示', () => {
     expect(text).not.toContain('providerSwitchNotice(null');
     expect(text).toContain('readonly providerStatus: ProviderRuntimeStatus');
   });
+
+  it('Provider 結果待機中は開始 Button を disabled にして二重 Tap を UI でも止める', async () => {
+    const text = await source();
+
+    expect(text).toContain('readonly providerBusy: boolean');
+    expect(text).toContain('disabled={providerBusy}');
+  });
 });

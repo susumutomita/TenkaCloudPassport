@@ -1,7 +1,15 @@
+import type {
+  AgentModelDecision,
+  AgentModelInput,
+} from '../domain/agent-model-provider';
 import type { ClockSnapshot } from '../domain/clock-guard';
 import type { LanguageCode } from '../domain/clue-catalog';
 import type { RulesInteractionDiscoveryProvider } from '../domain/interaction-discovery-provider';
-import type { ActiveLounge, LoungeState } from '../domain/lounge';
+import {
+  type ActiveLounge,
+  advanceLounge,
+  type LoungeState,
+} from '../domain/lounge';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
 import {
   advanceInteraction,
@@ -12,6 +20,7 @@ import {
   receiveOwnerAnswer,
   retireInteraction,
 } from '../domain/pet-interaction';
+import { materializeAgentModelOutcome } from './agent-model-live-outcome';
 
 /**
  * Issue 11: `src/domain/pet-interaction.ts` の bounded protocol を、Active Lounge の
@@ -27,6 +36,52 @@ import {
 export interface PetInteractionStep {
   readonly interaction: PetInteractionState | null;
   readonly lounge: LoungeState;
+}
+
+/**
+ * 共通 Agent Model Decision を 2 者間 Live Outcome へ具体化する。Bridge を具体化できない
+ * `no-signal` / Language-only は、既存の bounded Rules Discovery と Owner Question を残す。
+ */
+export function applyAgentModelDecision(
+  active: ActiveLounge,
+  input: AgentModelInput,
+  decision: AgentModelDecision,
+  provider: RulesInteractionDiscoveryProvider,
+  clock: ClockSnapshot
+): PetInteractionStep {
+  const outcome = materializeAgentModelOutcome(input, decision);
+  if (outcome.kind === 'no-signal') {
+    return beginPetInteraction(active, provider, clock);
+  }
+  return {
+    interaction: null,
+    lounge: collapseToRetiredLounge(active, outcome),
+  };
+}
+
+/**
+ * 非同期 Provider の確定結果を適用する直前に Lounge 本体の満了を評価する。Provider の Deadline と
+ * Lounge expiry が同時に到達した場合は最早の破棄を優先し、結果・Owner Question を生成しない。
+ */
+export function applyAgentModelDecisionBeforeLoungeExpiry(
+  active: ActiveLounge,
+  input: AgentModelInput,
+  decision: AgentModelDecision,
+  provider: RulesInteractionDiscoveryProvider,
+  startedClock: ClockSnapshot,
+  outcomeClock: ClockSnapshot
+): PetInteractionStep {
+  const current = advanceLounge(active, outcomeClock);
+  if (current.status === 'destroyed') {
+    return { interaction: null, lounge: current };
+  }
+  return applyAgentModelDecision(
+    current,
+    input,
+    decision,
+    provider,
+    startedClock
+  );
 }
 
 /**

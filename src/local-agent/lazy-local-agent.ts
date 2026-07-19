@@ -1,6 +1,7 @@
 import {
   type AgentModelFailureCode,
   AgentModelProviderError,
+  type AgentModelProviderOptions,
   normalizeAgentModelFailureCode,
 } from '../domain/agent-model-provider';
 import {
@@ -11,7 +12,10 @@ import {
 
 /** Development Build の Native module が実装する最小 Port。Passport は受け取れない。 */
 export interface LocalAgentModule {
-  complete(request: LocalModelRequest): unknown | Promise<unknown>;
+  complete(
+    request: LocalModelRequest,
+    options?: AgentModelProviderOptions
+  ): unknown | Promise<unknown>;
 }
 
 export type LocalAgentModuleLoader = () => Promise<LocalAgentModule>;
@@ -35,7 +39,7 @@ export function createLazyLocalAgent(
 ): LocalAgent {
   let modulePromise: Promise<LocalAgentModule> | undefined;
   const completionPort: LocalModelCompletionPort = {
-    async complete(request) {
+    async complete(request, options) {
       let module: LocalAgentModule;
       try {
         modulePromise ??= loadModule();
@@ -45,7 +49,7 @@ export function createLazyLocalAgent(
         throw safeLocalAgentError();
       }
       try {
-        return await module.complete(request);
+        return await module.complete(request, options);
       } catch (error: unknown) {
         if (error instanceof AgentModelProviderError) {
           throw safeLocalAgentError(normalizeAgentModelFailureCode(error.code));

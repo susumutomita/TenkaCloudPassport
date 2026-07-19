@@ -136,8 +136,8 @@ dist
 .expo-shared/
 dist/
 web-build/
-ios/
-android/
+/ios/
+/android/
 
 # Native Artifact staging and build outputs
 .native-artifacts/

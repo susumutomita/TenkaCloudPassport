@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "include": [
+    "android-*.ts",
     "atomic-output-publisher.ts",
     "atomic-output-publisher-darwin.ts",
     "atomic-output-publisher-linux.ts",
