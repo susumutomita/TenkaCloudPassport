@@ -113,7 +113,7 @@ export function createNearbyJoinDescriptor(
   invite: LoungeInvite
 ): NearbyJoinDescriptor {
   const validated = createLoungeInvite(invite);
-  return {
+  return Object.freeze({
     schemaVersion: validated.schemaVersion,
     loungeId: validated.loungeId,
     hostDiscoveryHint: validated.hostDiscoveryHint,
@@ -121,8 +121,8 @@ export function createNearbyJoinDescriptor(
     issuedAtEpochMs: validated.issuedAtEpochMs,
     expiresAtEpochMs: validated.expiresAtEpochMs,
     capacity: validated.capacity,
-    requiredCapabilities: [...validated.requiredCapabilities],
-  };
+    requiredCapabilities: Object.freeze([...validated.requiredCapabilities]),
+  });
 }
 
 export interface NearbyJoinInput {

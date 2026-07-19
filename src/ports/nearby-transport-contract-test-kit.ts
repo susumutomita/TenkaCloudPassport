@@ -1292,7 +1292,14 @@ export function runNearbyTransportContract(
       await expectTransportError(
         unknownHostGuest.join({
           ...firstInput,
-          rawJoinRequest: 'x'.repeat(1_000_000),
+          rawJoinRequest: 'x'.repeat(1_024),
+        }),
+        'AUTHORIZATION_FAILED'
+      );
+      await expectTransportError(
+        unknownHostGuest.join({
+          ...firstInput,
+          rawJoinRequest: 'x'.repeat(1_025),
         }),
         'INVALID_CONFIGURATION'
       );

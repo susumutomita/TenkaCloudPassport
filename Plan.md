@@ -565,6 +565,22 @@ Issue 20 の実機 Transport 選定を推測せず、Domain、Agent、UI から 
   0 件だった。`make before-commit` は 837 Test、6 Snapshot、11,921 Expect、Functions / Lines 100%、Web Export Green、
   staged architecture harness は Error / Warning 0 件で完了した。Production Web Bundle に Reference Adapter 固有 label / import
   は存在しない。Native Adapter、実機 Matrix、Packet Capture は引き続き `Not run` である。
+- 2026-07-19: GitHub 外部 Review の 4 指摘を反映し、Join Descriptor と `requiredCapabilities` の freeze、
+  raw Join Request の 1,024 / 1,025-byte 境界、Bounded Contract、Markdown、独立した振り返りを修正した。
+  code / security / simplify の再レビューはすべて `ALLOW`、全 severity 0 件である。`make before-commit` は
+  838 Test、6 Snapshot、11,927 Expect、Functions / Lines 100%、Web Export Green、staged harness 0 件で完了した。
+
+#### 振り返り
+
+- 問題: 外部 callback と validation の途中で Host End、Invite Rotation、Condition、`dispose()` が再入すると、
+  古い Operation が Membership、Ready、terminal reason を後から上書きできた。最終外部 Review では Join Descriptor の
+  nested Capability 配列が mutable なままで、1,024-byte raw Join Request 上限も設計表から漏れていた。
+- 根本原因: 正常な非同期順序を中心に State を更新し、callback 前の内部 commit、Operation ownership、dispatch 世代、
+  strict projection の deep immutability を同じ不変条件として最初から列挙していなかった。実装上の byte bound と
+  設計正本の Bound 一覧も別々に更新していた。
+- 予防策: 外部 callback 前に terminal / reconnecting を commit し、callback と validator の直後に generation と ownership を
+  再確認する。Join Descriptor と `requiredCapabilities` は strict rebuild 後に freeze し、全 byte / count bound を同じ
+  Contract Suite と設計表で正確な境界値まで検証する。外部 Review の指摘も focused Red → Green と全 Gate 後に統合する。
 
 ---
 

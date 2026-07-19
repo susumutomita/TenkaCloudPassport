@@ -2,7 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLoopbackNearbyNetwork } from '../adapters/loopback-nearby-transport';
-import { NearbyTransportError } from './nearby-transport';
+import { RULES_PROVIDER_CAPABILITY } from '../domain/capability';
+import { createLoungeInvite } from '../domain/lounge-invite';
+import {
+  createNearbyJoinDescriptor,
+  NearbyTransportError,
+} from './nearby-transport';
 import {
   type CreateNearbyTransportDiagnosticsHarness,
   runNearbyTransportContract,
@@ -30,6 +35,34 @@ runNearbyTransportDiagnosticsContract(
   'Loopback Reference Adapter',
   createLoopbackHarness
 );
+
+describe('Nearby Join Descriptor の不変境界', () => {
+  it('DescriptorとCapability配列を凍結して返す', () => {
+    const descriptor = createNearbyJoinDescriptor(
+      createLoungeInvite({
+        loungeId: 'lng_11111111111111111111111111111111',
+        joinSecret: `jsc_${'11'.repeat(32)}`,
+        hostDiscoveryHint: 'nearby://host-1',
+        transportFingerprint: `sha256_${'22'.repeat(32)}`,
+        issuedAtEpochMs: 1_000,
+        expiresAtEpochMs: 2_000,
+        capacity: 2,
+        requiredCapabilities: [RULES_PROVIDER_CAPABILITY],
+      })
+    );
+
+    expect(Object.isFrozen(descriptor)).toBe(true);
+    expect(Object.isFrozen(descriptor.requiredCapabilities)).toBe(true);
+    expect(() =>
+      Object.defineProperty(descriptor, 'capacity', { value: 6 })
+    ).toThrow();
+    expect(() =>
+      Object.defineProperty(descriptor.requiredCapabilities, '0', {
+        value: 'peer-v1',
+      })
+    ).toThrow();
+  });
+});
 
 async function productionSources(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
