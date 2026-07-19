@@ -346,7 +346,9 @@ describe('Issue 28: Android Release Binary identity 境界', () => {
       return;
     }
     const directory = await temporaryDirectory();
-    const shim = await approvedExecutable('git');
+    // git hook 内では git が exec-path を PATH 先頭に足し Bun.which('git') が
+    // CommandLineTools の実体を返すため、shim は PATH 解決でなく絶対パスで指す。
+    const shim = await approvedExecutablePath('/usr/bin/git');
     expect(shim.path).toBe('/usr/bin/git');
 
     await expect(
