@@ -477,6 +477,97 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
 
 ---
 
+### [Issue 22 Nearby Transport Port と Loopback Contract] - 2026-07-19
+
+#### 目的
+
+Issue 20 の実機 Transport 選定を推測せず、Domain、Agent、UI から Native Network 詳細を隔離する
+`NearbyTransport` Port、Host Relay、bounded Queue / Rate / Peer / Listener、固有 Connection Event、
+実 Adapterにも再利用する Contract Suite を完成する。
+
+#### 制約
+
+- Native Library、Socket、WebRTC、mDNS、Local Network API は将来の Infrastructure Adapter だけが import する。
+- QR Join Proof と Transport Fingerprint の認証、Host / Guest の Ready が完了するまで `send()` を許可しない。
+- Loopback Reference Adapter は Mock、暗号化済み Channel、実機証拠、Production fallback として扱わない。
+- Payload 4 KiB、Queue 8、1 秒 16 件 / 8 KiB、Participant 6、Listener 16 を超えた場合は型付き Error にする。
+- Passport、Prompt、Model Output、Network 名、端末 ID、Native Error 本文を保持または反射しない。
+- Issue 20 の Accepted ADR、Native Adapter、物理端末 Matrix、Packet Capture は本 Foundation の完了に含めない。
+
+#### 設計判断
+
+1. Peer Protocol に接続と Queue を持たせる案は Wire 検証と Native lifecycle を結合するため採用しない。
+2. App が Native Library を直接呼ぶ案は Platform ごとに認証、Ready、上限、cleanup が分岐するため採用しない。
+3. Adapter が短命 Binding を作り、App の `issueInvite(binding)` callback が実 Handshake を発行する Port を採用する。
+   Join は Host の `authorizeJoin()` と双方の `waitUntilReady()` が完了した後だけ `connected` となる。
+
+詳細は [Nearby Transport Port と Loopback Reference Adapter の設計](./docs/design/nearby-transport-contract.md) を
+正本とする。
+
+#### タスク
+
+1. 本 Plan と設計書を実装前に更新する。
+2. 再利用可能な Contract Suite を Red で追加する。
+3. Port の型、strict Error、Invite Descriptor、Event を実装する。
+4. 2〜6 名、Broadcast、Target、Leave、Host End、Reconnect、4 Condition を扱う Loopback Adapter を実装する。
+5. Payload / Queue / Rate / byte / Peer / Listener 上限と dispose cleanup を検証する。
+6. Production entrypoint が Loopback を import せず、Native Library が Port / Domain へ漏れないことを確認する。
+7. staged harness、`make before-commit`、code / security / simplify review を通して Draft PR を作成する。
+
+#### 検証手順
+
+- `bun test src/ports/nearby-transport.contract.test.ts` で Red / Green を確認する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従う code review。
+- 認証前 Payload、Identity 乗っ取り、Queue memory、Error 反射、dispose race を Security Review する。
+- Protocol との rate 重複、状態と Queue の重複、不要 abstraction を Simplify Review する。
+- Native / Physical Matrix は `Not run` として残す。
+
+#### 進捗ログ
+
+- 2026-07-19: Issue 20 / 21 / 22、Peer Protocol 1.2、Group Coordinator、単一端末 Binding を監査した。
+  Transport Binding と Handshake 発行の循環を `issueInvite(binding)` callback で切り、Join Proof と双方 Ready の
+  完了まで `send()` を閉じる設計を採用した。Native Adapter と実機証跡は未着手である。
+- 2026-07-19: `NearbyTransport` Port、Loopback Reference Adapter、実 Adapter と共有する Contract Suite を
+  Red → Green で追加した。2〜6 名、Fresh Invite、Host Relay の Broadcast / Target、Leave / Host End、4 Condition、
+  Payload / Queue / Rate / byte / Listener 上限、dispose cleanup を 25 本の日本語 BDD Contract で固定した。
+- 2026-07-19: 外部入力の未知 field、null Authorization の生 `TypeError`、並行 Host 開始、Host 開始中 dispose、
+  Join 中 Host End、Listener 例外による部分的な State 破壊を Red で再現し、strict rebuild、Operation Generation、
+  terminal Event、Observer 隔離へ修正した。Focused Test は Functions / Lines 100% である。
+- 2026-07-19: Join の認証待機中に Host が Invite を再発行すると、旧 Join の Identity と新 Authorization の
+  Ready callback が混在する race を Red で再現した。Join 開始時の Authorization object を世代 token として固定し、
+  Rotation 後の旧 Join を `CONNECTION_INTERRUPTED` で終端する契約へ修正した。
+- 2026-07-19: 独立 review で、認証待機中の定員 / Participant 未予約、同時 Reconnect、Host ID Join、
+  Host 再 Ready 前の送信、dispose 後 callback による state 巻き戻し、caller-owned object の await 越し再読を
+  再現した。in-flight reservation と単一 Join ownership、世代優先、strict data snapshot、Group Ready を
+  Contract へ追加して実装を修正した。巨大 UTF-8 入力の先行 allocation、mutable Binding / Identity、
+  reentrant dispose、固定 Error message、Production root scan、rate window 回復も回帰 Test で固定した。
+- 2026-07-19: 再レビューで Host Condition 中の pending Join、state Event 内 dispose、旧 Authorization cleanup 内
+  Host dispose、Fresh Invite の時刻更新後 Reconnect に世代 / 再入不足を再現した。Host / Join operation の
+  post-event ownership、pending 世代中断、cleanup 後再確認、既存 Membership の stable reconnect 判定を
+  Contract へ追加して修正した。Membership 通知前の内部 Ready commit と `joined` → `left` の外部順序を分離し、
+  `joined` listener からの現在 Membership 宛送信も許可した。byte-rate window の回復も portable Contract へ追加した。
+- 2026-07-19: 再入 Review で、Membership nested dispatch の `left` → `joined` 逆転、Host End 後の stale Event / Envelope、
+  Host Condition 後の terminal 復活、Host 開始中 Condition の再試行不能、Proxy validation 中 dispose 後の Ready / Queue、
+  Rotation candidate と破棄済み Authorization の残留を Red で再現した。Membership dispatch queue と recipient ownership、
+  validator 直後の generation check、Route の recipient 再確認、Rotation の fail-closed Host End へ修正した。Binding も
+  Port 共通 strict validator へ含め、Focused 30 Test と対象 Functions / Lines 100% を確認した。
+- 2026-07-19: Full Architecture Harness は Error / Warning 0、Typecheck は Green である。Bun 1.3.11 が class field の
+  implicit constructor を未実行 Function として source-map 集計する状態を Red で再現し、Binding Counter を明示
+  constructor で初期化して Reference Adapter の Functions / Lines を 100% にした。Native Adapter、実機 Matrix、
+  Packet Capture は `Not run` のままであり、本 Foundation の証拠へ含めない。
+- 2026-07-19: 最終再レビューで、Condition listener からの即時 Invite 再発行が Group の `reconnecting` commit を
+  追い越し、双方 Ready 前の送信を再開できる経路を Red で再現した。外部 callback 前に Host と現在 Membership の
+  送信を閉じ、Guest の再 Join と双方 Ready 後だけ復帰する契約へ修正した。Permission 拒否も terminal を先行 commit し、
+  pending / connected Guest の既存 terminal reason を Host End が再通知しないようにした。
+- 2026-07-19: code / security / state-concurrency の独立再レビューはすべて `ALLOW` となり、Blocker / High / Medium は
+  0 件だった。`make before-commit` は 837 Test、6 Snapshot、11,921 Expect、Functions / Lines 100%、Web Export Green、
+  staged architecture harness は Error / Warning 0 件で完了した。Production Web Bundle に Reference Adapter 固有 label / import
+  は存在しない。Native Adapter、実機 Matrix、Packet Capture は引き続き `Not run` である。
+
+---
+
 ### [Issue 21 一時 Lounge Handshake] - 2026-07-18
 
 #### 目的
