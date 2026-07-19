@@ -10,7 +10,10 @@ import {
   createAgentProviderSessionRunner,
   INITIAL_PROVIDER_RUNTIME_STATE,
 } from './agent-provider-session';
-import { LocalModelContextLeaseRegistry } from './local-data-control';
+import {
+  LocalDataAccessBlockedError,
+  LocalModelContextLeaseRegistry,
+} from './local-data-control';
 import { createNativeAgentModelProvider } from './native-agent-model-provider-composition';
 
 const INPUT: AgentModelInput = {
@@ -180,7 +183,7 @@ describe('Development Build Local Agent の統合 Matrix', () => {
     });
     await started;
 
-    expect(runner.cancel('integration-cancel')).toBe(true);
+    runner.forget('integration-cancel');
     const result = await pending;
 
     expect(result.outcome.switchReason).toBe('cancelled');
@@ -226,6 +229,9 @@ describe('Development Build Local Agent の統合 Matrix', () => {
       kind: 'busy',
       activeUse: 'model-context',
     });
+    expect(() => modelContexts.acquireMutation()).toThrow(
+      LocalDataAccessBlockedError
+    );
   });
 
   it('削除 Recovery Lock 中は Context を開始せず Rules へ切り替える', async () => {
@@ -244,5 +250,8 @@ describe('Development Build Local Agent の統合 Matrix', () => {
 
     expect(result.outcome.switchReason).toBe('load-error');
     expect(initializations).toBe(0);
+    expect(() => recoveryLockedContexts.acquireMutation()).toThrow(
+      LocalDataAccessBlockedError
+    );
   });
 });

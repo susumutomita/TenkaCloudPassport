@@ -11,6 +11,10 @@ import {
   type LlamaModulePort,
 } from './llama-agent-model-provider';
 import type { LocalModelConfiguration } from './local-model-configuration';
+import type {
+  ModelBenchmarkRecorder,
+  ModelBenchmarkSession,
+} from './model-benchmark';
 import {
   createLocalModelRequest,
   createSafetyBoundLocalModelProvider,
@@ -33,9 +37,15 @@ const REQUEST = createLocalModelRequest(INPUT);
 
 function llamaPort(
   loadModule: () => Promise<LlamaModulePort>,
-  executionLeases = new LocalModelContextLeaseRegistry(false)
+  executionLeases = new LocalModelContextLeaseRegistry(false),
+  recorder?: ModelBenchmarkRecorder
 ) {
-  return createLlamaCompletionPort(CONFIGURATION, loadModule, executionLeases);
+  return createLlamaCompletionPort(
+    CONFIGURATION,
+    loadModule,
+    executionLeases,
+    recorder
+  );
 }
 
 interface ContextOptions {
@@ -111,6 +121,165 @@ async function expectProviderError(
 }
 
 describe('llama.rn LocalModelCompletionPort', () => {
+  it('Benchmark へ内容を渡さず Load・First Token・成功の順だけを通知する', async () => {
+    const events: string[] = [];
+    const session: ModelBenchmarkSession = {
+      markLoaded() {
+        events.push('loaded');
+      },
+      markFirstToken() {
+        events.push('first-token');
+      },
+      markCompletion() {
+        events.push('completion');
+      },
+      async finish(outcome) {
+        events.push(`finish:${outcome}`);
+      },
+    };
+    const recorder: ModelBenchmarkRecorder = {
+      async start() {
+        events.push('start');
+        return session;
+      },
+    };
+    const port = llamaPort(
+      async () => {
+        events.push('load-module');
+        return new RecordingLlamaModule(new RecordingLlamaContext());
+      },
+      new LocalModelContextLeaseRegistry(false),
+      recorder
+    );
+
+    await port.complete(REQUEST);
+
+    expect(events).toEqual([
+      'start',
+      'load-module',
+      'loaded',
+      'first-token',
+      'completion',
+      'finish:success',
+    ]);
+  });
+
+  it('Native release 後の Benchmark 保存待ちは Provider teardown を止めない', async () => {
+    let markFinishStarted: (() => void) | undefined;
+    const finishStarted = new Promise<void>((resolve) => {
+      markFinishStarted = resolve;
+    });
+    let releaseFinish: (() => void) | undefined;
+    const finishPending = new Promise<void>((resolve) => {
+      releaseFinish = resolve;
+    });
+    const port = llamaPort(
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      new LocalModelContextLeaseRegistry(false),
+      {
+        async start() {
+          return {
+            markLoaded: () => undefined,
+            markFirstToken: () => undefined,
+            markCompletion: () => undefined,
+            async finish() {
+              markFinishStarted?.();
+              await finishPending;
+            },
+          };
+        },
+      }
+    );
+
+    const completion = Promise.resolve(port.complete(REQUEST));
+    await finishStarted;
+    const settledBeforeReport = await Promise.race([
+      completion.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 25)),
+    ]);
+    releaseFinish?.();
+    await completion;
+
+    expect(settledBeforeReport).toBe(true);
+  });
+
+  it('Benchmark は Provider の cancelled / failed を区別する', async () => {
+    const outcomes: string[] = [];
+    const recorder: ModelBenchmarkRecorder = {
+      async start() {
+        return {
+          markLoaded: () => undefined,
+          markFirstToken: () => undefined,
+          markCompletion: () => undefined,
+          async finish(outcome) {
+            outcomes.push(outcome);
+          },
+        };
+      },
+    };
+    const failed = llamaPort(
+      async () => {
+        throw new Error('load failed');
+      },
+      new LocalModelContextLeaseRegistry(false),
+      recorder
+    );
+    await expectProviderError(
+      async () => failed.complete(REQUEST),
+      'LOAD_ERROR'
+    );
+
+    const cancelled = llamaPort(
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      new LocalModelContextLeaseRegistry(false),
+      recorder
+    );
+    const controller = new AbortController();
+    controller.abort();
+    await expectProviderError(
+      async () => cancelled.complete(REQUEST, { signal: controller.signal }),
+      'CANCELLED'
+    );
+    expect(outcomes).toEqual(['failed', 'cancelled']);
+  });
+
+  it('Benchmark start / finish の失敗は推論結果を上書きしない', async () => {
+    const startFailure = llamaPort(
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      new LocalModelContextLeaseRegistry(false),
+      {
+        async start() {
+          throw new Error('benchmark unavailable');
+        },
+      }
+    );
+    expect(await startFailure.complete(REQUEST)).toEqual({
+      kind: 'bridge',
+      evidenceIds: ['topic:open-source'],
+    });
+
+    const finishFailure = llamaPort(
+      async () => new RecordingLlamaModule(new RecordingLlamaContext()),
+      new LocalModelContextLeaseRegistry(false),
+      {
+        async start() {
+          return {
+            markLoaded: () => undefined,
+            markFirstToken: () => undefined,
+            markCompletion: () => undefined,
+            async finish() {
+              throw new Error('benchmark write failed');
+            },
+          };
+        },
+      }
+    );
+    expect(await finishFailure.complete(REQUEST)).toEqual({
+      kind: 'bridge',
+      evidenceIds: ['topic:open-source'],
+    });
+  });
+
   it('設定値で Context を初期化し、Safety Boundary の canonical Evidence Request だけを渡す', async () => {
     const context = new RecordingLlamaContext();
     const module = new RecordingLlamaModule(context);
@@ -340,9 +509,14 @@ describe('llama.rn LocalModelCompletionPort', () => {
 
   it('Model 初期化中の Abort は Completion を開始せず、初期化後に Context を解放する', async () => {
     let finishInitialization: ((context: LlamaContextPort) => void) | undefined;
+    let markInitializationStarted: (() => void) | undefined;
+    const initializationStarted = new Promise<void>((resolve) => {
+      markInitializationStarted = resolve;
+    });
     const context = new RecordingLlamaContext();
     const module: LlamaModulePort = {
       initLlama() {
+        markInitializationStarted?.();
         return new Promise((resolve) => {
           finishInitialization = resolve;
         });
@@ -351,7 +525,7 @@ describe('llama.rn LocalModelCompletionPort', () => {
     const port = llamaPort(async () => module);
     const controller = new AbortController();
     const pending = port.complete(REQUEST, { signal: controller.signal });
-    await Promise.resolve();
+    await initializationStarted;
     controller.abort();
     finishInitialization?.(context);
 

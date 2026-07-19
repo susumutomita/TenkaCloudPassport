@@ -35,7 +35,7 @@
 | QR の表示と読み取り | schema 検証を通った版、上限、期限、1 回限り Secret、Transport Fingerprint である。 | QR の作成者、内容、URL、命令文、撮影者である。 | strict schema、サイズ上限、Host 基準の期限、使い捨て Secret、URL 非対応である。 |
 | 近距離通信と同一 LAN | 認証済み暗号化チャネルの暗号検証結果である。 | 通信相手、LAN 利用者、ルーター、探索情報、平文通信である。 | 一時鍵、相互認証、AEAD、sequence、Replay 拒否、平文 fallback 禁止である。 |
 | 参加 Pet と参加者 | 暗号化チャネル上で検証した一時的な参加状態である。 | 相手の自己申告、Public Passport の客観的真実、相手 Pet のモデル出力である。 | 来歴検証、参加表示、Host 終了、最小開示である。 |
-| アプリと GGUF | digest と形式検証を通ったモデルファイルである。 | モデルの出力、モデル内の指示、改ざん済みファイル、parser 入力である。 | digest allowlist、サイズ上限、隔離 runtime、出力 schema と根拠検証である。 |
+| アプリと GGUF | private File の Size、digest、Native parser による形式・互換性の検証結果である。 | モデルの出力、モデル内の指示、改ざん済みファイル、parser 入力、digest が安全性を証明するという仮定である。 | Copy 前 Size / 空き容量確認、chunked digest、Resource Guard、隔離 runtime、出力 schema と根拠検証である。 |
 | アプリとバックアップ保存先 | Owner が OS の保存画面で選んだ 1 回の書き込み先である。 | 保存先の同期、共有権限、履歴、外部アプリ、Import ファイルである。 | 明示確認、allowlist Export、strict Import、一時データ破棄である。 |
 | 利用者と配布 APK | Release 台帳で照合した Source Commit、App Signing Certificate、SHA-256 である。 | 非公式 Mirror、URL shortener、Debug Key、差し替え APK、漏えいした Signing Key である。 | `apksigner`、checksum、同一 Certificate 更新、配布停止 Runbook である。 |
 | アプリと Pilot 調査 | Research 参加を別に明示した Participant と、固定 Counter の Schema である。 | Research Consent から Product Consent を推測すること、Facilitator の記憶、少人数 Aggregate、自動収集基盤である。 | Consent 分離、Memory-only Counter、最低 5 Outcome、Preview 後の手動 Share、内容なし Observation Sheet である。 |
@@ -87,7 +87,7 @@
 | Lounge 侵入 | 参加 Pet ごとに 1 回限りの Secret と QR を発行し、HMAC Proof と Transport Fingerprint を照合してから Host が使用済みへ原子的に遷移する。安定 ID を参加判定に使わない。 | Host と参加 Pet に現在の参加数、追加、離脱を表示し、Secret の二重利用と認証失敗を検出する。 | Host は Lounge を終了し、すべてのローカルデータを削除する。続行する場合は新しい Secret と QR へ Rotation する。 | QR を正規に受け取った悪意ある参加者は Public Passport を見られ、他の参加者へ内容を口頭で伝えられる。 |
 | Replay | Lounge ごとに暗号学的乱数の nonce、Participant ID、Join Secret を生成し、Join Proof を Lounge、Participant、期限、Capability、Transport Fingerprint に結び付ける。各 Pet Message は Message ID、単調増加 sequence、Transport の nonce、認証 tag に結び付ける。Host は検証開始を同期的に予約し、成功後に Secret Key Buffer を上書きする。 | Host の `verifying` / `used` 状態と、各端末の受理済み Message ID、sequence、期限、Transport 認証により、二重参加、重複、順序戻り、別 Lounge の message を拒否する。 | 該当接続を閉じ、鍵とキューを破棄する。状態に矛盾があれば Lounge 全体を終了する。再参加には Host が発行する新しい Secret を必要とする。 | Guest の端末時刻は最終判定に使わず Host の期限へ収束する。Host の再起動後は状態を復元せず、Secret Key を失った以前の Lounge 全体を無効にする。 |
 | パケット盗聴 | QR の Join Proof と Transport Fingerprint を、採用 Transport が標準暗号で確立した Channel に結合する。全 Pet Message と終了通知を Transport が暗号化し、平文 fallback、外部 relay、外部推論 API を持たない。 | 改ざんを伴わない受動的な盗聴はアプリから検出できない。Transport の認証 tag、Fingerprint、sequence の検証失敗は能動的な改ざんの補助 Signal として接続を閉じる。 | Lounge を終了し、鍵を破棄して新しい QR で再作成する。 | 通信量、時刻、通信層アドレス、同一 LAN 上に端末がいる事実などのメタデータは OS とネットワーク機器から見える場合がある。 |
-| 改ざん済み GGUF | 対応形式、最大サイズ、digest allowlist を満たすモデルだけを、network、ファイル書き込み、アプリ状態変更の権限を持たない隔離 runtime で開く。 | 読み込み前とアプリ更新後に digest と構造を再検証し、runtime crash、資源上限超過、schema 外出力を失敗として扱う。 | モデルを無効化して隔離し、Owner に削除または既知 digest のモデルへの置換を求める。Lounge は `no-signal` または終了とする。 | GGUF parser と推論 runtime の未知の脆弱性、正規モデルの不適切な出力、入手元の侵害は残る。 |
+| 改ざん済み GGUF | Owner 確定後だけ private 領域へ Copy し、Size、SHA-256、Native parser の Architecture / Context Metadata、Device Memory Risk を Context 初期化前に検証する。Digest は同一性にだけ使い、安全表示や出所 allowlist にしない。 | 読み込み前とアプリ更新後に File Size / digest / 構造を再検証し、runtime crash、資源上限超過、schema 外出力を失敗として扱う。 | Model を deactivate し、Native teardown 後に Owner が File と検証記録を削除できる。Lounge は Rules / `no-signal` または終了とする。 | GGUF parser と推論 runtime の未知の脆弱性、byte として一貫した悪意ある Model、正規 Model の不適切な出力、入手元の侵害は残る。 |
 | バックアップ誤公開 | Export 対象を allowlist に固定し、Lounge データ、GGUF、端末パス、識別子を除外する。保存前に平文 JSON と保存先の管理責任を表示し、自動同期や自動 upload を行わない。 | Export 後の誤公開はアプリから検出できない。Export 前 preview と件数は誤操作の補助シグナルとし、Owner は保存先の共有状態を確認する。Import は strict schema で未知フィールドと Lounge 由来フィールドを拒否する。 | Owner は保存先の共有を解除してファイルを削除し、必要なら Local Private Profile の内容を変更する。アプリ内一時 copy は直ちに破棄する。 | 保存先の履歴、同期先、受信者の copy、公開済みリポジトリからの回収は困難である。 |
 | 配布 APK の差し替え | 署名済み APK、公開 Certificate Fingerprint、SHA-256、Source Tag を同じ Release で配布し、公式 Release 以外を案内しない。 | 利用前に `apksigner` と checksum を照合し、更新は同じ Package ID と Certificate だけを受け入れる。 | 新規配布を停止し、影響 SHA-256 を公表する。同じ Certificate が安全なら高い `versionCode` の修正版を配り、Key compromise では直接配布を停止する。 | 取得済み APK は回収できず、Signing Key が漏えいした場合は同じ Key の署名だけでは正当性を回復できない。 |
 | 診断情報の過剰開示 | Report は strict allowlist とし、正確な時刻、内容、識別子、パス、IP / SSID / 位置、Key / Token を型で表現しない。 | Snapshot と strict parser で未知 field と禁止語彙を拒否し、Preview で全項目を Owner に示す。 | Preview を破棄し、固定 Error Code と Recovery だけで再生成する。 | Owner が共有した Report の保存先と受信者 copy はアプリから回収できない。 |
@@ -105,5 +105,7 @@
 - Security Signal に入力本文、手掛かり、鍵、端末情報、通信層アドレスを含めず、Lounge 終了時に消す。
 - 検出不能または根拠不足の場合は Bridge を生成せず、`no-signal` または Lounge 終了を選ぶ。
 - 依存関係と通信先の検査で Analytics SDK と外部推論 API が存在しないことを継続確認する。
+- Local Benchmark は内容を受け取らず、Model digest、duration、Peak Process Memory、Thermal、Battery Delta だけを
+  private 領域に保存する。端末 ID、端末名、File URI を取得または保存しない。
 - Pilot Measurement module は `fetch`、`XMLHttpRequest`、`WebSocket`、自動送信 URL を持たず、既存の
   Share Sheet Port を Preview 後の明示操作からだけ呼ぶ。

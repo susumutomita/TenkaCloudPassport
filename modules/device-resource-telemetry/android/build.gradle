@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'cloud.tenka.passport.deviceresourcetelemetry'
+version = '1.0.0'
+
+android {
+  namespace 'cloud.tenka.passport.deviceresourcetelemetry'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}

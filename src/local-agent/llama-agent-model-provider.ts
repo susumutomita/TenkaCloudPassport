@@ -1,6 +1,10 @@
 import { AgentModelProviderError } from '../domain/agent-model-provider';
 import type { LocalModelConfiguration } from './local-model-configuration';
 import type {
+  ModelBenchmarkRecorder,
+  ModelBenchmarkSession,
+} from './model-benchmark';
+import type {
   LocalModelCompletionPort,
   LocalModelRequest,
 } from './model-safety-boundary';
@@ -173,14 +177,18 @@ async function completeContext(
   context: LlamaContextPort,
   request: LocalModelRequest,
   configuration: LocalModelConfiguration,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  benchmark: ModelBenchmarkSession | null
 ): Promise<unknown> {
   if (signal?.aborted) throw cancelledError();
   const cancellation = observeCompletionCancellation(context, signal);
   try {
     const result = await context.completion(
       completionParameters(request, configuration),
-      cancellation.onToken
+      () => {
+        benchmark?.markFirstToken();
+        cancellation.onToken();
+      }
     );
     await cancellation.waitForStop();
     if (signal?.aborted) throw cancelledError();
@@ -202,15 +210,44 @@ async function captureCompletion(
   context: LlamaContextPort,
   request: LocalModelRequest,
   configuration: LocalModelConfiguration,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  benchmark: ModelBenchmarkSession | null
 ): Promise<CompletionAttempt> {
   try {
     return {
       kind: 'success',
-      output: await completeContext(context, request, configuration, signal),
+      output: await completeContext(
+        context,
+        request,
+        configuration,
+        signal,
+        benchmark
+      ),
     };
   } catch (error: unknown) {
     return { kind: 'failure', error: normalizeNativeError(error) };
+  }
+}
+
+async function startBenchmark(
+  recorder: ModelBenchmarkRecorder | undefined
+): Promise<ModelBenchmarkSession | null> {
+  if (!recorder) return null;
+  try {
+    return await recorder.start();
+  } catch {
+    return null;
+  }
+}
+
+async function finishBenchmark(
+  benchmark: ModelBenchmarkSession | null,
+  outcome: 'success' | 'cancelled' | 'failed'
+): Promise<void> {
+  try {
+    await benchmark?.finish(outcome);
+  } catch {
+    // 内容を持たない計測の失敗で、推論結果や型付き Provider 失敗を上書きしない。
   }
 }
 
@@ -219,36 +256,49 @@ async function executeLlamaProvider(
   configuration: LocalModelConfiguration,
   loadModule: LlamaModuleLoader,
   executionLeases: LocalModelExecutionLeasePort,
-  signal: AbortSignal | undefined
+  signal: AbortSignal | undefined,
+  recorder: ModelBenchmarkRecorder | undefined
 ): Promise<unknown> {
+  const benchmark = await startBenchmark(recorder);
   let lease: LocalModelExecutionLease;
   try {
     lease = executionLeases.acquire();
   } catch {
+    void finishBenchmark(benchmark, 'failed');
     throw loadError();
   }
-  let context: LlamaContextPort;
+  let quarantined = false;
   try {
-    context = await initializeContext(configuration, loadModule, signal);
-  } catch (error: unknown) {
+    const context = await initializeContext(configuration, loadModule, signal);
+    benchmark?.markLoaded();
+    const completion = await captureCompletion(
+      context,
+      request,
+      configuration,
+      signal,
+      benchmark
+    );
+    if (completion.kind === 'success') benchmark?.markCompletion();
+    try {
+      await context.release();
+    } catch {
+      // Native Context の解放を証明できないため lease を保持し、Process 再起動まで削除と次 Context を止める。
+      quarantined = true;
+      throw quarantinedLoadError();
+    }
     lease.release();
-    throw error;
+    if (completion.kind === 'failure') throw completion.error;
+    void finishBenchmark(benchmark, 'success');
+    return completion.output;
+  } catch (error: unknown) {
+    if (!quarantined) lease.release();
+    const normalized = normalizeNativeError(error);
+    void finishBenchmark(
+      benchmark,
+      normalized.code === 'CANCELLED' ? 'cancelled' : 'failed'
+    );
+    throw normalized;
   }
-  const completion = await captureCompletion(
-    context,
-    request,
-    configuration,
-    signal
-  );
-  try {
-    await context.release();
-  } catch {
-    // Native Context の解放を証明できないため lease を保持し、Process 再起動まで削除と次 Context を止める。
-    throw quarantinedLoadError();
-  }
-  lease.release();
-  if (completion.kind === 'failure') throw completion.error;
-  return completion.output;
 }
 
 /**
@@ -258,7 +308,8 @@ async function executeLlamaProvider(
 export function createLlamaCompletionPort(
   configuration: LocalModelConfiguration,
   loadModule: LlamaModuleLoader,
-  executionLeases: LocalModelExecutionLeasePort
+  executionLeases: LocalModelExecutionLeasePort,
+  recorder?: ModelBenchmarkRecorder
 ): LocalModelCompletionPort {
   return {
     complete(request, options) {
@@ -267,7 +318,8 @@ export function createLlamaCompletionPort(
         configuration,
         loadModule,
         executionLeases,
-        options?.signal
+        options?.signal,
+        recorder
       );
     },
   };

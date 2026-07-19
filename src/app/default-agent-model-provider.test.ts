@@ -70,6 +70,10 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(app).toContain(
       'distributionCapability={DEFAULT_DISTRIBUTION_CAPABILITY}'
     );
+    expect(app).toContain('createDefaultLocalModelManagement(localDataLeases)');
+    expect(app).toContain(
+      'localModelManagement={localModelComposition?.management ?? null}'
+    );
   });
 
   it('Issue 28: Web / Expo Go / Native Build の Runtime capability を Platform Composition で分離する', async () => {
@@ -83,6 +87,79 @@ describe('AgentModelProvider の Platform Composition', () => {
       /isRunningInExpoGo\(\)\s*\?\s*'expo-go'\s*:\s*'native-build'/
     );
     expect(native).not.toContain("'development-build'");
+  });
+
+  it('Issue 18: Web / Expo Go は管理を無効化し、Development Build だけが private lifecycle を組み立てる', async () => {
+    const fallback = await source('default-local-model-management.ts');
+    const native = await source('default-local-model-management.native.ts');
+
+    expect(fallback).toContain('createDefaultLocalModelManagement');
+    expect(native).toContain('isRunningInExpoGo()');
+    expect(native).toContain('createExpoModelFileStore()');
+    expect(native).toContain('createLlamaModelInspector()');
+    expect(native).toContain('createDeviceResourceTelemetry()');
+    expect(native).toContain('createLocalModelLifecycle({');
+    expect(native).toContain(
+      'createLocalModelLifecycleStorageAdapter(lifecycle, fileStore)'
+    );
+    expect(native).not.toContain("from 'llama.rn'");
+  });
+
+  it('Issue 18: Picker は Owner 確定前に cache copy せず、Telemetry は端末識別 API を参照しない', async () => {
+    const fileStore = await source(
+      '../local-agent/expo-model-file-store.native.ts'
+    );
+    const apple = await source(
+      '../../modules/device-resource-telemetry/ios/TenkaDeviceResourceTelemetryModule.swift'
+    );
+    const android = await source(
+      '../../modules/device-resource-telemetry/android/src/main/java/cloud/tenka/passport/deviceresourcetelemetry/TenkaDeviceResourceTelemetryModule.kt'
+    );
+
+    expect(fileStore).toContain('copyToCacheDirectory: false');
+    expect(fileStore).toContain('Paths.document');
+    expect(fileStore).toContain('atomicWriteManifest');
+    expect(fileStore).toContain('exactManagedFile(privateUri');
+    expect(fileStore).toContain(
+      "throw new Error('Managed model file is outside app-private storage.')"
+    );
+    expect(fileStore).toContain('matchingDeletionFiles(stagedUri, privateUri)');
+    for (const sourceText of [apple, android]) {
+      expect(sourceText).not.toMatch(
+        /identifierForVendor|ANDROID_ID|Build\.SERIAL|AdvertisingId|deviceName/
+      );
+    }
+  });
+
+  it('Issue 18: Local Telemetry module は Apple Pod と Android Library の両方を autolink できる構成を持つ', async () => {
+    const config = await source(
+      '../../modules/device-resource-telemetry/expo-module.config.json'
+    );
+    const gitignore = await source('../../.gitignore');
+    const podspec = await source(
+      '../../modules/device-resource-telemetry/ios/TenkaDeviceResourceTelemetry.podspec'
+    );
+    const gradle = await source(
+      '../../modules/device-resource-telemetry/android/build.gradle'
+    );
+    const manifest = await source(
+      '../../modules/device-resource-telemetry/android/src/main/AndroidManifest.xml'
+    );
+
+    expect(config).toContain('TenkaDeviceResourceTelemetryModule');
+    expect(gitignore).toContain('/ios/');
+    expect(gitignore).toContain('/android/');
+    expect(gitignore).not.toMatch(/^ios\/$/m);
+    expect(gitignore).not.toMatch(/^android\/$/m);
+    expect(podspec).toContain("spec.dependency 'ExpoModulesCore'");
+    expect(podspec).toContain(
+      "spec.source_files = '**/*.{h,m,mm,swift,hpp,cpp}'"
+    );
+    expect(gradle).toContain("id 'expo-module-gradle-plugin'");
+    expect(gradle).toContain(
+      "namespace 'cloud.tenka.passport.deviceresourcetelemetry'"
+    );
+    expect(manifest).toContain('<manifest');
   });
 
   it('Expo Config は New Architecture と再現可能な llama Plugin Option を固定する', async () => {

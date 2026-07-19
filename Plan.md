@@ -3299,7 +3299,118 @@ Issue 16 の単一 Provider Contract を `llama.rn` 0.12 系へ接続し、Web /
 - 2026-07-19: 再レビューで Release quarantine が別 Runner / App remount 相当から迂回できること、同じ Promise へ
   二重 Tap の Handler が複数登録され Owner Question の 45 秒期限を延長できること、Provider 確定と Lounge 満了の
   競合で満了済み結果を一時適用できることを再現した。Process-global 単一 Context lease、App 結果適用 Gate、
-  確定時 Clock の満了先行評価と、旧実装を失敗させる回帰 Test へ修正する。
+  確定時 Clock の満了先行評価と、旧実装を失敗させる回帰 Test へ修正した。
+
+---
+
+### [Issue 18 GGUF Import・整合性確認・Resource Guard・Benchmark を実装する] - 2026-07-18
+
+#### 目的
+
+Owner が Files から選んだ GGUF を、Size 確認後だけ private directory へ transactional に取り込み、SHA-256、
+互換 Metadata、Device Memory Risk を Context 初期化前に確認する。内容非保持 Benchmark と明示 Unload / Delete
+までを同じ Model lifecycle として完成させる。
+
+#### 制約
+
+- Model を自動 Download または同梱せず、Document Picker の選択だけで cache copy を開始しない。
+- SHA-256 は byte 同一性にだけ使い、Model の安全性、品質、出所を証明する表示に使わない。
+- GGUF 全体を JavaScript memory へ展開せず、chunked hash と native copy を使う。
+- Blocked は Context 初期化 0 回、Caution は Owner のその場の明示確認後だけ activate する。
+- Benchmark は Passport、Prompt、Answer、Bridge、Model Output、Error 本文、File URI、端末 ID を持たない。
+- 4B / 8B の 2 Model と物理 iPhone / Android arm64 の 4 組合せは実機だけで完了判定する。
+
+#### 設計判断
+
+1. Candidate selection、private copy、copied size、chunked SHA-256、`loadLlamaModelInfo`、Risk、atomic Manifest の
+   順に進める。失敗時は cache を破棄し、永続 Manifest を正本とする reconcile で incoming / final File を整合させる。
+2. Model Size の 20% reserve と 2,048 token Context reserve を effective device memory と比較し、45% 以下を
+   supported、60% 以下を caution、それ以外または Metadata / Memory 不明を blocked とする。
+3. Manifest と Benchmark を versioned strict schema にし、Raw GGUF Metadata と推論内容を保存しない。
+4. Process RSS、Thermal、Battery の必要最小値だけを local Expo module から取得し、識別子 API を設けない。
+5. Unload / Delete は Runner の Abort に加えて Native teardown 完了を待つ。Delete は File を staged rename し、
+   Manifest から record を外した後に最終削除する。失敗時は restore または次回 load の reconcile で整合させる。
+
+詳細は [GGUF Import・Resource Guard・Benchmark の設計](./docs/design/gguf-model-lifecycle.md) と
+[ADR-0014](./docs/adr/0014-private-gguf-lifecycle-and-resource-guard.md) を正本とする。
+
+#### タスク
+
+1. 設計書、ADR、Data / Privacy / Threat / Native Build 文書、本 Plan を先に更新する。
+2. Model Manifest、Metadata projection、Risk、incremental SHA-256 を日本語 BDD Test 先行で実装する。
+3. Expo Document Picker / FileSystem と `llama.rn` inspector、local device telemetry module を実装する。
+4. Model Management UI と active Provider composition を配線し、Caution confirmation、Unload / Delete を実装する。
+5. 内容非保持 Benchmark を Import と Provider lifecycle へ接続する。
+6. 全品質ゲートとレビューを通し、物理端末 Matrix を記録する。
+
+#### 検証手順
+
+- Cancel、空き容量不足、読取権限失効、同名 / 同 digest、Copy 中断、Size 不一致、破損 / 不互換 GGUF を
+  それぞれ型付き Error にする。
+- supported / caution / blocked の境界と、blocked の Context 初期化 0 回、caution 未確認 0 回を Test する。
+- SHA-256 known vectors と大きな File の chunk 境界を検証し、全 File を一括読込しない。
+- Benchmark strict schema が推論内容と端末識別子を拒否することを検証する。
+- Unload / Delete が Native teardown 後にだけ active selection / File / record を消すことを検証する。
+- staged harness、`make before-commit`、code review、security review、simplify を指定順序で通す。
+
+#### 進捗ログ
+
+- 2026-07-18: Picker の既定 cache copy、File 全体の `arrayBuffer()` hash、Model 名 allowlist を比較し、
+  Size 確認後の private transaction、chunked SHA-256、Native Metadata と Device Memory による Risk を採用した。
+  設計書、ADR-0014、Data / Privacy / Threat / Native Build 文書、本 Plan を実装前に更新した。
+- 2026-07-18: strict Manifest、incremental SHA-256、private File transaction、GGUF Metadata projection、Resource Risk、
+  content-free Benchmark、managed Provider composition、Settings UI を実装した。Import の実行中 Cancel、二重操作 guard、
+  Telemetry 失敗時の fail-closed、staged Delete / restore / crash reconcile を日本語 BDD Test で固定した。
+- 2026-07-18: 独立 Review の指摘を受け、inactive Model の activate 直前 SHA-256 再検証、atomic Manifest の commit 後失敗を
+  含む曖昧な結果からの reconcile、incoming cleanup 失敗時の cache 無効化、read handle close 失敗の型付き正規化を追加した。
+  Hook は Import 失敗直後にも元 Error を維持して best-effort reconcile を実行する。blocked の再評価導線、最新 Risk の
+  refresh、内容非保持 Report 全項目の Settings 表示も実行テストで固定した。
+- 2026-07-18: local Expo Telemetry module に iOS Podspec と Android Gradle Library / Manifest を追加し、Apple / Android
+  autolinking の両方で `TenkaDeviceResourceTelemetryModule` が解決されることを確認した。Swift の Mach RSS 部分は
+  `swiftc -typecheck` を通したが、この環境には Full Xcode、CocoaPods、Android SDK、物理端末が無いため Native Build と
+  4B / 8B Compatibility Matrix は未完了である。
+- 2026-07-19: 最新 Issue 17 / Diagnostics との統合で、process-wide Context lease、結果適用 Gate、内容非保持
+  Benchmark、Native teardown 待機を単一 Provider 経路へ統合した。Diagnostics が実 GGUF を 0 件扱いする
+  `NoLocalModelStorageAdapter` の false-pass を解消し、Manifest 全 Model の実件数・合計 Size・全件 staged delete を
+  Local Data transaction へ接続する。
+- 2026-07-19: 統合後の Simplify Review で、Unload / Delete が Manifest mutation lane を保持したまま Native teardown を
+  待ち、Provider が teardown 後の Benchmark Report 保存で同じ lane を待つ循環待ちと、Model 管理操作が Encounter key
+  自体を破棄して同じ Active Lounge の次回開始を恒久 no-op にする false-pass を検出した。Native `release()` を teardown
+  確定点にし、Benchmark 保存を結果を待たせない後処理へ分離する。Model 管理では遅延結果の適用権限と Runner Ledger だけを
+  破棄し、Lounge 終端まで Encounter key を保持する結合回帰 Test を追加する。
+- 2026-07-19: Code / Security / Simplify Review の Blocker・High・Medium を修正した。Runner は UI Key 破棄後も全 Native
+  teardown を drain し、同じ Key の旧・新 teardown record を分離し、quarantine を後続へ即時伝播する。結果適用 Gate は
+  世代 Token で旧 Handler の再適用を拒否する。Benchmark Report 保存は Native release 後の best-effort 後処理へ分離した。
+  Diagnostics recovery は壊れた Manifest や記録 File 欠落を読まず exact managed filename を purge して残存 0 を確認する。
+  GGUF Copy は申告 Size と 64 MiB reserve を chunk ごとに強制し、Abort と partial cleanup を接続した。Settings は Owner
+  確定前に候補 Size と Copy 前空き容量を JA / EN で表示する。これらを 142 focused Test と型検査で検証したが、物理端末
+  Matrix は引き続き `Not run` である。
+- 2026-07-19: 修正後 Review で、chunk copy が同期 loop のため実 UI の Cancel Event を処理できないこと、Native drain 後から
+  Manifest / staged File mutation 完了まで旧 Provider を再開できる競合、壊れた・欠落 Manifest の初回 Preview 失敗で
+  tombstone 前の purge 導線へ到達できないことを検出した。Copy は chunk 間で macrotask へ制御を返し、Model mutation lane は
+  最終 refresh まで開始禁止を同期保持する。Diagnostics は exact managed payload の件数と容量を Manifest 非依存で Preview し、
+  marker 未作成の状態から Owner 確認付き削除へ進める回帰 Test を追加する。
+- 2026-07-19: 再レビューで Import だけが process-wide mutation lease を迂回すること、起動時の tombstone 回復失敗後に
+  通常 UI と Model 管理を fail-open すること、Caution 表示後に始まった Provider を二度目の確認なしで終了すること、
+  GGUF payload 0 件の壊れた Manifest に削除導線がないことを検出した。Import は Provider 終了確認、全 teardown、
+  process lease、Copy / Hash / Rename / Manifest / 最終 refresh を単一区間にする。Recovery lock は Context と全 Model mutation
+  の双方を拒否し、起動失敗は Diagnostic Recovery 専用状態に留める。exact Manifest / temp のみの残存も Model 件数を
+  偽らず削除対象として Preview する回帰 Test を追加する。
+- 2026-07-19: 統合最終レビューで、journal の一時読取失敗後の `not-pending` 再試行を全削除完了として扱い、既存 Profile を
+  復元せず空 state から上書きできる経路を検出した。再試行結果を区別し、`not-pending` は実 Storage から Profile load を
+  再開する。初回 Model load も単一 operation lane に入れて Settings reload と Lounge 開始を完了まで閉じ、Provider 確認待ち
+  Import は候補の変更・取消で失効させる。strict load が空で成功する temp Manifest だけの残存も削除 Preview に残す。
+- 2026-07-19: 再レビューで、timeout / fallback Outcome が Native teardown より先に返る既存契約に対し、
+  `providerRunPending` を早く解除して Settings reload と候補選択が残存 Context lease に競合する経路を検出した。Ledger を
+  破棄しない teardown wait を Runner に追加し、drain 完了まで Provider pending と Model Storage 操作禁止を維持する。
+- 2026-07-19: その修正レビューで、Outcome handler 自体を teardown wait の後ろへ置くと Abort を無視する Native Provider で
+  Rules fallback と Pilot Outcome を永久に適用できない退行を検出した。Outcome は直ちに適用し、teardown は独立 guard として
+  pending 解除だけを所有する二相状態へ分離する。Model mutation が割り込む場合だけ drain 後に確定 Ledger を破棄する。
+- 2026-07-19: PR CI の全 Repository harness で、App Composition の `LocalModelManagementPort` を
+  `src/local-agent/` に置いたため `AgentModelProvider` への直接依存が Local Agent Safety Boundary 違反になることを検出した。
+  Port は Provider を所有・注入する App 層へ移し、Local Agent 層は Completion Port と Safety Boundary 実装だけを保持する。
+  Invariant は緩和せず、全 Repository と staged の両 harness で回帰を確認する。
+
 ---
 
 ### [Issue 23 Versioned Peer Envelope・Capability・順序制御] - 2026-07-18

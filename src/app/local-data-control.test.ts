@@ -43,6 +43,7 @@ class FileBackedLocalModelStorage implements LocalModelStoragePort {
       architecture: 'llama',
       sizeBytes: statSync(this.filePath).size,
       digest: createHash('sha256').update(bytes).digest('hex'),
+      count: 1,
     });
   }
 
@@ -59,6 +60,50 @@ class UnavailableLocalModelStorage implements LocalModelStoragePort {
 
   remove(): Promise<void> {
     return Promise.reject(new Error('model storage unavailable'));
+  }
+}
+
+class CorruptManifestPurgeableModelStorage implements LocalModelStoragePort {
+  private purged = false;
+
+  inspect(): Promise<LocalModelInstallation | null> {
+    return Promise.resolve(
+      this.purged
+        ? null
+        : {
+            architecture: 'unknown',
+            sizeBytes: 4_096,
+            digest: 'a'.repeat(64),
+            count: 1,
+          }
+    );
+  }
+
+  remove(): Promise<void> {
+    this.purged = true;
+    return Promise.resolve();
+  }
+}
+
+class ManifestOnlyPurgeableModelStorage implements LocalModelStoragePort {
+  private purged = false;
+
+  inspect(): Promise<LocalModelInstallation | null> {
+    return Promise.resolve(
+      this.purged
+        ? null
+        : {
+            architecture: 'unknown',
+            sizeBytes: 0,
+            digest: '0'.repeat(64),
+            count: 0,
+          }
+    );
+  }
+
+  remove(): Promise<void> {
+    this.purged = true;
+    return Promise.resolve();
   }
 }
 
@@ -210,7 +255,7 @@ function control(storage: FileBackedWebStorage) {
   return createLocalDataControl({
     profileStorage: new WebLocalProfileStorageAdapter(storage),
     modelStorage: new NoLocalModelStorageAdapter(),
-    modelContexts: new LocalModelContextLeaseRegistry(),
+    modelContexts: new LocalModelContextLeaseRegistry(false),
     deletionJournal: new WebDeletionJournalAdapter(storage),
   });
 }
@@ -299,6 +344,48 @@ describe('Local Data の Preview と個別削除', () => {
     await localData.removeModel();
   });
 
+  it('fresh process の Recovery Lock は Context・Profile write・全 Model mutation を閉じる', async () => {
+    const storage = new FileBackedWebStorage(temporaryDirectories.create());
+    const contexts = new LocalModelContextLeaseRegistry();
+    const journal = new WebDeletionJournalAdapter(storage);
+    const profileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
+      new WebLocalProfileStorageAdapter(storage),
+      contexts,
+      journal
+    );
+    const localData = createLocalDataControl({
+      profileStorage,
+      modelStorage: new NoLocalModelStorageAdapter(),
+      modelContexts: contexts,
+      deletionJournal: journal,
+    });
+
+    expect(() => contexts.acquire()).toThrow(LocalDataAccessBlockedError);
+    expect(() => contexts.acquireMutation()).toThrow(
+      LocalDataAccessBlockedError
+    );
+    await expect(profileStorage.save(profile())).rejects.toBeInstanceOf(
+      LocalDataAccessBlockedError
+    );
+    await expectControlError(
+      () => localData.removeModel(),
+      'STORAGE_FAILURE',
+      false
+    );
+    await expectControlError(
+      () => localData.deleteAll(),
+      'STORAGE_FAILURE',
+      false
+    );
+
+    expect(await localData.recoverPendingDeletion()).toBe('not-pending');
+    const context = contexts.acquire();
+    context.release();
+    const mutation = contexts.acquireMutation();
+    mutation.release();
+    await profileStorage.save(profile());
+  });
+
   it('Model Context Lease は Registry 全体で 1 本に限定し、別 Runner 相当の再取得を拒否する', () => {
     const contexts = new LocalModelContextLeaseRegistry(false);
     const lease = contexts.acquire();
@@ -321,7 +408,7 @@ describe('Local Data の Preview と個別削除', () => {
         new FileBackedWebStorage(root)
       ),
       modelStorage,
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(
         new FileBackedWebStorage(root)
       ),
@@ -354,7 +441,7 @@ describe('Local Data の Preview と個別削除', () => {
     const profileFailure = createLocalDataControl({
       profileStorage: failingProfile,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(stable),
     });
     await expectControlError(
@@ -366,7 +453,7 @@ describe('Local Data の Preview と個別削除', () => {
     const modelFailure = createLocalDataControl({
       profileStorage: new WebLocalProfileStorageAdapter(stable),
       modelStorage: new UnavailableLocalModelStorage(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(stable),
     });
     await expectControlError(
@@ -388,7 +475,7 @@ describe('Local Data の Preview と個別削除', () => {
     const journalFailure = createLocalDataControl({
       profileStorage: new WebLocalProfileStorageAdapter(stable),
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(null),
     });
     await expectControlError(
@@ -424,7 +511,7 @@ describe('write-ahead tombstone による全削除', () => {
     const interrupted = createLocalDataControl({
       profileStorage: failingProfileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: journal,
     });
 
@@ -451,6 +538,70 @@ describe('write-ahead tombstone による全削除', () => {
     expect(await journal.isPending()).toBeFalse();
   });
 
+  it('tombstone 回復は壊れた Model Manifest を Preview せず purge して marker を消す', async () => {
+    const storage = new FileBackedWebStorage(temporaryDirectories.create());
+    const journal = new WebDeletionJournalAdapter(storage);
+    await journal.markPending();
+    const localData = createLocalDataControl({
+      profileStorage: new WebLocalProfileStorageAdapter(storage),
+      modelStorage: new CorruptManifestPurgeableModelStorage(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
+      deletionJournal: journal,
+    });
+
+    expect(await localData.recoverPendingDeletion()).toBe('recovered');
+    expect(await journal.isPending()).toBeFalse();
+    expect(await localData.preview()).toMatchObject({
+      modelCount: 0,
+      totalBytes: 0,
+    });
+  });
+
+  it('marker 前の壊れた Manifest も exact managed Preview から全削除を commit できる', async () => {
+    const storage = new FileBackedWebStorage(temporaryDirectories.create());
+    const journal = new WebDeletionJournalAdapter(storage);
+    const modelStorage = new CorruptManifestPurgeableModelStorage();
+    const localData = createLocalDataControl({
+      profileStorage: new WebLocalProfileStorageAdapter(storage),
+      modelStorage,
+      modelContexts: new LocalModelContextLeaseRegistry(false),
+      deletionJournal: journal,
+    });
+
+    expect(await journal.isPending()).toBeFalse();
+    expect(await localData.preview()).toMatchObject({
+      modelCount: 1,
+      totalBytes: 4_096,
+    });
+    expect((await localData.deleteAll()).modelCount).toBe(1);
+    expect(await journal.isPending()).toBeFalse();
+    expect(await localData.preview()).toMatchObject({
+      modelCount: 0,
+      totalBytes: 0,
+    });
+  });
+
+  it('GGUF 0 件で壊れた Manifest だけが残る場合も件数を偽らず全削除できる', async () => {
+    const storage = new FileBackedWebStorage(temporaryDirectories.create());
+    const journal = new WebDeletionJournalAdapter(storage);
+    const localData = createLocalDataControl({
+      profileStorage: new WebLocalProfileStorageAdapter(storage),
+      modelStorage: new ManifestOnlyPurgeableModelStorage(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
+      deletionJournal: journal,
+    });
+
+    const preview = await localData.preview();
+    expect(preview).toMatchObject({
+      modelCount: 0,
+      totalBytes: 0,
+    });
+    expect(preview.model).not.toBeNull();
+    expect((await localData.deleteAll()).modelCount).toBe(0);
+    expect(await journal.isPending()).toBeFalse();
+    expect((await localData.preview()).model).toBeNull();
+  });
+
   it('tombstone の書込失敗は committed 前として既存 Profile を保持する', async () => {
     const root = temporaryDirectories.create();
     const storage = new FileBackedWebStorage(root);
@@ -462,7 +613,7 @@ describe('write-ahead tombstone による全削除', () => {
     const localData = createLocalDataControl({
       profileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: failingJournal,
     });
 
@@ -483,7 +634,7 @@ describe('write-ahead tombstone による全削除', () => {
     const localData = createLocalDataControl({
       profileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new MarkerWrittenThenThrowingJournal(journal),
     });
 
@@ -501,7 +652,7 @@ describe('write-ahead tombstone による全削除', () => {
     const localData = createLocalDataControl({
       profileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new UnconfirmedMarkerJournal(journal, false),
     });
 
@@ -525,7 +676,7 @@ describe('write-ahead tombstone による全削除', () => {
     const localData = createLocalDataControl({
       profileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new UnconfirmedMarkerJournal(journal, true),
     });
 
@@ -602,7 +753,7 @@ describe('write-ahead tombstone による全削除', () => {
   it('commit 後の中断中は Profile write を閉じ、同じ Control の回復完了後だけ再開する', async () => {
     const root = temporaryDirectories.create();
     const storage = new FileBackedWebStorage(root);
-    const contexts = new LocalModelContextLeaseRegistry();
+    const contexts = new LocalModelContextLeaseRegistry(false);
     const journal = new WebDeletionJournalAdapter(storage);
     const profileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
       new WebLocalProfileStorageAdapter(storage),
@@ -656,7 +807,7 @@ describe('write-ahead tombstone による全削除', () => {
     const localData = createLocalDataControl({
       profileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(
         new DeleteFailingWebStorage(
           root,
@@ -683,7 +834,7 @@ describe('write-ahead tombstone による全削除', () => {
     const localData = createLocalDataControl({
       profileStorage: new DeleteRetainingProfileStorage(profileStorage),
       modelStorage: new NoLocalModelStorageAdapter(),
-      modelContexts: new LocalModelContextLeaseRegistry(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(storage),
     });
 

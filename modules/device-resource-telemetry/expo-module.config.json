@@ -1,0 +1,11 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["TenkaDeviceResourceTelemetryModule"]
+  },
+  "android": {
+    "modules": [
+      "cloud.tenka.passport.deviceresourcetelemetry.TenkaDeviceResourceTelemetryModule"
+    ]
+  }
+}

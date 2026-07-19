@@ -214,21 +214,88 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerStatus={providerRuntimeState.status}');
   });
 
+  it('Issue 18: 進行中の判定を伴う Model 操作は Native Context の解放完了を待つ', async () => {
+    const text = await source();
+    const teardownBody = functionBody(text, 'waitForActiveProviderTeardown');
+    const trackingBody = functionBody(text, 'trackProviderTeardown');
+
+    expect(teardownBody).toContain('providerRunner');
+    expect(teardownBody).toContain('.cancelAllAndWait()');
+    expect(teardownBody).not.toContain('activeEncounterKeyRef.current = null');
+    expect(teardownBody).toContain('providerResultApplicationGate.clear()');
+    expect(teardownBody).toContain('trackProviderTeardown');
+    expect(teardownBody).toContain('existing.then(cancelAfterDrain)');
+    expect(trackingBody).toContain('providerTeardownPendingRef.current');
+    expect(trackingBody).toContain('setProviderRunPending(true)');
+    expect(trackingBody).toContain('setProviderRunPending(false)');
+    expect(text).toContain(
+      'waitForNativeTeardown: waitForActiveProviderTeardown'
+    );
+    expect(text).toContain('hasActiveProviderRun: providerRunPending');
+    expect(text).toContain('ready: !restoring');
+  });
+
   it('開始操作は共通 Provider Runner を通し、検証済み Decision だけを Lounge へ適用する', async () => {
     const text = await source();
     const body = functionBody(text, 'startPetInteraction');
 
     expect(body).toContain('providerRunner');
-    expect(body).toContain('provider: agentModelProvider');
+    expect(body).toContain('provider: localModels.provider');
     expect(body).toContain('applyAgentModelDecision');
     expect(body).toContain('activeEncounterKeyRef.current !== encounterKey');
+    expect(body).toContain('providerTeardownPendingRef.current');
+    expect(body).toContain('localModels.isMutationPending()');
+    expectInOrder(body, [
+      '.run({',
+      'waitForSettledProviderTeardown()',
+      'applyAgentModelDecisionBeforeLoungeExpiry',
+    ]);
+    expect(body).not.toContain(
+      '.finally(() => providerRunner.waitForNativeTeardowns())'
+    );
+    expect(body).not.toContain('setProviderRunPending(false)');
     expect(body).toContain('providerResultApplicationGate.begin(encounterKey)');
     expect(body).toContain(
-      'providerResultApplicationGate.settle(encounterKey)'
+      'providerResultApplicationGate.settle(applicationToken)'
     );
     expect(body).toContain('applyAgentModelDecisionBeforeLoungeExpiry');
     expect(body).toContain('outcomeClock');
     expect(text).toContain('providerBusy={providerRunPending}');
+  });
+
+  it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {
+    const text = await source();
+    const recoveryStart = text.indexOf('recoverLocalStateAtStartup(');
+    const recoveryEnd = text.indexOf('/**\n   * Issue 11:', recoveryStart);
+    const recovery = text.slice(recoveryStart, recoveryEnd);
+    const recoveryFailureStart = recovery.indexOf(
+      "result.kind === 'recovery-failed'"
+    );
+    const recoveryFailure = recovery.slice(recoveryFailureStart);
+
+    expect(text).toContain('ready: !restoring');
+    expectInOrder(recoveryFailure, [
+      "result.kind === 'recovery-failed'",
+      'diagnosticsFlow.enterRecovery(result.error)',
+    ]);
+    expect(recoveryFailure).toContain(
+      'diagnosticsFlow.enterRecovery(result.error);\n          return;'
+    );
+    expect(recovery).toContain('applyStartupRecoveryResultRef.current(result)');
+    expect(text).toContain("result.kind === 'profile-load-failed'");
+    expect(text).toContain("result.recovery === 'recovered'");
+    expect(recovery).toContain(
+      'recoverLocalStateAtStartup(localDataControl, localProfileStorage)'
+    );
+    expectInOrder(text.slice(text.indexOf('const retryStartupRecovery')), [
+      'recoverLocalStateAtStartup(',
+      "result.kind === 'recovery-failed'",
+      'applyStartupRecoveryResultRef.current(result)',
+    ]);
+    expect(text).toContain('localModels.invalidateAfterExternalPurge()');
+    expect(text).toContain(
+      'onModelRemoved: localModels.invalidateAfterExternalPurge'
+    );
   });
 
   it('Invite フローからの離脱経路（再開・Profile 編集）は discardInviteFlow を直接呼ぶ', async () => {
@@ -456,6 +523,9 @@ describe('PassportApp の Stage 遷移契約', () => {
       expect(functionBody(text, 'cancelActiveProvider')).toContain(
         'providerRunner.forget(encounterKey)'
       );
+      expect(functionBody(text, 'cancelActiveProvider')).toContain(
+        'providerRunner.waitForNativeTeardowns()'
+      );
     });
 
     it('非同期 Provider の確定時刻を Pilot Outcome に使い、開始時刻から推論時間を落とさない', async () => {
@@ -515,6 +585,14 @@ describe('PassportApp の Stage 遷移契約', () => {
         '<SettingsScreen',
         "if (lounge?.status === 'active' && interaction?.phase === 'clarifying') {",
       ]);
+    });
+
+    it('実行中 Provider の Context を Settings 自動 reload として再評価しない', async () => {
+      const text = await source();
+
+      expect(text).toContain(
+        "if (stage === 'settings' && !providerRunPending)"
+      );
     });
 
     it('Issue 28: Settings へ実行時の配布能力をそのまま渡す', async () => {

@@ -86,40 +86,51 @@ export interface AgentProviderSessionRunner {
   readonly run: (
     request: AgentProviderSessionRequest
   ) => Promise<AgentProviderSessionResult>;
-  /** 実行中 Encounter だけを取り消す。確定済み・未知 Key は false の no-op。 */
-  readonly cancel: (encounterKey: string) => boolean;
+  /** Outcome 確定済み Ledger を維持したまま Process 内の Native teardown だけを待つ。 */
+  readonly waitForNativeTeardowns: () => Promise<void>;
+  /** Key が既に UI から破棄されていても、Process 内に残る全 Native teardown を待つ。 */
+  readonly cancelAllAndWait: () => Promise<boolean>;
   /** 実行中処理を取り消し、確定済み Outcome と遅延完了の再登録権限を破棄する。 */
   readonly forget: (encounterKey: string) => void;
 }
 
+export interface ProviderResultApplicationToken {
+  readonly encounterKey: string;
+  readonly generation: number;
+}
+
 export interface ProviderResultApplicationGate {
   /** Provider 呼出し前に同期取得し、同じ render 内の二重開始を拒否する。 */
-  readonly begin: (encounterKey: string) => boolean;
-  readonly isPending: (encounterKey: string) => boolean;
+  readonly begin: (
+    encounterKey: string
+  ) => ProviderResultApplicationToken | null;
+  readonly isPending: (token: ProviderResultApplicationToken) => boolean;
   /** 最初の Settlement だけが true を得て、結果適用権限を原子的に消費する。 */
-  readonly settle: (encounterKey: string) => boolean;
+  readonly settle: (token: ProviderResultApplicationToken) => boolean;
   readonly clear: () => void;
 }
 
 /** Runner の Promise 去重とは別に、App 側の開始要求と結果 Handler を 1 回へ限定する Gate。 */
 export function createProviderResultApplicationGate(): ProviderResultApplicationGate {
-  let pendingEncounterKey: string | null = null;
+  let generation = 0;
+  let pending: ProviderResultApplicationToken | null = null;
   return {
     begin(encounterKey) {
-      if (pendingEncounterKey !== null) return false;
-      pendingEncounterKey = encounterKey;
-      return true;
+      if (pending !== null) return null;
+      generation += 1;
+      pending = { encounterKey, generation };
+      return pending;
     },
-    isPending(encounterKey) {
-      return pendingEncounterKey === encounterKey;
+    isPending(token) {
+      return pending === token;
     },
-    settle(encounterKey) {
-      if (pendingEncounterKey !== encounterKey) return false;
-      pendingEncounterKey = null;
+    settle(token) {
+      if (pending !== token) return false;
+      pending = null;
       return true;
     },
     clear() {
-      pendingEncounterKey = null;
+      pending = null;
     },
   };
 }
@@ -230,36 +241,39 @@ async function attemptProviderBeforeDeadline(
 }
 
 async function acquireNativeLaneBeforeDeadline(
-  lane: Promise<void>,
+  lane: Promise<boolean>,
   input: AgentModelInput,
   cancellation: ProviderCancellation,
   nowWallClockMs: () => number
-): Promise<boolean> {
+): Promise<'acquired' | 'unavailable' | 'quarantined'> {
   const remainingMs = Math.max(
     0,
     input.deadlineAtWallClockMs - nowWallClockMs()
   );
   if (remainingMs === 0) {
     requestProviderCancellation(cancellation, 'timeout');
-    return false;
+    return 'unavailable';
   }
   const signal = cancellation.controller.signal;
-  if (signal.aborted) return false;
+  if (signal.aborted) return 'unavailable';
   let timer: ReturnType<typeof setTimeout> | undefined;
   let abortListener: (() => void) | undefined;
-  const unavailable = new Promise<boolean>((resolve) => {
-    abortListener = () => resolve(false);
+  const unavailable = new Promise<'unavailable'>((resolve) => {
+    abortListener = () => resolve('unavailable');
     signal.addEventListener('abort', abortListener, { once: true });
     timer = setTimeout(
       () => {
         requestProviderCancellation(cancellation, 'timeout');
-        resolve(false);
+        resolve('unavailable');
       },
       Math.min(remainingMs, MAX_TIMER_DELAY_MS)
     );
   });
   try {
-    return await Promise.race([lane.then(() => true), unavailable]);
+    return await Promise.race([
+      lane.then((reusable) => (reusable ? 'acquired' : 'quarantined')),
+      unavailable,
+    ]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     if (abortListener) signal.removeEventListener('abort', abortListener);
@@ -273,9 +287,17 @@ interface ExecutableAgentProviderSessionRequest
   readonly nowWallClockMs: () => number;
 }
 
+const QUARANTINED_ATTEMPT: ProviderAttemptResult = {
+  kind: 'failure',
+  providerKind: 'local-agent',
+  reason: 'load-error',
+  nativeLaneQuarantined: true,
+};
+
 /** Provider 1 回分を検証し、型付き失敗だけ Rules へ Fallback する内部実行境界。 */
 async function executeAgentProviderSession(
-  request: ExecutableAgentProviderSessionRequest
+  request: ExecutableAgentProviderSessionRequest,
+  forcedAttempt?: ProviderAttemptResult
 ): Promise<AgentProviderSessionResult> {
   let state = request.state;
   function apply(event: ProviderRuntimeEvent): void {
@@ -291,12 +313,14 @@ async function executeAgentProviderSession(
   }
 
   try {
-    const attempt = await attemptProviderBeforeDeadline(
-      request.provider,
-      request.input,
-      request.cancellation,
-      request.nowWallClockMs
-    );
+    const attempt =
+      forcedAttempt ??
+      (await attemptProviderBeforeDeadline(
+        request.provider,
+        request.input,
+        request.cancellation,
+        request.nowWallClockMs
+      ));
     if (attempt.kind === 'failure') {
       if (request.provider.kind === 'rules') {
         apply({ type: 'unexpected-failure' });
@@ -343,7 +367,9 @@ export function createAgentProviderSessionRunner(
     }
   >();
   const forgottenRuns = new WeakSet<Promise<AgentProviderSessionResult>>();
-  let nativeLaneTail: Promise<void> = Promise.resolve();
+  const nativeTeardowns = new Set<Promise<boolean>>();
+  let nativeLaneTail: Promise<boolean> = Promise.resolve(true);
+  let nativeLaneQuarantined = false;
 
   function run(
     request: AgentProviderSessionRequest
@@ -364,13 +390,21 @@ export function createAgentProviderSessionRunner(
       reason: undefined,
       teardown: Promise.resolve(true),
     };
-    let waitForNativeLane = Promise.resolve();
-    let releaseNativeLane: (() => void) | undefined;
+    let waitForNativeLane = Promise.resolve(true);
+    let finishNativeTeardown:
+      | ((nativeLaneReusable: boolean) => void)
+      | undefined;
     if (request.provider.kind === 'local-agent') {
       waitForNativeLane = nativeLaneTail;
-      nativeLaneTail = new Promise<void>((resolve) => {
-        releaseNativeLane = resolve;
+      const nativeTeardown = new Promise<boolean>((resolve) => {
+        finishNativeTeardown = (nativeLaneReusable) => {
+          if (!nativeLaneReusable) nativeLaneQuarantined = true;
+          resolve(nativeLaneReusable);
+          nativeTeardowns.delete(nativeTeardown);
+        };
       });
+      nativeTeardowns.add(nativeTeardown);
+      nativeLaneTail = nativeTeardown;
     }
     let pending: Promise<AgentProviderSessionResult>;
     const nativeLaneAcquisition =
@@ -383,15 +417,29 @@ export function createAgentProviderSessionRunner(
           )
         : Promise.resolve(true);
     pending = nativeLaneAcquisition
-      .then(async (acquiredNativeLane) => {
-        if (!acquiredNativeLane) {
-          void waitForNativeLane.then(() => releaseNativeLane?.());
+      .then(async (nativeLaneAvailability) => {
+        if (nativeLaneAvailability === 'unavailable') {
+          void waitForNativeLane.then((nativeLaneReusable) => {
+            finishNativeTeardown?.(nativeLaneReusable);
+          });
           return executeAgentProviderSession({
             ...request,
             ledger,
             cancellation,
             nowWallClockMs,
           });
+        }
+        if (nativeLaneAvailability === 'quarantined') {
+          finishNativeTeardown?.(false);
+          return executeAgentProviderSession(
+            {
+              ...request,
+              ledger,
+              cancellation,
+              nowWallClockMs,
+            },
+            QUARANTINED_ATTEMPT
+          );
         }
         try {
           return await executeAgentProviderSession({
@@ -402,7 +450,7 @@ export function createAgentProviderSessionRunner(
           });
         } finally {
           void cancellation.teardown.then((nativeLaneReusable) => {
-            if (nativeLaneReusable) releaseNativeLane?.();
+            finishNativeTeardown?.(nativeLaneReusable);
           });
         }
       })
@@ -422,10 +470,29 @@ export function createAgentProviderSessionRunner(
     return pending;
   }
 
-  function cancel(encounterKey: string): boolean {
-    const active = inFlight.get(encounterKey);
-    if (!active) return false;
-    return requestProviderCancellation(active.cancellation, 'cancelled');
+  async function waitForNativeTeardowns(): Promise<void> {
+    const nativeLaneReusable = (await Promise.all([...nativeTeardowns])).every(
+      Boolean
+    );
+    if (!nativeLaneReusable || nativeLaneQuarantined) {
+      throw quarantinedNativeLaneError();
+    }
+  }
+
+  async function cancelAllAndWait(): Promise<boolean> {
+    const hadPending = inFlight.size > 0 || nativeTeardowns.size > 0;
+    for (const active of inFlight.values()) {
+      forgottenRuns.add(active.promise);
+      requestProviderCancellation(active.cancellation, 'cancelled');
+    }
+    await waitForNativeTeardowns();
+    for (const [encounterKey, active] of inFlight) {
+      if (inFlight.get(encounterKey)?.promise === active.promise) {
+        inFlight.delete(encounterKey);
+      }
+    }
+    ledger = EMPTY_PROVIDER_RUN_LEDGER;
+    return hadPending;
   }
 
   function forget(encounterKey: string): void {
@@ -442,7 +509,15 @@ export function createAgentProviderSessionRunner(
     }
   }
 
-  return { run, cancel, forget };
+  return { run, waitForNativeTeardowns, cancelAllAndWait, forget };
+}
+
+function quarantinedNativeLaneError(): AgentModelProviderError {
+  return new AgentModelProviderError(
+    'LOAD_ERROR',
+    'Local Model の Native Context 解放を確認できませんでした。',
+    { nativeLaneQuarantined: true }
+  );
 }
 
 /** Pilot Counter へ渡す排他的 Provider 区分を確定 Outcome だけから導く。 */
