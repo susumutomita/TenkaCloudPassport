@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import packageManifest from './package.json';
+import { createDefaultAgentModelProvider } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
 import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
@@ -19,6 +20,7 @@ const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
   localDeletionJournal
 );
 const backupSharePort = createDefaultBackupSharePort();
+const agentModelProvider = createDefaultAgentModelProvider(localDataLeases);
 const localDataControl = createLocalDataControl({
   profileStorage: localProfileStorage,
   modelStorage: new NoLocalModelStorageAdapter(),
@@ -32,6 +34,7 @@ export default function App() {
       <StatusBar style="dark" />
       <PassportApp
         appVersion={packageManifest.version}
+        agentModelProvider={agentModelProvider}
         backupSharePort={backupSharePort}
         localDataControl={localDataControl}
         localProfileStorage={localProfileStorage}

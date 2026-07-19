@@ -48,10 +48,12 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
       'const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(',
       'createDefaultLocalProfileStorage()',
       'const backupSharePort = createDefaultBackupSharePort()',
+      'const agentModelProvider = createDefaultAgentModelProvider(localDataLeases)',
       'const localDataControl = createLocalDataControl({',
       'profileStorage: localProfileStorage',
       'modelContexts: localDataLeases',
       'deletionJournal: localDeletionJournal',
+      'agentModelProvider={agentModelProvider}',
       'localDataControl={localDataControl}',
     ]);
     expect(text).toContain('appVersion={packageManifest.version}');

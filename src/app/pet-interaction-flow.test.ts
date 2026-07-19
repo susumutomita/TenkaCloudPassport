@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { AgentModelDecision } from '../domain/agent-model-provider';
 import type { ClockSnapshot } from '../domain/clock-guard';
 import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
@@ -9,6 +10,8 @@ import {
   receiveDiscoveryResult,
 } from '../domain/pet-interaction';
 import {
+  applyAgentModelDecision,
+  applyAgentModelDecisionBeforeLoungeExpiry,
   applyPetInteractionTick,
   beginPetInteraction,
   collapseToRetiredLounge,
@@ -38,6 +41,89 @@ function activeLounge(
 }
 
 describe('Pet Interaction を Active Lounge の実判定経路へ配線する App 層', () => {
+  describe('applyAgentModelDecision: Local / Rules の共通 Decision を既存 bounded protocol へ接続する', () => {
+    it('Provider 確定時に Lounge が満了していれば結果と Owner Question を作らず expired へ収束する', () => {
+      const active = activeLounge(['open-source'], ['open-source']);
+      const input = {
+        ownerPassport: active.ownerPassport,
+        encounteredPassport: active.encounteredPassport,
+        language: 'ja' as const,
+        deadlineAtWallClockMs: active.expiresAtWallClockMs,
+      };
+      const outcomeClock = {
+        wallClockMs: active.expiresAtWallClockMs,
+        monotonicMs:
+          active.startedAtMonotonicMs +
+          (active.expiresAtWallClockMs - CLOCK.wallClockMs),
+      };
+
+      const step = applyAgentModelDecisionBeforeLoungeExpiry(
+        active,
+        input,
+        { kind: 'no-signal' },
+        RULES_INTERACTION_PROVIDER,
+        CLOCK,
+        outcomeClock
+      );
+
+      expect(step).toEqual({
+        interaction: null,
+        lounge: { status: 'destroyed', reason: 'expired' },
+      });
+    });
+
+    it('具体化できる Bridge は Owner Question を追加せず retired へ収束する', () => {
+      const active = activeLounge(['open-source'], ['open-source']);
+      const decision: AgentModelDecision = {
+        kind: 'bridge',
+        reason: '信頼側で再構築済み',
+        opener: '信頼側で再構築済み',
+        evidenceIds: ['topic:open-source'],
+        confidence: 'possible',
+      };
+
+      const step = applyAgentModelDecisionBeforeLoungeExpiry(
+        active,
+        {
+          ownerPassport: active.ownerPassport,
+          encounteredPassport: active.encounteredPassport,
+          language: 'ja',
+          deadlineAtWallClockMs: CLOCK.wallClockMs + INTERACTION_DEADLINE_MS,
+        },
+        decision,
+        RULES_INTERACTION_PROVIDER,
+        CLOCK,
+        CLOCK
+      );
+
+      expect(step.interaction).toBeNull();
+      expect(step.lounge.status).toBe('retired');
+      if (step.lounge.status === 'retired') {
+        expect(step.lounge.outcome.kind).toBe('bridge');
+      }
+    });
+
+    it('no-signal は既存 Rules Discovery へ渡し、候補があれば Owner Question を保つ', () => {
+      const active = activeLounge(['open-source'], ['open-source']);
+
+      const step = applyAgentModelDecision(
+        active,
+        {
+          ownerPassport: active.ownerPassport,
+          encounteredPassport: active.encounteredPassport,
+          language: 'ja',
+          deadlineAtWallClockMs: CLOCK.wallClockMs + INTERACTION_DEADLINE_MS,
+        },
+        { kind: 'no-signal' },
+        RULES_INTERACTION_PROVIDER,
+        CLOCK
+      );
+
+      expect(step.lounge).toBe(active);
+      expect(step.interaction?.phase).toBe('clarifying');
+    });
+  });
+
   describe('beginPetInteraction: 開始操作 1 回で discovering → clarifying / no-signal(retired) まで進める', () => {
     it('共有手掛かりに候補があれば clarifying を保ったまま Lounge は active のまま', () => {
       const active = activeLounge(

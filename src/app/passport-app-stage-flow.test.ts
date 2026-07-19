@@ -120,9 +120,11 @@ describe('PassportApp の Stage 遷移契約', () => {
 
     for (const body of [hostBody, guestBody]) {
       expect(body).toContain("status === 'ready'");
-      expect(body).toContain('startLoungeFromRoom');
-      expect(body).toContain('setLoungeRoom(null)');
+      expect(body).toContain('activateReadyLounge');
     }
+    const activationBody = functionBody(text, 'activateReadyLounge');
+    expect(activationBody).toContain('startLoungeFromRoom');
+    expect(activationBody).toContain('setLoungeRoom(null)');
   });
 
   it('Guest は Handshake 認証後だけ Public Passport を Room へ渡す', async () => {
@@ -207,10 +209,26 @@ describe('PassportApp の Stage 遷移契約', () => {
   it('Model 未導入の既定 Provider Status を Active Lounge へ明示的に渡す', async () => {
     const text = await source();
 
-    expect(text).toContain(
-      'providerRuntimeState = INITIAL_PROVIDER_RUNTIME_STATE'
-    );
+    expect(text).toContain('agentModelProvider = RULES_MODEL_PROVIDER');
+    expect(text).toContain('useState<ProviderRuntimeState>');
     expect(text).toContain('providerStatus={providerRuntimeState.status}');
+  });
+
+  it('開始操作は共通 Provider Runner を通し、検証済み Decision だけを Lounge へ適用する', async () => {
+    const text = await source();
+    const body = functionBody(text, 'startPetInteraction');
+
+    expect(body).toContain('providerRunner');
+    expect(body).toContain('provider: agentModelProvider');
+    expect(body).toContain('applyAgentModelDecision');
+    expect(body).toContain('activeEncounterKeyRef.current !== encounterKey');
+    expect(body).toContain('providerResultApplicationGate.begin(encounterKey)');
+    expect(body).toContain(
+      'providerResultApplicationGate.settle(encounterKey)'
+    );
+    expect(body).toContain('applyAgentModelDecisionBeforeLoungeExpiry');
+    expect(body).toContain('outcomeClock');
+    expect(text).toContain('providerBusy={providerRunPending}');
   });
 
   it('Invite フローからの離脱経路（再開・Profile 編集）は discardInviteFlow を直接呼ぶ', async () => {
@@ -352,11 +370,11 @@ describe('PassportApp の Stage 遷移契約', () => {
   });
 
   describe('Issue 11: Owner Question の Consent Flow を Active Lounge の実判定経路へ配線する', () => {
-    it('「会話の糸を探す」操作は beginPetInteraction の結果で interaction と lounge の両方を更新する', async () => {
+    it('「会話の糸を探す」操作は Agent Model Decision で interaction と lounge の両方を更新する', async () => {
       const text = await source();
       const body = functionBody(text, 'startPetInteraction');
 
-      expect(body).toContain('beginPetInteraction(');
+      expect(body).toContain('applyAgentModelDecisionBeforeLoungeExpiry(');
       expect(body).toContain('RULES_INTERACTION_PROVIDER');
       expect(body).toContain('setInteraction(step.interaction)');
       expect(body).toContain('setLounge(step.lounge)');
@@ -417,12 +435,37 @@ describe('PassportApp の Stage 遷移契約', () => {
 
     it('新しい Active Lounge 開始（Ready 到達）は必ず interaction を初期化する', async () => {
       const text = await source();
+      const body = functionBody(text, 'activateReadyLounge');
 
-      for (const name of ['markHostReady', 'guestReady'] as const) {
-        const body = functionBody(text, name);
-        expect(body).toContain('setInteraction(null)');
-        expect(body).toContain('startLoungeFromRoom(');
+      expect(body).toContain('setInteraction(null)');
+      expect(body).toContain('startLoungeFromRoom(');
+      expect(body).toContain('activeEncounterKeyRef.current = room.loungeId');
+    });
+
+    it('Lounge Exit / Host 終了 / 再開 / Diagnostic 破棄は実行中 Native Provider を破棄する', async () => {
+      const text = await source();
+
+      for (const name of [
+        'leave',
+        'endAsHost',
+        'restartEncounter',
+        'forgetLoungeForDiagnostics',
+      ] as const) {
+        expect(functionBody(text, name)).toContain('cancelActiveProvider()');
       }
+      expect(functionBody(text, 'cancelActiveProvider')).toContain(
+        'providerRunner.forget(encounterKey)'
+      );
+    });
+
+    it('非同期 Provider の確定時刻を Pilot Outcome に使い、開始時刻から推論時間を落とさない', async () => {
+      const text = await source();
+      const body = functionBody(text, 'startPetInteraction');
+
+      expect(body).toContain('const outcomeClock = currentClock()');
+      expect(body).toContain('recordPilotOutcome(');
+      expect(body).toContain('outcomeClock');
+      expect(body).toContain('pilotProviderRunFromOutcome(result.outcome)');
     });
 
     it('Encounter の再開も Lounge 由来の一時データと同様に interaction を破棄する', async () => {

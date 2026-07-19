@@ -56,6 +56,11 @@ UI でも書込中の Settings / Diagnostic 遷移と削除中の Back を無効
 しない。tombstone が残る commit 後中断では排他 lease を保持し、同じ Process の回復または再起動時の
 回復が完了するまで Profile write と Model Context 取得を拒否する。fresh process の Model lease registry
 も recovery-locked で開始し、marker 不在または削除完了を確認した後だけ Context 取得を解放する。
+Development Build の `llama.rn` Completion Port も同じ registry を Composition Root から受け取り、
+`initLlama` 前から `context.release()` 成功まで lease を保持する。Release が reject した場合は Context 消滅を
+証明できないため lease を保持し、`MODEL_IN_USE` として削除を拒否したまま Process 再起動を Recovery とする。
+Registry は Process 内で Model Context lease を同時に 1 本だけ許し、別 Runner / App remount 相当の再取得も
+active lease が残る限り拒否する。
 
 2 以降で失敗した Error は `committed: true` を持ち、UI は内容を保持せず Diagnostic の Recovery 専用
 safe-state に留まる。Back、Share、他の削除操作を閉じ、明示した再試行だけが同じ Control の
@@ -75,6 +80,8 @@ Error Code ごとに表示する。`End and forget Lounge`、`Reset Passport`、
 Lounge 破棄、全削除で即時失効させ、遅延中の
 refresh は generation で破棄する。状態変更後は新しい runtime snapshot から明示 refresh した Report
 だけを Share できる。
+`End and forget Lounge` と全削除は実行中 Provider の Signal、active Encounter Key、Runner Ledger も
+同じ遷移で破棄し、遅延 Model Outcome が Lounge や Evidence を復活させない。
 現在の表示言語と OS の Reduce Motion は永続 Resource ではなく、Process を越えて復元しない。実 Model と
 永続 Settings を追加する後続変更は、同じ全削除 callback と Resource Port の両方へ接続しなければならない。
 再起動相当の test は同じ実 File / Web Storage を新しい Adapter で開き、Profile と tombstone の両方が

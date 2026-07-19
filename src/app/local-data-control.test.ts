@@ -299,6 +299,18 @@ describe('Local Data の Preview と個別削除', () => {
     await localData.removeModel();
   });
 
+  it('Model Context Lease は Registry 全体で 1 本に限定し、別 Runner 相当の再取得を拒否する', () => {
+    const contexts = new LocalModelContextLeaseRegistry(false);
+    const lease = contexts.acquire();
+
+    expect(() => contexts.acquire()).toThrow(LocalDataAccessBlockedError);
+
+    lease.release();
+    const nextLease = contexts.acquire();
+    expect(contexts.hasActiveContext()).toBeTrue();
+    nextLease.release();
+  });
+
   it('実ファイル Local Model の metadata を Preview し、Model だけを冪等削除する', async () => {
     const root = temporaryDirectories.create();
     const modelPath = path.join(root, 'local-model.gguf');

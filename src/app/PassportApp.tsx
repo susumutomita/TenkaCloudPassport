@@ -8,6 +8,11 @@ import {
   useState,
 } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
+import {
+  type AgentModelInput,
+  type AgentModelProvider,
+  RULES_MODEL_PROVIDER,
+} from '../domain/agent-model-provider';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
@@ -20,6 +25,7 @@ import {
   type LoungeRoomState,
   type LoungeRoomTerminationReason,
   markParticipantReady,
+  type ReadyLoungeRoom,
   ROOM_CAPACITY,
   startLoungeFromRoom,
 } from '../domain/lounge-room';
@@ -33,6 +39,7 @@ import {
   PUBLIC_PASSPORT_MAX_CLUES,
 } from '../domain/passport';
 import type { PetInteractionState } from '../domain/pet-interaction';
+import { INTERACTION_DEADLINE_MS } from '../domain/pet-interaction';
 import {
   createParticipantId,
   createSessionIdentifiers,
@@ -65,8 +72,11 @@ import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import {
+  createAgentProviderSessionRunner,
+  createProviderResultApplicationGate,
   INITIAL_PROVIDER_RUNTIME_STATE,
   type ProviderRuntimeState,
+  pilotProviderRunFromOutcome,
 } from './agent-provider-session';
 import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
@@ -94,11 +104,14 @@ import {
   toggleLanguageCode,
 } from './passport-share';
 import {
+  applyAgentModelDecisionBeforeLoungeExpiry,
   applyPetInteractionTick,
-  beginPetInteraction,
   submitOwnerQuestionAnswer,
 } from './pet-interaction-flow';
-import type { ConversationSelfReport } from './pilot-measurement';
+import type {
+  ConversationSelfReport,
+  PilotProviderRun,
+} from './pilot-measurement';
 import {
   type ProfileNotice,
   profileNoticeFromStorageError,
@@ -125,9 +138,9 @@ interface PassportAppProps {
   readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly backupSharePort: BackupSharePort;
+  /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
+  readonly agentModelProvider?: AgentModelProvider;
   readonly localDataControl: LocalDataControl;
-  /** Issue 17 の Native Adapter が接続するまで、未導入は正常な Rules 状態とする。 */
-  readonly providerRuntimeState?: ProviderRuntimeState;
 }
 
 type SetupStage =
@@ -512,8 +525,8 @@ export default function PassportApp({
   appVersion,
   localProfileStorage,
   backupSharePort,
+  agentModelProvider = RULES_MODEL_PROVIDER,
   localDataControl,
-  providerRuntimeState = INITIAL_PROVIDER_RUNTIME_STATE,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
   // 完走させる（docs/design/qr-invite-and-ready-flow.md）。5 状態すべての UI 分岐は
@@ -564,6 +577,14 @@ export default function PassportApp({
   const [interaction, setInteraction] = useState<PetInteractionState | null>(
     null
   );
+  const [providerRuntimeState, setProviderRuntimeState] =
+    useState<ProviderRuntimeState>(INITIAL_PROVIDER_RUNTIME_STATE);
+  const [providerRunPending, setProviderRunPending] = useState(false);
+  const [providerRunner] = useState(() => createAgentProviderSessionRunner());
+  const [providerResultApplicationGate] = useState(() =>
+    createProviderResultApplicationGate()
+  );
+  const activeEncounterKeyRef = useRef<string | null>(null);
   const [loungeRoom, setLoungeRoom] = useState<LoungeRoomState | null>(null);
   const [issuedHandshake, setIssuedHandshake] =
     useState<IssuedLoungeHandshake | null>(null);
@@ -591,6 +612,23 @@ export default function PassportApp({
     })
   );
   const [reduceMotion, setReduceMotion] = useState(false);
+  const cancelActiveProvider = useCallback((): void => {
+    const encounterKey = activeEncounterKeyRef.current;
+    activeEncounterKeyRef.current = null;
+    providerResultApplicationGate.clear();
+    setProviderRunPending(false);
+    if (encounterKey) providerRunner.forget(encounterKey);
+    setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
+  }, [providerResultApplicationGate, providerRunner]);
+
+  useEffect(() => {
+    return () => {
+      const encounterKey = activeEncounterKeyRef.current;
+      activeEncounterKeyRef.current = null;
+      providerResultApplicationGate.clear();
+      if (encounterKey) providerRunner.forget(encounterKey);
+    };
+  }, [providerResultApplicationGate, providerRunner]);
   const handleBackupImportCommitted = useCallback(
     (committed: LocalPrivateProfile): void => {
       setPrivateProfile(committed);
@@ -616,13 +654,15 @@ export default function PassportApp({
     onClose: () => setStage('settings'),
   });
   const recordPilotOutcome = useCallback(
-    (state: LoungeState, clock: ClockSnapshot): void => {
+    (
+      state: LoungeState,
+      clock: ClockSnapshot,
+      provider: PilotProviderRun = 'rules'
+    ): void => {
       if (state.status !== 'retired') return;
-      // 現在の Live Interaction は RULES_INTERACTION_PROVIDER だけを実行する。Native
-      // Provider 接続後は Runtime 表示状態から推測せず、確定した settledBy を渡す。
       pilotMeasurementFlow.outcome({
         kind: state.outcome.kind,
-        provider: 'rules',
+        provider,
         monotonicMs: clock.monotonicMs,
       });
     },
@@ -682,13 +722,14 @@ export default function PassportApp({
   }, [issuedHandshake, qrScannerPort]);
 
   const forgetLoungeForDiagnostics = useCallback((): void => {
+    cancelActiveProvider();
     discardInviteFlow();
     pilotMeasurementFlow.abandon();
     setShowConversationSelfReport(false);
     setInteraction(null);
     setLounge(null);
     setErrorMessage(null);
-  }, [discardInviteFlow, pilotMeasurementFlow.abandon]);
+  }, [cancelActiveProvider, discardInviteFlow, pilotMeasurementFlow.abandon]);
 
   const resetPassportInMemory = useCallback((): void => {
     setPetName('');
@@ -824,6 +865,7 @@ export default function PassportApp({
         const step = applyPetInteractionTick(interaction, current, clock);
         if (step.lounge.status !== 'active') {
           recordPilotOutcome(step.lounge, clock);
+          cancelActiveProvider();
           setInteraction(step.interaction);
           setLounge(step.lounge);
           return;
@@ -835,12 +877,18 @@ export default function PassportApp({
       // （`DestroyedLoungeScreen`）は `interaction` を参照しないため実害はないが、
       // 「Lounge が終われば Pet Interaction も終わる」契約を状態としても保つ。
       if (current.status === 'active' && advanced.status !== 'active') {
+        cancelActiveProvider();
         pilotMeasurementFlow.abandon();
         setInteraction(null);
       }
       setLounge(advanced);
     },
-    [interaction, pilotMeasurementFlow.abandon, recordPilotOutcome]
+    [
+      cancelActiveProvider,
+      interaction,
+      pilotMeasurementFlow.abandon,
+      recordPilotOutcome,
+    ]
   );
 
   useEffect(() => {
@@ -1066,16 +1114,7 @@ export default function PassportApp({
       });
       setErrorMessage(null);
       if (updated.status === 'ready') {
-        // Agent State Machine（既存 Lounge）を開始したら、Room の 1 秒 tick はもう
-        // 不要なので破棄し、20 分の TTL が尽きるまで無駄に動き続けさせない。
-        issuedHandshake?.host.dispose();
-        qrScannerPort.publish(null);
-        setIssuedHandshake(null);
-        setScannedInvite(null);
-        setLoungeRoom(null);
-        setInteraction(null);
-        pilotMeasurementFlow.ready(clock.monotonicMs);
-        setLounge(startLoungeFromRoom(updated));
+        activateReadyLounge(updated, clock);
       } else {
         setLoungeRoom(updated);
       }
@@ -1226,10 +1265,7 @@ export default function PassportApp({
         setSeenRawPayloads(new Set());
         setErrorMessage(null);
         if (readied.status === 'ready') {
-          setLoungeRoom(null);
-          setInteraction(null);
-          pilotMeasurementFlow.ready(clock.monotonicMs);
-          setLounge(startLoungeFromRoom(readied));
+          activateReadyLounge(readied, clock);
         } else {
           setLoungeRoom(readied);
           setStage('host-invite');
@@ -1248,6 +1284,23 @@ export default function PassportApp({
         }
       }
     })();
+  }
+
+  /** Ready Room の ID を Provider lifetime の Encounter Key として保持して Lounge を開始する。 */
+  function activateReadyLounge(
+    room: ReadyLoungeRoom,
+    clock: ClockSnapshot
+  ): void {
+    cancelActiveProvider();
+    activeEncounterKeyRef.current = room.loungeId;
+    issuedHandshake?.host.dispose();
+    qrScannerPort.publish(null);
+    setLoungeRoom(null);
+    setIssuedHandshake(null);
+    setScannedInvite(null);
+    setInteraction(null);
+    pilotMeasurementFlow.ready(clock.monotonicMs);
+    setLounge(startLoungeFromRoom(room));
   }
 
   /**
@@ -1270,18 +1323,89 @@ export default function PassportApp({
   }
 
   /**
-   * Issue 11: 「会話の糸を探す」操作 1 回で、Pet Interaction の bounded protocol を
-   * discovering → clarifying（Owner Question 表示）/ no-signal（即 retired）まで進める。
-   * Rules Provider は同期関数のため discovering は観測可能な状態として現れない。
+   * 「会話の糸を探す」操作 1 回で共通 Model Provider を実行する。検証済み Bridge は
+   * そのまま Retired Lounge へ、保守的な no-signal は既存の bounded Rules Discovery と
+   * Owner Question へ渡す。Runner が二重 Tap、Deadline、Fallback-once を所有する。
    */
   function startPetInteraction(): void {
     if (lounge?.status !== 'active') return;
+    const encounterKey = activeEncounterKeyRef.current;
+    if (!encounterKey) return;
+    if (!providerResultApplicationGate.begin(encounterKey)) return;
+    const active = lounge;
     const clock = currentClock();
-    const step = beginPetInteraction(lounge, RULES_INTERACTION_PROVIDER, clock);
-    recordPilotOutcome(step.lounge, clock);
-    setInteraction(step.interaction);
-    setLounge(step.lounge);
+    const input: AgentModelInput = {
+      ownerPassport: active.ownerPassport,
+      encounteredPassport: active.encounteredPassport,
+      language: locale,
+      deadlineAtWallClockMs: Math.min(
+        clock.wallClockMs + INTERACTION_DEADLINE_MS,
+        active.expiresAtWallClockMs
+      ),
+    };
+    setProviderRuntimeState(INITIAL_PROVIDER_RUNTIME_STATE);
+    setProviderRunPending(true);
     setErrorMessage(null);
+    void providerRunner
+      .run({
+        state: INITIAL_PROVIDER_RUNTIME_STATE,
+        encounterKey,
+        provider: agentModelProvider,
+        input,
+        onStateChange(state) {
+          if (
+            activeEncounterKeyRef.current === encounterKey &&
+            providerResultApplicationGate.isPending(encounterKey)
+          ) {
+            setProviderRuntimeState(state);
+          }
+        },
+      })
+      .then(
+        (result) => {
+          if (
+            activeEncounterKeyRef.current !== encounterKey ||
+            !providerResultApplicationGate.settle(encounterKey)
+          ) {
+            return;
+          }
+          setProviderRunPending(false);
+          const outcomeClock = currentClock();
+          const step = applyAgentModelDecisionBeforeLoungeExpiry(
+            active,
+            input,
+            result.outcome.decision,
+            RULES_INTERACTION_PROVIDER,
+            clock,
+            outcomeClock
+          );
+          if (step.lounge.status === 'destroyed') {
+            cancelActiveProvider();
+            pilotMeasurementFlow.abandon();
+            setInteraction(null);
+            setLounge(step.lounge);
+            return;
+          }
+          setProviderRuntimeState(result.state);
+          recordPilotOutcome(
+            step.lounge,
+            outcomeClock,
+            pilotProviderRunFromOutcome(result.outcome)
+          );
+          if (step.lounge.status !== 'active') cancelActiveProvider();
+          setInteraction(step.interaction);
+          setLounge(step.lounge);
+        },
+        () => {
+          if (
+            activeEncounterKeyRef.current === encounterKey &&
+            providerResultApplicationGate.settle(encounterKey)
+          ) {
+            setProviderRunPending(false);
+            setProviderRuntimeState({ status: 'failed' });
+          }
+        }
+      );
   }
 
   /**
@@ -1302,12 +1426,14 @@ export default function PassportApp({
       locale
     );
     recordPilotOutcome(step.lounge, clock);
+    if (step.lounge.status !== 'active') cancelActiveProvider();
     setInteraction(step.interaction);
     setLounge(step.lounge);
     setErrorMessage(null);
   }
 
   function leave(): void {
+    cancelActiveProvider();
     pilotMeasurementFlow.abandon();
     setShowConversationSelfReport(false);
     setInteraction(null);
@@ -1318,6 +1444,7 @@ export default function PassportApp({
   }
 
   function endAsHost(): void {
+    cancelActiveProvider();
     pilotMeasurementFlow.abandon();
     setShowConversationSelfReport(false);
     setInteraction(null);
@@ -1328,6 +1455,7 @@ export default function PassportApp({
   }
 
   function complete(): void {
+    cancelActiveProvider();
     const shouldShowSelfReport =
       lounge?.status === 'retired' && lounge.outcome.kind === 'bridge';
     const showSelfReport =
@@ -1355,6 +1483,7 @@ export default function PassportApp({
     // discardInviteFlow() が相手の宣言内容（encounteredPetName 等）も含めて
     // Lounge 由来の一時データを一括破棄する。
     discardInviteFlow();
+    cancelActiveProvider();
     pilotMeasurementFlow.abandon();
     setShowConversationSelfReport(false);
     setInteraction(null);
@@ -1450,6 +1579,7 @@ export default function PassportApp({
         onExit={leave}
         onHostEnd={endAsHost}
         onOpenSettings={openSettings}
+        providerBusy={providerRunPending}
         providerStatus={providerRuntimeState.status}
         reduceMotion={reduceMotion}
         remainingMs={lounge.expiresAtWallClockMs - nowMs}

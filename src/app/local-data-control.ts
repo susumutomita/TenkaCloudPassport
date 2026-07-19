@@ -76,7 +76,8 @@ export class LocalModelContextLeaseRegistry {
   private acquireUse(use: LocalDataUse): LocalModelContextLease {
     if (
       this.#exclusive ||
-      (use === 'model-context' && this.#modelAcquisitionBlocked)
+      (use === 'model-context' &&
+        (this.#modelAcquisitionBlocked || this.#activeModelContextCount > 0))
     ) {
       throw new LocalDataAccessBlockedError();
     }
