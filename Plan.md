@@ -3423,3 +3423,44 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
 - 根本原因: ファイル横断の検査を CI に持っていなかったためです。
 - 予防策: 増分を正確に指せる検査 (jscpd ラチェット) は CI で止め、全量しか出せない検査
   (knip) は知らせるだけに分けて、形骸化させずに運用します。
+
+### [Issue 66 純 TypeScript QR エンコーダのサルベージ] - 2026-07-20
+
+- 目的: superseded された 2026-07-17 ローカル草稿から、スキャン可能な QR Code Model 2
+  エンコーダ `src/qr/encoder.ts` を M3 building block として main へ取り込む
+  (フォローアップ F-R1WMJW)。
+- 制約: runtime 依存ゼロを維持する。jsQR はテスト専用 devDependency。M1 の
+  `QrCodeView` / `qr-matrix.ts` (意図的に非スキャン可能) は変更しない。草稿の
+  ADR は番号衝突のため ADR-0024 として再番号する。
+- タスク:
+  - [x] 草稿の整理 (サルベージ対象以外を退避)
+  - [x] 仕様書 `docs/specs/2026-07-20-qr-encoder-salvage.md` (承認済み)
+  - [x] 設計 `docs/design/2026-07-20-qr-encoder-salvage.md` (承認済み)
+  - [x] Issue 66 作成
+  - [x] jsQR round-trip テスト追加と実装レビュー (5 役割並列)
+  - [x] ADR-0024 作成
+  - [ ] 品質ゲート (`make before-commit`、カバレッジ 100%) と PR 作成
+- 検証手順: `bun test src/qr --coverage` で round-trip と既知ベクタが緑、
+  `make before-commit` 全緑、knip 報告に encoder が載ることを想定内として記録。
+- 進捗ログ:
+  - 2026-07-20 origin/main へ fast-forward 後、草稿を scratchpad へ退避し
+    encoder + テスト + ADR 草稿のみ残置。仕様・設計の承認取得、Issue 66 作成。
+  - 2026-07-20 5 役割並列実装が完了。jsQR round-trip (ASCII / 日本語 / 絵文字 /
+    1,024 byte / Version 境界 106-107・180-181 / 空文字列) は encoder 修正なしで
+    全て Green となり、スキャン可能性を機械検証。QA / PM 指摘を反映し
+    `rsBlocks` の欠落定義を `INVALID_DATA` へ分類修正、上限判定に UTF-16 長の
+    事前ガードを追加。テスト 13 件・カバレッジ 100%。ADR-0024 で採番衝突を解消。
+    フォローアップ F-M3YK53 (ADR 採番整理)・F-DATZE4 (M3 受け入れ基準) を記録。
+  - 2026-07-20 code-reviewer (指摘 low 3 件を反映: 上限定数の等価 assert・番兵
+    throw の構造改善)、/security-review (指摘ゼロ、jsqr は registry tarball 照合まで
+    検証)、/simplify (RS block 表の tuple 型化で到達不能分岐を型検証へ、二重
+    lookup 3 箇所の畳み込み、テストヘルパ化) を完了。jsqr 追加に伴い Static
+    Screening baseline の SHA-256 を正規手順で更新。最終テスト 14 件・全ゲート緑。
+- 振り返り:
+  - 問題: 2026-07-17 の草稿が未コミットのまま残り、リモートで同じ Issue 8 の実装が
+    先に main へ入って並行実装となり、4 ファイルのパス衝突と ADR 採番衝突が起きた。
+  - 根本原因: ローカル作業をブランチとコミットに載せる前にセッションが終わり、作業
+    状態が他の作業経路 (cloud agent の PR) と共有されていなかった。
+  - 予防策: 着手時に Issue ブランチを作って WIP でも早期にコミットする。セッション
+    終了時に未コミット変更を残さない。salvage 判断は今回のように docs/specs の
+    5 役割レビューと jsQR のような独立実装での機械検証を通してから main へ入れる。
