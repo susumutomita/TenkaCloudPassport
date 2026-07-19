@@ -14,6 +14,7 @@
   復元されないことである。
 - GGUF モデルとその出力を信頼済みコードや確認済み事実として扱わないことである。
 - 手動 JSON バックアップが Owner の明示操作なしに作成または共有されないことである。
+- 配布 APK が Release Operator の署名と公開 checksum に結び付き、差し替えや別 Key の更新を受け入れないことである。
 - Pilot Event Aggregate が個別 Event、正確な時刻、安定 ID、内容を持たず、最低集計単位未満で共有されない
   ことである。
 - Nearby Transport の Packet Capture が実在 Owner の Passport を使わず、Network metadata を Repository や
@@ -36,6 +37,7 @@
 | 参加 Pet と参加者 | 暗号化チャネル上で検証した一時的な参加状態である。 | 相手の自己申告、Public Passport の客観的真実、相手 Pet のモデル出力である。 | 来歴検証、参加表示、Host 終了、最小開示である。 |
 | アプリと GGUF | digest と形式検証を通ったモデルファイルである。 | モデルの出力、モデル内の指示、改ざん済みファイル、parser 入力である。 | digest allowlist、サイズ上限、隔離 runtime、出力 schema と根拠検証である。 |
 | アプリとバックアップ保存先 | Owner が OS の保存画面で選んだ 1 回の書き込み先である。 | 保存先の同期、共有権限、履歴、外部アプリ、Import ファイルである。 | 明示確認、allowlist Export、strict Import、一時データ破棄である。 |
+| 利用者と配布 APK | Release 台帳で照合した Source Commit、App Signing Certificate、SHA-256 である。 | 非公式 Mirror、URL shortener、Debug Key、差し替え APK、漏えいした Signing Key である。 | `apksigner`、checksum、同一 Certificate 更新、配布停止 Runbook である。 |
 | アプリと Pilot 調査 | Research 参加を別に明示した Participant と、固定 Counter の Schema である。 | Research Consent から Product Consent を推測すること、Facilitator の記憶、少人数 Aggregate、自動収集基盤である。 | Consent 分離、Memory-only Counter、最低 5 Outcome、Preview 後の手動 Share、内容なし Observation Sheet である。 |
 | Spike Operator と Packet Capture | 承認済み手順、隔離 Network、非識別 Canary、指定 Reviewer である。 | 実在 Owner の Passport、raw Capture の共有、通信層 Address、正確な時刻、外部 Endpoint である。 | `L5` 分類、暗号化した検証端末、保持ポリシーの削除上限、Repository への raw Capture 禁止、`L5P` allowlist への明示投影である。 |
 
@@ -66,6 +68,7 @@
 | パケット盗聴 | 同一 LAN 利用者が手掛かり、Owner Answer、Bridge、通信相手を観測する。 | 高 | 高 | 高である。 |
 | 改ざん済み GGUF | 改ざんモデルが不正出力、過大消費、runtime の脆弱性悪用を狙う。 | 中 | 高 | 高である。 |
 | バックアップ誤公開 | 平文 JSON バックアップを共有フォルダー、公開リポジトリ、誤った相手へ保存する。 | 中 | 高 | 高である。 |
+| 配布 APK の差し替え | 非公式 APK または別 Key の更新により、端末内データの読取や不正な Network 通信を狙う。 | 中 | 高 | 高である。 |
 | 診断情報の過剰開示 | 障害調査 Report に内容、識別子、Model Path、Network metadata、秘密が混入する。 | 中 | 高 | 高である。 |
 | 全削除の中断 | 複数保存先の削除途中で Process または Storage が失敗し、一部 Data が次回起動で復元される。 | 中 | 高 | 高である。 |
 | Pilot Aggregate からの推測 | 少人数の Outcome、duration Bucket、Self-report と会場の知識を組み合わせ、個人の回答を推測する。 | 中 | 高 | 高である。 |
@@ -86,6 +89,7 @@
 | パケット盗聴 | QR の Join Proof と Transport Fingerprint を、採用 Transport が標準暗号で確立した Channel に結合する。全 Pet Message と終了通知を Transport が暗号化し、平文 fallback、外部 relay、外部推論 API を持たない。 | 改ざんを伴わない受動的な盗聴はアプリから検出できない。Transport の認証 tag、Fingerprint、sequence の検証失敗は能動的な改ざんの補助 Signal として接続を閉じる。 | Lounge を終了し、鍵を破棄して新しい QR で再作成する。 | 通信量、時刻、通信層アドレス、同一 LAN 上に端末がいる事実などのメタデータは OS とネットワーク機器から見える場合がある。 |
 | 改ざん済み GGUF | 対応形式、最大サイズ、digest allowlist を満たすモデルだけを、network、ファイル書き込み、アプリ状態変更の権限を持たない隔離 runtime で開く。 | 読み込み前とアプリ更新後に digest と構造を再検証し、runtime crash、資源上限超過、schema 外出力を失敗として扱う。 | モデルを無効化して隔離し、Owner に削除または既知 digest のモデルへの置換を求める。Lounge は `no-signal` または終了とする。 | GGUF parser と推論 runtime の未知の脆弱性、正規モデルの不適切な出力、入手元の侵害は残る。 |
 | バックアップ誤公開 | Export 対象を allowlist に固定し、Lounge データ、GGUF、端末パス、識別子を除外する。保存前に平文 JSON と保存先の管理責任を表示し、自動同期や自動 upload を行わない。 | Export 後の誤公開はアプリから検出できない。Export 前 preview と件数は誤操作の補助シグナルとし、Owner は保存先の共有状態を確認する。Import は strict schema で未知フィールドと Lounge 由来フィールドを拒否する。 | Owner は保存先の共有を解除してファイルを削除し、必要なら Local Private Profile の内容を変更する。アプリ内一時 copy は直ちに破棄する。 | 保存先の履歴、同期先、受信者の copy、公開済みリポジトリからの回収は困難である。 |
+| 配布 APK の差し替え | 署名済み APK、公開 Certificate Fingerprint、SHA-256、Source Tag を同じ Release で配布し、公式 Release 以外を案内しない。 | 利用前に `apksigner` と checksum を照合し、更新は同じ Package ID と Certificate だけを受け入れる。 | 新規配布を停止し、影響 SHA-256 を公表する。同じ Certificate が安全なら高い `versionCode` の修正版を配り、Key compromise では直接配布を停止する。 | 取得済み APK は回収できず、Signing Key が漏えいした場合は同じ Key の署名だけでは正当性を回復できない。 |
 | 診断情報の過剰開示 | Report は strict allowlist とし、正確な時刻、内容、識別子、パス、IP / SSID / 位置、Key / Token を型で表現しない。 | Snapshot と strict parser で未知 field と禁止語彙を拒否し、Preview で全項目を Owner に示す。 | Preview を破棄し、固定 Error Code と Recovery だけで再生成する。 | Owner が共有した Report の保存先と受信者 copy はアプリから回収できない。 |
 | 全削除の中断 | write-ahead tombstone を物理削除より先に永続化し、以後の復元を閉じる。削除対象の Snapshot は作らない。 | 起動時に tombstone を Profile load より先に確認し、残る Resource 件数を内容なしで検査する。 | 各 Resource の削除を冪等に再開し、全件 0 の確認後だけ tombstone を消す。 | OS 自体の侵害、filesystem snapshot、Owner が外部保存したバックアップはアプリ内全削除の対象外である。 |
 | Pilot Aggregate からの推測 | 個別 Event と正確な時刻を持たず、duration を即 Bucket 化し、Outcome 5 件未満では JSON を生成しない。Aggregate を地域、会場、人物の Ranking に使わない。 | strict parser と禁止 field Test で Schema を固定し、Preview で全 field を確認する。 | 少人数、禁止 field、Consent 逸脱を認識したら Export と Pilot 拡大を停止し、未共有 Counter を Process Memory から消す。 | 5 件でも会場の知識との組合せによる推測は残り、手動共有後の copy は回収できない。 |

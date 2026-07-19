@@ -313,6 +313,24 @@ export interface AppMessages {
   readonly settings: {
     readonly title: string;
     readonly description: string;
+    readonly distributionSectionTitle: string;
+    readonly distribution: {
+      readonly runtime: {
+        readonly web: string;
+        readonly expoGo: string;
+        readonly nativeBuild: string;
+      };
+      readonly tier: {
+        readonly productHypothesis: string;
+        readonly undeterminedNative: string;
+      };
+      readonly runtimeLabel: (runtime: string) => string;
+      readonly tierLabel: (tier: string) => string;
+      readonly rulesProviderAvailable: string;
+      readonly localModelUnavailable: string;
+      readonly localModelRequiresSetup: string;
+      readonly nearbyTransportUnavailable: string;
+    };
     readonly languageSectionTitle: string;
     readonly languageOptionAccessibilityLabel: (
       label: string,
@@ -777,9 +795,27 @@ const ja: AppMessages = {
     backButton: 'Profile 編集へ戻る',
   },
   settings: {
-    title: '表示言語を切り替える。',
+    title: '設定と現在の配布能力を確認する。',
     description:
-      '言語を切り替えても、進行中の Lounge、同意、保存済み Local Profile は失われません。',
+      'この実行環境で使える機能を表示します。言語を切り替えても、進行中の Lounge、同意、保存済み Local Profile は失われません。',
+    distributionSectionTitle: '現在の配布能力',
+    distribution: {
+      runtime: {
+        web: 'Web',
+        expoGo: 'Expo Go',
+        nativeBuild: 'Native Build',
+      },
+      tier: {
+        productHypothesis: 'Tier A — Product Hypothesis',
+        undeterminedNative: '未判定 — Release 情報で Tier B / C を確認',
+      },
+      runtimeLabel: (runtime) => `実行環境: ${runtime}`,
+      tierLabel: (tier) => `配布 Tier: ${tier}`,
+      rulesProviderAvailable: 'Rules Provider: 利用できます。',
+      localModelUnavailable: 'Local LLM: この実行環境では利用できません。',
+      localModelRequiresSetup: 'Local LLM: GGUF の設定と実機検証が必要です。',
+      nearbyTransportUnavailable: 'Nearby Transport: 現在は利用できません。',
+    },
     languageSectionTitle: '表示言語',
     languageOptionAccessibilityLabel: (label, selected) =>
       `表示言語 ${label}${selected ? '、選択中' : ''}`,
@@ -1326,9 +1362,30 @@ const en: AppMessages = {
     backButton: 'Back to editing Profile',
   },
   settings: {
-    title: 'Switch the display language.',
+    title: 'Review settings and current distribution capabilities.',
     description:
-      'Switching languages never loses an in-progress Lounge, consent, or your saved Local Profile.',
+      'Shows what this runtime can use. Switching languages never loses an in-progress Lounge, consent, or your saved Local Profile.',
+    distributionSectionTitle: 'Current distribution capabilities',
+    distribution: {
+      runtime: {
+        web: 'Web',
+        expoGo: 'Expo Go',
+        nativeBuild: 'Native Build',
+      },
+      tier: {
+        productHypothesis: 'Tier A — Product Hypothesis',
+        undeterminedNative:
+          'Undetermined — check release metadata for Tier B / C',
+      },
+      runtimeLabel: (runtime) => `Runtime: ${runtime}`,
+      tierLabel: (tier) => `Distribution tier: ${tier}`,
+      rulesProviderAvailable: 'Rules Provider: available.',
+      localModelUnavailable: 'Local LLM: not available in this runtime.',
+      localModelRequiresSetup:
+        'Local LLM: requires GGUF setup and physical-device verification.',
+      nearbyTransportUnavailable:
+        'Nearby Transport: not available in the current build.',
+    },
     languageSectionTitle: 'Display language',
     languageOptionAccessibilityLabel: (label, selected) =>
       `Display language ${label}${selected ? ', selected' : ''}`,

@@ -17,6 +17,7 @@
       "bundleIdentifier": "cloud.tenka.passport"
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f4f1ea"
