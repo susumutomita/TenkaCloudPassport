@@ -1,5 +1,88 @@
 # Plan.md
 
+### [Issue 2 対面イベント調査と Service Blueprint] - 2026-07-19
+
+#### 目的
+
+参加者と Event 主催者を分け、2 Locale Cohort 以上で会場到着から退出までの摩擦を同意済みの観察事実として
+収集する。個人を識別する記録、録音、人物評価を作らず、観察事実と仮説を分離した 1 枚の
+Service Blueprint と反証可能な上位 5 仮説へ収束させる。
+
+#### 制約
+
+- 参加者 4 名以上、Event 主催者 4 名以上、合計 2 Locale Cohort 以上を必要とし、各 Locale Cohort に
+  Participant と Event organizer を最低 1 completed session ずつ含める。
+- Repository Test、公開情報、実装者の walkthrough を Interview や会場観察の代替証跡にしない。
+- 氏名、連絡先、正確な日時、会場名、端末 ID、Lounge / Participant ID、音声、会話内容を保存しない。
+- Research Consent と Product Consent を分離し、拒否、回答しない、途中退出を不利益や失敗にしない。
+- 個別セッションは固定 Code だけを一時記録し、自由記述、Sensitive Data、協力者の要約、Researcher の解釈を
+  保存しない。一時記録は暗号化し、Aggregate 更新直後または 7 日以内に削除する。
+- 調査から生じる設計変更を本作業へ混ぜず、根拠と反証条件を添えて別 Issue 候補にする。
+
+#### 設計判断
+
+公開情報調査だけでは会場内の操作摩擦を観察できず、自由形式 Interview だけでは役割と Locale Cohort を横断して
+比較できない。実装済み Flow を成功前提で評価する Usability Test も探索範囲を狭めるため採用しない。
+半構造化 Interview と非介入 Observation を役割別に実施し、同じ Journey Stage / Failure Code へ
+固定 Code として整理する。完全な匿名性を主張せず、個別 Record、正確な人数、Locale 名、Role × Locale を
+公開しない。3 セッション以上かつ 2 Stratum 以上の Pattern だけを Public Aggregate にする。実調査前の
+Blueprint は `Hypothesis baseline / Not validated` と明記し、調査完了後だけ Evidence Status を更新する。
+
+#### タスク
+
+1. 本 Plan と調査設計を先に更新する。
+2. 調査未実施を fail-closed に保つ文書契約 Test を Red にする。
+3. `interview-guide.md`、`service-blueprint.md`、`hypotheses.md` と形成的調査専用 JA / EN Consent を作る。
+4. 参加者 / 主催者、JA / EN Prompt、2 Locale Cohort、各 Cohort の両 Role、全 Journey Stage、必須 Failure、
+   4 責務層 + Status、
+   上位 5 仮説を固定する。
+5. 全 Gate と独立 Code / Security / Simplify Review を完了して調査準備 PR を merge する。
+6. 実在する協力者へ同意を得て調査し、匿名 Evidence を反映する別 PR を作る。
+7. 調査で支持された設計変更だけを別 Issue として登録する。
+
+#### 検証手順
+
+- `bun test scripts/formative-event-research.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Textlint、Web Export、重複 baseline を含む）。
+- 3 成果物と JA / EN Consent が `Research execution: Not run` を保持し、実施人数や検証済み事実を
+  主張しないこと。
+- 実 Interview / Observation は参加者 4 名、主催者 4 名、2 Locale Cohort 以上、各 Cohort の両 Role の
+  証跡が得られるまで未完了とすること。
+
+#### 進捗ログ
+
+- 2026-07-19: Issue 2、Product Contract、Pilot Protocol、Research Consent、Observation Sheet、
+  Facilitator Guide を監査した。Issue 26 の Pilot 成果測定と重複させず、Issue 2 は導入前の形成的調査として
+  会場 Journey と運営摩擦の探索に責務を限定した。
+- 2026-07-19: 公開情報調査、自由形式 Interview、役割別の半構造化 Interview + Observation を比較し、
+  個人記録を増やさず反証可能な Stage 単位 Evidence を作れる 3 案目を採用した。
+- 2026-07-19: 初回案は Focused Test 4 pass / 0 fail と `make before-commit` 838 pass / 0 fail だったが、独立
+  Code / Security / Simplify Review は全て BLOCK だった。個別自由記述を匿名と表現したこと、撤回期限と公開範囲が
+  Consent 本文にないこと、Consent が英語だけであること、Test が Table の完全一致を強制しないことを検出した。
+- 2026-07-19: 個別自由記述を廃止し、7 Field の固定 Code、7 日以内削除、小 Cell 抑制、独立 Privacy Review、
+  専用 JA / EN Consent と English Prompt、Table を parse する厳密 Test へ設計を変更した。Focused Test は
+  4 pass / 0 fail、63 assertions である。
+- 2026-07-19: 再設計後の `make before-commit` は 838 pass / 0 fail、6 snapshots、11,927 assertions、
+  Functions / Lines 100%、Textlint、TypeScript、重複 baseline、Web Export が Green である。
+- 2026-07-19: 再 Review は Code / Security が全 Severity 0 で ALLOW、Simplify が ALLOW + Low 2 件だった。
+  `not-observed` を Evidence direction だけへ一本化し、形成的 Consent と Pilot Research の非代替境界を追記した。
+- 2026-07-19: CodeRabbit Review で Plan の Sampling Gate が Guide より弱い点を検出した。2 Locale Cohort 以上、
+  各 Cohort の Participant / Event organizer 最低 1 completed session へ全参照を統一し、Test I/O を
+  `Bun.file().text()` へ簡素化した。
+
+#### 振り返り
+
+- 問題: Repository 内の設計作業だけで成果物を埋めると、実在する 8 名、2 Locale Cohort の調査を実施したように
+  誤認させる危険があった。
+- 根本原因: 調査前の仮説と Field Evidence の状態遷移だけを設計し、Consent 説明、Temporary Record、Retention、
+  Public Aggregate を 1 つの Privacy Lifecycle として閉じていなかった。文字列存在 Test も未知 Field を許した。
+- 予防策: JA / EN Consent、7 Field の完全一致、全 Journey / Failure の `Untested`、7 日削除、3 セッションと
+  2 Stratum の公開閾値を文書契約 Test で維持する。実調査は別 PR とし、8 名、2 Locale Cohort、各 Cohort の
+  両 Role の同意済み Evidence が揃うまで Issue 2 を閉じない。
+
+---
+
 ### [Issue 27 Facilitator Kit と Local Champion 運用] - 2026-07-18
 
 #### 目的
