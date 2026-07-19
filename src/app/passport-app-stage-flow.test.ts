@@ -517,6 +517,17 @@ describe('PassportApp の Stage 遷移契約', () => {
       ]);
     });
 
+    it('Issue 28: Settings へ実行時の配布能力をそのまま渡す', async () => {
+      const text = await source();
+      const settingsBlockStart = text.indexOf('<SettingsScreen');
+      const settingsBlockEnd = text.indexOf('/>', settingsBlockStart);
+      const settingsBlock = text.slice(settingsBlockStart, settingsBlockEnd);
+
+      expect(settingsBlock).toContain(
+        'distributionCapability={distributionCapability}'
+      );
+    });
+
     it('openSettings / closeSettings は setStage だけを呼び、Lounge / Room / Interaction / Profile の state に触れない', async () => {
       const text = await source();
       const forbiddenSetters = [

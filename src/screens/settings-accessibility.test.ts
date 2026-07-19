@@ -11,11 +11,17 @@ function source(): Promise<string> {
  * Accessibility 契約と同じくソーステキスト検査で担保する。
  */
 describe('Settings 画面（言語切り替え）の Accessibility 契約', () => {
-  it('説明、言語セクション、選択肢、戻るボタンの順に配置する', async () => {
+  it('説明、現在の配布能力、言語セクション、選択肢、戻るボタンの順に配置する', async () => {
     const text = await source();
 
     expectInOrder(text, [
       't.description',
+      't.distributionSectionTitle',
+      'capabilityNotice.runtime',
+      'capabilityNotice.tier',
+      'capabilityNotice.rulesProvider',
+      'capabilityNotice.localModel',
+      'capabilityNotice.nearbyTransport',
       't.languageSectionTitle',
       'LOCALES.map(',
       't.backButton',
@@ -50,5 +56,16 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
 
     expect(text).toContain("from '../app/i18n/locale'");
     expect(text).toContain('LOCALES');
+  });
+
+  it('配布能力は Platform Composition から受け取り、Screen 内で Runtime を推測しない', async () => {
+    const text = await source();
+
+    expect(text).toContain('distributionCapability: DistributionCapability');
+    expect(text).toMatch(
+      /distributionCapabilityNotice\(\s*distributionCapability,\s*locale\s*\)/
+    );
+    expect(text).not.toContain('isRunningInExpoGo');
+    expect(text).not.toContain('Platform.OS');
   });
 });
