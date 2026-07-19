@@ -22,10 +22,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   AtomicOutputPublicationError,
+  assertRegularFileIdentitiesNoFollowAt,
   atomicRenameDirectoryNoReplace,
   readRegularFileNoFollowAt,
 } from './atomic-output-publisher';
-import { writeExclusiveOutput } from './exclusive-output-writer';
+import {
+  assertWrittenOutputSnapshot,
+  openExclusiveEntryAt,
+  writeExclusiveOutput,
+} from './exclusive-output-writer';
 import {
   assertNoKnownSecretContent,
   assertSafeTrackedPaths,
@@ -310,6 +315,9 @@ describe('Issue 29: Source Release の Lockfile 境界', () => {
       '{ "packages": { "dep": ["dep@1.0.0", "", {}, "sha512-not base64"] } }',
       `{ "packages": { "bad": ["@@1.0.0", "", {}, "${TEST_INTEGRITY}"] } }`,
       `{ "packages": { "bad": ["dep@1.0.0-01", "", {}, "${TEST_INTEGRITY}"] } }`,
+      `{ "packages": { "dep": ["dep@1.0.0", 42, {}, "${TEST_INTEGRITY}"] } }`,
+      `{ "packages": { "dep": ["dep@1.0.0", "", [], "${TEST_INTEGRITY}"] } }`,
+      `{ "packages": { "dep": ["dep@1.0.0", "", {}, "${TEST_INTEGRITY}", "extra"] } }`,
     ]) {
       expect(() => parseLockedPackages(source)).toThrow(
         new ReleaseCandidateError(
@@ -318,6 +326,22 @@ describe('Issue 29: Source Release の Lockfile 境界', () => {
         )
       );
     }
+  });
+
+  it('復号後に同じ package key となる JSONC record を拒否する', () => {
+    const source = String.raw`{
+      "packages": {
+        "dep": ["dep@1.0.0", "", {}, "${TEST_INTEGRITY}"],
+        "de\u0070": ["dep@2.0.0", "", {}, "${TEST_INTEGRITY}"]
+      }
+    }`;
+
+    expect(() => parseLockedPackages(source)).toThrow(
+      new ReleaseCandidateError(
+        'INVALID_LOCKFILE',
+        'bun.lock contains an invalid package record.'
+      )
+    );
   });
 
   it('Repository の frozen bun.lock 全 Package を欠落なく読む', async () => {
@@ -361,6 +385,8 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
     'id_ed25519',
     'assets/model',
     'assets/model.json',
+    'docs/evidence/nearby-transport-static-screening-copy.json',
+    'docs/research/interview-guide-copy.md',
     'docs/people.json',
     'docs/field-study-participant-notes.md',
     'docs/bad\nname.md',
@@ -374,11 +400,14 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
     );
   });
 
-  it('Source、文書、画像、License は許可する', () => {
+  it('Source、文書、exact Doc Data、画像、License は許可する', () => {
     expect(() =>
       assertSafeTrackedPaths([
         'src/domain/passport.ts',
         'docs/privacy/data-inventory.md',
+        'docs/evidence/nearby-transport-static-screening.json',
+        'docs/research/event-aggregate.schema.json',
+        'docs/research/interview-guide.md',
         '.claude/state/.gitkeep',
         'docs/design/.keep',
         'assets/icon.png',
@@ -1090,6 +1119,13 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     mkdirSync(writerDirectory);
     const status = lstatSync(writerDirectory);
     const input = () => new Blob(['descriptor-bound output\n']).stream();
+    assertWrittenOutputSnapshot(true, 0n, 0);
+    expect(() => assertWrittenOutputSnapshot(false, 0n, 0)).toThrow(
+      'Output file identity changed while writing.'
+    );
+    expect(() => assertWrittenOutputSnapshot(true, 1n, 0)).toThrow(
+      'Output file identity changed while writing.'
+    );
     await expect(
       writeExclusiveOutput([], input(), writerDirectory)
     ).rejects.toThrow('Invalid exclusive output writer arguments.');
@@ -1109,7 +1145,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     ).rejects.toThrow('Output directory identity changed before writing.');
     expect(() => lstatSync(path.join(writerDirectory, outputName))).toThrow();
 
-    await writeExclusiveOutput(
+    const written = await writeExclusiveOutput(
       [outputName, String(status.dev), String(status.ino), '--'],
       input(),
       writerDirectory
@@ -1117,6 +1153,32 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     expect(readFileSync(path.join(writerDirectory, outputName), 'utf8')).toBe(
       'descriptor-bound output\n'
     );
+    expect(written.fileName).toBe(outputName);
+    expect(written.byteLength).toBe('descriptor-bound output\n'.length);
+    expect(written.sha256).toBe(
+      createHash('sha256').update('descriptor-bound output\n').digest('hex')
+    );
+    expect(lstatSync(path.join(writerDirectory, outputName)).mode & 0o777).toBe(
+      0o600
+    );
+    const writerHandle = await open(
+      writerDirectory,
+      constants.O_RDONLY | constants.O_DIRECTORY
+    );
+    await assertRegularFileIdentitiesNoFollowAt(writerHandle.fd, [written]);
+    expect(() => openExclusiveEntryAt(writerHandle.fd, outputName)).toThrow(
+      'Exclusive output file could not be created.'
+    );
+    expect(() =>
+      openExclusiveEntryAt(writerHandle.fd, 'unsupported.txt', 'win32')
+    ).toThrow('Exclusive output writer is unsupported on this platform.');
+    const replacement = path.join(writerDirectory, 'replacement.txt');
+    writeFileSync(replacement, 'descriptor-bound output\n');
+    renameSync(replacement, path.join(writerDirectory, outputName));
+    await expect(
+      assertRegularFileIdentitiesNoFollowAt(writerHandle.fd, [written])
+    ).rejects.toThrow('no longer names the verified file');
+    await writerHandle.close();
 
     await writeExclusiveOutput(
       [
@@ -1205,7 +1267,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
           },
         ],
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
     expect(() => lstatSync(directory)).toThrow();
     const failedNames = readdirSync(parentPath).filter((entry) =>
       entry.startsWith('.tenkacloud-passport-failed-')
@@ -1276,7 +1338,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
           },
         ],
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
     expect(() =>
       lstatSync(path.join(movedParent, path.basename(staging)))
     ).toThrow();
@@ -1314,7 +1376,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         ref: 'HEAD',
         outputDirectory: output,
       })
-    ).rejects.toMatchObject({ code: 'UNSAFE_OUTPUT_DIRECTORY' });
+    ).rejects.toMatchObject({ code: 'INVALID_SBOM' });
     expect(() => lstatSync(output)).toThrow();
     expect(
       readdirSync(path.join(root, 'release-output')).some((entry) =>
@@ -1641,7 +1703,11 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     expect(source).toContain(
       "path.join(import.meta.dir, 'exclusive-output-writer.ts')"
     );
-    expect(writer).toContain('pipeline(Readable.from(source.stdout), output)');
+    expect(writer).toContain(
+      'pipeline(Readable.from(source.stdout), hashingStream, output)'
+    );
+    expect(writer).toContain('fstatSync(descriptor, { bigint: true })');
+    expect(source).toContain('await assertRecordedOutputFiles(transaction)');
     expect(source).not.toMatch(/archiveBytes|git archive stdout/);
     expect(source).not.toContain('rmdir(');
     expect(source).toContain('await validateOpenedSourceReleaseDirectory(');

@@ -13,7 +13,7 @@
 
 正本 Issue は [Issue 29](https://github.com/susumutomita/TenkaCloudPassport/issues/29) です。
 詳細な契約は [仕様書](./2026-07-18-oss-alpha-release.md)、
-[設計](../design/oss-alpha-release.md)、[ADR-0023](../adr/0023-reproducible-source-release.md)、
+[設計](../design/oss-alpha-release.md)、[ADR-0024](../adr/0024-reproducible-source-release.md)、
 [Quality Bar](../architecture/quality-bar.md) に従います。
 
 ## Evidence policy

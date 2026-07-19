@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, createReadStream } from 'node:fs';
+import { constants } from 'node:fs';
 import {
   type FileHandle,
   lstat,
@@ -12,10 +12,13 @@ import path from 'node:path';
 import {
   assertRegularFileIdentitiesNoFollowAt,
   atomicRenameDirectoryNoReplace,
+  type DescriptorRelativeFileHash,
   type DescriptorRelativeFileIdentity,
   hashRegularFileNoFollowAt,
   readRegularFileNoFollowAtWithIdentity,
 } from './atomic-output-publisher';
+import type { ExclusiveOutputRecord } from './exclusive-output-writer';
+import { firstDecodedDuplicateJsoncKey } from './jsonc-duplicate-key';
 
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -80,7 +83,11 @@ const ALLOWED_EXTENSIONLESS_FILES = new Set([
 ]);
 const ALLOWED_PLACEHOLDER_BASENAMES = new Set(['.gitkeep', '.keep']);
 const ALLOWED_DOC_DATA_FILES = new Set([
+  'docs/evidence/nearby-transport-static-screening.json',
   'docs/research/event-aggregate.schema.json',
+]);
+const ALLOWED_RESEARCH_GUIDE_FILES = new Set([
+  'docs/research/interview-guide.md',
 ]);
 const MAX_RELEASE_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_RELEASE_TREE_BYTES = 25 * 1024 * 1024;
@@ -246,6 +253,9 @@ function sha512Hex(integrity: string): string {
 }
 
 export function parseLockedPackages(source: string): readonly LockedPackage[] {
+  if (firstDecodedDuplicateJsoncKey(source, 'bun.lock') !== null) {
+    throw invalidLockfile();
+  }
   let lockfile: unknown;
   try {
     lockfile = Bun.JSONC.parse(source);
@@ -262,7 +272,10 @@ export function parseLockedPackages(source: string): readonly LockedPackage[] {
     if (
       lockKey.length === 0 ||
       !Array.isArray(value) ||
+      value.length !== 4 ||
       typeof value[0] !== 'string' ||
+      typeof value[1] !== 'string' ||
+      !isRecord(value[2]) ||
       typeof value[3] !== 'string'
     ) {
       throw invalidLockfile();
@@ -311,7 +324,8 @@ export function assertSafeTrackedPaths(paths: readonly string[]): void {
       hasControlCharacter(trackedPath) ||
       trackedPath.split('/').includes('..') ||
       !isAllowedReleasePath(trackedPath) ||
-      FORBIDDEN_RELEASE_PATHS.some((pattern) => pattern.test(trackedPath))
+      (!ALLOWED_RESEARCH_GUIDE_FILES.has(trackedPath) &&
+        FORBIDDEN_RELEASE_PATHS.some((pattern) => pattern.test(trackedPath)))
     ) {
       throw new ReleaseCandidateError(
         'FORBIDDEN_RELEASE_PATH',
@@ -423,7 +437,7 @@ async function runExclusiveOutputWriter(
   source:
     | { readonly command: readonly string[] }
     | { readonly contents: string | Uint8Array }
-): Promise<void> {
+): Promise<ExclusiveOutputRecord> {
   const command = 'command' in source ? source.command : [];
   const stdin =
     'contents' in source
@@ -435,7 +449,7 @@ async function runExclusiveOutputWriter(
     [
       'bun',
       '-e',
-      'const writer = await import(Bun.argv[1]); await writer.writeExclusiveOutput(Bun.argv.slice(2), Bun.stdin.stream(), ".");',
+      'const writer = await import(Bun.argv[1]); const result = await writer.writeExclusiveOutput(Bun.argv.slice(2), Bun.stdin.stream(), "."); process.stdout.write(JSON.stringify(result));',
       '--',
       path.join(import.meta.dir, 'exclusive-output-writer.ts'),
       fileName,
@@ -447,12 +461,13 @@ async function runExclusiveOutputWriter(
     {
       cwd: transaction.staging.path,
       stdin,
-      stdout: 'ignore',
+      stdout: 'pipe',
       stderr: 'pipe',
     }
   );
-  const [exitCode, stderr] = await Promise.all([
+  const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
+    new Response(child.stdout).text(),
     new Response(child.stderr).text(),
   ]);
   if (exitCode !== 0) {
@@ -461,22 +476,112 @@ async function runExclusiveOutputWriter(
       `Exclusive output writer failed: ${stderr.trim() || `exit ${exitCode}`}`
     );
   }
+  const record = parseExclusiveOutputRecord(stdout, fileName);
+  if ('contents' in source) {
+    const expected =
+      typeof source.contents === 'string'
+        ? new TextEncoder().encode(source.contents)
+        : source.contents;
+    const expectedHash = createHash('sha256').update(expected).digest('hex');
+    if (
+      record.byteLength !== expected.byteLength ||
+      record.sha256 !== expectedHash
+    ) {
+      throw new ReleaseCandidateError(
+        'UNSAFE_OUTPUT_DIRECTORY',
+        'Release output writer record differs from the requested contents.'
+      );
+    }
+  }
+  return record;
+}
+
+function parseExclusiveOutputRecord(
+  source: string,
+  expectedFileName: string
+): ExclusiveOutputRecord {
+  let value: unknown;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output writer did not return one valid file record.'
+    );
+  }
+  const expectedKeys = [
+    'byteLength',
+    'changeTimeNanoseconds',
+    'device',
+    'fileName',
+    'inode',
+    'modificationTimeNanoseconds',
+    'sha256',
+  ].sort();
+  if (
+    !isRecord(value) ||
+    Object.keys(value).sort().join('\0') !== expectedKeys.join('\0')
+  ) {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output writer did not return one valid file record.'
+    );
+  }
+  const byteLength = Reflect.get(value, 'byteLength');
+  const changeTimeNanoseconds = Reflect.get(value, 'changeTimeNanoseconds');
+  const device = Reflect.get(value, 'device');
+  const fileName = Reflect.get(value, 'fileName');
+  const inode = Reflect.get(value, 'inode');
+  const modificationTimeNanoseconds = Reflect.get(
+    value,
+    'modificationTimeNanoseconds'
+  );
+  const sha256 = Reflect.get(value, 'sha256');
+  if (
+    !Number.isSafeInteger(byteLength) ||
+    Number(byteLength) < 0 ||
+    typeof changeTimeNanoseconds !== 'string' ||
+    !/^\d+$/.test(changeTimeNanoseconds) ||
+    !Number.isSafeInteger(device) ||
+    Number(device) < 0 ||
+    fileName !== expectedFileName ||
+    !Number.isSafeInteger(inode) ||
+    Number(inode) < 0 ||
+    typeof modificationTimeNanoseconds !== 'string' ||
+    !/^\d+$/.test(modificationTimeNanoseconds) ||
+    typeof sha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(sha256)
+  ) {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output writer did not return one valid file record.'
+    );
+  }
+  return {
+    byteLength: Number(byteLength),
+    changeTimeNanoseconds,
+    device: Number(device),
+    fileName,
+    inode: Number(inode),
+    modificationTimeNanoseconds,
+    sha256,
+  };
 }
 
 async function pipeCommandToExclusiveFile(
   command: readonly string[],
   transaction: SafeOutputTransaction,
   fileName: string
-): Promise<void> {
-  await runExclusiveOutputWriter(transaction, fileName, { command });
+): Promise<ExclusiveOutputRecord> {
+  return runExclusiveOutputWriter(transaction, fileName, { command });
 }
 
 async function writeExclusiveFile(
   transaction: SafeOutputTransaction,
   fileName: string,
   contents: string | Uint8Array
-): Promise<void> {
-  await runExclusiveOutputWriter(transaction, fileName, { contents });
+): Promise<ExclusiveOutputRecord> {
+  return runExclusiveOutputWriter(transaction, fileName, { contents });
 }
 
 interface SourceReleaseInventory {
@@ -703,7 +808,7 @@ interface SafeOutputTransaction {
   readonly staging: DirectoryIdentity;
   readonly handle: FileHandle;
   readonly inspectionPath: string;
-  readonly createdFiles: Map<string, DirectoryIdentity>;
+  readonly createdFiles: Map<string, ExclusiveOutputRecord>;
 }
 
 function fileSystemErrorCode(error: unknown): string | undefined {
@@ -959,28 +1064,16 @@ async function assertDirectoryIdentity(
   }
 }
 
-function outputFilePath(
-  transaction: SafeOutputTransaction,
-  fileName: string
-): string {
-  if (fileName.length === 0 || path.basename(fileName) !== fileName) {
-    throw new ReleaseCandidateError(
-      'UNSAFE_OUTPUT_DIRECTORY',
-      'Release output file name must be a safe basename.'
-    );
-  }
-  return path.join(transaction.inspectionPath, fileName);
-}
-
 async function writeOutputExclusive(
   transaction: SafeOutputTransaction,
   fileName: string,
   contents: string | Uint8Array
 ): Promise<void> {
   await assertDirectoryIdentity(transaction);
-  await writeExclusiveFile(transaction, fileName, contents);
-  await recordCreatedFile(transaction, fileName);
+  const record = await writeExclusiveFile(transaction, fileName, contents);
+  recordCreatedFile(transaction, fileName, record);
   await assertDirectoryIdentity(transaction);
+  await assertRecordedOutputFiles(transaction);
 }
 
 async function streamOutputExclusive(
@@ -989,31 +1082,97 @@ async function streamOutputExclusive(
   command: readonly string[]
 ): Promise<void> {
   await assertDirectoryIdentity(transaction);
-  await pipeCommandToExclusiveFile(command, transaction, fileName);
-  await recordCreatedFile(transaction, fileName);
+  const record = await pipeCommandToExclusiveFile(
+    command,
+    transaction,
+    fileName
+  );
+  recordCreatedFile(transaction, fileName, record);
   await assertDirectoryIdentity(transaction);
+  await assertRecordedOutputFiles(transaction);
 }
 
-async function recordCreatedFile(
+function recordCreatedFile(
   transaction: SafeOutputTransaction,
-  fileName: string
-): Promise<void> {
-  const status = await lstat(outputFilePath(transaction, fileName));
-  if (
-    !status.isFile() ||
-    status.isSymbolicLink() ||
-    transaction.createdFiles.has(fileName)
-  ) {
+  fileName: string,
+  record: ExclusiveOutputRecord
+): void {
+  if (record.fileName !== fileName || transaction.createdFiles.has(fileName)) {
     throw new ReleaseCandidateError(
       'UNSAFE_OUTPUT_DIRECTORY',
       'Release output writer did not create one unique regular file.'
     );
   }
-  transaction.createdFiles.set(fileName, {
-    path: outputFilePath(transaction, fileName),
-    device: status.dev,
-    inode: status.ino,
-  });
+  transaction.createdFiles.set(fileName, record);
+}
+
+async function assertRecordedOutputFiles(
+  transaction: SafeOutputTransaction
+): Promise<void> {
+  if (transaction.createdFiles.size === 0) return;
+  try {
+    await assertRegularFileIdentitiesNoFollowAt(transaction.handle.fd, [
+      ...transaction.createdFiles.values(),
+    ]);
+  } catch {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output no longer names the file closed by its writer.'
+    );
+  }
+}
+
+function sameRecordedOutputHash(
+  expected: ExclusiveOutputRecord,
+  actual: DescriptorRelativeFileHash
+): boolean {
+  return (
+    expected.byteLength === actual.byteLength &&
+    expected.changeTimeNanoseconds === actual.changeTimeNanoseconds &&
+    expected.device === actual.device &&
+    expected.inode === actual.inode &&
+    expected.modificationTimeNanoseconds ===
+      actual.modificationTimeNanoseconds &&
+    expected.sha256 === actual.sha256
+  );
+}
+
+async function recordedOutputReleaseFile(
+  transaction: SafeOutputTransaction,
+  fileName: string,
+  maximumBytes: number
+): Promise<ReleaseFile> {
+  const expected = transaction.createdFiles.get(fileName);
+  if (expected === undefined) {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output was not created by the retained writer boundary.'
+    );
+  }
+  let actual: DescriptorRelativeFileHash;
+  try {
+    actual = await hashRegularFileNoFollowAt(
+      transaction.handle.fd,
+      fileName,
+      maximumBytes
+    );
+  } catch {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output could not be rebound to its writer record.'
+    );
+  }
+  if (!sameRecordedOutputHash(expected, actual)) {
+    throw new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output differs from the file closed by its writer.'
+    );
+  }
+  return {
+    fileName,
+    sha256: actual.sha256,
+    byteLength: actual.byteLength,
+  };
 }
 
 export interface RecordedOutputCleanup {
@@ -1088,12 +1247,12 @@ export async function cleanupRecordedOutputDirectory(
     ]);
     return false;
   }
-  await quarantineFailedOutputDirectory(cleanup);
-  await Promise.all([
+  const quarantined = await quarantineFailedOutputDirectory(cleanup);
+  const closed = await Promise.all([
     closeCleanupHandle(cleanup.handle),
     closeCleanupHandle(cleanup.parentHandle),
   ]);
-  return false;
+  return quarantined && closed.every((result) => result);
 }
 
 async function cleanupSafeOutput(
@@ -1122,6 +1281,7 @@ async function publishSafeOutput(
   const stagingName = path.basename(transaction.staging.path);
   const outputName = path.basename(transaction.requestedPath);
   await assertDirectoryIdentity(transaction);
+  await assertRecordedOutputFiles(transaction);
   await atomicRenameDirectoryNoReplace(
     transaction.parentHandle.fd,
     stagingName,
@@ -1189,6 +1349,7 @@ async function publishSafeOutput(
     );
   }
   try {
+    await assertRecordedOutputFiles(transaction);
     await validateOpenedSourceReleaseDirectory(
       {
         handle: transaction.handle,
@@ -1200,6 +1361,7 @@ async function publishSafeOutput(
       },
       version
     );
+    await assertRecordedOutputFiles(transaction);
   } catch (error) {
     try {
       await atomicRenameDirectoryNoReplace(
@@ -1804,20 +1966,6 @@ ${rows.join('\n')}
 `;
 }
 
-async function hashFile(filePath: string): Promise<ReleaseFile> {
-  const hash = createHash('sha256');
-  let byteLength = 0;
-  for await (const chunk of createReadStream(filePath)) {
-    hash.update(chunk);
-    byteLength += chunk.length;
-  }
-  return {
-    fileName: path.basename(filePath),
-    sha256: hash.digest('hex'),
-    byteLength,
-  };
-}
-
 function expectedPayloadNames(version: string): readonly string[] {
   return [
     'LICENSE',
@@ -2270,7 +2418,11 @@ export async function buildSourceRelease(
       trackedPaths,
       repositoryRoot
     );
-    const archive = await hashFile(archivePath);
+    const archive = await recordedOutputReleaseFile(
+      transaction,
+      archiveName,
+      MAX_RELEASE_ARCHIVE_BYTES
+    );
     const createdAt = new Date(
       (
         await runCommand(
@@ -2308,7 +2460,13 @@ export async function buildSourceRelease(
     const payloadNames = expectedPayloadNames(options.version);
     const payloadFiles = await Promise.all(
       payloadNames.map((fileName) =>
-        hashFile(path.join(outputDirectory, fileName))
+        recordedOutputReleaseFile(
+          transaction,
+          fileName,
+          fileName.endsWith('.tar.gz')
+            ? MAX_RELEASE_ARCHIVE_BYTES
+            : MAX_RELEASE_FILE_BYTES
+        )
       )
     );
     const manifestName = 'release-manifest.json';
@@ -2331,7 +2489,11 @@ export async function buildSourceRelease(
     );
     const checksumFiles = [
       ...payloadFiles,
-      await hashFile(path.join(outputDirectory, manifestName)),
+      await recordedOutputReleaseFile(
+        transaction,
+        manifestName,
+        MAX_RELEASE_FILE_BYTES
+      ),
     ].sort((left, right) => left.fileName.localeCompare(right.fileName));
     await writeOutputExclusive(
       transaction,
@@ -2340,10 +2502,15 @@ export async function buildSourceRelease(
         .map(({ sha256, fileName }) => `${sha256}  ${fileName}`)
         .join('\n')}\n`
     );
-    const files = await validateSourceReleaseDirectory(
-      outputDirectory,
+    await assertRecordedOutputFiles(transaction);
+    const files = await validateOpenedSourceReleaseDirectory(
+      {
+        handle: transaction.handle,
+        identity: transaction.staging,
+      },
       options.version
     );
+    await assertRecordedOutputFiles(transaction);
     await publishSafeOutput(transaction, options.version);
     return {
       version: options.version,

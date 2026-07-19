@@ -21,7 +21,7 @@ GitHub 自動 Archive だけ、外部 Release / SBOM Action、Repository-native 
 自動 Archive だけでは SBOM と除外規則を固定できず、外部 Action は新しい Supply Chain を増やす。
 検証済み Git ref、追跡 Tree、Bun Lock を入力にする Repository-native CLI と最小 Workflow を採用する。
 詳細は [OSS Alpha Release 設計](./docs/design/oss-alpha-release.md) と
-[ADR-0023](./docs/adr/0023-reproducible-source-release.md) を正本とする。
+[ADR-0024](./docs/adr/0024-reproducible-source-release.md) を正本とする。
 
 #### タスク
 
@@ -101,6 +101,36 @@ GitHub 自動 Archive だけ、外部 Release / SBOM Action、Repository-native 
   可能であり、cleanup が未知 File を消し得ることを `BLOCK` とした。予約方式を廃止し、macOS / Linux の OS-native
   no-replace rename で検証済み staging inode を原子的に確定する。cleanup は記録済み inode 限定、Manifest 優先、
   unlink ごとの継続検査へ設計を更新した。numeric prerelease leading zero は shared strict SemVer で拒否する。
+- 2026-07-19: `origin/main` の Issue 2 調査準備と Issue 20 Nearby Static Screening を統合した。Issue 29 が
+  `package.json` の Source Release Version と `bun.lock` の root workspace 名を正規化するため、Nearby Screening の
+  Repository baseline を merged tree の exact SHA-256 へ再結合する。main の Nearby ADR が先に `ADR-0023` を採番した
+  ため、未 merge の Source Release ADR は `ADR-0024` へ繰り上げ、strict source inventory には main の新規 tracked
+  path を完全列挙する。Nearby evidence JSON は既存の Event Aggregate Schema と同様に exact doc-data path だけを
+  Release path allowlist へ追加し、隣接 JSON は拒否する。形成的調査の `interview-guide.md` は participant record を
+  禁止する regex を維持したまま exact reviewed guide だけを例外にし、類似 interview path は拒否する。依存 Version、
+  Static Gate の判定、物理証拠の `Not run` は変更しない。
+- 2026-07-19: merge delta の独立 Review で、隔離成功後も cleanup が常に失敗を返して元の typed error を
+  `UNSAFE_OUTPUT_DIRECTORY` へ上書きする経路と、main から追加された Markdown contract / 形成的調査 / Nearby protocol
+  scripts が strict TypeScript project の外にある blind spot を検出した。隔離と handle close が両方成功した場合だけ
+  元 error を保持し、新規 scripts を native-artifact script project の strict options へ追加する。
+- 2026-07-19: 形成的イベント調査の Temporary Coded Record と Public Aggregate が専用 Guide だけに定義され、Privacy
+  データ台帳、保持ポリシー、脅威モデルの正本へ登録されていない境界を独立 Review が検出した。暗号化済み一時領域の
+  7 Field、撤回時即時削除、集計直後または 7 日以内の削除、公開 Aggregate の小 Cell 抑制を Research 専用分類として
+  3 正本へ先に登録し、Guide と 2 言語 Consent は正本の投影として扱う。Research execution は `Not run` のままとする。
+- 2026-07-19: Source Release の `bun.lock` reader が JSONC の復号後重複 key と package tuple の余分な slot を受理する
+  fail-open 境界を検出した。JSONC object の復号済み key 重複検査を Nearby Static Screening と共有し、package tuple は
+  現行 lockfile の 4 slot (`canonical package`、resolution、metadata object、integrity) だけを exact shape として受理する。
+- 2026-07-19: artifact writer 後から最終 validation 前に pathname が別 inode へ置換されても、記録済み identity が cleanup
+  にしか使われず、Archive / LICENSE / Notice の差替え byte を Manifest と checksum が追認し得る競合境界を独立 Review が
+  検出した。writer が閉じた descriptor の identity と digest を全成果物の最終 publish まで再照合し、固定 Commit 由来 File
+  は期待 byte とも再照合する。単なる pathname 一覧一致を provenance の証拠として扱わない。
+- 2026-07-19: Workflow の Version は strict SemVer の build metadata を許可する一方、対応する `release_tag` の文字集合が
+  `+` を拒否して同一性検査まで到達できない不整合を検出した。Tag は常に `v${version}` と完全一致させる既存契約を維持し、
+  安全な `+` だけを Tag syntax に追加する。
+- 2026-07-19: strict TypeScript の追加対象を `tsconfig.native-artifacts.json` へ手動列挙した結果、Source Release、Research、
+  Markdown、Nearby を Native Artifact と誤分類する命名不整合が残った。対象を減らさず `tsconfig.scripts.json` へ改名し、
+  Repository script の共通 typecheck 正本とする。`package.json` の変更後は Nearby Static Screening の exact SHA-256 を
+  merged tree へ再結合する。
 
 #### 振り返り
 
@@ -114,6 +144,93 @@ GitHub 自動 Archive だけ、外部 Release / SBOM Action、Repository-native 
 - 根本原因: Repository Evidence と Physical / Human Evidence の Owner、状態語彙、昇格条件が分離されていなかった。
 - 予防策: Gate A は Draft Source Candidate だけを許可し、Gate B の必須行に `Not run` / `Blocked` が残る間は
   Workflow から Public Publish できない契約とする。
+
+---
+
+### [Issue 2 対面イベント調査と Service Blueprint] - 2026-07-19
+
+#### 目的
+
+参加者と Event 主催者を分け、2 Locale Cohort 以上で会場到着から退出までの摩擦を同意済みの観察事実として
+収集する。個人を識別する記録、録音、人物評価を作らず、観察事実と仮説を分離した 1 枚の
+Service Blueprint と反証可能な上位 5 仮説へ収束させる。
+
+#### 制約
+
+- 参加者 4 名以上、Event 主催者 4 名以上、合計 2 Locale Cohort 以上を必要とし、各 Locale Cohort に
+  Participant と Event organizer を最低 1 completed session ずつ含める。
+- Repository Test、公開情報、実装者の walkthrough を Interview や会場観察の代替証跡にしない。
+- 氏名、連絡先、正確な日時、会場名、端末 ID、Lounge / Participant ID、音声、会話内容を保存しない。
+- Research Consent と Product Consent を分離し、拒否、回答しない、途中退出を不利益や失敗にしない。
+- 個別セッションは固定 Code だけを一時記録し、自由記述、Sensitive Data、協力者の要約、Researcher の解釈を
+  保存しない。一時記録は暗号化し、Aggregate 更新直後または 7 日以内に削除する。
+- 調査から生じる設計変更を本作業へ混ぜず、根拠と反証条件を添えて別 Issue 候補にする。
+
+#### 設計判断
+
+公開情報調査だけでは会場内の操作摩擦を観察できず、自由形式 Interview だけでは役割と Locale Cohort を横断して
+比較できない。実装済み Flow を成功前提で評価する Usability Test も探索範囲を狭めるため採用しない。
+半構造化 Interview と非介入 Observation を役割別に実施し、同じ Journey Stage / Failure Code へ
+固定 Code として整理する。完全な匿名性を主張せず、個別 Record、正確な人数、Locale 名、Role × Locale を
+公開しない。3 セッション以上かつ 2 Stratum 以上の Pattern だけを Public Aggregate にする。実調査前の
+Blueprint は `Hypothesis baseline / Not validated` と明記し、調査完了後だけ Evidence Status を更新する。
+Temporary Record と Public Aggregate の分類判断は
+[ADR-0025](./docs/adr/0025-formative-research-data-boundary.md) を正本とする。
+
+#### タスク
+
+1. 本 Plan と調査設計を先に更新する。
+2. 調査未実施を fail-closed に保つ文書契約 Test を Red にする。
+3. `interview-guide.md`、`service-blueprint.md`、`hypotheses.md` と形成的調査専用 JA / EN Consent を作る。
+4. 参加者 / 主催者、JA / EN Prompt、2 Locale Cohort、各 Cohort の両 Role、全 Journey Stage、必須 Failure、
+   4 責務層 + Status、
+   上位 5 仮説を固定する。
+5. 全 Gate と独立 Code / Security / Simplify Review を完了して調査準備 PR を merge する。
+6. 実在する協力者へ同意を得て調査し、匿名 Evidence を反映する別 PR を作る。
+7. 調査で支持された設計変更だけを別 Issue として登録する。
+
+#### 検証手順
+
+- `bun test scripts/formative-event-research.test.ts`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（全 Test、Functions / Lines 100%、Textlint、Web Export、重複 baseline を含む）。
+- 3 成果物と JA / EN Consent が `Research execution: Not run` を保持し、実施人数や検証済み事実を
+  主張しないこと。
+- 実 Interview / Observation は参加者 4 名、主催者 4 名、2 Locale Cohort 以上、各 Cohort の両 Role の
+  証跡が得られるまで未完了とすること。
+
+#### 進捗ログ
+
+- 2026-07-19: Issue 2、Product Contract、Pilot Protocol、Research Consent、Observation Sheet、
+  Facilitator Guide を監査した。Issue 26 の Pilot 成果測定と重複させず、Issue 2 は導入前の形成的調査として
+  会場 Journey と運営摩擦の探索に責務を限定した。
+- 2026-07-19: 公開情報調査、自由形式 Interview、役割別の半構造化 Interview + Observation を比較し、
+  個人記録を増やさず反証可能な Stage 単位 Evidence を作れる 3 案目を採用した。
+- 2026-07-19: 初回案は Focused Test 4 pass / 0 fail と `make before-commit` 838 pass / 0 fail だったが、独立
+  Code / Security / Simplify Review は全て BLOCK だった。個別自由記述を匿名と表現したこと、撤回期限と公開範囲が
+  Consent 本文にないこと、Consent が英語だけであること、Test が Table の完全一致を強制しないことを検出した。
+- 2026-07-19: 個別自由記述を廃止し、7 Field の固定 Code、7 日以内削除、小 Cell 抑制、独立 Privacy Review、
+  専用 JA / EN Consent と English Prompt、Table を parse する厳密 Test へ設計を変更した。Focused Test は
+  4 pass / 0 fail、63 assertions である。
+- 2026-07-19: 再設計後の `make before-commit` は 838 pass / 0 fail、6 snapshots、11,927 assertions、
+  Functions / Lines 100%、Textlint、TypeScript、重複 baseline、Web Export が Green である。
+- 2026-07-19: 再 Review は Code / Security が全 Severity 0 で ALLOW、Simplify が ALLOW + Low 2 件だった。
+  `not-observed` を Evidence direction だけへ一本化し、形成的 Consent と Pilot Research の非代替境界を追記した。
+- 2026-07-19: CodeRabbit Review で Plan の Sampling Gate が Guide より弱い点を検出した。2 Locale Cohort 以上、
+  各 Cohort の Participant / Event organizer 最低 1 completed session へ全参照を統一し、Test I/O を
+  `Bun.file().text()` へ簡素化した。
+
+#### 振り返り
+
+- 問題: Repository 内の設計作業だけで成果物を埋めると、実在する 8 名、2 Locale Cohort の調査を実施したように
+  誤認させる危険があった。
+- 根本原因: 調査前の仮説と Field Evidence の状態遷移だけを設計し、Consent 説明、Temporary Record、Retention、
+  Public Aggregate を 1 つの Privacy Lifecycle として閉じていなかった。文字列存在 Test も未知 Field を許した。
+- 予防策: JA / EN Consent、7 Field の完全一致、全 Journey / Failure の `Untested`、7 日削除、3 セッションと
+  2 Stratum の公開閾値を文書契約 Test で維持する。実調査は別 PR とし、8 名、2 Locale Cohort、各 Cohort の
+  両 Role の同意済み Evidence が揃うまで Issue 2 を閉じない。
+
+---
 
 ### [Issue 27 Facilitator Kit と Local Champion 運用] - 2026-07-18
 
@@ -589,6 +706,258 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
   だけを専用 API に隔離して Transport と Product Rule の重複を増やしていないことを確認した。
 - 2026-07-18: `make before-commit` を 707 Test、Functions 100%、Lines 100%、Web Export 成功で通過した。
   実機 3 台、実時間 30 分、Network Capture、Storage Inspection は実 Transport 実装後の残条件とする。
+
+---
+
+### [Issue 20 Nearby Transport 実機 Spike Protocol] - 2026-07-19
+
+#### 目的
+
+4 つの Transport 候補を同じ静的 Gate で Screening し、通過候補から理由を記録して選んだ
+1 候補だけを同じ物理条件で検証する。Repository の Green や静的な資料調査を iOS / Android
+相互接続の証拠へ読み替えない選定 Gate を完成する。実機証拠がそろうまでは Production Adapter を
+選ばず、選定状態を `Undecided` に固定する。
+
+#### 制約
+
+- iPhone と Android の実機、同一 Wi-Fi、Personal Hotspot、Internet 遮断を自動 Test で代替しない。
+- 100 回 Join は Network fixture ごとに実行し、iOS Host と Android Host の両方向を各 50 回含める。
+- Packet Capture は実在 Owner の Passport を使わず、Production serializer を通した非識別 Canary だけを使う。
+- raw Capture、IP、SSID、BSSID、MAC、UDID、正確な実行時刻を Repository へ commit しない。
+- Spike dependency と Native code は Production Path へ入れず、採用 Adapter は Issue 22 の別変更で実装する。
+- Expo Go、Web、Loopback、Simulator、静的 source review は物理端末証拠に数えない。
+- Phase A の Static Gate は 4 候補すべてを対象とし、Phase B の物理試験は選定理由と exact route を
+  記録した 1 候補だけを対象とする。異なる Candidate、Build、Capture、Review の結果を合算しない。
+- Google Nearby Connections のように SDK Telemetry の停止が利用者設定だけに依存する候補は、Application が
+  収集を停止する公式 API または Configuration と Build 適用証拠がなければ Static Gate を `Fail` とする。
+- Phase A は 4 候補をすべて判定し、各候補の全 Gate を埋める。`Fail` 候補は棄却できるが、Phase B は
+  Phase A を `Pass` した候補が 1 つ以上ある場合だけ進める。
+- Packet Capture は Positive-control Fixture、Sensitive Field Manifest、対象 flow の packet / byte と送受信 Counter で
+  Coverage を証明する。traffic 0 や別 interface の Capture を「平文 0 件」の証拠にしない。
+- 必須証拠が 1 件でも欠ける場合は ADR の Transport 選定を Accepted にせず、Issue 20 を閉じない。
+
+#### 設計判断
+
+1. 先に Library を選ぶ案は、Platform 相互接続、権限、外部 Analytics、Hotspot、再接続の失敗を
+   Package 人気で隠すため採用しない。
+2. raw Packet Capture を Repository へ残す案は Network metadata と短命な Lounge Data の保持境界を
+   破るため採用しない。
+3. Phase A では 4 候補を同じ Static Gate で Screening し、Phase B では通過候補から選んだ 1 候補を
+   方向別 Join Matrix、Lifecycle、Security、Privacy Gate で測る。
+4. Phase B の証拠を 1 つの Evidence Bundle ID、Candidate の exact route と version、Package なら source commit と
+   lock resolution、System Framework なら SDK / API version と OS / Build locator、Repository commit、
+   両 Platform の Build ID と artifact SHA-256、Analyzer、Review に結び付ける。
+5. raw Capture は `L5`、公開 Record は `L5P` とし、許可 Field と Lifecycle は Privacy 台帳と保持ポリシーへ
+   一元化する。
+6. Evidence Binding を Bundle Metadata、Decision Record を選定状態の唯一の正本とし、Physical Rubric は
+   詳細 Record の Atomic Status と数値閾値から導出する。
+7. ADR-0023 は証拠 Gate だけを Accepted にし、Transport の最終選定は実機 Evidence を参照する
+   後続 ADR へ分離する。
+
+手順の正本は [Nearby Transport 実機 Spike Protocol](./docs/design/nearby-transport-spike-protocol.md)、
+判断の正本は [ADR-0023](./docs/adr/0023-nearby-transport-evidence-gate.md)、証拠データと保持の正本は
+[Privacy データ台帳](./docs/privacy/data-inventory.md) と
+[保持ポリシー](./docs/privacy/retention-policy.md) とする。
+
+#### タスク
+
+1. 本 Plan、ADR、設計、Privacy 台帳、保持、脅威モデルを先に更新する。
+2. Markdown Table parser の既存重複候補を共通 Test helper へ分離する。
+3. Phase A の 4 候補、Phase B の 1 候補、方向別内訳と Network 単位集計を分けた 200 Join、Lifecycle、
+   Star Relay、Discovery 無効 Recovery、Packet Capture Coverage、Evidence Bundle の Record Contract を Red にする。
+4. `Not run` の初期 Evidence Record を追加し、静的 Screening と物理実行を混同せず、証拠なしで
+   `Selected` または `Accepted` へ進めないことを固定する。
+5. staged harness、`make before-commit`、code / security / simplify review を通し、Foundation PR を作成する。
+6. 実機 Spike は対象端末と隔離 Network fixture を用意した別セッションで実行する。
+7. Phase A の一次資料、exact route、version / source locator、7 Gate と導出 Status を strict JSON manifest に固定し、
+   unknown field、floating provenance、導出 Status の手入力を fail-closed validator で拒否する。
+8. 4 候補を同じ manifest で判定し、Static `Pass` の候補が 1 件以上ある場合だけ Physical Spike Candidate を
+   Evidence Record へ選ぶ。Static 判定を Physical Evidence や最終 Transport 選定へ読み替えない。
+
+#### 検証手順
+
+- `bun test scripts/nearby-transport-spike-protocol.test.ts`。
+- `bun test scripts/nearby-transport-static-screening.test.ts`。
+- `bun scripts/nearby-transport-static-screening.ts docs/evidence/nearby-transport-static-screening.json`。
+- 変更した Markdown の Textlint。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従う code review。
+- Capture、外部 Analytics、端末識別子、秘密、保持期限を Security Review する。
+- 評価表、Record、ADR に重複した判断状態がないことを Simplify Review する。
+- Physical Device Matrix と Packet Capture は実行するまで `Not run` とする。
+
+#### 進捗ログ
+
+- 2026-07-19: Issue 20、Issue 22 の Port Contract、Handshake、Privacy 台帳、保持、脅威モデル、
+  Native Build 境界を監査した。実機がない状態で Candidate を選ばず、Evidence Gate と選定 ADR を分離した。
+- 2026-07-19: Expo、React Native WebRTC、Apple、Android、Google Nearby Connections の一次資料を確認した。
+  Google Nearby Connections は iOS / Android と Star Strategy を提供する一方、SDK 利用 Analytics を収集し、
+  利用者の端末設定で制御する契約であるため、Telemetry 不使用 Gate を満たすかは未判定とした。
+- 2026-07-19: Code、Security、Simplify の独立レビューで、4 候補すべてを物理試験するよう読める曖昧さ、
+  Static Review の早すぎる完了表示、Lifecycle と Security 負試験の不足、Evidence Bundle の未結合、
+  Markdown Table parser の fail-open を検出した。Phase A / B、`L5` / `L5P`、Binding と Record を再設計した。
+- 2026-07-19: 再レビューで、Code block 内の偽 Table、Join の方向別 / Network 集計混在、空 Capture の
+  false negative、Sensitive Field の Canary Coverage、Phase A の棄却条件、Record の状態重複を検出した。
+  Code block 除外、集計表分離、Positive control、Field Manifest、導出規則へ修正した。
+- 2026-07-19: 追加の adversarial review で CommonMark fence / raw HTML による Evidence spoof、Offline の
+  Atomic Evidence 欠落、System Framework の source locator、状態正本の drift を修正した。最終 Code、Security、
+  Simplify Review は Blocker / High / Medium / Low すべて 0 件である。Physical Matrix と Packet Capture は `Not run` である。
+- 2026-07-19: GitHub 外部 Review の Candidate Status 優先順位、Plan の振り返り、Table header 除外、到達不能分岐、
+  列数不一致 Test を反映した。再レビューで検出した Table 内 row + delimiter の header 再同期 fail-open も、Table 内では
+  再同期せず拒否する回帰 Test とともに修正した。Code / Security / Simplify の最終再レビューは全 severity 0 件、
+  focused 文書契約 Test は 28 件成功である。Physical Matrix と Packet Capture は引き続き `Not run` である。
+- 2026-07-19: PR https://github.com/susumutomita/TenkaCloudPassport/pull/63 の merge が Issue 20 を自動 Close したが、
+  PR 本文と Evidence Record が Physical Gate 未実行を明記しているため Issue を再 Open に戻した。件数ではなく
+  受け入れ条件を完了境界とする。
+- 2026-07-19: Phase A の実行を開始した。OS 標準の DNS-SD と TLS 1.3 framed TCP を同一 Wire とする候補を Static
+  `Pass` の対象として調査し、WebRTC は Android Native Artifact の floating resolution と SDK 57 / RN 0.86 適合証拠不足、
+  Google Nearby Android + Swift は Application から停止できない利用 Analytics を理由に棄却する。BLE は独自 Secure
+  Protocol と Discovery Gate が `Fail` だが、Telemetry Gate の Native Artifact 証拠がなく Candidate 全体は `Not run` とする。
+  Machine-readable manifest と validator を判定正本にし、Physical 証拠は引き続き `Not run` とする。
+- 2026-07-19: 独立 Review で official URL の Host-only allowlist、Repository baseline 未結合、floating provenance の
+  Official Gate fail-open、Manifest / Markdown / 導出 Status の重複、早すぎる Secure / Telemetry `Pass` を検出した。
+  Source ID ごとの immutable URL、package.json / bun.lock SHA-256、System SDK の構造化 baseline、単一 Status 導出、
+  Manifest からの Record 全 Cell 投影へ修正する。Android Host identity の一次 route と Native Build Artifact がない
+  Secure / Telemetry Gate は `Not run` とし、Phase A 全体と Physical Candidate は `Not run` / `Not selected` のままにする。
+- 2026-07-19: 最終 validator は公式 Source catalog、Candidate / Gate class、7 Gate 共通 evidence role、known blocker、
+  JSONC AST の decoded duplicate key 検査を一元化した。Focused Test は 21 件、全 Test は 838 件成功し、staged harness は
+  Error / Warning 0、Typecheck、Textlint、Web Export、Code / Security / Simplify の全 severity 0 件を確認した。
+  Manifest CLI は Phase A `Not run` を導出し、Physical Candidate と実機 Evidence は未選択 / 未実行のままである。
+- 2026-07-19: Android Host の標準 TLS identity route を Android 公式 API から固定した。Lounge ごとの一時
+  AndroidKeyStore alias に EC P-256、`PURPOSE_SIGN`、self-sign 用 `DIGEST_SHA256`、TLS signing 用 `DIGEST_NONE` の
+  key pair と短期 self-signed certificate を生成し、`KeyStore.getCertificate()`
+  の DER を SHA-256 fingerprint として QR に bind する。`KeyManagerFactory` の key material を Lounge alias 固定の
+  `X509KeyManager.chooseServerAlias()` で選び、`SSLContext` へ組み込んで TLS 1.3 server へ提示する。Guest は
+  `X509TrustManager.checkServerTrusted()` 内で peer leaf の X.509 DER を SHA-256 化し、`MessageDigest.isEqual()` の
+  fingerprint 不一致を拒否する。終了時は `KeyStore.deleteEntry()` で
+  alias を削除する。これは Static secure-channel Gate の根拠だけであり、Native Build、実機 handshake、alias 削除確認、
+  Packet Capture、Telemetry artifact 検査は引き続き `Not run` とする。
+
+#### 振り返り
+
+- 問題: 初期案は Phase A / B の対象と完了条件が曖昧で、Static Review だけでも完了に見えた。Evidence Bundle は
+  Build、Capture、Analyzer、Review を同じ実行へ結び付けず、Capture Coverage と状態の正本も不足していた。
+  Markdown parser は code fence、raw HTML、分断 Table を証跡として取り込める fail-open 経路を持っていた。
+- 根本原因: 候補調査、物理測定、選定判断を 1 つの表現へ集約し、欠落時の状態遷移、Atomic Evidence、Bundle の
+  一意性、Capture の Positive control、parser の adversarial input を最初の不変条件として列挙していなかった。
+- 予防策: Phase A は全 4 候補の全 Gate が判定済みになるまで `Not run`、Phase B は通過した 1 候補だけを対象とし、
+  Bundle Metadata と Decision Record をそれぞれ証拠 Binding と選定状態の唯一の正本にする。Capture は対象 flow の
+  非 0 packet / byte、送受信 Counter、Sensitive Field Manifest、Positive control を必須にし、Markdown 契約は
+  CommonMark の偽装入力を Red にして fail-closed で検証する。
+- 問題: Foundation PR の merge だけで GitHub Issue が自動 Close され、PR 本文と Record の未完了状態が Issue 状態へ
+  反映されなかった。また、Static Table を手入力するだけでは source locator と導出 Status の drift を機械検出できない。
+- 根本原因: GitHub closing keyword と Definition of Done の境界が一致しておらず、Phase A の外部入力に strict schema と
+  provenance 制約を設けていなかった。
+- 予防策: 受け入れ条件未達の自動 Close は再 Open し、Phase A は strict JSON manifest から Status を導出する。
+  Package の floating resolution、unknown field、欠落 source、導出 Status field の入力を validator で拒否する。
+
+---
+
+### [Issue 22 Nearby Transport Port と Loopback Contract] - 2026-07-19
+
+#### 目的
+
+Issue 20 の実機 Transport 選定を推測せず、Domain、Agent、UI から Native Network 詳細を隔離する
+`NearbyTransport` Port、Host Relay、bounded Queue / Rate / Peer / Listener、固有 Connection Event、
+実 Adapterにも再利用する Contract Suite を完成する。
+
+#### 制約
+
+- Native Library、Socket、WebRTC、mDNS、Local Network API は将来の Infrastructure Adapter だけが import する。
+- QR Join Proof と Transport Fingerprint の認証、Host / Guest の Ready が完了するまで `send()` を許可しない。
+- Loopback Reference Adapter は Mock、暗号化済み Channel、実機証拠、Production fallback として扱わない。
+- Payload 4 KiB、Queue 8、1 秒 16 件 / 8 KiB、Participant 6、Listener 16 を超えた場合は型付き Error にする。
+- Passport、Prompt、Model Output、Network 名、端末 ID、Native Error 本文を保持または反射しない。
+- Issue 20 の Accepted ADR、Native Adapter、物理端末 Matrix、Packet Capture は本 Foundation の完了に含めない。
+
+#### 設計判断
+
+1. Peer Protocol に接続と Queue を持たせる案は Wire 検証と Native lifecycle を結合するため採用しない。
+2. App が Native Library を直接呼ぶ案は Platform ごとに認証、Ready、上限、cleanup が分岐するため採用しない。
+3. Adapter が短命 Binding を作り、App の `issueInvite(binding)` callback が実 Handshake を発行する Port を採用する。
+   Join は Host の `authorizeJoin()` と双方の `waitUntilReady()` が完了した後だけ `connected` となる。
+
+詳細は [Nearby Transport Port と Loopback Reference Adapter の設計](./docs/design/nearby-transport-contract.md) を
+正本とする。
+
+#### タスク
+
+1. 本 Plan と設計書を実装前に更新する。
+2. 再利用可能な Contract Suite を Red で追加する。
+3. Port の型、strict Error、Invite Descriptor、Event を実装する。
+4. 2〜6 名、Broadcast、Target、Leave、Host End、Reconnect、4 Condition を扱う Loopback Adapter を実装する。
+5. Payload / Queue / Rate / byte / Peer / Listener 上限と dispose cleanup を検証する。
+6. Production entrypoint が Loopback を import せず、Native Library が Port / Domain へ漏れないことを確認する。
+7. staged harness、`make before-commit`、code / security / simplify review を通して Draft PR を作成する。
+
+#### 検証手順
+
+- `bun test src/ports/nearby-transport.contract.test.ts` で Red / Green を確認する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従う code review。
+- 認証前 Payload、Identity 乗っ取り、Queue memory、Error 反射、dispose race を Security Review する。
+- Protocol との rate 重複、状態と Queue の重複、不要 abstraction を Simplify Review する。
+- Native / Physical Matrix は `Not run` として残す。
+
+#### 進捗ログ
+
+- 2026-07-19: Issue 20 / 21 / 22、Peer Protocol 1.2、Group Coordinator、単一端末 Binding を監査した。
+  Transport Binding と Handshake 発行の循環を `issueInvite(binding)` callback で切り、Join Proof と双方 Ready の
+  完了まで `send()` を閉じる設計を採用した。Native Adapter と実機証跡は未着手である。
+- 2026-07-19: `NearbyTransport` Port、Loopback Reference Adapter、実 Adapter と共有する Contract Suite を
+  Red → Green で追加した。2〜6 名、Fresh Invite、Host Relay の Broadcast / Target、Leave / Host End、4 Condition、
+  Payload / Queue / Rate / byte / Listener 上限、dispose cleanup を 25 本の日本語 BDD Contract で固定した。
+- 2026-07-19: 外部入力の未知 field、null Authorization の生 `TypeError`、並行 Host 開始、Host 開始中 dispose、
+  Join 中 Host End、Listener 例外による部分的な State 破壊を Red で再現し、strict rebuild、Operation Generation、
+  terminal Event、Observer 隔離へ修正した。Focused Test は Functions / Lines 100% である。
+- 2026-07-19: Join の認証待機中に Host が Invite を再発行すると、旧 Join の Identity と新 Authorization の
+  Ready callback が混在する race を Red で再現した。Join 開始時の Authorization object を世代 token として固定し、
+  Rotation 後の旧 Join を `CONNECTION_INTERRUPTED` で終端する契約へ修正した。
+- 2026-07-19: 独立 review で、認証待機中の定員 / Participant 未予約、同時 Reconnect、Host ID Join、
+  Host 再 Ready 前の送信、dispose 後 callback による state 巻き戻し、caller-owned object の await 越し再読を
+  再現した。in-flight reservation と単一 Join ownership、世代優先、strict data snapshot、Group Ready を
+  Contract へ追加して実装を修正した。巨大 UTF-8 入力の先行 allocation、mutable Binding / Identity、
+  reentrant dispose、固定 Error message、Production root scan、rate window 回復も回帰 Test で固定した。
+- 2026-07-19: 再レビューで Host Condition 中の pending Join、state Event 内 dispose、旧 Authorization cleanup 内
+  Host dispose、Fresh Invite の時刻更新後 Reconnect に世代 / 再入不足を再現した。Host / Join operation の
+  post-event ownership、pending 世代中断、cleanup 後再確認、既存 Membership の stable reconnect 判定を
+  Contract へ追加して修正した。Membership 通知前の内部 Ready commit と `joined` → `left` の外部順序を分離し、
+  `joined` listener からの現在 Membership 宛送信も許可した。byte-rate window の回復も portable Contract へ追加した。
+- 2026-07-19: 再入 Review で、Membership nested dispatch の `left` → `joined` 逆転、Host End 後の stale Event / Envelope、
+  Host Condition 後の terminal 復活、Host 開始中 Condition の再試行不能、Proxy validation 中 dispose 後の Ready / Queue、
+  Rotation candidate と破棄済み Authorization の残留を Red で再現した。Membership dispatch queue と recipient ownership、
+  validator 直後の generation check、Route の recipient 再確認、Rotation の fail-closed Host End へ修正した。Binding も
+  Port 共通 strict validator へ含め、Focused 30 Test と対象 Functions / Lines 100% を確認した。
+- 2026-07-19: Full Architecture Harness は Error / Warning 0、Typecheck は Green である。Bun 1.3.11 が class field の
+  implicit constructor を未実行 Function として source-map 集計する状態を Red で再現し、Binding Counter を明示
+  constructor で初期化して Reference Adapter の Functions / Lines を 100% にした。Native Adapter、実機 Matrix、
+  Packet Capture は `Not run` のままであり、本 Foundation の証拠へ含めない。
+- 2026-07-19: 最終再レビューで、Condition listener からの即時 Invite 再発行が Group の `reconnecting` commit を
+  追い越し、双方 Ready 前の送信を再開できる経路を Red で再現した。外部 callback 前に Host と現在 Membership の
+  送信を閉じ、Guest の再 Join と双方 Ready 後だけ復帰する契約へ修正した。Permission 拒否も terminal を先行 commit し、
+  pending / connected Guest の既存 terminal reason を Host End が再通知しないようにした。
+- 2026-07-19: code / security / state-concurrency の独立再レビューはすべて `ALLOW` となり、Blocker / High / Medium は
+  0 件だった。`make before-commit` は 837 Test、6 Snapshot、11,921 Expect、Functions / Lines 100%、Web Export Green、
+  staged architecture harness は Error / Warning 0 件で完了した。Production Web Bundle に Reference Adapter 固有 label / import
+  は存在しない。Native Adapter、実機 Matrix、Packet Capture は引き続き `Not run` である。
+- 2026-07-19: GitHub 外部 Review の 4 指摘を反映し、Join Descriptor と `requiredCapabilities` の freeze、
+  raw Join Request の 1,024 / 1,025-byte 境界、Bounded Contract、Markdown、独立した振り返りを修正した。
+  code / security / simplify の再レビューはすべて `ALLOW`、全 severity 0 件である。`make before-commit` は
+  838 Test、6 Snapshot、11,927 Expect、Functions / Lines 100%、Web Export Green、staged harness 0 件で完了した。
+
+#### 振り返り
+
+- 問題: 外部 callback と validation の途中で Host End、Invite Rotation、Condition、`dispose()` が再入すると、
+  古い Operation が Membership、Ready、terminal reason を後から上書きできた。最終外部 Review では Join Descriptor の
+  nested Capability 配列が mutable なままで、1,024-byte raw Join Request 上限も設計表から漏れていた。
+- 根本原因: 正常な非同期順序を中心に State を更新し、callback 前の内部 commit、Operation ownership、dispatch 世代、
+  strict projection の deep immutability を同じ不変条件として最初から列挙していなかった。実装上の byte bound と
+  設計正本の Bound 一覧も別々に更新していた。
+- 予防策: 外部 callback 前に terminal / reconnecting を commit し、callback と validator の直後に generation と ownership を
+  再確認する。Join Descriptor と `requiredCapabilities` は strict rebuild 後に freeze し、全 byte / count bound を同じ
+  Contract Suite と設計表で正確な境界値まで検証する。外部 Review の指摘も focused Red → Green と全 Gate 後に統合する。
 
 ---
 

@@ -16,6 +16,10 @@
 - 手動 JSON バックアップが Owner の明示操作なしに作成または共有されないことである。
 - Pilot Event Aggregate が個別 Event、正確な時刻、安定 ID、内容を持たず、最低集計単位未満で共有されない
   ことである。
+- Nearby Transport の Packet Capture が実在 Owner の Passport を使わず、Network metadata を Repository や
+  Cloud Storage へ残さないことである。
+- 公開 Nearby Transport Evidence が単一 Bundle に結合され、端末、Network、正確な実行日時を識別する Field を
+  持たないことである。
 
 可用性を妨げる電波妨害、端末 OS 自体の侵害、Owner が意図して画面またはバックアップを公開する行為は、
 アプリだけでは防げない。ただし安全でない入力を受けた場合は Bridge を無理に生成せず、
@@ -33,6 +37,8 @@
 | アプリと GGUF | digest と形式検証を通ったモデルファイルである。 | モデルの出力、モデル内の指示、改ざん済みファイル、parser 入力である。 | digest allowlist、サイズ上限、隔離 runtime、出力 schema と根拠検証である。 |
 | アプリとバックアップ保存先 | Owner が OS の保存画面で選んだ 1 回の書き込み先である。 | 保存先の同期、共有権限、履歴、外部アプリ、Import ファイルである。 | 明示確認、allowlist Export、strict Import、一時データ破棄である。 |
 | アプリと Pilot 調査 | Research 参加を別に明示した Participant と、固定 Counter の Schema である。 | Research Consent から Product Consent を推測すること、Facilitator の記憶、少人数 Aggregate、自動収集基盤である。 | Consent 分離、Memory-only Counter、最低 5 Outcome、Preview 後の手動 Share、内容なし Observation Sheet である。 |
+| Formative Researcher と参加者 | Product Consent とは別の明示的な Research Consent、固定 7 Field、暗号化済み一時領域、独立 Privacy Reviewer である。 | Researcher の端末と記憶、Facilitator、自由記述、正確な人数、小 Cell、Consent から Product 操作を推測することである。 | `L6` / `L6P` 分離、撤回時即時削除、集計直後または 7 日以内の削除、3 セッションかつ 2 Stratum の公開閾値、禁止 Field の fail-closed 削除である。 |
+| Spike Operator と Packet Capture | 承認済み手順、隔離 Network、非識別 Canary、指定 Reviewer である。 | 実在 Owner の Passport、raw Capture の共有、通信層 Address、正確な時刻、外部 Endpoint である。 | `L5` 分類、暗号化した検証端末、保持ポリシーの削除上限、Repository への raw Capture 禁止、`L5P` allowlist への明示投影である。 |
 
 中央サーバー、Analytics、外部推論 API は信頼境界へ置かない。中核フローはこれらへの通信を
 必要とせず、アプリは GitHub Token を要求または保存しない。
@@ -65,6 +71,10 @@
 | 全削除の中断 | 複数保存先の削除途中で Process または Storage が失敗し、一部 Data が次回起動で復元される。 | 中 | 高 | 高である。 |
 | Pilot Aggregate からの推測 | 少人数の Outcome、duration Bucket、Self-report と会場の知識を組み合わせ、個人の回答を推測する。 | 中 | 高 | 高である。 |
 | Research Consent の強制 | Research 拒否や Self-report 未回答を Product 利用、退出、支援の条件にする。 | 中 | 高 | 高である。 |
+| Formative Record の過剰収集と保持 | Researcher が自由記述、回答内容、正確な日時、会場、識別子、Sensitive Data を `L6` に記録するか、撤回または 7 日満了後も保持する。 | 中 | 高 | 高である。 |
+| Formative Public Aggregate からの再識別 | 正確な人数、Locale 名、Role × Locale、小 Cell、個別説明、逐語引用を `L6P` に公開し、外部の会場知識から参加者を推測する。 | 中 | 高 | 高である。 |
+| Packet Capture の過剰保持 | Spike の raw Capture に通信層 Address、Timing、誤って送った Passport が残り、Repository または Cloud へ複製される。 | 中 | 高 | 高である。 |
+| 公開 Spike Evidence の混同と再識別 | 別 Candidate、Build、Capture、Review の結果を合算するか、端末 model、Network ID、正確な日時を公開 Record に混ぜて誤った採用判断または再識別を招く。 | 中 | 高 | 高である。 |
 
 ## 脅威別の対策
 
@@ -79,10 +89,14 @@
 | パケット盗聴 | QR の Join Proof と Transport Fingerprint を、採用 Transport が標準暗号で確立した Channel に結合する。全 Pet Message と終了通知を Transport が暗号化し、平文 fallback、外部 relay、外部推論 API を持たない。 | 改ざんを伴わない受動的な盗聴はアプリから検出できない。Transport の認証 tag、Fingerprint、sequence の検証失敗は能動的な改ざんの補助 Signal として接続を閉じる。 | Lounge を終了し、鍵を破棄して新しい QR で再作成する。 | 通信量、時刻、通信層アドレス、同一 LAN 上に端末がいる事実などのメタデータは OS とネットワーク機器から見える場合がある。 |
 | 改ざん済み GGUF | 対応形式、最大サイズ、digest allowlist を満たすモデルだけを、network、ファイル書き込み、アプリ状態変更の権限を持たない隔離 runtime で開く。 | 読み込み前とアプリ更新後に digest と構造を再検証し、runtime crash、資源上限超過、schema 外出力を失敗として扱う。 | モデルを無効化して隔離し、Owner に削除または既知 digest のモデルへの置換を求める。Lounge は `no-signal` または終了とする。 | GGUF parser と推論 runtime の未知の脆弱性、正規モデルの不適切な出力、入手元の侵害は残る。 |
 | バックアップ誤公開 | Export 対象を allowlist に固定し、Lounge データ、GGUF、端末パス、識別子を除外する。保存前に平文 JSON と保存先の管理責任を表示し、自動同期や自動 upload を行わない。 | Export 後の誤公開はアプリから検出できない。Export 前 preview と件数は誤操作の補助シグナルとし、Owner は保存先の共有状態を確認する。Import は strict schema で未知フィールドと Lounge 由来フィールドを拒否する。 | Owner は保存先の共有を解除してファイルを削除し、必要なら Local Private Profile の内容を変更する。アプリ内一時 copy は直ちに破棄する。 | 保存先の履歴、同期先、受信者の copy、公開済みリポジトリからの回収は困難である。 |
-| 診断情報の過剰開示 | Report は strict allowlist とし、正確な時刻、内容、識別子、Path、IP / SSID / 位置、Key / Token を型で表現しない。 | Snapshot と strict parser で未知 field と禁止語彙を拒否し、Preview で全項目を Owner に示す。 | Preview を破棄し、固定 Error Code と Recovery だけで再生成する。 | Owner が共有した Report の保存先と受信者 copy はアプリから回収できない。 |
-| 全削除の中断 | write-ahead tombstone を物理削除より先に永続化し、以後の復元を閉じる。削除対象の Snapshot は作らない。 | 起動時に tombstone を Profile load より先に確認し、残る Resource 件数を内容なしで検査する。 | 各 Resource の削除を冪等に再開し、全件 0 の確認後だけ tombstone を消す。 | OS 自体の侵害、filesystem snapshot、Owner が外部保存した Backup はアプリ内全削除の対象外である。 |
+| 診断情報の過剰開示 | Report は strict allowlist とし、正確な時刻、内容、識別子、パス、IP / SSID / 位置、Key / Token を型で表現しない。 | Snapshot と strict parser で未知 field と禁止語彙を拒否し、Preview で全項目を Owner に示す。 | Preview を破棄し、固定 Error Code と Recovery だけで再生成する。 | Owner が共有した Report の保存先と受信者 copy はアプリから回収できない。 |
+| 全削除の中断 | write-ahead tombstone を物理削除より先に永続化し、以後の復元を閉じる。削除対象の Snapshot は作らない。 | 起動時に tombstone を Profile load より先に確認し、残る Resource 件数を内容なしで検査する。 | 各 Resource の削除を冪等に再開し、全件 0 の確認後だけ tombstone を消す。 | OS 自体の侵害、filesystem snapshot、Owner が外部保存したバックアップはアプリ内全削除の対象外である。 |
 | Pilot Aggregate からの推測 | 個別 Event と正確な時刻を持たず、duration を即 Bucket 化し、Outcome 5 件未満では JSON を生成しない。Aggregate を地域、会場、人物の Ranking に使わない。 | strict parser と禁止 field Test で Schema を固定し、Preview で全 field を確認する。 | 少人数、禁止 field、Consent 逸脱を認識したら Export と Pilot 拡大を停止し、未共有 Counter を Process Memory から消す。 | 5 件でも会場の知識との組合せによる推測は残り、手動共有後の copy は回収できない。 |
-| Research Consent の強制 | Research と Product の Script / UI を分離し、Research 拒否でも Product を利用できる。Self-report に「回答しない」と即時 Skip を置く。 | 第三者 Dry Run と Observation Sheet で Consent 混同、未回答者の待機を確認する。 | 混同が 1 件でもあれば新規 Session と拡大を停止し、Script / UI を改訂して再 Dry Run する。 | Facilitator の口頭圧力や周囲の同調圧力をアプリだけで完全には検出できない。 |
+| Formative Record の過剰収集と保持 | `L6` を固定 7 Field に限定し、自由記述、正確な日時、会場、端末 / Lounge ID、回答や会話の内容、逐語引用、Sensitive Data を型と運用で禁止する。Researcher だけが扱える暗号化済み一時領域に置く。 | セッション終了時と独立 Privacy Review で Field allowlist、撤回、Aggregate 更新、最長 7 日の削除を確認する。禁止 Field は内容を複製せず存在だけを確認する。 | 撤回または禁止 Field の発見時は Record 全体を即時削除し、本人の再同意なしに作り直さない。期限超過や削除不能が 1 件でもあれば新規 Research を停止する。 | Researcher の記憶、暗号化領域を扱う端末の侵害、削除前の少人数 Record からの推測は残る。 |
+| Formative Public Aggregate からの再識別 | 同じ Pattern が 3 セッション以上かつ 2 つ以上の Role または Locale Stratum に広がる場合だけ `L6P` へ投影する。Journey stage、Outcome class、Behavior code、Evidence direction、Hypothesis reference と固定 Code から作る 140 文字以内の sanitized pattern summary だけを許可し、Role cohort、Locale cohort、正確な人数、個別 Record、参加者由来の自由記述、逐語引用を含めない。 | 独立 Privacy Reviewer が Public Aggregate の小 Cell、Field allowlist、元 `L6` の削除を公開前に確認する。Privacy、Consent、退出に反する 1 件は内容を公開せず停止判断だけにする。 | 禁止 Field または閾値違反があれば公開を止め、既存 Public Aggregate と Review PR を Supersede して訂正する。元 Record を再公開または復元しない。 | 閾値を満たす Pattern でも外部の Event 情報との組合せによる推測と、公開後の copy は完全には回収できない。 |
+| Packet Capture の過剰保持 | 実在 Owner の Passport を使わず、Production serializer を通した非識別 Canary だけを送る。raw Capture は暗号化した検証端末だけに置き、Repository、Issue、PR、CI Artifact、Cloud Storage へ置かない。 | Reviewer が Sensitive Field Manifest の全 Field、stream 再構成後の完全値と断片、複数 Encoding、Positive-control Fixture の既知件数、対象 flow の packet / byte、送受信 Counter、各 digest、平文一致 0 件、外部 Endpoint 0 件を確認する。traffic 0 と未捕捉 interface は Fail とする。 | 保持ポリシーの `L5` 削除契機に従う。手順逸脱や平文一致が 1 件でもあれば Candidate 選定を停止し、Capture を即時削除する。 | Operator の検証端末侵害と、通信量、相対 Timing、通信層 Address が Capture 中に見えることは残る。 |
+| 公開 Spike Evidence の混同と再識別 | Record を `L5P` allowlist に固定し、Evidence Bundle ID、Candidate exact route、source、Repository commit、Build artifact digest、Analyzer digest、公開 Review を同じ Bundle に結合する。端末は platform class と OS major、実行時期は月だけを記録する。 | strict Table Contract と Review で必須 Binding の欠落、Bundle 不一致、禁止 Field、別 Bundle の合算を拒否する。 | 不整合または禁止 Field が 1 件でもあれば Selection を `Undecided` に戻し、公開 Record を Supersede して訂正する。raw `L5` は保持ポリシーどおり削除する。 | 公開 digest と月、Platform class、Candidate 情報を外部情報と組み合わせた推測は残る。 |
+| Research Consent の強制 | Research と Product の Script / UI を分離し、Research 拒否でも Product を利用できる。Self-report に「回答しない」と即時 Skip を置く。 | 第三者 Dry Run と Observation Sheet で Consent 混同、未回答者の待機を確認する。 | 混同が 1 件でもあれば新規セッションと拡大を停止し、Script / UI を改訂して再 Dry Run する。 | Facilitator の口頭圧力や周囲の同調圧力をアプリだけでは十分に検出できない。 |
 
 ## 横断的な検証規則
 

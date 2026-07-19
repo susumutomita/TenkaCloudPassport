@@ -31,7 +31,7 @@
     "build:web": "expo export --platform web --output-dir dist",
     "test": "bun test",
     "test:coverage": "bun test src --coverage",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.native-artifacts.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.scripts.json",
     "expo:check": "expo install --check",
     "clean": "rimraf .expo dist coverage",
     "lint": "bun biome check .",

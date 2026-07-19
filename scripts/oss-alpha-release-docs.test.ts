@@ -475,6 +475,7 @@ describe('Issue 29: Release Gate と Version の一致契約', () => {
     expect(workflow).toContain('--draft');
     expect(workflow).toContain('--verify-tag');
     expect(workflow).toContain('refusing to overwrite');
+    expect(workflow).toContain('^v[0-9A-Za-z.+-]+$');
     expect(workflow).not.toContain('continue-on-error');
     expect(workflow).not.toContain('--latest');
     expect(sourceWorkflowViolations(workflow)).toEqual([]);

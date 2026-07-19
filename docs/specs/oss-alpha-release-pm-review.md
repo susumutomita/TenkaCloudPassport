@@ -7,7 +7,7 @@
 - Review date: 2026-07-18。
 - Review basis: [OSS Alpha Release 仕様書](./2026-07-18-oss-alpha-release.md)、
   [OSS Alpha Release 設計](../design/oss-alpha-release.md)、
-  [ADR-0023](../adr/0023-reproducible-source-release.md)、
+  [ADR-0024](../adr/0024-reproducible-source-release.md)、
   [Definition of Done](../architecture/quality-bar.md) である。
 - Product specification: `ALLOW`。Source-only Candidate と Public Release を分ければ、利用者へ誤認を
   与えずに実装できる。
@@ -116,7 +116,7 @@ Commit / Build で、次の証拠を再確認する。
 | [Diagnostics / Full Delete](https://github.com/susumutomita/TenkaCloudPassport/issues/25) | Open | Sanitized diagnostics、Telemetry 不在、全削除後の再起動、Model / バックアップ Cache / Settings 不復元、OS Log inspection。 |
 | [Zero-cost Distribution](https://github.com/susumutomita/TenkaCloudPassport/issues/28) | Open | Tier / Capability / Cost / Scale Gate、Apple 公式制約、Android Artifact の署名、checksum、更新、Rollback の決定。 |
 
-Optional Android Artifact は Source-only R1 に混ぜない。[ADR-0023](../adr/0023-reproducible-source-release.md) と
+Optional Android Artifact は Source-only R1 に混ぜない。[ADR-0024](../adr/0024-reproducible-source-release.md) と
 [OSS Alpha Release 設計](../design/oss-alpha-release.md) が挙げる llama.rn Provider、Model Lifecycle、Transport ADR、
 Nearby Transport、Distribution の Gate が揃った後、別 Artifact Kind として判断する。APK がないことは R1 の失敗では
 ないが、APK を添付した時点で Source-only の Evidence を流用して合格にはできない。

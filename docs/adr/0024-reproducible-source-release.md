@@ -1,4 +1,4 @@
-# ADR-0023: OSS Alpha は再現可能な Source-only Candidate から開始する
+# ADR-0024: OSS Alpha は再現可能な Source-only Candidate から開始する
 
 - Status: Accepted
 - Date: 2026-07-18

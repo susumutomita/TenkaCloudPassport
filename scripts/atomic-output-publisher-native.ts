@@ -3,8 +3,11 @@ import { dlopen, ptr } from 'bun:ffi';
 export interface NativeEntryPlatformConfig {
   readonly libraryPath: string;
   readonly openCloseOnExec: number;
+  readonly openCreate: number;
   readonly openDirectory: number;
+  readonly openExclusive: number;
   readonly openNoFollow: number;
+  readonly openWriteOnly: number;
   readonly renameFlag: number;
   readonly renameSymbol: string;
 }
@@ -70,8 +73,49 @@ export function openEntryNoFollowWithConfig(
   }
 }
 
+export function openEntryExclusiveWithConfig(
+  config: NativeEntryPlatformConfig,
+  parentDescriptor: number,
+  entryName: string,
+  mode: number
+): number {
+  const library = dlopen(config.libraryPath, {
+    openat: {
+      args: ['i32', 'ptr', 'i32', 'i32'],
+      returns: 'i32',
+    },
+  });
+  try {
+    const entry = cPath(entryName);
+    return library.symbols.openat(
+      parentDescriptor,
+      ptr(entry),
+      config.openCloseOnExec |
+        config.openCreate |
+        config.openExclusive |
+        config.openNoFollow |
+        config.openWriteOnly,
+      mode
+    );
+  } finally {
+    library.close();
+  }
+}
+
 export function createNativeEntryFunctions(config: NativeEntryPlatformConfig) {
   return {
+    openEntryExclusiveNative(
+      parentDescriptor: number,
+      entryName: string,
+      mode: number
+    ): number {
+      return openEntryExclusiveWithConfig(
+        config,
+        parentDescriptor,
+        entryName,
+        mode
+      );
+    },
     openEntryNoFollowNative(
       parentDescriptor: number,
       entryName: string,

@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isJoinSecret } from '../src/domain/lounge-invite';
 import { QR_PROTOCOL_PREFIX } from '../src/protocol/qr-payload';
+import { markdownTableRowsInDocument } from './markdown-test-contract';
 
 const repositoryRoot = join(import.meta.dir, '..');
 const kitRoot = join(repositoryRoot, 'docs', 'facilitator');
@@ -25,6 +26,14 @@ const readKit = (fileName: string): Promise<string> =>
 const normalizeWhitespace = (value: string): string =>
   value.replace(/\s+/g, ' ').trim();
 
+const requiredValue = <Value>(
+  value: Value | undefined,
+  label: string
+): Value => {
+  if (value === undefined) throw new Error(`必須値がありません: ${label}`);
+  return value;
+};
+
 const expectTerms = (content: string, terms: readonly string[]): void => {
   const normalizedContent = normalizeWhitespace(content);
   for (const term of terms) {
@@ -32,39 +41,21 @@ const expectTerms = (content: string, terms: readonly string[]): void => {
   }
 };
 
-const markdownTableCells = (line: string): readonly string[] | null => {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return null;
-  const cells = trimmed
-    .slice(1, -1)
-    .split('|')
-    .map((cell) => cell.trim());
-  if (cells.every((cell) => /^:?-+:?$/.test(cell))) return null;
-  return cells;
-};
-
 const findTableRow = (
   content: string,
   firstCell: string
-): readonly string[] | null => {
-  for (const line of content.split('\n')) {
-    const cells = markdownTableCells(line);
-    if (cells?.[0] === firstCell) return cells;
-  }
-  return null;
-};
+): readonly string[] | null =>
+  markdownTableRowsInDocument(content).find(
+    (cells) => cells[0] === firstCell
+  ) ?? null;
 
 const findTableRows = (
   content: string,
   firstCell: string
 ): readonly (readonly string[])[] =>
-  content
-    .split('\n')
-    .map(markdownTableCells)
-    .filter(
-      (cells): cells is readonly string[] =>
-        cells !== null && cells[0] === firstCell
-    );
+  markdownTableRowsInDocument(content).filter(
+    (cells) => cells[0] === firstCell
+  );
 
 const physicalCapabilities = [
   ['Native Build / Distribution Channel', 2],
@@ -133,17 +124,10 @@ const supportMatrixViolations = (content: string): readonly string[] => {
   const allowedCapabilitySet: ReadonlySet<string> = new Set([
     ...physicalCapabilities.map(([capability]) => capability),
     ...repositoryRows.map(([capability]) => capability),
-    '能力',
-    'Capability',
   ]);
-  const unexpectedRows = supportSection
-    .split('\n')
-    .map(markdownTableCells)
-    .filter(
-      (row): row is readonly string[] =>
-        row !== null && !allowedCapabilitySet.has(row[0])
-    )
-    .map((row) => `${row[0]}: unexpected capability row`);
+  const unexpectedRows = markdownTableRowsInDocument(supportSection)
+    .filter((row) => !allowedCapabilitySet.has(row[0] ?? ''))
+    .map((row) => `${row[0] ?? ''}: unexpected capability row`);
   return [...physicalViolations, ...repositoryViolations, ...unexpectedRows];
 };
 
@@ -206,7 +190,9 @@ const consentContractViolations = (content: string): readonly string[] => {
 };
 
 const recordFieldLabels = (content: string): readonly string[] =>
-  [...content.matchAll(/^- ([^:\n]+):/gm)].map((match) => match[1].trim());
+  [...content.matchAll(/^- ([^:\n]+):/gm)].map((match) =>
+    requiredValue(match[1], 'record field label').trim()
+  );
 
 const allowedRecordFieldLabels = [
   'Kit Version',
@@ -239,14 +225,19 @@ const recordFieldEntries = (
   const lines = content.split('\n');
   const entries: [string, string][] = [];
   for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(/^- ([^:\n]+):[ \t]*(.*)$/);
+    const match = (lines[index] ?? '').match(/^- ([^:\n]+):[ \t]*(.*)$/);
     if (match === null) continue;
-    const valueLines = [match[2].trim()];
-    while (index + 1 < lines.length && /^ {2}\S/.test(lines[index + 1])) {
+    const valueLines = [requiredValue(match[2], 'record field value').trim()];
+    while (index + 1 < lines.length && /^ {2}\S/.test(lines[index + 1] ?? '')) {
       index += 1;
-      valueLines.push(lines[index].trim());
+      valueLines.push(
+        requiredValue(lines[index], 'continued record value').trim()
+      );
     }
-    entries.push([match[1].trim(), normalizeWhitespace(valueLines.join(' '))]);
+    entries.push([
+      requiredValue(match[1], 'record field label').trim(),
+      normalizeWhitespace(valueLines.join(' ')),
+    ]);
   }
   return entries;
 };
@@ -328,12 +319,9 @@ const recordFieldViolations = (content: string): readonly string[] => {
   );
   const revisionSection =
     content.split('## Kit 改訂入力 / Revision Input')[1] ?? '';
-  const revisionRows = revisionSection
-    .split('\n')
-    .map(markdownTableCells)
-    .filter((cells): cells is readonly string[] => cells !== null)
-    .map((cells) => cells[0])
-    .filter((label) => label !== '分類 / Category');
+  const revisionRows = markdownTableRowsInDocument(revisionSection).map(
+    (cells) => cells[0] ?? ''
+  );
   const allowedRevisionRows = [
     '文書の場所に迷った / Navigation confusion',
     '手順の意味に迷った / Instruction confusion',
@@ -386,7 +374,7 @@ const markdownAnchor = (heading: string): string =>
 const anchorsIn = (content: string): ReadonlySet<string> =>
   new Set(
     [...content.matchAll(/^#{1,6}\s+(.+?)\s*#*$/gm)].map((match) =>
-      markdownAnchor(match[1])
+      markdownAnchor(requiredValue(match[1], 'heading text'))
     )
   );
 
@@ -400,7 +388,7 @@ const unsafeLinkReason = (
   ) {
     return 'external or scheme URL';
   }
-  const [pathPart] = destination.split('#', 1);
+  const pathPart = destination.split('#', 1)[0] ?? '';
   if (pathPart.startsWith('/') || isAbsolute(pathPart)) return 'absolute path';
   if (
     pathPart !== '' &&
@@ -507,8 +495,8 @@ describe('Facilitator Kit 文書契約', () => {
       'Real iOS / Android camera QR: status must be `Not run`'
     );
     const inventedCapability = index.replace(
-      '## 現場で使う文書',
-      '| Participant Registry | Event | Verified | Stored centrally. |\n\n## 現場で使う文書'
+      '| 未経験者による Kit Dry Run | Kit Version 1.0 | `Not run` |',
+      '| Participant Registry | Event | Verified | Stored centrally. |\n| 未経験者による Kit Dry Run | Kit Version 1.0 | `Not run` |'
     );
     expect(supportMatrixViolations(inventedCapability)).toContain(
       'Participant Registry: unexpected capability row'
@@ -975,9 +963,10 @@ describe('Facilitator Kit 文書契約', () => {
       expect(content).not.toMatch(/^\s*\[[^\]]+\]:\s*/m);
       expect(content).not.toMatch(/<a\s+[^>]*href=/i);
       const links = [...content.matchAll(/\]\(([^)]+)\)/g)];
-      for (const [, destination] of links) {
+      for (const link of links) {
+        const destination = requiredValue(link[1], 'Markdown link destination');
         expect(unsafeLinkReason(sourcePath, destination)).toBeNull();
-        const [pathPart, rawFragment] = destination.split('#', 2);
+        const [pathPart = '', rawFragment] = destination.split('#', 2);
         const linkedPath =
           pathPart === '' ? sourcePath : resolve(dirname(sourcePath), pathPart);
         expect((await stat(linkedPath)).isFile()).toBe(true);
