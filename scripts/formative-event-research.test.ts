@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const researchRoot = join(import.meta.dir, '..', 'docs', 'research');
 
 const readResearchDocument = (fileName: string): Promise<string> =>
-  readFile(join(researchRoot, fileName), 'utf8');
+  Bun.file(join(researchRoot, fileName)).text();
 
 interface MarkdownTable {
   readonly header: readonly string[];
