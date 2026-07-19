@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
+  chmod,
   mkdtemp,
   readdir,
   readFile,
@@ -34,7 +35,11 @@ async function approvedExecutable(command: string) {
   const discovered = Bun.which(command);
   if (discovered === null)
     throw new Error(`${command} is required for this test`);
-  const path = await realpath(discovered);
+  return approvedExecutablePath(discovered);
+}
+
+async function approvedExecutablePath(executablePath: string) {
+  const path = await realpath(executablePath);
   const sha256 = createHash('sha256')
     .update(Buffer.from(await Bun.file(path).arrayBuffer()))
     .digest('hex');
@@ -421,13 +426,19 @@ describe('Issue 28: Android Release Binary identity 境界', () => {
 
   it('Git command の出力が 256 KiB を超える場合は Process を停止する', async () => {
     const directory = await temporaryDirectory();
-    const yes = await approvedExecutable('yes');
+    const executablePath = join(directory, 'overflow-git');
+    await writeFile(
+      executablePath,
+      "#!/bin/sh\nwhile :; do printf '0123456789abcdef0123456789abcdef\\n'; done\n"
+    );
+    await chmod(executablePath, 0o500);
+    const overflowingGit = await approvedExecutablePath(executablePath);
 
     await expect(
       createAndroidReleaseProvenance(
         join(directory, 'provenance.json'),
         'v1.0.0',
-        { git: yes.path, gitSha256: yes.sha256 },
+        { git: overflowingGit.path, gitSha256: overflowingGit.sha256 },
         directory
       )
     ).rejects.toEqual(
