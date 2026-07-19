@@ -47,10 +47,12 @@ Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容
 | `L3` Lounge 限定 | Lounge への参加中だけ必要な通信、推論、結果データである。 | メモリに限る。永続ストレージへ書き込まない。 |
 | `L3P` Process 限定集計 | 複数の Lounge をまたいで件数だけを集計し、Process 終了までに限って必要な非識別 Aggregate である。 | Process Memory に限る。Event Log や永続ストレージへ書き込まない。 |
 | `L4` Owner 管理 Export | Owner が明示操作でアプリ外へ複製したバックアップである。 | Owner が選んだ保存先に限る。 |
+| `L5` 管理された Engineering Evidence | 明示した実機 Security Test だけで作る、Network metadata を含み得る短命な証拠である。Product 機能と Pilot では生成しない。 | 暗号化した検証端末に限る。Repository、CI Artifact、Cloud Storage へ保存しない。 |
+| `L5P` 公開 Engineering Evidence | `L5` の内容を含めず、再現性と判定に必要な allowlist Field だけへ明示投影した公開証拠である。 | 公開 Repository と Review PR に保存できる。 |
 
 Diagnostic Report は `L0` の Version と、内容を持たない現在状態・件数だけを Owner の明示操作で
 組み立てる。Report 自体は永続保存せず、Preview 中のメモリだけで扱う。Owner が Share Sheet を確定した
-後の保存先は `L4` と同じく Owner 管理とする。正確な時刻、識別子、内容、Path、Network metadata は
+後の保存先は `L4` と同じく Owner 管理とする。正確な時刻、識別子、内容、パス、Network metadata は
 Diagnostic Schema に存在しない。
 
 Pilot Event Aggregate は `L3P` の Process 内 Counter として Start、Ready、Outcome、Provider、任意の
@@ -85,13 +87,15 @@ Facilitator の明示 Share 後は Owner 管理の `L4` とする。Research Con
 | 手動 JSON バックアップ | `L4` | Owner が Export を明示実行する。 | バックアップ schema 版、Local Private Profile、端末設定、モデル検証記録である。 | Owner がファイル選択画面で指定した保存先である。 | Owner と保存先を扱えるアプリまたはサービスである。 | Export 後は Owner が削除するまでである。 | Owner が保存先から削除する。アプリ内一時データは完了、取消、失敗、再起動で破棄する。 | 対象そのものである。 |
 | Sanitized Diagnostic Report | `L4` | Owner が Preview 後に Share を明示実行する。 | Version、Provider / Transport / Permission 状態、Model の Architecture / Size / digest 先頭 8 桁、固定 Error Code / Phase、Storage 件数 / Byte 数である。 | Preview 中はメモリだけ、Share 後は Owner が選んだ保存先である。 | Owner が選んだ保存先または共有先である。 | Preview 終了まで、Share 後は Owner が削除するまでである。 | Preview 終了または Owner が保存先から削除する。 | 対象そのものである。 |
 | Pilot Event Aggregate | `L3P`、手動 Share 後は `L4` | Lounge の固定遷移と任意 Self-report が内容なしの Counter を加算する。 | Schema Version、最低集計単位、Start / Ready、duration Bucket、Bridge / `no-signal`、Rules / Local LLM / Fallback、Self-report 件数である。 | Process Memory だけ、手動 Share 後は Owner が選んだ保存先である。 | Preview は Owner / Facilitator、Share 後は選択した保存先または共有先である。 | Process 終了まで、Share 後は Owner が削除するまでである。 | Process 終了、全 Local Data 削除、または Owner が保存先から削除する。 | Outcome 5 件以上の固定 Aggregate だけが対象である。 |
+| Nearby Transport Spike raw Packet Capture | `L5` | 承認済みの実機 Spike Operator が隔離 Network で明示取得する。 | 暗号化済み Packet、通信層 Address、Packet size、相対 Timing、非識別 Canary である。実在 Owner の Passport は使わない。 | 暗号化した検証端末だけである。 | 指定 Reviewer だけである。 | Review 完了直後または取得から 7 日以内の早い方である。 | Review 完了、7 日満了、手順逸脱の発見のうち最も早い時点である。 | 否である。`L5P` への明示投影だけを許可し、raw Capture を Export しない。 |
+| Sanitized Nearby Transport Spike Evidence Record | `L5P` | `L5` の内容を保持せず、承認済み Operator と Reviewer が実施結果から明示投影する。 | Schema / Record Version、Evidence Bundle ID、Candidate exact route / version / source、Repository commit、公開 Build ID と artifact digest、`physical-iphone` / `physical-android`、OS major、実行月、集計 Metric と Gate Status、cipher / fingerprint 判定、Capture / Canary / Serialized Envelope / Analyzer / Sensitive Field Manifest / Positive-control Fixture の digest、内容なしの Capture coverage と packet / byte / Envelope 件数、Tool Version、Review PR、Attestation、`L5` 削除 Attestation だけである。 | 公開 Repository と Review PR である。 | Repository と Review PR の閲覧者である。 | Repository history と同じである。 | 誤りは Record と Review PR を Supersede して訂正する。raw `L5` の削除とは独立する。 | 否である。手動 JSON バックアップへ含めない。製品 model、端末 ID、Network ID、Address、正確な日時、raw Capture、Canary cleartext、Packet Timing を含めない。 |
 | 実行時 Security Signal | `L3` | schema、認証、Replay、モデル出力の検証失敗が生成する。 | 内容を持たない失敗種別と現在の Lounge 内回数である。 | アプリのメモリだけである。 | Owner の警告画面だけである。 | Lounge セッションと同じである。 | 退出、Host 終了、20 分満了、プロセス終了のうち最も早い時点である。 | 否である。 |
 
 通信層アドレスは OS とネットワーク機器から見える場合があるが、QR、Public Passport、
 Pet Message、ログ、バックアップのアプリケーションデータへ複製しない。
 
 全削除 transaction の tombstone は内容を持たない固定 marker であり、`L1` としてアプリ専用領域へ保存
-できる。削除対象の値、件数、Path、識別子を marker に含めない。marker が存在する間は既存の Local Data を
+できる。削除対象の値、件数、パス、識別子を marker に含めない。marker が存在する間は既存の Local Data を
 復元せず、新規 Profile write と Model Context 取得も共有 lease で拒否する。冪等削除を完了して全 Resource
 の不在を確認した後に marker 自体を削除し、lease を解除する。
 

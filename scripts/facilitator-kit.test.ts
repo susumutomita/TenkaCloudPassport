@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isJoinSecret } from '../src/domain/lounge-invite';
 import { QR_PROTOCOL_PREFIX } from '../src/protocol/qr-payload';
+import { markdownTableRowsInDocument } from './markdown-test-contract';
 
 const repositoryRoot = join(import.meta.dir, '..');
 const kitRoot = join(repositoryRoot, 'docs', 'facilitator');
@@ -30,39 +31,21 @@ const expectTerms = (content: string, terms: readonly string[]): void => {
   }
 };
 
-const markdownTableCells = (line: string): readonly string[] | null => {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return null;
-  const cells = trimmed
-    .slice(1, -1)
-    .split('|')
-    .map((cell) => cell.trim());
-  if (cells.every((cell) => /^:?-+:?$/.test(cell))) return null;
-  return cells;
-};
-
 const findTableRow = (
   content: string,
   firstCell: string
-): readonly string[] | null => {
-  for (const line of content.split('\n')) {
-    const cells = markdownTableCells(line);
-    if (cells?.[0] === firstCell) return cells;
-  }
-  return null;
-};
+): readonly string[] | null =>
+  markdownTableRowsInDocument(content).find(
+    (cells) => cells[0] === firstCell
+  ) ?? null;
 
 const findTableRows = (
   content: string,
   firstCell: string
 ): readonly (readonly string[])[] =>
-  content
-    .split('\n')
-    .map(markdownTableCells)
-    .filter(
-      (cells): cells is readonly string[] =>
-        cells !== null && cells[0] === firstCell
-    );
+  markdownTableRowsInDocument(content).filter(
+    (cells) => cells[0] === firstCell
+  );
 
 const physicalCapabilities = [
   ['Native Build / Distribution Channel', 2],
@@ -133,13 +116,8 @@ const supportMatrixViolations = (content: string): readonly string[] => {
     '能力',
     'Capability',
   ]);
-  const unexpectedRows = supportSection
-    .split('\n')
-    .map(markdownTableCells)
-    .filter(
-      (row): row is readonly string[] =>
-        row !== null && !allowedCapabilitySet.has(row[0])
-    )
+  const unexpectedRows = markdownTableRowsInDocument(supportSection)
+    .filter((row) => !allowedCapabilitySet.has(row[0]))
     .map((row) => `${row[0]}: unexpected capability row`);
   return [...physicalViolations, ...repositoryViolations, ...unexpectedRows];
 };
@@ -325,10 +303,7 @@ const recordFieldViolations = (content: string): readonly string[] => {
   );
   const revisionSection =
     content.split('## Kit 改訂入力 / Revision Input')[1] ?? '';
-  const revisionRows = revisionSection
-    .split('\n')
-    .map(markdownTableCells)
-    .filter((cells): cells is readonly string[] => cells !== null)
+  const revisionRows = markdownTableRowsInDocument(revisionSection)
     .map((cells) => cells[0])
     .filter((label) => label !== '分類 / Category');
   const allowedRevisionRows = [
