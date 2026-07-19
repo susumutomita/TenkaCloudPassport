@@ -560,6 +560,113 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
 
 ---
 
+### [Issue 20 Nearby Transport 実機 Spike Protocol] - 2026-07-19
+
+#### 目的
+
+4 つの Transport 候補を同じ静的 Gate で Screening し、通過候補から理由を記録して選んだ
+1 候補だけを同じ物理条件で検証する。Repository の Green や静的な資料調査を iOS / Android
+相互接続の証拠へ読み替えない選定 Gate を完成する。実機証拠がそろうまでは Production Adapter を
+選ばず、選定状態を `Undecided` に固定する。
+
+#### 制約
+
+- iPhone と Android の実機、同一 Wi-Fi、Personal Hotspot、Internet 遮断を自動 Test で代替しない。
+- 100 回 Join は Network fixture ごとに実行し、iOS Host と Android Host の両方向を各 50 回含める。
+- Packet Capture は実在 Owner の Passport を使わず、Production serializer を通した非識別 Canary だけを使う。
+- raw Capture、IP、SSID、BSSID、MAC、UDID、正確な実行時刻を Repository へ commit しない。
+- Spike dependency と Native code は Production Path へ入れず、採用 Adapter は Issue 22 の別変更で実装する。
+- Expo Go、Web、Loopback、Simulator、静的 source review は物理端末証拠に数えない。
+- Phase A の Static Gate は 4 候補すべてを対象とし、Phase B の物理試験は選定理由と exact route を
+  記録した 1 候補だけを対象とする。異なる Candidate、Build、Capture、Review の結果を合算しない。
+- Google Nearby Connections のように SDK Telemetry の停止が利用者設定だけに依存する候補は、Application が
+  収集を停止する公式 API または Configuration と Build 適用証拠がなければ Static Gate を `Fail` とする。
+- Phase A は 4 候補をすべて判定し、各候補の全 Gate を埋める。`Fail` 候補は棄却できるが、Phase B は
+  Phase A を `Pass` した候補が 1 つ以上ある場合だけ進める。
+- Packet Capture は Positive-control Fixture、Sensitive Field Manifest、対象 flow の packet / byte と送受信 Counter で
+  Coverage を証明する。traffic 0 や別 interface の Capture を「平文 0 件」の証拠にしない。
+- 必須証拠が 1 件でも欠ける場合は ADR の Transport 選定を Accepted にせず、Issue 20 を閉じない。
+
+#### 設計判断
+
+1. 先に Library を選ぶ案は、Platform 相互接続、権限、外部 Analytics、Hotspot、再接続の失敗を
+   Package 人気で隠すため採用しない。
+2. raw Packet Capture を Repository へ残す案は Network metadata と短命な Lounge Data の保持境界を
+   破るため採用しない。
+3. Phase A では 4 候補を同じ Static Gate で Screening し、Phase B では通過候補から選んだ 1 候補を
+   方向別 Join Matrix、Lifecycle、Security、Privacy Gate で測る。
+4. Phase B の証拠を 1 つの Evidence Bundle ID、Candidate の exact route と version、Package なら source commit と
+   lock resolution、System Framework なら SDK / API version と OS / Build locator、Repository commit、
+   両 Platform の Build ID と artifact SHA-256、Analyzer、Review に結び付ける。
+5. raw Capture は `L5`、公開 Record は `L5P` とし、許可 Field と Lifecycle は Privacy 台帳と保持ポリシーへ
+   一元化する。
+6. Evidence Binding を Bundle Metadata、Decision Record を選定状態の唯一の正本とし、Physical Rubric は
+   詳細 Record の Atomic Status と数値閾値から導出する。
+7. ADR-0023 は証拠 Gate だけを Accepted にし、Transport の最終選定は実機 Evidence を参照する
+   後続 ADR へ分離する。
+
+手順の正本は [Nearby Transport 実機 Spike Protocol](./docs/design/nearby-transport-spike-protocol.md)、
+判断の正本は [ADR-0023](./docs/adr/0023-nearby-transport-evidence-gate.md)、証拠データと保持の正本は
+[Privacy データ台帳](./docs/privacy/data-inventory.md) と
+[保持ポリシー](./docs/privacy/retention-policy.md) とする。
+
+#### タスク
+
+1. 本 Plan、ADR、設計、Privacy 台帳、保持、脅威モデルを先に更新する。
+2. Markdown Table parser の既存重複候補を共通 Test helper へ分離する。
+3. Phase A の 4 候補、Phase B の 1 候補、方向別内訳と Network 単位集計を分けた 200 Join、Lifecycle、
+   Star Relay、Discovery 無効 Recovery、Packet Capture Coverage、Evidence Bundle の Record Contract を Red にする。
+4. `Not run` の初期 Evidence Record を追加し、静的 Screening と物理実行を混同せず、証拠なしで
+   `Selected` または `Accepted` へ進めないことを固定する。
+5. staged harness、`make before-commit`、code / security / simplify review を通し、Foundation PR を作成する。
+6. 実機 Spike は対象端末と隔離 Network fixture を用意した別セッションで実行する。
+
+#### 検証手順
+
+- `bun test scripts/nearby-transport-spike-protocol.test.ts`。
+- 変更した Markdown の Textlint。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `.claude/agents/code-reviewer.md` に従う code review。
+- Capture、外部 Analytics、端末識別子、秘密、保持期限を Security Review する。
+- 評価表、Record、ADR に重複した判断状態がないことを Simplify Review する。
+- Physical Device Matrix と Packet Capture は実行するまで `Not run` とする。
+
+#### 進捗ログ
+
+- 2026-07-19: Issue 20、Issue 22 の Port Contract、Handshake、Privacy 台帳、保持、脅威モデル、
+  Native Build 境界を監査した。実機がない状態で Candidate を選ばず、Evidence Gate と選定 ADR を分離した。
+- 2026-07-19: Expo、React Native WebRTC、Apple、Android、Google Nearby Connections の一次資料を確認した。
+  Google Nearby Connections は iOS / Android と Star Strategy を提供する一方、SDK 利用 Analytics を収集し、
+  利用者の端末設定で制御する契約であるため、Telemetry 不使用 Gate を満たすかは未判定とした。
+- 2026-07-19: Code、Security、Simplify の独立レビューで、4 候補すべてを物理試験するよう読める曖昧さ、
+  Static Review の早すぎる完了表示、Lifecycle と Security 負試験の不足、Evidence Bundle の未結合、
+  Markdown Table parser の fail-open を検出した。Phase A / B、`L5` / `L5P`、Binding と Record を再設計した。
+- 2026-07-19: 再レビューで、Code block 内の偽 Table、Join の方向別 / Network 集計混在、空 Capture の
+  false negative、Sensitive Field の Canary Coverage、Phase A の棄却条件、Record の状態重複を検出した。
+  Code block 除外、集計表分離、Positive control、Field Manifest、導出規則へ修正した。
+- 2026-07-19: 追加の adversarial review で CommonMark fence / raw HTML による Evidence spoof、Offline の
+  Atomic Evidence 欠落、System Framework の source locator、状態正本の drift を修正した。最終 Code、Security、
+  Simplify Review は Blocker / High / Medium / Low すべて 0 件である。Physical Matrix と Packet Capture は `Not run` である。
+- 2026-07-19: GitHub 外部 Review の Candidate Status 優先順位、Plan の振り返り、Table header 除外、到達不能分岐、
+  列数不一致 Test を反映した。再レビューで検出した Table 内 row + delimiter の header 再同期 fail-open も、Table 内では
+  再同期せず拒否する回帰 Test とともに修正した。Code / Security / Simplify の最終再レビューは全 severity 0 件、
+  focused 文書契約 Test は 28 件成功である。Physical Matrix と Packet Capture は引き続き `Not run` である。
+
+#### 振り返り
+
+- 問題: 初期案は Phase A / B の対象と完了条件が曖昧で、Static Review だけでも完了に見えた。Evidence Bundle は
+  Build、Capture、Analyzer、Review を同じ実行へ結び付けず、Capture Coverage と状態の正本も不足していた。
+  Markdown parser は code fence、raw HTML、分断 Table を証跡として取り込める fail-open 経路を持っていた。
+- 根本原因: 候補調査、物理測定、選定判断を 1 つの表現へ集約し、欠落時の状態遷移、Atomic Evidence、Bundle の
+  一意性、Capture の Positive control、parser の adversarial input を最初の不変条件として列挙していなかった。
+- 予防策: Phase A は全 4 候補の全 Gate が判定済みになるまで `Not run`、Phase B は通過した 1 候補だけを対象とし、
+  Bundle Metadata と Decision Record をそれぞれ証拠 Binding と選定状態の唯一の正本にする。Capture は対象 flow の
+  非 0 packet / byte、送受信 Counter、Sensitive Field Manifest、Positive control を必須にし、Markdown 契約は
+  CommonMark の偽装入力を Red にして fail-closed で検証する。
+
+---
+
 ### [Issue 22 Nearby Transport Port と Loopback Contract] - 2026-07-19
 
 #### 目的

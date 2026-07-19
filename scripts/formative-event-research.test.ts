@@ -1,44 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
+import {
+  markdownTable,
+  markdownSection as section,
+} from './markdown-test-contract';
 
 const researchRoot = join(import.meta.dir, '..', 'docs', 'research');
 
 const readResearchDocument = (fileName: string): Promise<string> =>
   Bun.file(join(researchRoot, fileName)).text();
-
-interface MarkdownTable {
-  readonly header: readonly string[];
-  readonly rows: readonly (readonly string[])[];
-}
-
-function section(document: string, heading: string): string {
-  const marker = `## ${heading}`;
-  const start = document.indexOf(marker);
-  if (start < 0) {
-    throw new Error(`必須 Section がありません: ${heading}`);
-  }
-  const remainder = document.slice(start + marker.length);
-  const nextHeading = remainder.indexOf('\n## ');
-  return nextHeading < 0 ? remainder : remainder.slice(0, nextHeading);
-}
-
-function markdownTable(document: string, heading: string): MarkdownTable {
-  const lines = section(document, heading)
-    .split('\n')
-    .filter((line) => line.startsWith('|') && line.endsWith('|'));
-  if (lines.length < 2) {
-    throw new Error(`必須 Table がありません: ${heading}`);
-  }
-  const parseRow = (line: string): readonly string[] =>
-    line
-      .slice(1, -1)
-      .split('|')
-      .map((cell) => cell.trim());
-  return {
-    header: parseRow(lines[0]),
-    rows: lines.slice(2).map(parseRow),
-  };
-}
 
 const journeyStages = [
   'Arrival',
