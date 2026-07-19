@@ -620,10 +620,16 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
    `Selected` または `Accepted` へ進めないことを固定する。
 5. staged harness、`make before-commit`、code / security / simplify review を通し、Foundation PR を作成する。
 6. 実機 Spike は対象端末と隔離 Network fixture を用意した別セッションで実行する。
+7. Phase A の一次資料、exact route、version / source locator、7 Gate と導出 Status を strict JSON manifest に固定し、
+   unknown field、floating provenance、導出 Status の手入力を fail-closed validator で拒否する。
+8. 4 候補を同じ manifest で判定し、Static `Pass` の候補が 1 件以上ある場合だけ Physical Spike Candidate を
+   Evidence Record へ選ぶ。Static 判定を Physical Evidence や最終 Transport 選定へ読み替えない。
 
 #### 検証手順
 
 - `bun test scripts/nearby-transport-spike-protocol.test.ts`。
+- `bun test scripts/nearby-transport-static-screening.test.ts`。
+- `bun scripts/nearby-transport-static-screening.ts docs/evidence/nearby-transport-static-screening.json`。
 - 変更した Markdown の Textlint。
 - `bun scripts/architecture-harness.ts --staged --fail-on=error`。
 - `make before-commit`。
@@ -652,6 +658,23 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
   列数不一致 Test を反映した。再レビューで検出した Table 内 row + delimiter の header 再同期 fail-open も、Table 内では
   再同期せず拒否する回帰 Test とともに修正した。Code / Security / Simplify の最終再レビューは全 severity 0 件、
   focused 文書契約 Test は 28 件成功である。Physical Matrix と Packet Capture は引き続き `Not run` である。
+- 2026-07-19: PR https://github.com/susumutomita/TenkaCloudPassport/pull/63 の merge が Issue 20 を自動 Close したが、
+  PR 本文と Evidence Record が Physical Gate 未実行を明記しているため Issue を再 Open に戻した。件数ではなく
+  受け入れ条件を完了境界とする。
+- 2026-07-19: Phase A の実行を開始した。OS 標準の DNS-SD と TLS 1.3 framed TCP を同一 Wire とする候補を Static
+  `Pass` の対象として調査し、WebRTC は Android Native Artifact の floating resolution と SDK 57 / RN 0.86 適合証拠不足、
+  Google Nearby Android + Swift は Application から停止できない利用 Analytics を理由に棄却する。BLE は独自 Secure
+  Protocol と Discovery Gate が `Fail` だが、Telemetry Gate の Native Artifact 証拠がなく Candidate 全体は `Not run` とする。
+  Machine-readable manifest と validator を判定正本にし、Physical 証拠は引き続き `Not run` とする。
+- 2026-07-19: 独立 Review で official URL の Host-only allowlist、Repository baseline 未結合、floating provenance の
+  Official Gate fail-open、Manifest / Markdown / 導出 Status の重複、早すぎる Secure / Telemetry `Pass` を検出した。
+  Source ID ごとの immutable URL、package.json / bun.lock SHA-256、System SDK の構造化 baseline、単一 Status 導出、
+  Manifest からの Record 全 Cell 投影へ修正する。Android Host identity の一次 route と Native Build Artifact がない
+  Secure / Telemetry Gate は `Not run` とし、Phase A 全体と Physical Candidate は `Not run` / `Not selected` のままにする。
+- 2026-07-19: 最終 validator は公式 Source catalog、Candidate / Gate class、7 Gate 共通 evidence role、known blocker、
+  JSONC AST の decoded duplicate key 検査を一元化した。Focused Test は 21 件、全 Test は 838 件成功し、staged harness は
+  Error / Warning 0、Typecheck、Textlint、Web Export、Code / Security / Simplify の全 severity 0 件を確認した。
+  Manifest CLI は Phase A `Not run` を導出し、Physical Candidate と実機 Evidence は未選択 / 未実行のままである。
 
 #### 振り返り
 
@@ -664,6 +687,12 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
   Bundle Metadata と Decision Record をそれぞれ証拠 Binding と選定状態の唯一の正本にする。Capture は対象 flow の
   非 0 packet / byte、送受信 Counter、Sensitive Field Manifest、Positive control を必須にし、Markdown 契約は
   CommonMark の偽装入力を Red にして fail-closed で検証する。
+- 問題: Foundation PR の merge だけで GitHub Issue が自動 Close され、PR 本文と Record の未完了状態が Issue 状態へ
+  反映されなかった。また、Static Table を手入力するだけでは source locator と導出 Status の drift を機械検出できない。
+- 根本原因: GitHub closing keyword と Definition of Done の境界が一致しておらず、Phase A の外部入力に strict schema と
+  provenance 制約を設けていなかった。
+- 予防策: 受け入れ条件未達の自動 Close は再 Open し、Phase A は strict JSON manifest から Status を導出する。
+  Package の floating resolution、unknown field、欠落 source、導出 Status field の入力を validator で拒否する。
 
 ---
 

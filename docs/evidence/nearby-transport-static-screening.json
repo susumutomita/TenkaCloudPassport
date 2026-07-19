@@ -1,0 +1,440 @@
+{
+  "schemaVersion": 1,
+  "reviewedMonth": "2026-07",
+  "baseline": {
+    "expoSdk": "57.0.7",
+    "reactNative": "0.86.0",
+    "androidCompileSdk": 36,
+    "androidTargetSdk": 36,
+    "iosMinimum": "16.4",
+    "xcodeMinimum": "26.4",
+    "packageJsonSha256": "ad2753e14ee70051ecc464bc807c2ec58d64c8cd42236ffbce70e12ba3fc5eed",
+    "bunLockSha256": "640807aef44b5d5a23b0fd929760c05c4ff359d0a1a8eb5729789c7238592db8"
+  },
+  "sources": [
+    {
+      "id": "expo-platform-baseline",
+      "label": "Expo SDK platform baseline",
+      "url": "https://docs.expo.dev/versions/v57.0.0/",
+      "locator": "SDK 57.0.0 row: Android compileSdk 36, targetSdk 36, iOS 16.4+, Xcode 26.4+"
+    },
+    {
+      "id": "expo-modules-api",
+      "label": "Expo Modules API",
+      "url": "https://docs.expo.dev/modules/module-api/",
+      "locator": "Swift and Kotlin native module API over JSI and React Native primitives"
+    },
+    {
+      "id": "expo-new-architecture",
+      "label": "React Native New Architecture in Expo",
+      "url": "https://docs.expo.dev/guides/new-architecture/",
+      "locator": "Expo Modules API modules support the New Architecture by default"
+    },
+    {
+      "id": "expo-development-builds",
+      "label": "Expo development builds",
+      "url": "https://docs.expo.dev/develop/development-builds/introduction/",
+      "locator": "Development build boundary for custom native code"
+    },
+    {
+      "id": "apple-network-listener",
+      "label": "Apple NWListener",
+      "url": "https://developer.apple.com/documentation/network/nwlistener",
+      "locator": "Network.framework listener, inbound connections, and Bonjour service advertisement"
+    },
+    {
+      "id": "apple-local-tls",
+      "label": "Apple local network TLS identity",
+      "url": "https://developer.apple.com/documentation/network/creating-an-identity-for-local-network-tls",
+      "locator": "NWListener TLS identity and explicit peer certificate verification route"
+    },
+    {
+      "id": "apple-bonjour",
+      "label": "Apple Bonjour",
+      "url": "https://developer.apple.com/documentation/network/bonjour",
+      "locator": "DNS-SD service discovery on Apple platforms"
+    },
+    {
+      "id": "android-nsd-guide",
+      "label": "Android Network Service Discovery guide",
+      "url": "https://developer.android.com/develop/connectivity/wifi/use-nsd",
+      "locator": "DNS-SD registration, discovery, resolution, and socket connection route"
+    },
+    {
+      "id": "android-nsd-manager",
+      "label": "Android NsdManager API",
+      "url": "https://developer.android.com/reference/android/net/nsd/NsdManager",
+      "locator": "NsdManager API 16+, DNS-SD over mDNS, lifecycle and permission behavior"
+    },
+    {
+      "id": "android-ssl-socket",
+      "label": "Android SSLSocket API",
+      "url": "https://developer.android.com/reference/javax/net/ssl/SSLSocket",
+      "locator": "TLS 1.3 client and server support from API 29"
+    },
+    {
+      "id": "android-x509-trust-manager",
+      "label": "Android unsafe TrustManager guidance",
+      "url": "https://developer.android.com/privacy-and-security/risks/unsafe-trustmanager",
+      "locator": "checkServerTrusted must reject certificates that do not satisfy the application trust check"
+    },
+    {
+      "id": "webrtc-release-124-0-7",
+      "label": "React Native WebRTC 124.0.7 release",
+      "url": "https://github.com/react-native-webrtc/react-native-webrtc/commit/5ecc86111c2f8e0d152d719f8b7b357a601150b6",
+      "locator": "tag 124.0.7, source commit 5ecc86111c2f8e0d152d719f8b7b357a601150b6"
+    },
+    {
+      "id": "webrtc-android-build",
+      "label": "React Native WebRTC Android provenance",
+      "url": "https://github.com/react-native-webrtc/react-native-webrtc/blob/5ecc86111c2f8e0d152d719f8b7b357a601150b6/android/build.gradle",
+      "locator": "org.jitsi:webrtc:124.+ Android dependency declaration"
+    },
+    {
+      "id": "webrtc-ios-podspec",
+      "label": "React Native WebRTC iOS provenance",
+      "url": "https://github.com/react-native-webrtc/react-native-webrtc/blob/5ecc86111c2f8e0d152d719f8b7b357a601150b6/react-native-webrtc.podspec",
+      "locator": "JitsiWebRTC ~> 124.0.0 CocoaPods dependency declaration"
+    },
+    {
+      "id": "webrtc-basic-usage",
+      "label": "React Native WebRTC basic usage",
+      "url": "https://react-native-webrtc.github.io/handbook/guides/basic-usage.html",
+      "locator": "RTCPeerConnection and DataChannel route"
+    },
+    {
+      "id": "webrtc-expo",
+      "label": "React Native WebRTC Expo boundary",
+      "url": "https://react-native-webrtc.github.io/handbook/guides/extra-steps/expo.html",
+      "locator": "Expo Go unsupported; development client and out-of-tree config plugin required"
+    },
+    {
+      "id": "google-nearby-overview",
+      "label": "Google Nearby Connections overview",
+      "url": "https://developers.google.com/nearby/connections/overview",
+      "locator": "Encrypted offline connections and SDK usage analytics controlled by end-user OS settings"
+    },
+    {
+      "id": "google-nearby-strategies",
+      "label": "Google Nearby Connections strategies",
+      "url": "https://developers.google.com/nearby/connections/strategies",
+      "locator": "P2P_STAR topology and discovery model"
+    },
+    {
+      "id": "google-nearby-swift",
+      "label": "Google Nearby Connections for Swift",
+      "url": "https://developers.google.com/nearby/connections/swift/get-started",
+      "locator": "google/nearby Swift Package route without an exact version in the setup guide"
+    },
+    {
+      "id": "apple-core-bluetooth",
+      "label": "Apple Core Bluetooth",
+      "url": "https://developer.apple.com/documentation/corebluetooth",
+      "locator": "iOS BLE central and peripheral system framework"
+    },
+    {
+      "id": "android-ble",
+      "label": "Android BLE overview",
+      "url": "https://developer.android.com/develop/connectivity/bluetooth/ble/ble-overview",
+      "locator": "Android BLE GATT central and peripheral APIs"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "mdns-tls",
+      "name": "mDNS + Local WebSocket / Secure Channel",
+      "exactRoute": "DNS-SD is optional discovery; QR carries a direct host hint and SHA-256 leaf-certificate fingerprint; iOS Network.framework and Android NsdManager plus JSSE exchange the same bounded length-prefixed application frames over TLS 1.3 with no plaintext fallback",
+      "rationale": "This is the only route that keeps one cross-platform wire, standard TLS, and QR recovery without a third-party transport SDK, but Android Host identity provisioning and application-controlled telemetry remain Not run until primary-route and native-build evidence exist.",
+      "provenance": {
+        "kind": "system-framework",
+        "ios": {
+          "buildTool": "Xcode",
+          "buildToolVersion": "26.4",
+          "minimumOs": "16.4",
+          "framework": "Network.framework",
+          "apiRoute": "NWListener and NWConnection with TLS options, Bonjour advertisement, and leaf-certificate fingerprint verification"
+        },
+        "android": {
+          "buildTool": "Expo SDK Android toolchain",
+          "minimumApi": 29,
+          "compileSdk": 36,
+          "targetSdk": 36,
+          "framework": "NsdManager and JSSE",
+          "apiRoute": "NsdManager DNS-SD plus SSLServerSocket and SSLSocket restricted to TLS 1.3 with leaf-certificate fingerprint verification"
+        }
+      },
+      "gates": {
+        "officialSourceAndVersion": {
+          "status": "Pass",
+          "reason": "Repository versions and Expo platform SDK baseline are exact; the route uses only public Apple and Android system-framework locators.",
+          "sourceIds": [
+            "expo-platform-baseline",
+            "apple-network-listener",
+            "android-nsd-manager",
+            "android-ssl-socket"
+          ]
+        },
+        "crossPlatformRoute": {
+          "status": "Pass",
+          "reason": "Both platforms advertise or resolve DNS-SD and exchange the same bounded framed protocol over interoperable TLS sockets; QR bypasses discovery.",
+          "sourceIds": [
+            "apple-bonjour",
+            "android-nsd-guide",
+            "apple-local-tls",
+            "android-ssl-socket"
+          ]
+        },
+        "expoAndNewArchitecture": {
+          "status": "Pass",
+          "reason": "The route is a local Swift and Kotlin Expo module in a Development Build; Expo Modules support the New Architecture by default.",
+          "sourceIds": [
+            "expo-modules-api",
+            "expo-new-architecture",
+            "expo-development-builds"
+          ]
+        },
+        "standardSecureChannel": {
+          "status": "Not run",
+          "reason": "The TLS 1.3 trust-callback contract is fixed, but an official Android Host route for ephemeral certificate and key generation, KeyManager presentation, and alias deletion is not yet fixed or evidenced.",
+          "sourceIds": []
+        },
+        "licenseAndMaintenance": {
+          "status": "Pass",
+          "reason": "No third-party transport package, native artifact, or downloader is added; Apple and Android public system APIs are compiled by the pinned Expo platform toolchain.",
+          "sourceIds": [
+            "expo-platform-baseline",
+            "apple-network-listener",
+            "android-nsd-manager"
+          ]
+        },
+        "applicationControlledTelemetry": {
+          "status": "Not run",
+          "reason": "The route adds no third-party transport SDK, but no iOS or Android native build artifact exists yet for dependency, symbol, configuration, and endpoint verification.",
+          "sourceIds": []
+        },
+        "topologyAndDiscovery": {
+          "status": "Pass",
+          "reason": "One Host listener relays to at most five Guests; DNS-SD is optional and the QR direct host hint remains the recovery route when discovery is disabled.",
+          "sourceIds": [
+            "apple-network-listener",
+            "apple-bonjour",
+            "android-nsd-guide"
+          ]
+        }
+      }
+    },
+    {
+      "id": "webrtc-datachannel",
+      "name": "WebRTC DataChannel + QR Signaling",
+      "exactRoute": "react-native-webrtc 124.0.7 with QR-carried SDP and ICE host candidates, one Host RTCPeerConnection per Guest, and DataChannel application frames",
+      "rationale": "The cross-platform wire is viable, but floating native artifacts, unproven Expo compatibility, unavailable peer fingerprint binding, and unknown telemetry prevent selection.",
+      "provenance": {
+        "kind": "package",
+        "version": "124.0.7",
+        "tag": "124.0.7",
+        "sourceCommit": "5ecc86111c2f8e0d152d719f8b7b357a601150b6",
+        "resolutions": [
+          {
+            "platform": "shared",
+            "artifact": "react-native-webrtc",
+            "declaredVersion": "124.0.7",
+            "resolution": "exact"
+          },
+          {
+            "platform": "android",
+            "artifact": "org.jitsi:webrtc",
+            "declaredVersion": "124.+",
+            "resolution": "floating"
+          },
+          {
+            "platform": "ios",
+            "artifact": "JitsiWebRTC",
+            "declaredVersion": "~> 124.0.0",
+            "resolution": "floating"
+          }
+        ]
+      },
+      "gates": {
+        "officialSourceAndVersion": {
+          "status": "Fail",
+          "reason": "The JavaScript package tag and source commit are exact, but both native Jitsi artifact declarations are ranges rather than exact lock resolutions.",
+          "sourceIds": [
+            "webrtc-release-124-0-7",
+            "webrtc-android-build",
+            "webrtc-ios-podspec"
+          ]
+        },
+        "crossPlatformRoute": {
+          "status": "Pass",
+          "reason": "Both platforms use the same WebRTC DataChannel wire route and QR can carry the out-of-band signaling description.",
+          "sourceIds": ["webrtc-basic-usage"]
+        },
+        "expoAndNewArchitecture": {
+          "status": "Fail",
+          "reason": "The official Expo note requires a Development Client and out-of-tree plugin but does not establish exact Expo SDK 57 and React Native 0.86 compatibility.",
+          "sourceIds": ["webrtc-expo", "expo-new-architecture"]
+        },
+        "standardSecureChannel": {
+          "status": "Fail",
+          "reason": "DTLS protects DataChannel traffic, but the reviewed React Native API route does not expose a peer certificate fingerprint that can be bound to the QR proof.",
+          "sourceIds": ["webrtc-basic-usage"]
+        },
+        "licenseAndMaintenance": {
+          "status": "Fail",
+          "reason": "The package is maintained and MIT-licensed, but floating iOS and Android Jitsi native artifact resolutions violate reproducible provenance.",
+          "sourceIds": [
+            "webrtc-release-124-0-7",
+            "webrtc-android-build",
+            "webrtc-ios-podspec"
+          ]
+        },
+        "applicationControlledTelemetry": {
+          "status": "Fail",
+          "reason": "The transitive Jitsi native artifacts and their application-controlled collection configuration are not fixed or evidenced by the reviewed route.",
+          "sourceIds": ["webrtc-android-build", "webrtc-ios-podspec"]
+        },
+        "topologyAndDiscovery": {
+          "status": "Pass",
+          "reason": "A Host can maintain one DataChannel per Guest and QR signaling removes the need for a central signaling service or discovery service.",
+          "sourceIds": ["webrtc-basic-usage"]
+        }
+      }
+    },
+    {
+      "id": "google-nearby",
+      "name": "Platform Adapter (Multipeer / Nearby)",
+      "exactRoute": "Google Nearby Connections on Android and the google/nearby Swift package on iOS using P2P_STAR; Apple Multipeer Connectivity is not mixed into this route",
+      "rationale": "Application-controlled telemetry, exact package provenance, peer fingerprint binding, and QR discovery recovery do not meet the static gate.",
+      "provenance": {
+        "kind": "package",
+        "version": null,
+        "tag": null,
+        "sourceCommit": null,
+        "resolutions": [
+          {
+            "platform": "android",
+            "artifact": "com.google.android.gms:play-services-nearby",
+            "declaredVersion": null,
+            "resolution": "unresolved"
+          },
+          {
+            "platform": "ios",
+            "artifact": "google/nearby",
+            "declaredVersion": null,
+            "resolution": "unresolved"
+          }
+        ]
+      },
+      "gates": {
+        "officialSourceAndVersion": {
+          "status": "Fail",
+          "reason": "Official setup routes exist for Android and Swift, but the reviewed setup sources do not fix a shared exact release, source commit, and both lock resolutions.",
+          "sourceIds": ["google-nearby-overview", "google-nearby-swift"]
+        },
+        "crossPlatformRoute": {
+          "status": "Pass",
+          "reason": "Google documents Nearby Connections and a Swift package route, so this candidate does not combine unrelated Apple Multipeer and Android protocols.",
+          "sourceIds": ["google-nearby-overview", "google-nearby-swift"]
+        },
+        "expoAndNewArchitecture": {
+          "status": "Fail",
+          "reason": "No exact Expo SDK 57 and React Native 0.86 local-module build route with fixed Android and Swift packages is evidenced.",
+          "sourceIds": [
+            "google-nearby-swift",
+            "expo-modules-api",
+            "expo-new-architecture"
+          ]
+        },
+        "standardSecureChannel": {
+          "status": "Fail",
+          "reason": "Google states that connections are encrypted and symmetrically authenticated, but the reviewed API does not provide the peer key or certificate fingerprint required by the QR binding contract.",
+          "sourceIds": ["google-nearby-overview"]
+        },
+        "licenseAndMaintenance": {
+          "status": "Fail",
+          "reason": "Both native package versions, lock resolutions, source commit, and native artifact provenance remain unresolved.",
+          "sourceIds": ["google-nearby-swift", "google-nearby-overview"]
+        },
+        "applicationControlledTelemetry": {
+          "status": "Fail",
+          "reason": "The SDK collects performance and device information, and the official control is an end-user Google Usage and diagnostics setting rather than an application API or build configuration.",
+          "sourceIds": ["google-nearby-overview"]
+        },
+        "topologyAndDiscovery": {
+          "status": "Fail",
+          "reason": "P2P_STAR is available, but a QR direct host hint cannot bypass Nearby endpoint advertising and discovery under the reviewed API route.",
+          "sourceIds": ["google-nearby-strategies", "google-nearby-overview"]
+        }
+      }
+    },
+    {
+      "id": "ble-custom",
+      "name": "BLE Custom Protocol (comparison only)",
+      "exactRoute": "A common custom GATT service over iOS Core Bluetooth and Android BLE with one Host peripheral and up to five Guest centrals; QR carries service identity but BLE discovery remains required",
+      "rationale": "Cross-platform GATT is possible, but a custom security protocol and mandatory discovery fail the route; telemetry remains Not run without native build artifacts.",
+      "provenance": {
+        "kind": "system-framework",
+        "ios": {
+          "buildTool": "Xcode",
+          "buildToolVersion": "26.4",
+          "minimumOs": "16.4",
+          "framework": "CoreBluetooth",
+          "apiRoute": "CBPeripheralManager Host and CBCentralManager Guest over a custom GATT service"
+        },
+        "android": {
+          "buildTool": "Expo SDK Android toolchain",
+          "minimumApi": 24,
+          "compileSdk": 36,
+          "targetSdk": 36,
+          "framework": "BluetoothGattServer and BluetoothGatt",
+          "apiRoute": "BluetoothGattServer Host and BluetoothGatt Guest over the same custom GATT service"
+        }
+      },
+      "gates": {
+        "officialSourceAndVersion": {
+          "status": "Pass",
+          "reason": "The route uses public iOS and Android system BLE APIs under the exact Expo platform SDK baseline.",
+          "sourceIds": [
+            "expo-platform-baseline",
+            "apple-core-bluetooth",
+            "android-ble"
+          ]
+        },
+        "crossPlatformRoute": {
+          "status": "Pass",
+          "reason": "Both platforms can implement the same application-defined GATT service and characteristic framing.",
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
+        },
+        "expoAndNewArchitecture": {
+          "status": "Pass",
+          "reason": "The comparison route can be isolated in a local Swift and Kotlin Expo module supported by the New Architecture.",
+          "sourceIds": [
+            "expo-modules-api",
+            "expo-new-architecture",
+            "expo-development-builds"
+          ]
+        },
+        "standardSecureChannel": {
+          "status": "Fail",
+          "reason": "The common GATT route does not provide a standard end-to-end secure channel with a peer certificate fingerprint; meeting the contract would require a custom security protocol.",
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
+        },
+        "licenseAndMaintenance": {
+          "status": "Pass",
+          "reason": "No third-party transport package, native artifact, or downloader is added; both BLE APIs are maintained system frameworks.",
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
+        },
+        "applicationControlledTelemetry": {
+          "status": "Not run",
+          "reason": "No third-party transport SDK is planned, but no iOS or Android native build artifact exists for dependency, symbol, configuration, and endpoint verification.",
+          "sourceIds": []
+        },
+        "topologyAndDiscovery": {
+          "status": "Fail",
+          "reason": "BLE service discovery remains required after QR scanning, so the candidate cannot provide the required QR direct hint recovery when discovery is disabled.",
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
+        }
+      }
+    }
+  ]
+}

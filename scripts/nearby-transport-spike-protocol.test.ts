@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import { markdownSection, markdownTable } from './markdown-test-contract';
+import {
+  nearbyTransportStaticScreeningRecordRows,
+  parseNearbyTransportStaticScreening,
+  summarizeNearbyTransportStaticScreening,
+} from './nearby-transport-static-screening';
 
 const repositoryRoot = join(import.meta.dir, '..');
 
@@ -61,10 +66,15 @@ const joinRows = [
 
 describe('Nearby Transport 実機 Spike Protocol 文書契約', () => {
   it('Phase A の全 Candidate と Phase B の単一 Candidate を分離する', async () => {
-    const [protocol, record] = await Promise.all([
+    const [protocol, record, manifestSource] = await Promise.all([
       readRepositoryDocument('docs/design/nearby-transport-spike-protocol.md'),
       readRepositoryDocument('docs/evidence/nearby-transport-spike-record.md'),
+      readRepositoryDocument(
+        'docs/evidence/nearby-transport-static-screening.json'
+      ),
     ]);
+    const screening = parseNearbyTransportStaticScreening(manifestSource);
+    const screeningSummary = summarizeNearbyTransportStaticScreening(screening);
     const staticRubric = markdownTable(
       protocol,
       'Phase A static screening rubric'
@@ -91,11 +101,19 @@ describe('Nearby Transport 実機 Spike Protocol 文書契約', () => {
       'Rationale',
     ]);
     expect(staticRecord.rows.map((row) => row[0])).toEqual(candidates);
-    for (const row of staticRecord.rows) {
-      expect(row.slice(1, 10)).toEqual(row.slice(1, 10).map(() => '`Not run`'));
-    }
-    expect(record).toContain('Static Screening Status: `Not run`');
+    expect(screening.candidates.map((candidate) => candidate.name)).toEqual(
+      candidates
+    );
+    expect(staticRecord.rows).toEqual(
+      nearbyTransportStaticScreeningRecordRows(screening)
+    );
+    expect(record).toContain(
+      `Static Screening Status: \`${screeningSummary.screeningStatus}\``
+    );
     expect(record).toContain('Physical Spike Candidate: `Not selected`');
+    expect(record).toContain(
+      'Machine-readable 正本: [Static Screening Manifest](./nearby-transport-static-screening.json)'
+    );
     expect(protocol).toContain(
       'Phase B へ進めるのは、Static Status が `Pass` の Candidate から理由を記録して選んだ 1 Candidate だけ'
     );
@@ -374,6 +392,9 @@ describe('Nearby Transport 実機 Spike Protocol 文書契約', () => {
     ].map((heading) => markdownTable(record, heading));
 
     expect(decision).toContain('Selection Status: `Undecided`');
+    expect(decision).toContain(
+      'Rejected candidates: Static screening record の `Fail` Candidate と棄却理由を参照する'
+    );
     expect(record.match(/Selection Status:/g)).toHaveLength(1);
     expect(rubric.header).toEqual(['Gate', 'Source record', 'Derived status']);
     expect(
@@ -387,7 +408,7 @@ describe('Nearby Transport 実機 Spike Protocol 文書契約', () => {
     );
     expect(record).toContain('`Decision record` を選定状態の唯一の正本');
     expect(record).toContain(
-      'Static Gate の各 Cell は `Pass — 公開根拠` または `Fail — 棄却理由`'
+      'Static Gate の各 Cell は `Pass — 公開根拠`、`Fail — 棄却理由`、`Not run — 欠落証拠`'
     );
     expect(record).toContain('値または検証が欠ければ `Not run` とする');
   });
