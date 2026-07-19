@@ -9,6 +9,10 @@ researcher cannot answer a question or the person cannot confirm understanding.
 
 This script is only for formative research. It does not authorize Pilot counters, the Pilot Observation Sheet, or
 their consent, and it does not replace the existing [Pilot Research Consent](./consent-script.en.md).
+The canonical boundaries for temporary records and public aggregates are `L6` / `L6P` in the
+[Privacy Data Inventory](../privacy/data-inventory.md) and the
+[Retention Policy](../privacy/retention-policy.md). This script does not relax their fields, TTL, deletion, or
+publication threshold.
 
 > This research studies the event journey. It does not evaluate you. Participation is optional and does not affect
 > Product use, event access, or future support. You may skip a question, stop, or decline research. Research Consent
@@ -26,7 +30,8 @@ their consent, and it does not replace the existing [Pilot Research Consent](./c
 > and no later than seven days after this session.
 >
 > Individual records and exact participant counts are not published in the public repository. Only a pattern repeated
-> in at least three sessions may be published, without locale names or role-by-locale combinations. One fact that
+> in at least three sessions may be published as a summary of no more than 140 characters derived from fixed codes,
+> without locale names or role-by-locale combinations. One fact that
 > contradicts privacy, consent, or safe exit can stop the study, but no description that could identify a person is
 > published.
 >

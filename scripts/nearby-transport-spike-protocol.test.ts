@@ -19,7 +19,7 @@ const candidates = [
   'WebRTC DataChannel + QR Signaling',
   'Platform Adapter (Multipeer / Nearby)',
   'BLE Custom Protocol (comparison only)',
-] as const;
+];
 
 const staticGates = [
   'Official source and version',
@@ -29,7 +29,7 @@ const staticGates = [
   'License and maintenance',
   'Application-controlled telemetry',
   'Topology and discovery',
-] as const;
+];
 
 const physicalGates = [
   'iOS and Android interoperability',
@@ -42,7 +42,7 @@ const physicalGates = [
   'Expo and New Architecture',
   'Supply chain',
   'Privacy and telemetry',
-] as const;
+];
 
 const lifecycleScenarios = [
   'QR to Ready operations',
@@ -55,14 +55,14 @@ const lifecycleScenarios = [
   'Target routing',
   'Guest leave',
   'Dispose',
-] as const;
+];
 
 const joinRows = [
   ['Same Wi-Fi', 'iPhone Host → Android Guest', '50'],
   ['Same Wi-Fi', 'Android Host → iPhone Guest', '50'],
   ['Personal Hotspot', 'iPhone Host → Android Guest', '50'],
   ['Personal Hotspot', 'Android Host → iPhone Guest', '50'],
-] as const;
+];
 
 describe('Nearby Transport 実機 Spike Protocol 文書契約', () => {
   it('Phase A の全 Candidate と Phase B の単一 Candidate を分離する', async () => {

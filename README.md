@@ -1,105 +1,122 @@
 # TenkaCloud Passport
 
-TenkaCloud Passport は、イベントで出会った Owner が公開を許可した手掛かりから、口頭会話を
-始める理由である Bridge を 1 つだけ提示して退く、アカウント不要の Expo アプリです。
+[English](./README.en.md)
 
-## 現在の基盤
+TenkaCloud Passport はデジタル名刺ではありません。Owner が公開を許可した手掛かりだけを Pet が扱い、
+対面で人間同士の会話を始める Bridge を 1 つ見つけて退く、アカウント不要の Expo アプリです。
 
-- Expo SDK 57 と React Native 0.86 を使う単一アプリをリポジトリルートに置く。
-- iOS、Android、Web は同じ `App.tsx`、Screen、純 TypeScript Domain を使う。
-- Expo Go / Web は外部と通信しない Rules Provider で動く。
-- Local Agent は Development Build 専用の遅延 loader と Safety Boundary を通して `llama.rn` 0.12 系へ接続する。
-  Expo Go / Web / Model 未設定は Native module を読まず Rules Provider を使う。物理 iPhone / Android arm64 の
-  Offline 受入れは `Not run` であり、JavaScript Test や Web Export で代替しない。
-- Peer Protocol 1.2 は strict schema、Capability Negotiation、去重、順序、期限、bounded receiver を
-  純 TypeScript で定義する。実 Nearby Transport Adapter と実機検証は未実装である。
-- Lounge 由来データは永続化せず、退出、Host 終了、20 分満了の最早契機で破棄する。
+## 現在の Release 状態
 
-製品契約は [プロダクト契約](./docs/product/product-contract.md)、初回フローは
-[初回 Encounter の設計](./docs/design/initial-encounter.md)、基盤選定は
-[ADR-0008](./docs/adr/0008-expo-local-agent-foundation.md)、Wire 契約は
-[Peer Protocol Specification](./docs/architecture/peer-protocol.md) を参照する。
+| 対象 | 状態 | 現在できること | 停止条件 |
+| --- | --- | --- | --- |
+| Repository 開発 | `Implemented` | Source、純 TypeScript Domain、Rules Provider、Web Export を検証する。 | Green CI を実機証拠にしない。 |
+| Source-only Candidate | `Experimental` | 固定 Commit から Draft Candidate を再現する。 | Public Release と呼ばない。既存出力を上書きしない。 |
+| Public OSS Alpha | `Blocked` | なし。 | 必須の物理 Gate が `Verified` になるまで公開しない。 |
+| Local Champion Walkthrough | `Experimental` | 文書、図、役割、停止条件だけを読み合わせる。 | 実参加者データ、実 QR、Nearby、Group セッション を使わない。 |
+| Product セッション | `Blocked / Not run` | なし。 | 配布、実機、Nearby、Accessibility、Full Delete、Dry Run の証拠が揃うまで開始しない。 |
 
-対面 Event の版管理済み運用文書は
-[Facilitator Kit](./docs/facilitator/README.md) を参照する。Kit の物理 Dry Run と実機 Transport 検証は
-`Not run` であり、文書の存在を実機利用可能の証拠にしない。
+`Implemented / Experimental / Planned` は Source の成熟度、`Verified / Not run / Blocked` は特定環境の
+実行証拠です。同じ意味ではありません。組合せごとの根拠は
+[Release Status と Device Matrix](./docs/releases/status.md)を確認してください。
 
-## セットアップ
+## 入口を選ぶ
 
-```bash
-make install
-bunx expo install --fix -- --ignore-scripts
-make setup-hooks
-```
+| 経路 | 対象 | 前提 | 最初の成功 | 現在の保証 |
+| --- | --- | --- | --- | --- |
+| Repository Gate | Contributor | Git、Bun 1.3.11 | `make before-commit` が exit 0 になる。 | Repository Contract だけ。 |
+| Web | Rules と共通 UI の確認者 | Bun、対応 Browser | Metro が URL を表示し、初期画面が開く。 | Web Export と Rules Provider。Browser 操作は Release Matrix では `Not run`。 |
+| Expo Go | 実機 UI の確認者 | 対応 Expo Go、同一 Network | QR から初期画面が開く。 | Expo Go 同梱 Native module の範囲だけ。Local LLM / Nearby は使えない。 |
+| Native Development Build | Native 開発者 | macOS + Xcode、または Android SDK / JDK | 対象端末で専用 Build が起動する。 | `Not run`。Simulator や Build 成功を実機 Provider 証拠にしない。 |
 
-通常の install と Expo の互換バージョン調整は lifecycle script を無効化する。調整した後は、
-更新された `package.json` と正規 lockfile である `bun.lock` を同時にレビューする。
+### 1. Repository Gate
 
-## 開発
+固定した tag または Commit を checkout してから実行します。移動する `main` を Release 再現性の基準にしません。
 
 ```bash
-make dev
-bun run ios
-bun run android
-bun run web
-```
-
-`make dev` は Expo 開発サーバーを起動する。Expo Go では Rules Provider を使う。設定済み Local Agent は
-Development Build 専用 entry point からだけ起動する。環境ごとの能力、Xcode Personal Team、Model 設定、
-iOS / Android 実機手順は
-[Native Development Build 手順](./docs/development/native-builds.md)を参照する。
-
-配布は [Pilot 配布 Tier と Scale Gate](./docs/design/distribution-tiers.md) に従い、Web / Expo Go の
-Tier A、少数実機の Tier B、非開発者へ継続配布する Tier C を区別する。Tier A で Local LLM や
-Nearby Transport が動くとは表示しない。
-
-## 品質ゲート
-
-```bash
-bun scripts/architecture-harness.ts --staged --fail-on=error
+make install_ci
 make before-commit
 ```
 
-`make before-commit` は architecture harness、harness 自身のテスト、公開前 invariant、textlint、
-Biome、型検査、Domain のカバレッジ、Web Export を順に検査する。依存を取得できない環境では
-純 TypeScript Domain の `bun test` と、利用可能な静的ゲートを先に実行する。
+最初の成功は、Architecture Harness、Test、Lint、Typecheck、Coverage、Web Export がすべて exit 0 になることです。
+失敗時は invariant、`biome.json`、Coverage 閾値を緩めず、最初の失敗を修正します。
 
-## 主なディレクトリ
+### 2. Web
 
-```text
-.
-├── App.tsx
-├── index.ts
-├── assets/
-├── src/
-│   ├── app/
-│   ├── components/
-│   ├── domain/
-│   ├── local-agent/
-│   └── screens/
-├── docs/
-│   ├── adr/
-│   ├── design/
-│   ├── facilitator/
-│   ├── privacy/
-│   └── product/
-└── scripts/
+```bash
+make install_ci
+bun run web
 ```
 
-## 供給網防御
+Terminal に表示された URL を Browser で開き、Passport の初期画面が見えることだけを確認します。Local LLM、
+実 Camera QR、Nearby Transport の証拠にはなりません。Network で開けない場合は Web Export Gate へ戻り、
+Expo Go が成功したと推測しません。
 
-- `make install` と `make install_ci` は `--ignore-scripts` を必須にする。
-- `bunfig.toml` と `package.json` は `trustedDependencies = []` を指定する。
-- Native Artifact は通常 install から分離し、将来 `llama.rn` を追加した後も
-  `make setup-llama-native` だけで取得する。
-- architecture harness は Git URL 依存、過剰な lifecycle hook、既知 IOC、lockfile の Git 解決を検出する。
-- GitHub Actions は固定 SHA の Action、safe-chain、`bun.lock` の frozen install、Expo Native
-  compatibility check を使う。
+### 3. Expo Go
 
-詳細は [ADR-0001](./docs/adr/0001-supply-chain-hardening.md) と
-[architecture harness](./docs/architecture/harness.md) を参照する。
+```bash
+make install_ci
+bun run start
+```
+
+同一 Network の Expo Go から Metro の QR を読み、初期画面が開くことを確認します。Expo Go は任意の Custom
+Native Code を追加できないため、Local LLM と実 Nearby Transport は対象外です。接続できない場合は
+Network 前提を確認し、解消しなければ `Not run` のまま Web 経路へ戻ります。
+
+### 4. Native Development Build
+
+OS 別の前提、生成 File、署名、復旧は
+[Native Development Build 手順](./docs/development/native-builds.md)を参照してください。現在の Release Matrix では
+iOS / Android 実機、Local LLM、Nearby Transport は `Not run` または `Blocked` です。
+
+配布は [Pilot 配布 Tier と Scale Gate](./docs/design/distribution-tiers.md) に従い、Web / Expo Go の
+Tier A、少数実機の Tier B、非開発者へ継続配布する Tier C を区別します。Tier A で Local LLM や
+Nearby Transport が動くとは表示しません。
+
+## Draft Source Candidate を再現する
+
+Public Release ではなく、固定 Commit の Source-only Candidate を検証する手順です。`<candidate-commit>` は
+Release Operator が提示した 40 桁 Commit SHA へ置き換えます。
+
+```bash
+git checkout --detach <candidate-commit>
+make install_ci
+RELEASE_VERSION=0.1.0-alpha.1 RELEASE_REF=HEAD RELEASE_OUTPUT=release-output make release_candidate
+cd release-output
+shasum -a 256 -c checksums.txt
+```
+
+成功時は Source Archive、SPDX SBOM、`LICENSE`、直接依存 License Notice、Release Manifest、checksum の
+6 File ができます。出力先はまだ存在しない Path に限定し、symlink や既存 Candidate を拒否します。
+途中失敗や checksum 不一致では配布せず、出力を隔離して別の未作成 Path で再実行します。詳細は
+[Source Release Runbook](./docs/development/source-release.md)を参照してください。
+
+## Architecture
+
+[Architecture Overview](./docs/architecture/overview.md) は Domain、Agent Runtime、Rules / Local LLM、Storage、
+QR、Nearby Transport の依存方向を図と同等の Text で示します。現在の要点は次です。
+
+- 純 TypeScript Domain は React Native、Storage、Transport、Model Runtime を import しない。
+- App 層が Port を呼び、Platform Adapter が外部能力を実装する。
+- Web / Expo Go は Rules Provider を使う。
+- Local LLM と実 Nearby Transport は default branch の Supported 能力ではない。
+- Lounge 由来データは永続化せず、退出、Host 終了、20 分満了の最早契機で破棄する。
+
+## 正本と運用文書
+
+- [Concept](./CONCEPT.md) / [Product Contract](./docs/product/product-contract.md) / [Glossary](./docs/product/glossary.md)
+- [Privacy Data Inventory](./docs/privacy/data-inventory.md) / [Retention](./docs/privacy/retention-policy.md)
+- [Threat Model](./docs/security/threat-model.md) / [Security Policy](./SECURITY.md)
+- [Peer Protocol](./docs/architecture/peer-protocol.md) / [ADR index](./docs/adr/)
+- [Facilitator Kit](./docs/facilitator/README.md) / [安全な Walkthrough](./docs/facilitator/walkthrough.ja.md) / [Pilot Protocol](./docs/research/pilot-protocol.md)
+- [Release Checklist](./docs/releases/checklist.md) / [Known Limitations](./docs/releases/0.1.0-alpha.1.md)
+- [Contributing](./CONTRIBUTING.md) / [Good First Issue candidates](./docs/contributing/good-first-issues.md)
+
+Facilitator Kit は現時点で Document Walkthrough 専用です。実参加者の氏名、写真、Profile、端末 ID を入力せず、
+実 QR を生成・読取せず、Nearby / Group セッションを開始しません。物理能力は `Not run` のまま
+[安全な Walkthrough](./docs/facilitator/walkthrough.ja.md)を読み上げます。
 
 ## 開発規律
 
-[AGENTS.md](./AGENTS.md) と [CLAUDE.md](./CLAUDE.md) に従う。完了条件は
-[Definition of Done](./docs/architecture/quality-bar.md) を正本とし、MVP や仮実装を完了としない。
+作業は [AGENTS.md](./AGENTS.md) と [CLAUDE.md](./CLAUDE.md) に従います。完了条件は
+[Definition of Done](./docs/architecture/quality-bar.md)、機械的な禁止事項は
+[Architecture Harness](./docs/architecture/harness.md)が正本です。MVP、仮実装、Green CI だけでは完了しません。

@@ -9,6 +9,11 @@
 非介入 Observation の手順です。実装済み機能の評価会、営業 Interview、人物の適性評価ではない。
 現在は調査準備だけが完了しており、調査結果や検証済みの利用者事実を含まない。
 
+本書の Temporary Coded Record と Public Aggregate は、
+[Privacy データ台帳](../privacy/data-inventory.md) の `L6` / `L6P`、
+[保持ポリシー](../privacy/retention-policy.md)、[脅威モデル](../security/threat-model.md) を正本とする。
+本書と Consent Script はその調査手順への投影であり、Field、TTL、削除、公開閾値を独自に緩和しない。
+
 調査後の統合先は [Service Blueprint](./service-blueprint.md)、反証判断は
 [Top Five Hypotheses](./hypotheses.md) とする。Pilot 成果の測定は
 [Pilot Protocol](./pilot-protocol.md) の別目的であり、本調査の Interview 証拠に置き換えない。
@@ -163,7 +168,7 @@ English Cohort では日本語を即席翻訳せず、次の固定 Prompt を使
 | --- | --- |
 | Role cohort | `participant` / `event-organizer` |
 | Locale cohort | `ja` / `en` / `approved-other` |
-| Journey stage | 本書の 8 Stage のいずれかである。 |
+| Journey stage | Interview Guide の 8 Stage のいずれかである。 |
 | Outcome class | `continued` / `recovered` / `declined` / `exited` / `blocked` |
 | Behavior code | `self-directed` / `neutral-repeat-needed` / `help-requested` / `privacy-confusion` / `recovery-chosen` / `stop-chosen` |
 | Evidence direction | `supporting` / `contradicting` / `not-observed` |
@@ -171,12 +176,15 @@ English Cohort では日本語を即席翻訳せず、次の固定 Prompt を使
 
 ## Retention and synthesis
 
+- この節は Privacy データ台帳、保持ポリシー、脅威モデルの `L6` / `L6P` 契約を調査手順へ投影する。
 - Temporary Coded Record は Researcher だけが扱える暗号化済み一時領域へ置く。Aggregate 更新後に直ちに削除し、
   更新できない場合もセッション終了から 7 日以内に削除する。Repository、Issue、PR、Cloud Analytics へ置かない。
 - セッションを閉じる確認前の撤回は Record 全体を直ちに削除する。閉じた後は個人へ結び付ける ID を残さないため、
   個別寄与を検索または削除できない。この境界を専用 Consent Script で先に説明する。
 - Public Aggregate は 3 セッション以上で同じ Pattern があり、2 つ以上の Role または Locale Stratum へ広がる場合だけ
-  記載する。Locale 名、Role × Locale の組合せ、正確な人数、個別 Record を公開しない。
+  記載する。Journey stage、Outcome class、Behavior code、Evidence direction、Hypothesis reference と固定 Code だけから
+  作る 140 UTF-16 code unit 以下の sanitized pattern summary に限定する。Role cohort、Locale cohort、
+  Role × Locale の組合せ、正確な人数、個別 Record、参加者由来の自由記述を公開しない。
 - Privacy、Consent、退出へ反する 1 件は調査を停止して `Contradicted` にできるが、3 セッション閾値未満の説明は
   公開しない。独立 Privacy Reviewer が内容を複製せず停止判断だけを確認する。
 - 支持例と反証例を同じ固定 Code で扱い、会話成立、`no-signal`、拒否、途中退出を選別しない。

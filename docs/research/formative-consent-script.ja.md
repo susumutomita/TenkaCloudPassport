@@ -9,6 +9,8 @@
 
 本 Script は形成的調査専用です。Pilot Counter、Pilot Observation Sheet、またはその Consent を許可せず、
 既存の [Pilot Research Consent](./consent-script.ja.md) の代わりに使わない。
+一時記録と公開集計の正本は [Privacy データ台帳](../privacy/data-inventory.md) の `L6` / `L6P` と
+[保持ポリシー](../privacy/retention-policy.md) であり、本 Script は Field、TTL、削除、公開閾値を緩和しない。
 
 > これは Event の流れを調べる Research であり、あなたを評価するものではありません。参加は任意です。
 > Product の利用、Event への参加、今後の支援には影響しません。質問へ回答しない、途中で止める、Research だけを
@@ -26,7 +28,8 @@
 > 探して削除できません。一時記録は集計直後、遅くともセッションから 7 日以内に削除します。
 >
 > 公開 Repository へ個別記録や正確な人数は載せません。3 セッション以上で繰り返された Pattern だけを、Locale 名と
-> Role × Locale の組合せを除いた要約として公開できます。Privacy、Consent、退出に反する 1 件の事実は停止判断に
+> Role × Locale の組合せを除き、固定 Code から作る 140 文字以内の要約として公開できます。Privacy、Consent、退出に
+> 反する 1 件の事実は停止判断に
 > 使いますが、個人を推測できる説明は公開しません。
 >
 > この Research に同意しますか。質問へ回答しない、または同意しない場合も Product と Event を利用できます。

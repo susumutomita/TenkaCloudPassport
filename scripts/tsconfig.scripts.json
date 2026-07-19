@@ -1,0 +1,25 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "android-*.ts",
+    "atomic-output-publisher.ts",
+    "atomic-output-publisher-darwin.ts",
+    "atomic-output-publisher-linux.ts",
+    "llama-native-artifacts.ts",
+    "llama-native-artifacts.test.ts",
+    "jsonc-duplicate-key.ts",
+    "exclusive-output-writer.ts",
+    "facilitator-kit.test.ts",
+    "formative-event-research.test.ts",
+    "oss-alpha-release-docs.test.ts",
+    "markdown-test-contract.ts",
+    "markdown-test-contract.test.ts",
+    "nearby-transport-spike-protocol.test.ts",
+    "source-release.ts",
+    "source-release-cli.ts",
+    "source-release-verify-cli.ts",
+    "source-release.test.ts",
+    "nearby-transport-static-screening.ts",
+    "nearby-transport-static-screening.test.ts"
+  ]
+}

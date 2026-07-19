@@ -1,0 +1,45 @@
+name: Good First Issue
+description: Product Boundary 内の小さく独立した Contribution を定義する。
+title: "[Good First Issue] "
+labels:
+  - good first issue
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CONCEPT、Product Contract、Privacy Data Inventory、Quality Bar を先に確認してください。
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 利用者が観察できる Outcome
+      description: 実装の内部手段ではなく、完了後に何が確認できるかを 1 つ書く。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: In scope
+      description: この Issue で変更する File、Flow、境界を列挙する。
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: Cloud、Telemetry、Model Weight、Privacy 緩和を含め、実装しないものを書く。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 受け入れ条件
+      description: 正常、異常、境界、検証 Command、Not run をチェック可能に書く。
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 正本 Link
+      description: Product Contract、Design、ADR、関連 Source の相対または完全 URL を書く。
+    validations:
+      required: true

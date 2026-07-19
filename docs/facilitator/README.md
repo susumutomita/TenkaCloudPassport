@@ -1,22 +1,25 @@
 # TenkaCloud Passport Facilitator Kit
 
 - Kit Version: 1.0。
-- Status: Repository Contract Ready / Physical Dry Run `Not run`。
+- Status: Repository Contract Candidate / Physical Dry Run `Not run`。
 - 対象: 初めて Local Champion と Facilitator を担当する人である。
 
 この Kit は、2〜6 名の対面 Lounge を Product Contract と Privacy Contract の範囲で進行するための
 版管理文書として提供する。Kit の存在は、Nearby Transport、Native Build、配布経路、特定端末での実動作を証明しない。
 開催前に [1 Page Checklist](./one-page-checklist.ja.md) の対応状況を確認し、未検証経路は `Not run` とする。
+Product セッションに必要な能力が 1 件でも `Not run` なら、Guide の Product 手順へ進まず
+[日本語 Walkthrough](./walkthrough.ja.md)または[English Walkthrough](./walkthrough.en.md)だけを実施する。
 
 ## Kit Version 1.0 Support Matrix
 
 | 能力 | 対象 | 状態 | 現在の Evidence / 判断 |
 | --- | --- | --- | --- |
-| Repository 文書と文書契約 Test | Kit Version 1.0 | Verified | `scripts/facilitator-kit.test.ts` の実 file I/O Test であり、Tabletop Walkthrough だけに使える。 |
+| Repository 文書と文書契約 Test | Kit Version 1.0 | `Not run` | Candidate commit の immutable Actions URL と別 Reviewer を記録していない。Tabletop Walkthrough だけに使える。 |
 | Native Build / Distribution Channel | Build / Channel 未指定 | `Not run` | Evidence 無しである。対象 Build を参加者端末へ安全に用意できる証拠がなければ Product セッションを開催しない。 |
 | iOS / Android の実 Camera QR | Build / OS / Device 未指定 | `Not run` | Evidence 無しである。実機 Evidence を取得するまで Event で依存しない。 |
 | Nearby Transport Adapter | Build / Transport 未指定 | `Not run` | Evidence 無しである。Peer Protocol の定義を実通信の証拠にしない。 |
-| Rules Provider / Local Model | Build / Provider 未指定 | `Not run` | Evidence 無しである。Rules の実行または検証済み Local Model のどちらも使えなければ開始しない。 |
+| Rules Provider | Build / Provider 未指定 | `Not run` | Source の存在は対象 Build での実行証跡ではない。Candidate Build の Offline 実行を別に検証する。 |
+| Local Model | Build / Provider / Model 未指定 | `Not run` | Default branch に利用可能な Native Provider と検証済み Model はない。Weight を Kit へ含めない。 |
 | 2〜6 台の Group Lounge | Build / OS / Device / Venue 未指定 | `Not run` | Evidence 無しである。複数実機 Evidence を取得するまで Product セッションを開催しない。 |
 | Host Loss と端末別破棄完了表示 | Build / OS / Device 未指定 | `Not run` | Evidence 無しである。全残存端末の破棄完了表示を確認できるまで Host Loss 後に再開しない。 |
 | A4 / Letter 1 Page と QR Poster の出力 | Printer / Browser / Assistive Technology 未指定 | `Not run` | Evidence 無しである。欠落、折返し、読上げ順、200％ Zoom を実出力で確認するまで印刷物へ依存しない。 |
@@ -35,14 +38,17 @@ This Kit is a versioned document set for a first-time Local Champion or Facilita
 for two to six people within the Product and Privacy contracts. Its presence does not prove Nearby Transport,
 a native build, distribution, or operation on a particular device. Check the matrix before an event and treat
 every unverified path as `Not run`.
+If any capability required for a Product Lounge is `Not run`, do not enter the Product steps in the Guide. Use only
+the [English Walkthrough](./walkthrough.en.md) or [Japanese Walkthrough](./walkthrough.ja.md).
 
 | Capability | Scope | Status | Current evidence and decision |
 | --- | --- | --- | --- |
-| Repository documents and document contract test | Kit Version 1.0 | Verified | Real file I/O in `scripts/facilitator-kit.test.ts`; valid only for a tabletop walkthrough. |
+| Repository documents and document contract test | Kit Version 1.0 | `Not run` | No immutable Actions URL and separate reviewer are recorded for the candidate commit. Valid only for a tabletop walkthrough. |
 | Native Build / Distribution Channel | Build / channel unspecified | `Not run` | No evidence. Do not run a Product Lounge without evidence that the intended build can be safely provided to participant devices. |
 | Real iOS / Android camera QR | Build / OS / device unspecified | `Not run` | No evidence. Do not depend on this at an event until physical-device evidence exists. |
 | Nearby Transport Adapter | Build / transport unspecified | `Not run` | No evidence. A peer protocol definition does not prove real transport. |
-| Rules Provider / Local Model | Build / provider unspecified | `Not run` | No evidence. Do not start when neither executable Rules nor a verified Local Model is available. |
+| Rules Provider | Build / provider unspecified | `Not run` | Source presence is not execution evidence for the candidate build. Verify its offline path separately. |
+| Local Model | Build / provider / model unspecified | `Not run` | The default branch has no available native provider and verified model. Never include a model weight in this Kit. |
 | Two-to-six-device Group Lounge | Build / OS / device / venue unspecified | `Not run` | No evidence. Do not run a Product Lounge until evidence from multiple real devices exists. |
 | Host loss and per-device discard confirmation | Build / OS / device unspecified | `Not run` | No evidence. Do not restart after Host loss until every remaining device shows discard completion. |
 | A4 / Letter one-page and QR Poster output | Printer / browser / assistive technology unspecified | `Not run` | No evidence. Do not depend on printed output until content loss, wrapping, reading order, and 200 percent zoom are verified. |
@@ -60,6 +66,7 @@ conversation content. Closing an issue alone is not physical-device evidence.
 
 | 文書 | 日本語 | English |
 | --- | --- | --- |
+| 安全な Document Walkthrough | [日本語 Walkthrough](./walkthrough.ja.md) | [English Walkthrough](./walkthrough.en.md) |
 | Facilitator Guide | [日本語 Guide](./guide.ja.md) | [English Guide](./guide.en.md) |
 | 1 Page Checklist | [日本語 Checklist](./one-page-checklist.ja.md) | [English Checklist](./one-page-checklist.en.md) |
 | QR 掲示物 | [日本語 Poster](./qr-poster.ja.md) | [English Poster](./qr-poster.en.md) |

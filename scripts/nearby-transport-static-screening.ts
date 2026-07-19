@@ -2,14 +2,6 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  forEachChild,
-  isObjectLiteralExpression,
-  isPropertyAssignment,
-  isStringLiteralLike,
-  type Node,
-  parseJsonText,
-} from 'typescript';
-import {
   assertOneOf,
   parseBoundedJson,
   SchemaValidationError,
@@ -18,6 +10,7 @@ import {
   integerValue as validatedIntegerValue,
   stringValue as validatedStringValue,
 } from '../src/protocol/validation';
+import { firstDecodedDuplicateJsoncKey } from './jsonc-duplicate-key';
 
 const MAX_MANIFEST_BYTES = 128 * 1024;
 const MAX_JSON_DEPTH = 16;
@@ -1132,27 +1125,10 @@ function parseJsoncRecord(
   source: string,
   label: string
 ): Record<string, unknown> {
-  const sourceFile = parseJsonText(label, source);
-  const visit = (node: Node): void => {
-    if (isObjectLiteralExpression(node)) {
-      const keys = new Set<string>();
-      for (const property of node.properties) {
-        if (
-          !isPropertyAssignment(property) ||
-          !isStringLiteralLike(property.name)
-        ) {
-          continue;
-        }
-        const key = property.name.text;
-        if (keys.has(key)) {
-          invalid(`${label} に重複 key があります: ${key}`);
-        }
-        keys.add(key);
-      }
-    }
-    forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  const duplicate = firstDecodedDuplicateJsoncKey(source, label);
+  if (duplicate !== null) {
+    invalid(`${label} に重複 key があります: ${duplicate}`);
+  }
   let value: unknown;
   try {
     value = Bun.JSONC.parse(source);

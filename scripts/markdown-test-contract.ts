@@ -19,17 +19,21 @@ interface MarkdownFence {
 const openingFence = (line: string): MarkdownFence | null => {
   const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
   if (match === null) return null;
-  const character = match[1].startsWith('`') ? '`' : '~';
-  if (character === '`' && match[2].includes('`')) return null;
-  return { character, length: match[1].length };
+  const fenceSource = match[1];
+  const suffix = match[2];
+  if (fenceSource === undefined || suffix === undefined) return null;
+  const character = fenceSource.startsWith('`') ? '`' : '~';
+  if (character === '`' && suffix.includes('`')) return null;
+  return { character, length: fenceSource.length };
 };
 
 const closesFence = (line: string, fence: MarkdownFence): boolean => {
   const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+  const fenceSource = match?.[1];
   return (
-    match !== null &&
-    match[1][0] === fence.character &&
-    match[1].length >= fence.length
+    fenceSource !== undefined &&
+    fenceSource[0] === fence.character &&
+    fenceSource.length >= fence.length
   );
 };
 
@@ -70,12 +74,11 @@ interface MarkdownHeading {
 
 const parseMarkdownHeading = (line: string): MarkdownHeading | null => {
   const match = /^(#{2,6}) (.+)$/.exec(line);
-  return match === null
+  const marker = match?.[1];
+  const text = match?.[2];
+  return marker === undefined || text === undefined
     ? null
-    : {
-        level: match[1].length,
-        text: match[2],
-      };
+    : { level: marker.length, text };
 };
 
 export function parseMarkdownTableLine(
@@ -114,7 +117,7 @@ export function markdownTableRowsInDocument(
   const rows: (readonly string[])[] = [];
   let tableColumns: number | null = null;
   for (let index = 0; index < lines.length; index += 1) {
-    const parsed = parseMarkdownTableLine(lines[index]);
+    const parsed = parseMarkdownTableLine(lines[index] ?? '');
     if (tableColumns === null) {
       const headerColumns = tableHeaderColumns(
         parsed,
@@ -150,7 +153,11 @@ export function markdownSection(document: string, heading: string): string {
   if (matchingHeadings.length > 1) {
     throw new Error(`Section が重複しています: ${heading}`);
   }
-  const [{ index: headingIndex, level: headingLevel }] = matchingHeadings;
+  const match = matchingHeadings[0];
+  if (match === undefined) {
+    throw new Error(`必須 Section がありません: ${heading}`);
+  }
+  const { index: headingIndex, level: headingLevel } = match;
   const start = headingIndex + 1;
   const nextHeadingOffset = lines.slice(start).findIndex((line) => {
     const parsed = parseMarkdownHeading(line);
@@ -171,7 +178,7 @@ export function markdownTable(
   if (tableStart < 0) {
     throw new Error(`必須 Table がありません: ${heading}`);
   }
-  const header = parseMarkdownTableLine(lines[tableStart]);
+  const header = parseMarkdownTableLine(lines[tableStart] ?? '');
   const delimiter = parseMarkdownTableLine(lines[tableStart + 1] ?? '');
   if (header?.kind !== 'row' || delimiter?.kind !== 'delimiter') {
     throw new Error(`Table 区切り行が不正です: ${heading}`);
@@ -182,7 +189,7 @@ export function markdownTable(
   const rows: (readonly string[])[] = [];
   let cursor = tableStart + 2;
   while (cursor < lines.length) {
-    const parsed = parseMarkdownTableLine(lines[cursor]);
+    const parsed = parseMarkdownTableLine(lines[cursor] ?? '');
     if (parsed === null) break;
     if (parsed.kind !== 'row' || parsed.cells.length !== header.cells.length) {
       throw new Error(`Table の Data 行が不正です: ${heading}`);

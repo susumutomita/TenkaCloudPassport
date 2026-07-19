@@ -16,6 +16,8 @@ const kitDocuments = [
   'qr-poster.ja.md',
   'qr-poster.en.md',
   'dry-run-record.md',
+  'walkthrough.ja.md',
+  'walkthrough.en.md',
 ] as const;
 
 const readKit = (fileName: string): Promise<string> =>
@@ -23,6 +25,14 @@ const readKit = (fileName: string): Promise<string> =>
 
 const normalizeWhitespace = (value: string): string =>
   value.replace(/\s+/g, ' ').trim();
+
+const requiredValue = <Value>(
+  value: Value | undefined,
+  label: string
+): Value => {
+  if (value === undefined) throw new Error(`必須値がありません: ${label}`);
+  return value;
+};
 
 const expectTerms = (content: string, terms: readonly string[]): void => {
   const normalizedContent = normalizeWhitespace(content);
@@ -51,7 +61,8 @@ const physicalCapabilities = [
   ['Native Build / Distribution Channel', 2],
   ['iOS / Android の実 Camera QR', 1],
   ['Nearby Transport Adapter', 2],
-  ['Rules Provider / Local Model', 2],
+  ['Rules Provider', 2],
+  ['Local Model', 2],
   ['2〜6 台の Group Lounge', 1],
   ['Host Loss と端末別破棄完了表示', 1],
   ['A4 / Letter 1 Page と QR Poster の出力', 1],
@@ -99,8 +110,8 @@ const supportMatrixViolations = (content: string): readonly string[] => {
       )
   );
   const repositoryRows = [
-    ['Repository 文書と文書契約 Test', 'Verified'],
-    ['Repository documents and document contract test', 'Verified'],
+    ['Repository 文書と文書契約 Test', '`Not run`'],
+    ['Repository documents and document contract test', '`Not run`'],
   ] as const;
   const repositoryViolations = repositoryRows.flatMap(
     ([capability, expectedStatus]) =>
@@ -115,8 +126,8 @@ const supportMatrixViolations = (content: string): readonly string[] => {
     ...repositoryRows.map(([capability]) => capability),
   ]);
   const unexpectedRows = markdownTableRowsInDocument(supportSection)
-    .filter((row) => !allowedCapabilitySet.has(row[0]))
-    .map((row) => `${row[0]}: unexpected capability row`);
+    .filter((row) => !allowedCapabilitySet.has(row[0] ?? ''))
+    .map((row) => `${row[0] ?? ''}: unexpected capability row`);
   return [...physicalViolations, ...repositoryViolations, ...unexpectedRows];
 };
 
@@ -179,7 +190,9 @@ const consentContractViolations = (content: string): readonly string[] => {
 };
 
 const recordFieldLabels = (content: string): readonly string[] =>
-  [...content.matchAll(/^- ([^:\n]+):/gm)].map((match) => match[1].trim());
+  [...content.matchAll(/^- ([^:\n]+):/gm)].map((match) =>
+    requiredValue(match[1], 'record field label').trim()
+  );
 
 const allowedRecordFieldLabels = [
   'Kit Version',
@@ -212,14 +225,19 @@ const recordFieldEntries = (
   const lines = content.split('\n');
   const entries: [string, string][] = [];
   for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(/^- ([^:\n]+):[ \t]*(.*)$/);
+    const match = (lines[index] ?? '').match(/^- ([^:\n]+):[ \t]*(.*)$/);
     if (match === null) continue;
-    const valueLines = [match[2].trim()];
-    while (index + 1 < lines.length && /^ {2}\S/.test(lines[index + 1])) {
+    const valueLines = [requiredValue(match[2], 'record field value').trim()];
+    while (index + 1 < lines.length && /^ {2}\S/.test(lines[index + 1] ?? '')) {
       index += 1;
-      valueLines.push(lines[index].trim());
+      valueLines.push(
+        requiredValue(lines[index], 'continued record value').trim()
+      );
     }
-    entries.push([match[1].trim(), normalizeWhitespace(valueLines.join(' '))]);
+    entries.push([
+      requiredValue(match[1], 'record field label').trim(),
+      normalizeWhitespace(valueLines.join(' ')),
+    ]);
   }
   return entries;
 };
@@ -302,7 +320,7 @@ const recordFieldViolations = (content: string): readonly string[] => {
   const revisionSection =
     content.split('## Kit 改訂入力 / Revision Input')[1] ?? '';
   const revisionRows = markdownTableRowsInDocument(revisionSection).map(
-    (cells) => cells[0]
+    (cells) => cells[0] ?? ''
   );
   const allowedRevisionRows = [
     '文書の場所に迷った / Navigation confusion',
@@ -356,7 +374,7 @@ const markdownAnchor = (heading: string): string =>
 const anchorsIn = (content: string): ReadonlySet<string> =>
   new Set(
     [...content.matchAll(/^#{1,6}\s+(.+?)\s*#*$/gm)].map((match) =>
-      markdownAnchor(match[1])
+      markdownAnchor(requiredValue(match[1], 'heading text'))
     )
   );
 
@@ -370,7 +388,7 @@ const unsafeLinkReason = (
   ) {
     return 'external or scheme URL';
   }
-  const [pathPart] = destination.split('#', 1);
+  const pathPart = destination.split('#', 1)[0] ?? '';
   if (pathPart.startsWith('/') || isAbsolute(pathPart)) return 'absolute path';
   if (
     pathPart !== '' &&
@@ -398,6 +416,7 @@ describe('Facilitator Kit 文書契約', () => {
       ['guide.ja.md', 'guide.en.md'],
       ['one-page-checklist.ja.md', 'one-page-checklist.en.md'],
       ['qr-poster.ja.md', 'qr-poster.en.md'],
+      ['walkthrough.ja.md', 'walkthrough.en.md'],
     ] as const;
 
     for (const pair of pairedDocuments) {
@@ -407,13 +426,47 @@ describe('Facilitator Kit 文書契約', () => {
     }
   });
 
+  it('未検証時の Walkthrough が Product 操作へ進まず JA と EN で安全に完了する', async () => {
+    const [index, japanese, english] = await Promise.all([
+      readKit('README.md'),
+      readKit('walkthrough.ja.md'),
+      readKit('walkthrough.en.md'),
+    ]);
+
+    expectTerms(index, [
+      '[日本語 Walkthrough](./walkthrough.ja.md)',
+      '[English Walkthrough](./walkthrough.en.md)',
+    ]);
+    expectTerms(japanese, [
+      'Product セッションを開始しない',
+      '実参加者の情報を入力しない',
+      '実 QR を生成または読み取らない',
+      'Nearby Transport を開始しない',
+      'すべて `Not run` のまま',
+      'Walkthrough 完了',
+    ]);
+    expectTerms(english, [
+      'Do not start a Product Lounge',
+      'Enter no real participant information',
+      'Do not create or scan a real QR',
+      'Do not start Nearby Transport',
+      'Keep every physical capability `Not run`',
+      'Walkthrough complete',
+    ]);
+    for (const content of [japanese, english]) {
+      expect(content).not.toContain('P6');
+      expect(content).not.toContain('R8');
+    }
+  });
+
   it('Support Matrix が未検証の実機能力と Verified 移行証跡を区別する', async () => {
     const index = await readKit('README.md');
 
     expectTerms(index, [
       'iOS / Android の実 Camera QR',
       'Nearby Transport Adapter',
-      'Rules Provider / Local Model',
+      'Rules Provider',
+      'Local Model',
       '2〜6 台の Group Lounge',
       'Host Loss と端末別破棄完了表示',
       'A4 / Letter 1 Page と QR Poster の出力',
@@ -910,9 +963,10 @@ describe('Facilitator Kit 文書契約', () => {
       expect(content).not.toMatch(/^\s*\[[^\]]+\]:\s*/m);
       expect(content).not.toMatch(/<a\s+[^>]*href=/i);
       const links = [...content.matchAll(/\]\(([^)]+)\)/g)];
-      for (const [, destination] of links) {
+      for (const link of links) {
+        const destination = requiredValue(link[1], 'Markdown link destination');
         expect(unsafeLinkReason(sourcePath, destination)).toBeNull();
-        const [pathPart, rawFragment] = destination.split('#', 2);
+        const [pathPart = '', rawFragment] = destination.split('#', 2);
         const linkedPath =
           pathPart === '' ? sourcePath : resolve(dirname(sourcePath), pathPart);
         expect((await stat(linkedPath)).isFile()).toBe(true);

@@ -1,0 +1,235 @@
+name: source-release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Strict SemVer from package.json
+        required: true
+        type: string
+      candidate_commit:
+        description: Exact 40-character commit already referenced by the release tag
+        required: true
+        type: string
+      release_tag:
+        description: Existing v-prefixed tag that resolves to the candidate commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate-source-candidate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate dispatch syntax before checkout
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+          RELEASE_REF_INPUT: ${{ inputs.candidate_commit }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          [[ "$RELEASE_VERSION_INPUT" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
+          [[ "$RELEASE_REF_INPUT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_TAG_INPUT" =~ ^v[0-9A-Za-z.+-]+$ ]]
+          test "v$RELEASE_VERSION_INPUT" = "$RELEASE_TAG_INPUT"
+
+      - name: Check out the candidate without retaining credentials
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ inputs.candidate_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and candidate identity
+        env:
+          RELEASE_REF_INPUT: ${{ inputs.candidate_commit }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_REF_INPUT"
+          test "$(git rev-list -n 1 "refs/tags/$RELEASE_TAG_INPUT")" = "$RELEASE_REF_INPUT"
+          git merge-base --is-ancestor "$RELEASE_REF_INPUT" "$GITHUB_SHA"
+
+      - name: Setup the package-pinned Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node.js
+        # actions/setup-node v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22.13.1"
+
+      - name: Setup safe-chain
+        run: |
+          bun add -g --ignore-scripts @aikidosec/safe-chain@1.5.3
+          safe-chain setup-ci
+
+      - name: Install frozen dependencies without lifecycle scripts
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
+        run: make install_ci INSTALL_CI_FLAGS=--safe-chain-skip-minimum-package-age
+
+      - name: Validate candidate source
+        run: make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error
+
+      - name: Build and verify the candidate twice
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+          RELEASE_REF_INPUT: ${{ inputs.candidate_commit }}
+        run: |
+          first_output="$RUNNER_TEMP/source-release-first"
+          second_output="$RUNNER_TEMP/source-release-second"
+          RELEASE_VERSION="$RELEASE_VERSION_INPUT" RELEASE_REF="$RELEASE_REF_INPUT" RELEASE_OUTPUT="$first_output" make release_candidate
+          RELEASE_VERSION="$RELEASE_VERSION_INPUT" RELEASE_REF="$RELEASE_REF_INPUT" RELEASE_OUTPUT="$second_output" make release_candidate
+          RELEASE_VERSION="$RELEASE_VERSION_INPUT" RELEASE_OUTPUT="$first_output" make release_verify
+          RELEASE_VERSION="$RELEASE_VERSION_INPUT" RELEASE_OUTPUT="$second_output" make release_verify
+          diff --recursive --brief "$first_output" "$second_output"
+          bundle="$RUNNER_TEMP/source-release-bundle"
+          mkdir "$bundle"
+          cp -R "$first_output" "$bundle/candidate"
+          cp "docs/releases/${RELEASE_VERSION_INPUT}.md" "$bundle/RELEASE_NOTES.md"
+          RELEASE_VERSION="$RELEASE_VERSION_INPUT" RELEASE_OUTPUT="$bundle/candidate" make release_verify
+          (
+            cd "$bundle"
+            shasum -a 256 \
+              RELEASE_NOTES.md \
+              candidate/LICENSE \
+              candidate/THIRD_PARTY_NOTICES.md \
+              candidate/checksums.txt \
+              candidate/release-manifest.json \
+              "candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.spdx.json" \
+              "candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.tar.gz" \
+              > bundle-checksums.txt
+            shasum -a 256 -c bundle-checksums.txt
+          )
+
+      - name: Upload the validated release bundle
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: source-release-bundle
+          path: ${{ runner.temp }}/source-release-bundle
+          if-no-files-found: error
+
+  publish-draft:
+    if: github.ref == 'refs/heads/main'
+    needs: validate-source-candidate
+    runs-on: ubuntu-latest
+    environment: oss-alpha-draft
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Require protected environment and immutable release tags
+        env:
+          GITHUB_API_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RULESET_AUDIT_TOKEN: ${{ secrets.OSS_ALPHA_RULESET_AUDIT_TOKEN }}
+          TAG_RULESET_ID: ${{ vars.OSS_ALPHA_TAG_RULESET_ID }}
+        run: |
+          [[ "$TAG_RULESET_ID" =~ ^[1-9][0-9]*$ ]]
+          test -n "$RULESET_AUDIT_TOKEN"
+          test "$RULESET_AUDIT_TOKEN" != "$GITHUB_API_TOKEN"
+          GH_TOKEN="$GITHUB_API_TOKEN" gh api "repos/$GH_REPO/environments/oss-alpha-draft" > "$RUNNER_TEMP/environment.json"
+          jq -e '
+            has("protection_rules") and
+            (.protection_rules | type == "array") and
+            (.protection_rules | any(
+              .type == "required_reviewers" and
+              .prevent_self_review == true and
+              (.reviewers | type == "array") and
+              (.reviewers | length > 0)
+            )) and
+            (.deployment_branch_policy | type == "object") and
+            .deployment_branch_policy.protected_branches == true
+          ' "$RUNNER_TEMP/environment.json"
+          GH_TOKEN="$RULESET_AUDIT_TOKEN" gh api "repos/$GH_REPO/rulesets/$TAG_RULESET_ID" > "$RUNNER_TEMP/tag-ruleset.json"
+          jq -e '
+            .target == "tag" and
+            .enforcement == "active" and
+            has("bypass_actors") and
+            (.bypass_actors | type == "array") and
+            (.bypass_actors | length == 0) and
+            (.conditions.ref_name.include == ["refs/tags/v*"]) and
+            (.conditions.ref_name.exclude == []) and
+            (.rules | type == "array") and
+            (.rules | map(.type) | index("update") != null) and
+            (.rules | map(.type) | index("deletion") != null)
+          ' "$RUNNER_TEMP/tag-ruleset.json"
+
+      - name: Download the validated release bundle
+        # actions/download-artifact v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: source-release-bundle
+          path: release-bundle
+
+      - name: Create a new draft release without executing repository code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+          RELEASE_REF_INPUT: ${{ inputs.candidate_commit }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          expected_files="$(printf '%s\n' \
+            RELEASE_NOTES.md \
+            bundle-checksums.txt \
+            candidate/LICENSE \
+            candidate/THIRD_PARTY_NOTICES.md \
+            candidate/checksums.txt \
+            candidate/release-manifest.json \
+            "candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.spdx.json" \
+            "candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.tar.gz" \
+            | sort)"
+          actual_files="$(cd release-bundle && find . -type f -print | sed 's#^\./##' | sort)"
+          test "$actual_files" = "$expected_files"
+          expected_checksum_targets="$(printf '%s\n' \
+            RELEASE_NOTES.md \
+            candidate/LICENSE \
+            candidate/THIRD_PARTY_NOTICES.md \
+            candidate/checksums.txt \
+            candidate/release-manifest.json \
+            "candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.spdx.json" \
+            "candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.tar.gz" \
+            | sort)"
+          actual_checksum_targets="$(
+            while IFS= read -r checksum_line; do
+              [[ "$checksum_line" =~ ^[0-9a-f]{64}\ \ ([A-Za-z0-9._+/-]+)$ ]]
+              printf '%s\n' "${BASH_REMATCH[1]}"
+            done < release-bundle/bundle-checksums.txt | sort
+          )"
+          test "$actual_checksum_targets" = "$expected_checksum_targets"
+          (
+            cd release-bundle
+            shasum -a 256 -c bundle-checksums.txt
+          )
+          remote_tag_commit="$(gh api \
+            -H 'Accept: application/vnd.github.sha' \
+            "repos/$GH_REPO/commits/tags/$RELEASE_TAG_INPUT")"
+          test "$remote_tag_commit" = "$RELEASE_REF_INPUT"
+          if gh release view "$RELEASE_TAG_INPUT" >/dev/null 2>&1; then
+            echo "A release already exists for $RELEASE_TAG_INPUT; refusing to overwrite it." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG_INPUT" \
+            release-bundle/candidate/LICENSE \
+            release-bundle/candidate/THIRD_PARTY_NOTICES.md \
+            release-bundle/candidate/checksums.txt \
+            release-bundle/candidate/release-manifest.json \
+            "release-bundle/candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.spdx.json" \
+            "release-bundle/candidate/tenkacloud-passport-${RELEASE_VERSION_INPUT}.tar.gz" \
+            --draft \
+            --verify-tag \
+            --title "TenkaCloud Passport ${RELEASE_VERSION_INPUT} source candidate" \
+            --notes-file release-bundle/RELEASE_NOTES.md

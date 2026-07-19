@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "typescript-template",
+      "name": "tenkacloud-passport",
       "dependencies": {
         "@expo/metro-runtime": "~57.0.6",
         "@noble/hashes": "2.2.0",
