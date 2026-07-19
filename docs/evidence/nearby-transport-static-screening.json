@@ -73,10 +73,52 @@
       "locator": "TLS 1.3 client and server support from API 29"
     },
     {
-      "id": "android-x509-trust-manager",
-      "label": "Android unsafe TrustManager guidance",
-      "url": "https://developer.android.com/privacy-and-security/risks/unsafe-trustmanager",
-      "locator": "checkServerTrusted must reject certificates that do not satisfy the application trust check"
+      "id": "android-keygen-parameter-spec",
+      "label": "Android KeyGenParameterSpec Builder",
+      "url": "https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder.html",
+      "locator": "API 23+: PURPOSE_SIGN with DIGEST_SHA256 produces a self-signed EC certificate; DIGEST_NONE is also authorized because TLS stacks typically sign an already-digested input"
+    },
+    {
+      "id": "android-key-store",
+      "label": "Android KeyStore certificate and alias lifecycle",
+      "url": "https://developer.android.com/reference/java/security/KeyStore.html",
+      "locator": "getCertificate returns the leaf certificate for fingerprinting and deleteEntry removes the Lounge-scoped alias"
+    },
+    {
+      "id": "android-key-manager-factory",
+      "label": "Android KeyManagerFactory",
+      "url": "https://developer.android.com/reference/javax/net/ssl/KeyManagerFactory",
+      "locator": "init(KeyStore, password) and getKeyManagers load the generated identity material for secure socket negotiation"
+    },
+    {
+      "id": "android-x509-key-manager",
+      "label": "Android X509KeyManager",
+      "url": "https://developer.android.com/reference/javax/net/ssl/X509KeyManager",
+      "locator": "chooseServerAlias selects the exact Lounge alias used to authenticate the TLS server side"
+    },
+    {
+      "id": "android-ssl-context",
+      "label": "Android SSLContext",
+      "url": "https://developer.android.com/reference/javax/net/ssl/SSLContext",
+      "locator": "TLSv1.3 is available on API 29+ and init installs explicit KeyManager and TrustManager arrays"
+    },
+    {
+      "id": "android-certificate",
+      "label": "Android Certificate encoding",
+      "url": "https://developer.android.com/reference/java/security/cert/Certificate",
+      "locator": "getEncoded returns the single ASN.1 DER encoding used for an X.509 leaf certificate fingerprint"
+    },
+    {
+      "id": "android-message-digest",
+      "label": "Android MessageDigest",
+      "url": "https://developer.android.com/reference/java/security/MessageDigest",
+      "locator": "SHA-256 hashes the leaf DER and isEqual compares the QR and peer digests without content-dependent timing"
+    },
+    {
+      "id": "android-x509-trust-manager-api",
+      "label": "Android X509TrustManager API",
+      "url": "https://developer.android.com/reference/javax/net/ssl/X509TrustManager",
+      "locator": "checkServerTrusted receives the peer X.509 chain and throws CertificateException when the leaf fingerprint is not trusted"
     },
     {
       "id": "webrtc-release-124-0-7",
@@ -144,7 +186,7 @@
       "id": "mdns-tls",
       "name": "mDNS + Local WebSocket / Secure Channel",
       "exactRoute": "DNS-SD is optional discovery; QR carries a direct host hint and SHA-256 leaf-certificate fingerprint; iOS Network.framework and Android NsdManager plus JSSE exchange the same bounded length-prefixed application frames over TLS 1.3 with no plaintext fallback",
-      "rationale": "This is the only route that keeps one cross-platform wire, standard TLS, and QR recovery without a third-party transport SDK, but Android Host identity provisioning and application-controlled telemetry remain Not run until primary-route and native-build evidence exist.",
+      "rationale": "This is the only route that keeps one cross-platform wire, standard TLS, and QR recovery without a third-party transport SDK, but application-controlled telemetry remains Not run until native-build artifact evidence exists.",
       "provenance": {
         "kind": "system-framework",
         "ios": {
@@ -159,8 +201,8 @@
           "minimumApi": 29,
           "compileSdk": 36,
           "targetSdk": 36,
-          "framework": "NsdManager and JSSE",
-          "apiRoute": "NsdManager DNS-SD plus SSLServerSocket and SSLSocket restricted to TLS 1.3 with leaf-certificate fingerprint verification"
+          "framework": "NsdManager, AndroidKeyStore, and JSSE",
+          "apiRoute": "NsdManager DNS-SD; Lounge-scoped EC P-256 AndroidKeyStore identity with DIGEST_SHA256 and DIGEST_NONE; KeyStore certificate access and deletion; KeyManagerFactory material loading; X509KeyManager server-alias selection; SSLContext with X509TrustManager leaf-DER SHA-256 pinning; SSLServerSocket and SSLSocket restricted to TLS 1.3"
         }
       },
       "gates": {
@@ -194,9 +236,20 @@
           ]
         },
         "standardSecureChannel": {
-          "status": "Not run",
-          "reason": "The TLS 1.3 trust-callback contract is fixed, but an official Android Host route for ephemeral certificate and key generation, KeyManager presentation, and alias deletion is not yet fixed or evidenced.",
-          "sourceIds": []
+          "status": "Pass",
+          "reason": "Apple Network.framework supplies the local TLS identity route; Android API 29+ supplies TLS 1.3 while AndroidKeyStore creates a Lounge-scoped EC signing key with self-sign and TLS digests, KeyStore exposes its leaf and deletion, KeyManagerFactory loads the material, X509KeyManager fixes the server alias, SSLContext installs the managers, and X509TrustManager rejects a mismatched SHA-256 of the peer leaf DER during the handshake.",
+          "sourceIds": [
+            "apple-local-tls",
+            "android-ssl-socket",
+            "android-keygen-parameter-spec",
+            "android-key-store",
+            "android-key-manager-factory",
+            "android-x509-key-manager",
+            "android-ssl-context",
+            "android-certificate",
+            "android-message-digest",
+            "android-x509-trust-manager-api"
+          ]
         },
         "licenseAndMaintenance": {
           "status": "Pass",

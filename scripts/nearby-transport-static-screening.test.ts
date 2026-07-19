@@ -252,6 +252,35 @@ describe('Nearby Transport Phase A manifest 境界', () => {
     }
   });
 
+  it('mDNS TLS の必須 secure-channel source が1つでも欠けると Pass を拒否する', async () => {
+    for (const sourceId of [
+      'apple-local-tls',
+      'android-ssl-socket',
+      'android-keygen-parameter-spec',
+      'android-key-store',
+      'android-key-manager-factory',
+      'android-x509-key-manager',
+      'android-ssl-context',
+      'android-certificate',
+      'android-message-digest',
+      'android-x509-trust-manager-api',
+    ]) {
+      const manifest = await mutableManifest();
+      const secureGate = gate(
+        candidateAt(manifest, 0),
+        'standardSecureChannel'
+      );
+      secureGate['sourceIds'] = requireArray(
+        secureGate['sourceIds'],
+        'standardSecureChannel.sourceIds'
+      ).filter((candidateSourceId) => candidateSourceId !== sourceId);
+
+      expect(() =>
+        parseNearbyTransportStaticScreening(JSON.stringify(manifest))
+      ).toThrow('evidence role が不足');
+    }
+  });
+
   it('Repository と異なる Expo、React Native、Platform SDK baseline を拒否する', async () => {
     for (const [field, value] of [
       ['expoSdk', '999.0.0'],

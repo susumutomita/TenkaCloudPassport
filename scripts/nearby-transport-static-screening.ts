@@ -76,6 +76,16 @@ type StaticEvidenceRole =
   | 'shared-security'
   | 'ios-security'
   | 'android-security'
+  | 'android-tls13'
+  | 'android-identity-generation'
+  | 'android-certificate-access'
+  | 'android-certificate-der'
+  | 'android-fingerprint-digest'
+  | 'android-key-material-loading'
+  | 'android-server-alias-selection'
+  | 'android-tls-context-installation'
+  | 'android-peer-fingerprint-verification'
+  | 'android-key-deletion'
   | 'telemetry-control'
   | 'shared-topology'
   | 'ios-topology'
@@ -145,12 +155,52 @@ const OFFICIAL_SOURCE_CATALOG: Readonly<Record<string, OfficialSourcePolicy>> =
         'crossPlatformRoute',
         'standardSecureChannel',
       ],
-      roles: ['android-api', 'android-route', 'android-security'],
+      roles: [
+        'android-api',
+        'android-route',
+        'android-security',
+        'android-tls13',
+      ],
     },
-    'android-x509-trust-manager': {
-      url: 'https://developer.android.com/privacy-and-security/risks/unsafe-trustmanager',
+    'android-keygen-parameter-spec': {
+      url: 'https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder.html',
       gateIds: ['standardSecureChannel'],
-      roles: ['android-security'],
+      roles: ['android-identity-generation'],
+    },
+    'android-key-store': {
+      url: 'https://developer.android.com/reference/java/security/KeyStore.html',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-certificate-access', 'android-key-deletion'],
+    },
+    'android-key-manager-factory': {
+      url: 'https://developer.android.com/reference/javax/net/ssl/KeyManagerFactory',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-key-material-loading'],
+    },
+    'android-x509-key-manager': {
+      url: 'https://developer.android.com/reference/javax/net/ssl/X509KeyManager',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-server-alias-selection'],
+    },
+    'android-ssl-context': {
+      url: 'https://developer.android.com/reference/javax/net/ssl/SSLContext',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-tls-context-installation'],
+    },
+    'android-certificate': {
+      url: 'https://developer.android.com/reference/java/security/cert/Certificate',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-certificate-der'],
+    },
+    'android-message-digest': {
+      url: 'https://developer.android.com/reference/java/security/MessageDigest',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-fingerprint-digest'],
+    },
+    'android-x509-trust-manager-api': {
+      url: 'https://developer.android.com/reference/javax/net/ssl/X509TrustManager',
+      gateIds: ['standardSecureChannel'],
+      roles: ['android-peer-fingerprint-verification'],
     },
     'webrtc-release-124-0-7': {
       url: 'https://github.com/react-native-webrtc/react-native-webrtc/commit/5ecc86111c2f8e0d152d719f8b7b357a601150b6',
@@ -251,7 +301,6 @@ const OFFICIAL_SOURCE_CATALOG: Readonly<Record<string, OfficialSourcePolicy>> =
   };
 
 const KNOWN_PASS_BLOCKERS: ReadonlySet<StaticGatePolicyKey> = new Set([
-  'mdns-tls:standardSecureChannel',
   'webrtc-datachannel:expoAndNewArchitecture',
   'webrtc-datachannel:standardSecureChannel',
   'webrtc-datachannel:applicationControlledTelemetry',
@@ -274,6 +323,9 @@ const CANDIDATE_SOURCE_ID_PREFIXES: Readonly<
     'android-nsd-',
     'android-ssl-',
     'android-x509-',
+    'android-key',
+    'android-certificate',
+    'android-message-',
   ],
   'webrtc-datachannel': ['expo-', 'webrtc-'],
   'google-nearby': ['expo-', 'google-nearby-'],
@@ -790,6 +842,23 @@ function requiredPassEvidenceRoleAlternatives(
     case 'expoAndNewArchitecture':
       return [['native-module', 'new-architecture', 'development-build']];
     case 'standardSecureChannel':
+      if (candidate.id === 'mdns-tls') {
+        return [
+          [
+            'ios-security',
+            'android-tls13',
+            'android-identity-generation',
+            'android-certificate-access',
+            'android-certificate-der',
+            'android-fingerprint-digest',
+            'android-key-material-loading',
+            'android-server-alias-selection',
+            'android-tls-context-installation',
+            'android-peer-fingerprint-verification',
+            'android-key-deletion',
+          ],
+        ];
+      }
       return [['shared-security'], ['ios-security', 'android-security']];
     case 'licenseAndMaintenance':
       return candidate.provenance.kind === 'system-framework'

@@ -675,6 +675,15 @@ Tombstone または Round の bounded 上限へ到達した場合は、古い ID
   JSONC AST の decoded duplicate key 検査を一元化した。Focused Test は 21 件、全 Test は 838 件成功し、staged harness は
   Error / Warning 0、Typecheck、Textlint、Web Export、Code / Security / Simplify の全 severity 0 件を確認した。
   Manifest CLI は Phase A `Not run` を導出し、Physical Candidate と実機 Evidence は未選択 / 未実行のままである。
+- 2026-07-19: Android Host の標準 TLS identity route を Android 公式 API から固定した。Lounge ごとの一時
+  AndroidKeyStore alias に EC P-256、`PURPOSE_SIGN`、self-sign 用 `DIGEST_SHA256`、TLS signing 用 `DIGEST_NONE` の
+  key pair と短期 self-signed certificate を生成し、`KeyStore.getCertificate()`
+  の DER を SHA-256 fingerprint として QR に bind する。`KeyManagerFactory` の key material を Lounge alias 固定の
+  `X509KeyManager.chooseServerAlias()` で選び、`SSLContext` へ組み込んで TLS 1.3 server へ提示する。Guest は
+  `X509TrustManager.checkServerTrusted()` 内で peer leaf の X.509 DER を SHA-256 化し、`MessageDigest.isEqual()` の
+  fingerprint 不一致を拒否する。終了時は `KeyStore.deleteEntry()` で
+  alias を削除する。これは Static secure-channel Gate の根拠だけであり、Native Build、実機 handshake、alias 削除確認、
+  Packet Capture、Telemetry artifact 検査は引き続き `Not run` とする。
 
 #### 振り返り
 

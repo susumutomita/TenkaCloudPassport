@@ -41,6 +41,18 @@ Static Screening Status は、4 Candidate の全 Gate が
 | Application-controlled telemetry | Application 側で収集を無効化できる公式 API または config と Build artifact 上の適用方法を示す。 | 利用者の OS 設定だけに opt-out を委ねる、送信だけを遮断する、収集状態が不明である。 |
 | Topology and discovery | 2〜6 台の Star と、Discovery 無効時の QR direct hint route を示す。 | Discovery または中央 Signaling / Relay が必須である。 |
 
+mDNS + TLS Candidate の Android Host identity は、Lounge ごとの一時 alias を使う AndroidKeyStore の EC P-256
+key pair と短期 self-signed certificate に固定する。Key は `PURPOSE_SIGN`、self-sign 用 `DIGEST_SHA256`、TLS stack が
+digest 済み入力を署名するための `DIGEST_NONE` を許可し、certificate の
+DER SHA-256 を QR fingerprint にする。`KeyManagerFactory` が取り出した key material は、delegate の利用可能 alias と
+certificate chain を検査する Lounge-scoped `X509KeyManager` で包み、`chooseServerAlias()` は QR に bind した alias だけを
+返す。`SSLContext` はこの KeyManager と fingerprint 固定の `X509TrustManager` を明示して初期化する。Guest の
+`checkServerTrusted()` は `Certificate.getEncoded()` の X.509 DER を SHA-256 化し、`MessageDigest.isEqual()` で
+QR fingerprint と一致しない限り
+`CertificateException` を投げ、handshake 完了前に拒否する。Lounge 終了、失敗、`dispose()` の全経路で alias を
+`KeyStore.deleteEntry()` する。公式 API premise はこの Static route の `Pass` 根拠に限り、実機での key generation、
+handshake、削除、plaintext 不在を証明しない。
+
 Google Nearby Connections は公式資料上、performance metrics と端末情報を収集し、利用者の端末設定で制御する。
 Application-controlled telemetry を無効化する公式手段と Build 適用証拠がなければ、この Candidate の Static Status は
 機械的に `Fail` とする。Internet 遮断中の外部 Endpoint 0 件は、この Gate の代替証拠にしない。
@@ -75,6 +87,9 @@ Manifest は次を fail-closed で検証する。
   source class かつ同じ Gate class の Source だけを参照する。`Pass` は Gate 共通の evidence role を満たし、
   cross-platform Gate は shared route または iOS / Android 両方の role を必要とする。既知の不足を明示した
   Candidate / Gate は `Pass` にしない。
+- mDNS + TLS の Standard secure channel `Pass` は iOS の local TLS route、Android TLS 1.3 に加え、Android Host の
+  identity generation、certificate access、certificate DER、fingerprint digest、KeyManager material loading、server alias
+  selection、TLS context installation、Guest fingerprint verification、alias deletion の全 role を必要とする。
 - Unknown field、重複 ID、source ID と異なる URL、欠落 source、導出 Status field の入力、128 KiB 超過、
   16 階層超過を拒否する。
 - Candidate Status と Static Screening Status は Manifest に保存せず、7 Gate と 4 Candidate から本 Protocol の
