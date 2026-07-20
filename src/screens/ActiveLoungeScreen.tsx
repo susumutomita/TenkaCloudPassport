@@ -11,6 +11,7 @@ import AppScreen from '../components/AppScreen';
 import { type ClueId, clueById } from '../domain/clue-catalog';
 import type { ActiveLounge } from '../domain/lounge';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
 
 interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
@@ -161,9 +162,12 @@ export default function ActiveLoungeScreen({
         Known follow-ups 参照）。逐次更新される値であるかのように読める
         accessibilityLabel は付けない。
       */}
-      <Text style={styles.interactionStatus}>
-        {interactionStatusNotice('discovering', locale).message}
-      </Text>
+      <View style={styles.statusRow}>
+        <View style={[styles.statusDot, styles.infoDot]} />
+        <Text style={styles.interactionStatus}>
+          {interactionStatusNotice('discovering', locale).message}
+        </Text>
+      </View>
       <Text style={styles.providerStatus}>
         {providerStatusNotice(providerStatus, locale).message}
       </Text>
@@ -173,6 +177,7 @@ export default function ActiveLoungeScreen({
       </View>
       {notice.level === 'warning' ? (
         <View accessibilityRole="alert" style={styles.expiryWarning}>
+          <View style={[styles.statusDot, styles.warningDot]} />
           <Text style={styles.expiryWarningText}>{notice.message}</Text>
         </View>
       ) : null}
@@ -204,12 +209,32 @@ export default function ActiveLoungeScreen({
 
 const styles = StyleSheet.create({
   grid: {
+    flexDirection: 'row',
     gap: spacing.sm,
+  },
+  statusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  statusDot: {
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  infoDot: {
+    backgroundColor: colors.info,
+  },
+  warningDot: {
+    backgroundColor: colors.warning,
+    marginTop: 6,
   },
   interactionStatus: {
     color: colors.muted,
+    flex: 1,
+    fontFamily: monoFontFamily,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   providerStatus: {
     color: colors.muted,
@@ -217,25 +242,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   passport: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.white,
+    borderColor: colors.borderSubtle,
     borderRadius: 14,
     borderWidth: 1,
+    flex: 1,
     gap: spacing.xs,
     padding: spacing.md,
   },
   passportTitle: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
+    color: colors.mutedLight,
+    fontFamily: monoFontFamily,
+    fontSize: 11,
+    fontWeight: '500',
     letterSpacing: 0.8,
     marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
   clue: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: '700',
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 20,
   },
   petNameRow: {
     alignItems: 'center',
@@ -251,30 +278,31 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   notice: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     gap: spacing.xs,
     padding: spacing.md,
   },
   noticeTitle: {
-    color: colors.primary,
+    color: colors.ink,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   noticeText: {
-    color: colors.ink,
+    color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
   },
   expiryWarning: {
     backgroundColor: colors.surface,
-    borderColor: colors.danger,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
     padding: spacing.md,
   },
   expiryWarningText: {
-    color: colors.danger,
+    color: colors.warningText,
+    flex: 1,
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 21,

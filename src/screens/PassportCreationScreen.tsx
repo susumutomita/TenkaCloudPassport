@@ -15,6 +15,7 @@ import {
   PROFILE_MAX_CLUES,
 } from '../domain/passport';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
 
 interface PassportCreationScreenProps {
   readonly petName: string;
@@ -175,15 +176,15 @@ export default function PassportCreationScreen({
 
 const styles = StyleSheet.create({
   notice: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderColor: colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
     gap: spacing.xs,
     padding: spacing.md,
   },
   errorNotice: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderColor: colors.danger,
   },
   noticeTitle: {
@@ -205,9 +206,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderColor: colors.border,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     color: colors.ink,
     fontSize: 16,
@@ -231,8 +232,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   counter: {
-    color: colors.primary,
+    color: colors.ink,
+    fontFamily: monoFontFamily,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
   },
 });

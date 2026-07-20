@@ -16,6 +16,7 @@ import {
   validateOwnerAnswerNote,
 } from '../domain/owner-question';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
 
 interface OwnerQuestionScreenProps {
   readonly question: OwnerQuestion;
@@ -99,10 +100,15 @@ export default function OwnerQuestionScreen({
           {disclosure.notSavedToPassportMessage}
         </Text>
       </View>
-      <Text style={styles.question}>{question.displayText}</Text>
-      <Text style={styles.countdown}>
-        {t.countdown(formatRemainingSeconds(remainingMs))}
-      </Text>
+      <View accessibilityRole="summary" style={styles.countdownBadge}>
+        <View style={styles.countdownDot} />
+        <Text style={styles.countdown}>
+          {t.countdown(formatRemainingSeconds(remainingMs))}
+        </Text>
+      </View>
+      <View style={styles.questionCard}>
+        <Text style={styles.question}>{question.displayText}</Text>
+      </View>
       <View style={styles.field}>
         <Text nativeID="owner-answer-note-label" style={styles.label}>
           {t.noteLabel}
@@ -197,15 +203,44 @@ export default function OwnerQuestionScreen({
 
 const styles = StyleSheet.create({
   disclosure: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     gap: spacing.xs,
     padding: spacing.md,
   },
   disclosureText: {
-    color: colors.ink,
+    color: colors.muted,
     fontSize: 13,
     lineHeight: 20,
+  },
+  countdownBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  countdownDot: {
+    backgroundColor: colors.warning,
+    borderRadius: 4,
+    height: 7,
+    width: 7,
+  },
+  countdown: {
+    color: colors.warningText,
+    fontFamily: monoFontFamily,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  questionCard: {
+    backgroundColor: colors.white,
+    borderColor: colors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: spacing.md,
   },
   question: {
     color: colors.ink,
@@ -213,23 +248,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 28,
   },
-  countdown: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
   field: {
     gap: spacing.sm,
   },
   label: {
-    color: colors.ink,
+    color: colors.muted,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   input: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderColor: colors.border,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     color: colors.ink,
     fontSize: 16,
@@ -243,8 +273,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   confirm: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.white,
+    borderColor: colors.borderSubtle,
     borderRadius: 14,
     borderWidth: 1,
     gap: spacing.sm,

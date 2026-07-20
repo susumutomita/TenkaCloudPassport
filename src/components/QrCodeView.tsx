@@ -44,7 +44,9 @@ const styles = StyleSheet.create({
   frame: {
     alignSelf: 'center',
     backgroundColor: colors.white,
+    borderColor: colors.borderSubtle,
     borderRadius: 12,
+    borderWidth: 1,
     padding: 12,
   },
   row: {
