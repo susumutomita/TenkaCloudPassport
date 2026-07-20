@@ -3,6 +3,7 @@ import packageManifest from './package.json';
 import { createDefaultAgentModelProvider } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
 import { DEFAULT_DISTRIBUTION_CAPABILITY } from './src/app/default-distribution-capability';
+import { createDefaultIntroCardStorage } from './src/app/default-intro-card-storage';
 import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
 import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
@@ -21,6 +22,7 @@ const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
   localDataLeases,
   localDeletionJournal
 );
+const introCardStorage = createDefaultIntroCardStorage();
 const backupSharePort = createDefaultBackupSharePort();
 const agentModelProvider = createDefaultAgentModelProvider(localDataLeases);
 const localModelComposition =
@@ -46,6 +48,7 @@ export default function App() {
         localModelMutationLeases={localModelComposition?.mutationLeases ?? null}
         localDataControl={localDataControl}
         localProfileStorage={localProfileStorage}
+        introCardStorage={introCardStorage}
       />
     </>
   );

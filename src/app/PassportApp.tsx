@@ -15,6 +15,7 @@ import {
 } from '../domain/agent-model-provider';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
+import { createIntroCard, type IntroCard } from '../domain/intro-card';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
 import type { LoungeInvite } from '../domain/lounge-invite';
 import {
@@ -52,6 +53,7 @@ import {
   issueLoungeHandshake,
 } from '../protocol/lounge-handshake';
 import { encodeQrPayload } from '../protocol/qr-payload';
+import { encodeVCard, vCardByteLength } from '../protocol/vcard';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
 import BackupExportScreen from '../screens/BackupExportScreen';
@@ -62,6 +64,8 @@ import ConversationSelfReportScreen from '../screens/ConversationSelfReportScree
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
+import IntroCardEditScreen from '../screens/IntroCardEditScreen';
+import IntroCardScreen from '../screens/IntroCardScreen';
 import LocalDiagnosticsScreen from '../screens/LocalDiagnosticsScreen';
 import OutcomeScreen from '../screens/OutcomeScreen';
 import OwnerQuestionScreen from '../screens/OwnerQuestionScreen';
@@ -86,6 +90,11 @@ import type { DistributionCapability } from './distribution-capability';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { inProcessTransportFingerprint } from './in-process-transport-binding';
+import {
+  type IntroCardNotice,
+  introCardNoticeFromError,
+} from './intro-card-notice';
+import type { IntroCardStoragePort } from './intro-card-storage';
 import {
   LocalDataAccessBlockedError,
   type LocalDataControl,
@@ -148,6 +157,7 @@ import {
 interface PassportAppProps {
   readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
+  readonly introCardStorage: IntroCardStoragePort;
   readonly backupSharePort: BackupSharePort;
   readonly distributionCapability: DistributionCapability;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
@@ -169,7 +179,11 @@ type SetupStage =
   | 'backup-import'
   | 'settings'
   | 'diagnostics'
-  | 'pilot-measurement';
+  | 'pilot-measurement'
+  // Issue 79: 自己紹介カードピボット Step 1 のメインフロー。Pet / Lounge / Encounter 系
+  // stage は導線から外れ、既定の着地点はこの 2 つになる。
+  | 'intro-card'
+  | 'intro-card-edit';
 
 interface DiagnosticTransportSnapshot {
   readonly state: DiagnosticTransportState;
@@ -289,6 +303,11 @@ interface ProfileHomeGateProps {
   readonly onOpenSettings: () => void;
   readonly encounter: EncounterBranchProps;
   readonly creation: PassportCreationBranchProps;
+  /** Issue 79: 自己紹介カードピボット Step 1。詳細は `IntroCardStageGate` を参照。 */
+  readonly introCard: IntroCard | null;
+  readonly introCardEdit: IntroCardEditBranchProps;
+  readonly onEditIntroCard: () => void;
+  readonly onDeleteIntroCard: () => void;
 }
 
 /**
@@ -308,7 +327,29 @@ function ProfileHomeGate({
   onOpenSettings,
   encounter,
   creation,
+  introCard,
+  introCardEdit,
+  onEditIntroCard,
+  onDeleteIntroCard,
 }: ProfileHomeGateProps) {
+  // Issue 79: 自己紹介カードピボット Step 1 の既定フロー。Pet / Encounter より前に
+  // 判定する。`PassportApp` 本体へ `if` を追加すると Cognitive Complexity が上限を
+  // 超えるため（このファイル既存の設計判断、上記コメント参照）、既に子 Component へ
+  // 判定を委譲している `ProfileHomeGate` 側へ同じ方針で 1 段追加する。
+  if (INTRO_CARD_STAGES.has(stage)) {
+    return (
+      <IntroCardStageGate
+        edit={introCardEdit}
+        introCard={introCard}
+        locale={locale}
+        onDelete={onDeleteIntroCard}
+        onEdit={onEditIntroCard}
+        onOpenBackup={backupFlow.open}
+        onOpenSettings={onOpenSettings}
+        stage={stage}
+      />
+    );
+  }
   if (isBackupStage(stage)) {
     return (
       <BackupStageGate
@@ -542,9 +583,106 @@ function UtilityStageGate({
   return null;
 }
 
+const INTRO_CARD_STAGES: ReadonlySet<SetupStage> = new Set([
+  'intro-card',
+  'intro-card-edit',
+]);
+
+/**
+ * Issue 79: 自己紹介カードピボット Step 1 の 2 Stage（表示・編集）を 1 つの
+ * Component へ集約する。`UtilityStageGate` / `BackupStageGate` と同じ「複数 Stage を
+ * 子 Component へ集約して Cognitive Complexity を抑える」方針。編集画面用の Prop は
+ * `edit` に 1 つの object としてまとめ、`ProfileHomeGate` の `creation` / `encounter`
+ * と同じ形にする。
+ */
+interface IntroCardEditBranchProps {
+  readonly name: string;
+  readonly title: string;
+  readonly organization: string;
+  readonly selfIntro: string;
+  readonly email: string;
+  readonly phone: string;
+  readonly linksText: string;
+  readonly notice: IntroCardNotice;
+  readonly saving: boolean;
+  readonly vCardByteUsage: number;
+  readonly onChangeName: (value: string) => void;
+  readonly onChangeTitle: (value: string) => void;
+  readonly onChangeOrganization: (value: string) => void;
+  readonly onChangeSelfIntro: (value: string) => void;
+  readonly onChangeEmail: (value: string) => void;
+  readonly onChangePhone: (value: string) => void;
+  readonly onChangeLinksText: (value: string) => void;
+  readonly onSave: () => void;
+}
+
+interface IntroCardStageGateProps {
+  readonly stage: SetupStage;
+  readonly introCard: IntroCard | null;
+  readonly locale: Locale;
+  readonly onOpenBackup: () => void;
+  readonly onOpenSettings: () => void;
+  readonly onEdit: () => void;
+  readonly onDelete: () => void;
+  readonly edit: IntroCardEditBranchProps;
+}
+
+function IntroCardStageGate({
+  stage,
+  introCard,
+  locale,
+  onOpenBackup,
+  onOpenSettings,
+  onEdit,
+  onDelete,
+  edit,
+}: IntroCardStageGateProps) {
+  if (stage === 'intro-card' && introCard) {
+    return (
+      <IntroCardScreen
+        card={introCard}
+        deleteError={
+          edit.notice.kind === 'delete-error' ? edit.notice.message : null
+        }
+        locale={locale}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        onOpenBackup={onOpenBackup}
+        onOpenSettings={onOpenSettings}
+      />
+    );
+  }
+  return (
+    <IntroCardEditScreen
+      email={edit.email}
+      linksText={edit.linksText}
+      locale={locale}
+      name={edit.name}
+      notice={edit.notice}
+      onChangeEmail={edit.onChangeEmail}
+      onChangeLinksText={edit.onChangeLinksText}
+      onChangeName={edit.onChangeName}
+      onChangeOrganization={edit.onChangeOrganization}
+      onChangePhone={edit.onChangePhone}
+      onChangeSelfIntro={edit.onChangeSelfIntro}
+      onChangeTitle={edit.onChangeTitle}
+      onOpenBackup={onOpenBackup}
+      onOpenSettings={onOpenSettings}
+      onSave={edit.onSave}
+      organization={edit.organization}
+      phone={edit.phone}
+      saving={edit.saving}
+      selfIntro={edit.selfIntro}
+      title={edit.title}
+      vCardByteUsage={edit.vCardByteUsage}
+    />
+  );
+}
+
 export default function PassportApp({
   appVersion,
   localProfileStorage,
+  introCardStorage,
   backupSharePort,
   distributionCapability,
   agentModelProvider = RULES_MODEL_PROVIDER,
@@ -572,6 +710,25 @@ export default function PassportApp({
   const [notice, setNotice] = useState<ProfileNotice>({
     kind: 'empty',
     message: MESSAGES[DEFAULT_LOCALE].passportApp.initialNotice,
+  });
+  // Issue 79: 自己紹介カードピボット Step 1。`introCardRef` は起動時 Promise.all の
+  // `.then()` や各種 handler から同期的に「保存済みカードがあるか」を読むための参照で、
+  // React state（`introCard`）と異なり同一 tick 内の再 render を待たずに最新値を返す
+  // （`applyStartupRecoveryResult` / `resetAllLocalMemory` の stage 決定がこれに依存する）。
+  const [introCard, setIntroCard] = useState<IntroCard | null>(null);
+  const introCardRef = useRef<IntroCard | null>(null);
+  const [introCardDraftName, setIntroCardDraftName] = useState('');
+  const [introCardDraftTitle, setIntroCardDraftTitle] = useState('');
+  const [introCardDraftOrganization, setIntroCardDraftOrganization] =
+    useState('');
+  const [introCardDraftSelfIntro, setIntroCardDraftSelfIntro] = useState('');
+  const [introCardDraftEmail, setIntroCardDraftEmail] = useState('');
+  const [introCardDraftPhone, setIntroCardDraftPhone] = useState('');
+  const [introCardDraftLinksText, setIntroCardDraftLinksText] = useState('');
+  const [introCardSaving, setIntroCardSaving] = useState(false);
+  const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>({
+    kind: 'empty',
+    message: MESSAGES[DEFAULT_LOCALE].introCard.initialNotice,
   });
   const [petName, setPetName] = useState('');
   const [petEmoji, setPetEmoji] = useState<PetEmoji>('🐾');
@@ -727,7 +884,23 @@ export default function PassportApp({
     },
     []
   );
-  const closeBackupStage = useCallback(() => setStage('profile'), []);
+  // Issue 79: `restoring` を false にした直後や Settings / Backup を閉じた後の着地先は、
+  // 既定でこの Callback が決める。起動時（`applyStartupRecoveryResult` の 'recovered'
+  // 分岐）と Diagnostics の「全データ削除」の両方から呼ばれるため、その場の React state
+  // ではなく `introCardRef.current`（同期参照）で判定する。全データ削除は Intro Card
+  // Storage を対象にしないため（Issue 79 の follow-up、JSON Backup 統合と同様に別
+  // Issue）、削除前後で Intro Card の有無は変化しない。
+  const introCardHomeStage = useCallback(
+    (): SetupStage => (introCardRef.current ? 'intro-card' : 'intro-card-edit'),
+    []
+  );
+
+  // Issue 79: Backup も Intro Card 側の画面から開くのが既定経路のため、閉じた後は
+  // Pet 側の 'profile' ではなく Intro Card の着地先へ戻す。
+  const closeBackupStage = useCallback(
+    () => setStage(introCardHomeStage()),
+    [introCardHomeStage]
+  );
   const backupFlow = useBackupFlow({
     localProfileStorage,
     backupSharePort,
@@ -845,12 +1018,13 @@ export default function PassportApp({
       pilotMeasurementFlow.reset();
       if (!recoveryRequired) {
         setRestoring(false);
-        setStage('profile');
+        setStage(introCardHomeStage());
       }
     },
     [
       backupFlow,
       forgetLoungeForDiagnostics,
+      introCardHomeStage,
       localModels.invalidateAfterExternalPurge,
       pilotMeasurementFlow.reset,
       resetPassportInMemory,
@@ -874,7 +1048,7 @@ export default function PassportApp({
           profileNoticeFromStorageError(result.error, 'load', localeRef.current)
         );
         setRestoring(false);
-        setStage('profile');
+        setStage(introCardHomeStage());
         return;
       }
       const { profile } = result;
@@ -884,9 +1058,13 @@ export default function PassportApp({
           message: MESSAGES[localeRef.current].passportApp.emptyOnLoad,
         });
         setRestoring(false);
-        setStage('profile');
+        setStage(introCardHomeStage());
         return;
       }
+      // Issue 79: Pet Profile が既にあっても既定の着地先は Intro Card 側へ統一する
+      // （Pet / Lounge / Encounter は導線から外す）。ここで Pet 側の state を復元
+      // しておくのは、コードを削除せず Settings 経由等で将来再度たどり着けるようにする
+      // ためであり、この分岐自体は 'encounter' へは遷移しない。
       setPetName(profile.petName);
       setPetEmoji(profile.petEmoji);
       setOwnerAlias(profile.ownerAlias ?? '');
@@ -894,14 +1072,14 @@ export default function PassportApp({
       setLanguageSelection([...profile.languages]);
       setPrivateProfile(profile);
       setShareSelection(createDefaultPassportShareSelection(profile));
-      setStage('encounter');
+      setStage(introCardHomeStage());
       setNotice({
         kind: 'restored',
         message: MESSAGES[localeRef.current].passportApp.restoredOnLoad,
       });
       setRestoring(false);
     },
-    [resetAllLocalMemory]
+    [introCardHomeStage, resetAllLocalMemory]
   );
   const applyStartupRecoveryResultRef = useRef(applyStartupRecoveryResult);
   applyStartupRecoveryResultRef.current = applyStartupRecoveryResult;
@@ -961,21 +1139,40 @@ export default function PassportApp({
   // 反する。localeRef は復元完了時点の表示言語だけを読み、effect 自体の再実行要因にしない。
   useEffect(() => {
     let active = true;
-    void recoverLocalStateAtStartup(localDataControl, localProfileStorage).then(
-      (result) => {
-        if (!active) return;
-        if (result.kind === 'recovery-failed') {
-          setLastDiagnosticError(startupDiagnosticError(result.error));
-          diagnosticsFlow.enterRecovery(result.error);
-          return;
+    // Issue 79: Intro Card の読込は Pet Profile Recovery（`recoverLocalStateAtStartup`）と
+    // 完全に独立した Storage だが、既定の着地 stage は両方が揃ってから 1 回で決めたいため
+    // `Promise.all` で束ねる。`introCardStorage.load()` 自体の失敗は Promise.all 全体を
+    // reject させず、`null`（カードなし扱い）へ畳み込んだ上で Notice にだけ反映する。
+    void Promise.all([
+      recoverLocalStateAtStartup(localDataControl, localProfileStorage),
+      introCardStorage.load().catch((error: unknown) => {
+        if (active) {
+          setIntroCardNotice(
+            introCardNoticeFromError(error, 'load', localeRef.current)
+          );
         }
-        applyStartupRecoveryResultRef.current(result);
+        return null;
+      }),
+    ]).then(([result, loadedIntroCard]) => {
+      if (!active) return;
+      introCardRef.current = loadedIntroCard;
+      setIntroCard(loadedIntroCard);
+      if (result.kind === 'recovery-failed') {
+        setLastDiagnosticError(startupDiagnosticError(result.error));
+        diagnosticsFlow.enterRecovery(result.error);
+        return;
       }
-    );
+      applyStartupRecoveryResultRef.current(result);
+    });
     return () => {
       active = false;
     };
-  }, [diagnosticsFlow.enterRecovery, localDataControl, localProfileStorage]);
+  }, [
+    diagnosticsFlow.enterRecovery,
+    introCardStorage,
+    localDataControl,
+    localProfileStorage,
+  ]);
 
   /**
    * Issue 11: Active Lounge の 1 秒 tick / Background 復帰の両方が、Lounge 本体の期限
@@ -1148,6 +1345,90 @@ export default function PassportApp({
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Issue 79: 空文字・空白のみは undefined 扱いにする正規化は `createIntroCard`
+   * 自身が担う（`src/domain/intro-card.ts`）ため、ここでは draft の生文字列を
+   * そのまま渡すだけでよい。`links` だけは改行区切りの単一 TextInput（Issue 79
+   * 詳細設計、5 件の個別欄より単純な構成）から配列へ変換する。
+   */
+  function introCardDraftAsShape(): IntroCard {
+    return {
+      name: introCardDraftName,
+      title: introCardDraftTitle,
+      organization: introCardDraftOrganization,
+      selfIntro: introCardDraftSelfIntro,
+      links: introCardDraftLinksText.split('\n'),
+      email: introCardDraftEmail,
+      phone: introCardDraftPhone,
+    };
+  }
+
+  function loadIntroCardDraftFrom(card: IntroCard): void {
+    setIntroCardDraftName(card.name);
+    setIntroCardDraftTitle(card.title ?? '');
+    setIntroCardDraftOrganization(card.organization ?? '');
+    setIntroCardDraftSelfIntro(card.selfIntro ?? '');
+    setIntroCardDraftEmail(card.email ?? '');
+    setIntroCardDraftPhone(card.phone ?? '');
+    setIntroCardDraftLinksText((card.links ?? []).join('\n'));
+  }
+
+  function openIntroCardEdit(): void {
+    if (introCard) loadIntroCardDraftFrom(introCard);
+    setIntroCardNotice({
+      kind: 'empty',
+      message: MESSAGES[locale].introCard.initialNotice,
+    });
+    setStage('intro-card-edit');
+  }
+
+  async function saveIntroCard(): Promise<void> {
+    if (introCardSaving) return;
+    setIntroCardSaving(true);
+    try {
+      const card = createIntroCard(introCardDraftAsShape());
+      // vCard 化と 1,024 byte 上限の検証をここで通す（保存後の表示画面では
+      // 再検証せずそのまま QR 化できる前提を保つ）。
+      encodeVCard(card);
+      await introCardStorage.save(card);
+      introCardRef.current = card;
+      setIntroCard(card);
+      setIntroCardNotice({
+        kind: 'saved',
+        message: MESSAGES[locale].introCard.noticeTitles.saved,
+      });
+      setStage('intro-card');
+    } catch (error: unknown) {
+      setIntroCardNotice(introCardNoticeFromError(error, 'save', locale));
+    } finally {
+      setIntroCardSaving(false);
+    }
+  }
+
+  async function deleteIntroCard(): Promise<void> {
+    try {
+      await introCardStorage.remove();
+      introCardRef.current = null;
+      setIntroCard(null);
+      setIntroCardDraftName('');
+      setIntroCardDraftTitle('');
+      setIntroCardDraftOrganization('');
+      setIntroCardDraftSelfIntro('');
+      setIntroCardDraftEmail('');
+      setIntroCardDraftPhone('');
+      setIntroCardDraftLinksText('');
+      setIntroCardNotice({
+        kind: 'empty',
+        message: MESSAGES[locale].introCard.initialNotice,
+      });
+      setStage('intro-card-edit');
+    } catch (error: unknown) {
+      // stage は変えない（'intro-card' に留まる）。失敗時の Notice は
+      // IntroCardScreen 側（deleteError prop）で表示する。
+      setIntroCardNotice(introCardNoticeFromError(error, 'delete', locale));
     }
   }
 
@@ -1663,7 +1944,9 @@ export default function PassportApp({
   }
 
   function closeSettings(): void {
-    setStage('profile');
+    // Issue 79: Settings は今や Intro Card 側の画面から開くのが既定経路のため、
+    // 閉じた後は Pet 側の 'profile' ではなく Intro Card の着地先へ戻す。
+    setStage(introCardHomeStage());
   }
 
   // Settings と Diagnostics は Lounge の状態確認より先に判定する。これにより、Active
@@ -1866,7 +2149,30 @@ export default function PassportApp({
           ),
         onToggleConfirmed: () => setEncounteredConfirmed((current) => !current),
       }}
+      introCard={introCard}
+      introCardEdit={{
+        email: introCardDraftEmail,
+        linksText: introCardDraftLinksText,
+        name: introCardDraftName,
+        notice: introCardNotice,
+        onChangeEmail: setIntroCardDraftEmail,
+        onChangeLinksText: setIntroCardDraftLinksText,
+        onChangeName: setIntroCardDraftName,
+        onChangeOrganization: setIntroCardDraftOrganization,
+        onChangePhone: setIntroCardDraftPhone,
+        onChangeSelfIntro: setIntroCardDraftSelfIntro,
+        onChangeTitle: setIntroCardDraftTitle,
+        onSave: () => void saveIntroCard(),
+        organization: introCardDraftOrganization,
+        phone: introCardDraftPhone,
+        saving: introCardSaving,
+        selfIntro: introCardDraftSelfIntro,
+        title: introCardDraftTitle,
+        vCardByteUsage: vCardByteLength(introCardDraftAsShape()),
+      }}
       locale={locale}
+      onDeleteIntroCard={() => void deleteIntroCard()}
+      onEditIntroCard={openIntroCardEdit}
       onOpenSettings={openSettings}
       privateProfile={privateProfile}
       stage={stage}

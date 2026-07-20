@@ -18,6 +18,7 @@ import {
   readRegularFileNoFollowAtWithIdentity,
 } from './atomic-output-publisher';
 import type { ExclusiveOutputRecord } from './exclusive-output-writer';
+import { isolatedGitEnv } from './git-env-isolation';
 import { firstDecodedDuplicateJsoncKey } from './jsonc-duplicate-key';
 
 const SEMVER =
@@ -414,6 +415,7 @@ async function runCommandBytes(
 ): Promise<Uint8Array> {
   const process = Bun.spawn([...command], {
     cwd,
+    env: isolatedGitEnv(),
     stdout: 'pipe',
     stderr: 'pipe',
   });

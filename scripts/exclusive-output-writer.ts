@@ -14,6 +14,7 @@ import { PassThrough, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { openEntryExclusiveNative as openDarwinEntryExclusive } from './atomic-output-publisher-darwin';
 import { openEntryExclusiveNative as openLinuxEntryExclusive } from './atomic-output-publisher-linux';
+import { isolatedGitEnv } from './git-env-isolation';
 
 export interface ExclusiveOutputRecord {
   readonly byteLength: number;
@@ -114,6 +115,13 @@ export async function writeExclusiveOutput(
         ? standardInput
         : Bun.spawn(command, {
             cwd: workingDirectory,
+            // `command` is `git show <commit>:<path>` in every current caller
+            // (`source-release.ts`). Stripping GIT_DIR-family vars keeps this
+            // scoped to `cwd` even when the parent process inherited them from
+            // an active git hook invocation; it is a no-op for non-git
+            // commands, so this is safe even though this module itself is
+            // generic (see `git-env-isolation.ts` for why this matters).
+            env: isolatedGitEnv(),
             stdout: 'pipe',
             stderr: 'pipe',
           });

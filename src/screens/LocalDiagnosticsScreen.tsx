@@ -95,6 +95,7 @@ function DiagnosticSections({
           <Text style={styles.body}>
             {t.confirmDeleteAllText(totalCount, localDataPreview.totalBytes)}
           </Text>
+          <Text style={styles.body}>{t.introCardExcludedNotice}</Text>
         </ScreenCard>
       ) : null}
       {noticeText ? (

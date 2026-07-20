@@ -31,6 +31,7 @@ import {
   openExclusiveEntryAt,
   writeExclusiveOutput,
 } from './exclusive-output-writer';
+import { isolatedGitEnv } from './git-env-isolation';
 import {
   assertNoKnownSecretContent,
   assertSafeTrackedPaths,
@@ -60,6 +61,12 @@ afterAll(() => {
   }
 });
 
+/**
+ * `runGit` はこの fixture repo 専用のヘルパー。継承した `GIT_DIR` 等を
+ * `isolatedGitEnv()`（`git-env-isolation.ts`、理由はそちらの doc comment 参照）で
+ * 除去しないと、`cwd: root`（使い捨て fixture）ではなく呼び出し元の実リポジトリへ
+ * `git add` / `git commit` してしまう（Issue 79 実装中に実際に踏んだ回帰）。
+ */
 async function runGit(
   root: string,
   arguments_: readonly string[]
@@ -67,7 +74,7 @@ async function runGit(
   const process = Bun.spawn(['git', ...arguments_], {
     cwd: root,
     env: {
-      ...processEnv(),
+      ...isolatedGitEnv(),
       GIT_AUTHOR_DATE: '2026-07-18T00:00:00Z',
       GIT_COMMITTER_DATE: '2026-07-18T00:00:00Z',
     },
@@ -282,6 +289,108 @@ async function archiveEntries(archivePath: string): Promise<readonly string[]> {
   if (exitCode !== 0) throw new Error(`tar listing failed: ${stderr}`);
   return stdout.trim().split('\n');
 }
+
+describe('Issue 79 回帰: 継承した GIT_DIR / GIT_WORK_TREE から fixture リポジトリを分離する', () => {
+  it('isolatedGitEnv は GIT_DIR 系の key だけを取り除き、他の環境変数は保持する', () => {
+    const original = process.env['PATH'];
+
+    const isolated = isolatedGitEnv();
+
+    for (const key of [
+      'GIT_DIR',
+      'GIT_WORK_TREE',
+      'GIT_INDEX_FILE',
+      'GIT_COMMON_DIR',
+      'GIT_OBJECT_DIRECTORY',
+      'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+      'GIT_PREFIX',
+    ]) {
+      expect(isolated[key]).toBeUndefined();
+    }
+    expect(isolated['PATH']).toBe(original);
+  });
+
+  it('呼び出し元プロセスが GIT_DIR / GIT_WORK_TREE を継承していても、runGit は cwd の fixture リポジトリだけへ commit する（実 git 操作、モックなし）', async () => {
+    // "呼び出し元リポジトリ" 役の decoy と、"fixture" 役の 2 つの実リポジトリを用意する。
+    // pre-commit hook 経由で bun test が起動されたとき、git はこの decoy に相当する
+    // 環境変数（GIT_DIR 等）を子プロセスへ自動で設定する（Issue 79 実装中に実際に
+    // 踏んだ回帰の再現）。
+    const decoyRoot = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'passport-source-release-decoy-'))
+    );
+    tempRoots.push(decoyRoot);
+    const fixtureRoot = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'passport-source-release-fixture-'))
+    );
+    tempRoots.push(fixtureRoot);
+
+    await runGit(decoyRoot, ['init']);
+    await runGit(decoyRoot, [
+      'config',
+      'user.email',
+      'release-test@example.invalid',
+    ]);
+    await runGit(decoyRoot, ['config', 'user.name', 'Release Test']);
+    writeFileSync(path.join(decoyRoot, 'decoy.txt'), 'decoy\n');
+    await runGit(decoyRoot, ['add', 'decoy.txt']);
+    await runGit(decoyRoot, ['commit', '-m', 'decoy: initial commit']);
+    const decoyLogBefore = await runGit(decoyRoot, ['log', '--oneline']);
+
+    const inheritedEnv = {
+      ...processEnv(),
+      GIT_DIR: path.join(decoyRoot, '.git'),
+      GIT_WORK_TREE: decoyRoot,
+    };
+    const child = Bun.spawn(
+      [
+        'bun',
+        '-e',
+        `
+        const { readFileSync, writeFileSync } = await import('node:fs');
+        const path = await import('node:path');
+        const script = await import(${JSON.stringify(path.join(import.meta.dir, 'git-env-isolation.ts'))});
+        const isolatedGitEnv = script.isolatedGitEnv;
+        async function runGit(root, args) {
+          const process = Bun.spawn(['git', ...args], {
+            cwd: root,
+            env: { ...isolatedGitEnv(), GIT_AUTHOR_DATE: '2026-07-18T00:00:00Z', GIT_COMMITTER_DATE: '2026-07-18T00:00:00Z' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+          });
+          const [exitCode, stdout, stderr] = await Promise.all([
+            process.exited,
+            new Response(process.stdout).text(),
+            new Response(process.stderr).text(),
+          ]);
+          if (exitCode !== 0) throw new Error('git ' + args.join(' ') + ' failed: ' + stderr);
+          return stdout.trim();
+        }
+        const root = ${JSON.stringify(fixtureRoot)};
+        await runGit(root, ['init']);
+        await runGit(root, ['config', 'user.email', 'release-test@example.invalid']);
+        await runGit(root, ['config', 'user.name', 'Release Test']);
+        writeFileSync(path.join(root, 'fixture.txt'), 'fixture\\n');
+        await runGit(root, ['add', 'fixture.txt']);
+        await runGit(root, ['commit', '-m', 'test: create release fixture']);
+        `,
+      ],
+      { env: inheritedEnv, stdout: 'pipe', stderr: 'pipe' }
+    );
+    const [exitCode, , stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    if (exitCode !== 0) throw new Error(`fixture child failed: ${stderr}`);
+    expect(exitCode).toBe(0);
+
+    const decoyLogAfter = await runGit(decoyRoot, ['log', '--oneline']);
+    expect(decoyLogAfter).toBe(decoyLogBefore);
+    const fixtureLog = await runGit(fixtureRoot, ['log', '--oneline']);
+    expect(fixtureLog).toContain('test: create release fixture');
+    expect(existsSync(path.join(fixtureRoot, 'fixture.txt'))).toBe(true);
+  });
+});
 
 describe('Issue 29: Source Release の Lockfile 境界', () => {
   it('同名の異なる Version を別 Package として決定順で保持する', () => {
