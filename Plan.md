@@ -3914,3 +3914,97 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
     更新した。複数箇所へ同じスタイル断片を書くときは、実装中に「これは 2 箇所目以降か」
     を都度自問し、共有原子の抽出パターン（本 PR 自身が確立した `monoLabel` /
     `styles[variant]`）を最初から踏襲する。
+
+### [M3 準備] QR 表示・読取の受け入れ基準と encoder / protocol の契約強化（Issue 73） - 2026-07-20
+
+- 目的: フォローアップ F-DATZE4（Issue 66 レビュー由来）を解消する。(1) Invite payload
+  の encode 後サイズ予算を回帰テストで固定、(2) `QR_ENCODER_MAX_BYTES` /
+  `QR_PAYLOAD_MAX_BYTES` の二重リテラルを単一ソース化、(3) `TCPQ1:` envelope の実 payload
+  で jsQR round-trip を検証、(4) M3 renderer / scanner の受け入れ基準を docs へ追補する。
+  正本は Issue 73 本文。
+- 制約: `rm` 禁止（`git rm` / `mv` を使う）、`npx` 禁止（`bunx`）、型エスケープ禁止、
+  `site/` と `docs/adr/` は触らない、マージはしない。日本語 BDD・No Mock・`it.only` 禁止。
+  1 の予算テストで 504 byte を超えた場合はテストを緩めず、内訳を PR 本文に明記する。
+- タスク:
+  - [x] 1: `src/protocol/qr-payload-budget.test.ts` を新設し、schema v2 の Lounge Invite を
+    `createLoungeInvite` で各 field 最大長（`hostDiscoveryHint` 128 文字、
+    `requiredCapabilities` 4 件 × 32 文字、`capacity` 6 等、`src/domain/lounge-invite.ts`
+    の制約どおり）で組み立て、`encodeQrPayload` の UTF-8 byte 数を固定する回帰テストを
+    追加する。
+  - [x] 2: `src/protocol/qr-payload.ts` が `QR_ENCODER_MAX_BYTES`
+    (`src/qr/encoder.ts`) を re-export し、`QR_PAYLOAD_MAX_BYTES` の二重リテラルを解消する。
+    既存の等価 assert（`encoder.test.ts:110`）は tripwire として残す。
+  - [x] 3: `src/qr/encoder.test.ts` の `jsQR による round-trip 検証` に、
+    `encodeQrPayload`（実 lounge-invite）→ `encodeQr` → 画素化 → jsQR 実デコードの 1 件を追加する。
+  - [x] 4: `docs/design/qr-invite-and-ready-flow.md` に「M3 受け入れ基準」節を追補する
+    （renderer の quiet zone / ダークモード白地固定 / 最小表示サイズ、scanner の debounce /
+    再試行導線、jsQR round-trip の限界、error taxonomy）。
+- 検証手順: `bun test src --coverage`（100% 必須）、`bun run typecheck`、
+  `bunx biome check --write src`、`git add <明示ファイル> && bun scripts/architecture-harness.ts
+  --staged --fail-on=error`、`make before-commit`（exit 0 必須）、code-reviewer subagent
+  レビュー。
+- 進捗ログ:
+  - 2026-07-20 着手。ブランチ `feat/issue-73-m3-qr-contracts`。実測調査として
+    `createLoungeInvite` に各 field 最大長を与えて `encodeQrPayload` した byte 数を
+    scratch script で確認したところ 725 byte（Version 22 相当）となり、Issue が
+    予算とする Version 17 = 504 byte を 221 byte 超過することを確認した。内訳:
+    ベース（envelope + `loungeId`/`joinSecret`/`transportFingerprint` の固定長 hash +
+    時刻 2 つ + `capacity` + `hostDiscoveryHint` 1 文字 + `requiredCapabilities` 1 件）が
+    493 byte、`hostDiscoveryHint` を 1→128 文字にすると +127 byte、
+    `requiredCapabilities` を 1→4 件（各 32 文字）にすると +105 byte。
+    `hostDiscoveryHint` の domain 制約（`isHostDiscoveryHint` の正規表現
+    `/^[A-Za-z0-9._~:/-]+$/`）は非 ASCII を一切許可しないため、
+    `docs/specs/qr-encoder-salvage-user-feedback.md` が言及する「日本語 128 文字で
+    750 byte 超」という記述は現行ドメイン制約とは整合しない（ASCII 128 文字でも
+    725 byte で同程度に超過する）。Issue 記載の「テストを緩めず内訳を PR に書く」を
+    適用し、予算超過を隠さず固定するテストとして実装する方針とした。
+  - 2026-07-20 TDD で 1〜4 を実装。1 は `src/protocol/qr-payload-budget.test.ts` を新設し、
+    「典型的な Invite は 504 byte 予算内（実測 480 byte）」と「各 field 最大長では
+    504 byte 予算を超過する（実測 725 byte を pin）」の 2 件を Red → Green で作った。
+    2 は `qr-payload.ts` が `QR_ENCODER_MAX_BYTES` を re-export し `encoder.test.ts` の
+    等価 assert にコメントで tripwire の意図を明記。3 は `encoder.test.ts` の round-trip
+    describe に `createLoungeInvite` → `encodeQrPayload` → `encodeQr` → jsQR の 1 件を
+    追加。4 は `docs/design/qr-invite-and-ready-flow.md` に「M3 受け入れ基準」節
+    （renderer / scanner / payload 予算 / 検証範囲）を追補し `bunx textlint` で
+    ゼロエラーを確認。code-reviewer subagent によるレビューを実施（blocker 0、
+    should-fix 2 件・nit 4 件）。should-fix 2 件のうち (1) `qr-payload.ts` が
+    decode-only 消費者にも `encoder.ts` 全体を transitively import させる bundle
+    weight 懸念は、Issue 本文が import 文の形まで明示しているため本 PR では踏襲し、
+    follow-up（`QR encode 専用 encoder.ts を decode-only 消費者が丸ごと import する
+    bundle weight 懸念`）として記録した。(2) 新設した「M3 受け入れ基準」節が
+    `hostDiscoveryHint` の日本語想定と現行 ASCII 制約の不整合を吸収していなかった点は、
+    ASCII 制約を明記する 1 段落を追加して即時対応した。nit のうち「等価 assert の行番号
+    ズレ」と「内訳をテストコメントにも書く」は反映済み。最終検証:
+    `bun test src --coverage` 1079 件全緑・カバレッジ 100%、`bun run typecheck` 緑、
+    `bunx biome check --write src` 緑、`bun scripts/architecture-harness.ts --staged
+    --fail-on=error` エラー 0、`make before-commit` exit 0。
+- 振り返り:
+  - 問題 1: Issue 1 節の「各 field 最大長で組み立てる」を文字どおり実装すると、
+    `hostDiscoveryHint` 128 文字と `requiredCapabilities` 4 件を同時に満たすだけで
+    725 byte になり、504 byte 予算を必ず超過する（`make before-commit` は
+    `app_test`（`bun test --coverage`）を含むため、`it.skip` / `xit` 禁止の下で
+    素直に `toBeLessThanOrEqual(504)` を書くと red のまま出荷できない矛盾があった）。
+  - 根本原因 1: Issue 本文の「予算超過が現実に起きる場合はテストを緩めず内訳を
+    PR に書く」という一文は、この矛盾を見越した contingency だったが、
+    「緩めない」対象が「閾値」なのか「テストの主張内容」なのかが本文だけでは
+    一意に決まらなかった。
+  - 予防策 1: 「各 field 最大長」の構成自体は一切妥協せず（実際に
+    `createLoungeInvite` の実バリデーションを通した値で組み立てる）、
+    アサーションを `toBeLessThanOrEqual(504)` から
+    「504 を超えることを明示 (`toBeGreaterThan`) しつつ実測値 725 を pin
+    (`toBe`) する」形に変更した。これにより (a) 入力側を弱めて予算内に収める
+    「隠れた緩和」を避け、(b) 将来の envelope 変更で数値がドリフトしたら
+    即座に red になる回帰テストとしての機能は保ち、(c) `make before-commit` は
+    green のまま出荷できた。判断の根拠と内訳は Plan.md・テストコメント・
+    docs/design の 3 箇所に明記し、owner が後から経緯を追えるようにした。
+    同様の「Issue の一文が意図的な contingency か曖昧な記述か」を見分けるときは、
+    実際に数値を測ってから contingency が現実に発火するかを先に確認する。
+  - 問題 2: 参照した `docs/specs/qr-encoder-salvage-user-feedback.md` の
+    「`hostDiscoveryHint` 日本語 128 文字で 750 byte 超」という記述は、現行の
+    `isHostDiscoveryHint` 正規表現（ASCII のみ）とは整合しない古い前提だった。
+  - 根本原因 2: そのレビュー時点（Issue 66）では `hostDiscoveryHint` の文字種制約が
+    今ほど厳密でなかった可能性があるが、正本ドキュメントを更新せず記述が残った。
+  - 予防策 2: 新設した「M3 受け入れ基準」節に ASCII 制約と、それによって
+    「日本語 128 文字」シナリオが `createLoungeInvite` 経由では実際には作れない旨を
+    明記した。参照する正本資料の前提が現行コードと食い違っていないかは、
+    実装前に一度は実行して確かめる。

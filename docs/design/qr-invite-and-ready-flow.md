@@ -201,6 +201,57 @@ Scan 後にそのまま再利用する（コピーの意味は変わらない）
 Ready gating の状態遷移、Camera Permission の 5 状態別 UI 文言、単一端末 2 人分フローの
 オフライン完走を対象にする。
 
+## M3 受け入れ基準
+
+M1 の決定論的な Grid（`src/components/qr-matrix.ts`）を M3 で実カメラ走査可能な
+renderer / scanner に差し替えるときの受け入れ基準を、Issue 66 レビューのフォローアップ
+（F-DATZE4、Issue 73）として明文化する。正本資料は
+[QR エンコーダサルベージ設計レビュー](../specs/qr-encoder-salvage-design-review.md) と
+[QR エンコーダサルベージ User フィードバック](../specs/qr-encoder-salvage-user-feedback.md) だ。
+
+### renderer
+
+- Quiet zone は 4 module 以上を確保する（module サイズに比例させる）。
+- QR カードはダークモードでも白地固定とし、明暗反転（背景が黒地の QR）を禁止する。
+- 1 module あたり物理 2 px 以上で表示する。誤り訂正 M・schema v2 の Lounge Invite が
+  取り得る最大 Version 26 では 121 module になるため、最低でも 258 px 四方の表示領域が
+  必要になる。
+- 誤り訂正 M の訂正予算をロゴ等の上乗せ描画で消費しない。
+- 表示中は端末の輝度を確保し、暗い会場でも読み取れるようにする。
+
+### scanner
+
+- 読取成功直後の debounce を設ける。同一 QR の連続デコードが
+  `QrPayloadError`（`DUPLICATE_SCAN`）としてユーザーに見えてしまう導線を作らない。
+- 読取に失敗したときの再試行導線（再スキャン操作）を用意する。
+
+### payload 予算
+
+- 設計目標は Version 17・504 byte 以下（`src/protocol/qr-payload-budget.test.ts` が
+  典型的な Lounge Invite でこの予算に収まることを固定する）。
+- `hostDiscoveryHint`（最大 128 文字）と `requiredCapabilities`（最大 4 件）を
+  `src/domain/lounge-invite.ts` の制約どおり同時に最大まで満たすと、
+  実測 725 byte（Version 22 相当）まで膨らみ、504 byte 予算を超過する。この超過は
+  `src/protocol/qr-payload-budget.test.ts` が既知の事実として固定しており、
+  `QR_PAYLOAD_MAX_BYTES`（1,024 byte、`src/qr/encoder.ts` の `QR_ENCODER_MAX_BYTES`
+  を正本として re-export した「壊れない上限」）自体は超過しない。フィールド上限の
+  見直しは M3 wiring 時に owner 判断とする。
+- `hostDiscoveryHint` は `isHostDiscoveryHint`（`src/domain/lounge-invite.ts`）の
+  正規表現 `/^[A-Za-z0-9._~:/-]+$/` により ASCII 以外を受け付けない。そのため
+  [QR エンコーダサルベージ User フィードバック](../specs/qr-encoder-salvage-user-feedback.md)
+  が想定する「日本語 128 文字で 750 byte 超」という組み合わせは
+  `createLoungeInvite` を経由する限り実際には作れない。ここで固定する 725 byte は
+  ASCII 128 文字での実測値であり、同程度に予算を超過する。
+
+### 検証範囲
+
+- jsQR round-trip（`src/qr/encoder.test.ts`）は理想画素での decode 可能性を検証する
+  もので、実機・実会場（照明、距離、手ブレ）での読み取りやすさを保証しない。実機・実会場
+  検証は M3 の完了条件に含める。
+- encoder の `INVALID_DATA`（内部不整合を示す型付き Error）を、consumer 側でユーザー入力
+  エラーと誤表示しないこと。エラー分類（code taxonomy）の見直しが必要かどうかは M3 で
+  renderer / scanner を実配線するときに判断する。
+
 ## Known follow-ups
 
 - Room の定員を 2 名超へ拡張する場合は、N 者間の Bridge 選定ロジックを別 Issue で設計する。
@@ -208,3 +259,5 @@ Ready gating の状態遷移、Camera Permission の 5 状態別 UI 文言、単
   M3 で `QrScannerPort` の別実装として追加する。
 - バックアップ / Settings 画面自体は本 Issue 時点でまだ実装されておらず、Camera 権限拒否時の
   案内文言はそれらの画面の存在を前提にしている。画面自体の実装は別 Issue で追う。
+- Invite payload が 504 byte 予算を超過する件（`hostDiscoveryHint` / `requiredCapabilities`
+  の上限見直しの要否）は owner 判断待ちとする（Issue 73）。

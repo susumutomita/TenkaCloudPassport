@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import jsQR, { type QRCode } from 'jsqr';
-import { QR_PAYLOAD_MAX_BYTES } from '../protocol/qr-payload';
+import { createLoungeInvite } from '../domain/lounge-invite';
+import { encodeQrPayload, QR_PAYLOAD_MAX_BYTES } from '../protocol/qr-payload';
 import { encodeQr, QR_ENCODER_MAX_BYTES, QrEncodingError } from './encoder';
 
 function rows(matrix: readonly (readonly boolean[])[]): string[] {
@@ -103,6 +104,9 @@ describe('QR Code Model 2 byte mode encoder', () => {
   });
 
   it('encoder の上限は QR wire format の上限と一致する', () => {
+    // QR_PAYLOAD_MAX_BYTES は QR_ENCODER_MAX_BYTES を re-export した恒真値になった
+    // （Issue 73 #2、正本は qr/encoder.ts）。この assert は今後常に真になるが、
+    // 正本が逆転して二重リテラルへ戻る変更が入ったときに検知する tripwire として残す。
     expect(QR_ENCODER_MAX_BYTES).toBe(QR_PAYLOAD_MAX_BYTES);
   });
 
@@ -213,5 +217,31 @@ describe('jsQR による round-trip 検証', () => {
     expect(decoded).not.toBeNull();
     expect(decoded?.binaryData).toEqual([]);
     expect(decoded?.data).toBe('');
+  });
+
+  it('TCPQ1: envelope で encode した実運用形の Lounge Invite payload を jsQR が実デコードする', () => {
+    // encoder 単体の合成文字列だけでなく、実運用の生文字列（protocol 層の
+    // encodeQrPayload が組み立てる `TCPQ1:{...}` envelope）を通して round-trip を
+    // 検証する（Issue 73 #3、PM レビュー S-3-1 の残件）。protocol → qr は依存方向に
+    // 反するため、依存は test からだけ張る。
+    const invite = createLoungeInvite({
+      loungeId: `lng_${'a1'.repeat(16)}`,
+      joinSecret: `jsc_${'b2'.repeat(32)}`,
+      hostDiscoveryHint: 'local-v1:host-a',
+      transportFingerprint: `sha256_${'c3'.repeat(32)}`,
+      issuedAtEpochMs: 1_000_000,
+      expiresAtEpochMs: 1_000_000 + 10 * 60 * 1000,
+      capacity: 2,
+      requiredCapabilities: ['rules-provider-v1'],
+    });
+    const raw = encodeQrPayload({ kind: 'lounge-invite', value: invite });
+
+    const qr = encodeQr(raw);
+    const decoded = decodeWithJsQr(qr.matrix);
+
+    expect(raw.startsWith('TCPQ1:')).toBe(true);
+    expect(decoded).not.toBeNull();
+    expect(decoded?.binaryData).toEqual(utf8Bytes(raw));
+    expect(decoded?.data).toBe(raw);
   });
 });
