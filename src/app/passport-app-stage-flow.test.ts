@@ -265,21 +265,24 @@ describe('PassportApp の Stage 遷移契約', () => {
 
   it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {
     const text = await source();
+    // Issue 79: 起動時 effect が Intro Card Storage も `Promise.all` で束ねるように
+    // なり、`recoverLocalStateAtStartup(` の最初の出現位置が `retryStartupRecovery`
+    // 側になった（従来どおり両方の呼び出しを含む区間を検査する点は変えていない）。
     const recoveryStart = text.indexOf('recoverLocalStateAtStartup(');
     const recoveryEnd = text.indexOf('/**\n   * Issue 11:', recoveryStart);
     const recovery = text.slice(recoveryStart, recoveryEnd);
-    const recoveryFailureStart = recovery.indexOf(
+    const startupEffectFailureStart = recovery.lastIndexOf(
       "result.kind === 'recovery-failed'"
     );
-    const recoveryFailure = recovery.slice(recoveryFailureStart);
+    const startupEffectFailure = recovery.slice(startupEffectFailureStart);
 
     expect(text).toContain('ready: !restoring');
-    expectInOrder(recoveryFailure, [
+    expectInOrder(startupEffectFailure, [
       "result.kind === 'recovery-failed'",
       'diagnosticsFlow.enterRecovery(result.error)',
     ]);
-    expect(recoveryFailure).toContain(
-      'diagnosticsFlow.enterRecovery(result.error);\n          return;'
+    expect(startupEffectFailure).toContain(
+      'diagnosticsFlow.enterRecovery(result.error);\n        return;'
     );
     expect(recovery).toContain('applyStartupRecoveryResultRef.current(result)');
     expect(text).toContain("result.kind === 'profile-load-failed'");
@@ -287,6 +290,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(recovery).toContain(
       'recoverLocalStateAtStartup(localDataControl, localProfileStorage)'
     );
+    expect(recovery).toContain('introCardStorage.load().catch(');
     expectInOrder(text.slice(text.indexOf('const retryStartupRecovery')), [
       'recoverLocalStateAtStartup(',
       "result.kind === 'recovery-failed'",

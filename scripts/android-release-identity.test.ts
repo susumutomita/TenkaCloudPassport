@@ -22,6 +22,7 @@ import {
   parseApkanalyzerVersionCode,
   parseApksignerCertificateSha256,
 } from './android-release-identity';
+import { isolatedGitEnv } from './git-env-isolation';
 
 const directories: string[] = [];
 const SOURCE_COMMIT = 'a'.repeat(40);
@@ -82,9 +83,18 @@ async function cleanupTree(path: string): Promise<void> {
   }
 }
 
+/**
+ * `isolatedGitEnv()` を使わないと、pre-commit hook（`git commit` →
+ * `.husky/pre-commit` → `make before-commit` → `bun test scripts/`）経由で
+ * このテストが起動されたとき、継承した `GIT_DIR` / `GIT_WORK_TREE` に引きずられて
+ * `cwd: repositoryPath`（使い捨て fixture）ではなく呼び出し元の実リポジトリへ
+ * `git` コマンドを実行してしまう（`scripts/source-release.test.ts` と同じ回帰、
+ * Issue 79 実装中に実際に踏んだ）。
+ */
 async function runGit(repositoryPath: string, ...arguments_: string[]) {
   const process = Bun.spawn(['git', ...arguments_], {
     cwd: repositoryPath,
+    env: isolatedGitEnv(),
     stdout: 'pipe',
     stderr: 'pipe',
   });

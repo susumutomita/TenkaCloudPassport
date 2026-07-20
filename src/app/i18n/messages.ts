@@ -23,6 +23,18 @@ export interface ProfileNoticeTitles {
   readonly 'lounge-discarded': string;
 }
 
+/** Issue 79: `src/app/intro-card-notice.ts` の `IntroCardNotice['kind']` に対応する。 */
+export interface IntroCardNoticeTitles {
+  readonly empty: string;
+  readonly saved: string;
+  readonly 'validation-error': string;
+  readonly 'save-error': string;
+  readonly 'delete-error': string;
+  readonly 'storage-unavailable': string;
+  readonly 'invalid-data': string;
+  readonly 'read-error': string;
+}
+
 export interface DiagnosticRecoveryMessages {
   readonly TIMEOUT: {
     readonly title: string;
@@ -440,6 +452,12 @@ export interface AppMessages {
     readonly removeModelButton: string;
     readonly deleteAllButton: string;
     readonly confirmDeleteAllText: (count: number, bytes: number) => string;
+    /**
+     * Issue 79: 自己紹介カード（Intro Card）は独立した Storage であり、この
+     * 「全削除」の対象（`count` / `bytes`）に含まれない。誤解を避けるため、対象一覧の
+     * すぐ下に明示する。
+     */
+    readonly introCardExcludedNotice: string;
     readonly confirmDeleteAllButton: string;
     readonly cancelDeleteAllButton: string;
     readonly backButton: string;
@@ -545,6 +563,53 @@ export interface AppMessages {
   readonly profileNotice: {
     readonly readErrorFallback: string;
     readonly saveErrorFallback: string;
+  };
+  /** Issue 79: 自己紹介カードピボット Step 1 の編集画面・表示画面が共有する文言。 */
+  readonly introCard: {
+    readonly editEyebrow: string;
+    readonly editTitle: string;
+    readonly editDescription: string;
+    readonly initialNotice: string;
+    readonly noticeTitles: IntroCardNoticeTitles;
+    readonly readErrorFallback: string;
+    readonly saveErrorFallback: string;
+    readonly deleteErrorFallback: string;
+    readonly nameLabel: string;
+    readonly nameAccessibilityLabel: string;
+    readonly nameHint: (maxLength: number) => string;
+    readonly namePlaceholder: string;
+    readonly nameCounter: (current: number, max: number) => string;
+    readonly titleLabel: string;
+    readonly titlePlaceholder: string;
+    readonly titleCounter: (current: number, max: number) => string;
+    readonly organizationLabel: string;
+    readonly organizationPlaceholder: string;
+    readonly organizationCounter: (current: number, max: number) => string;
+    readonly selfIntroLabel: string;
+    readonly selfIntroHint: string;
+    readonly selfIntroPlaceholder: string;
+    readonly selfIntroCounter: (current: number, max: number) => string;
+    readonly emailLabel: string;
+    readonly emailPlaceholder: string;
+    readonly phoneLabel: string;
+    readonly phonePlaceholder: string;
+    readonly linksLabel: string;
+    readonly linksHint: string;
+    readonly linksPlaceholder: string;
+    readonly linksCounter: (current: number, max: number) => string;
+    readonly byteUsageLabel: (current: number, max: number) => string;
+    readonly byteUsageOverBudget: (current: number, max: number) => string;
+    readonly saveButton: (saving: boolean) => string;
+    readonly saveButtonHint: string;
+    readonly cardEyebrow: string;
+    readonly cardTitle: string;
+    readonly cardDescription: string;
+    readonly qrAccessibilityLabel: string;
+    readonly qrExplanation: string;
+    readonly editButton: string;
+    readonly editButtonHint: string;
+    readonly deleteButton: string;
+    readonly deleteButtonHint: string;
   };
 }
 
@@ -994,6 +1059,8 @@ const ja: AppMessages = {
     deleteAllButton: 'Delete all local data',
     confirmDeleteAllText: (count, bytes) =>
       `${count} 件、${bytes} bytes を削除します。中断時は次回起動で再開します。`,
+    introCardExcludedNotice:
+      '自己紹介カードはこの対象に含まれません。削除するにはカード画面の「カードを削除する」を使ってください。',
     confirmDeleteAllButton: '確認して全削除を実行',
     cancelDeleteAllButton: '全削除をやめる',
     backButton: 'Settings へ戻る',
@@ -1159,6 +1226,71 @@ const ja: AppMessages = {
       'Storage の処理に失敗しました。もう一度実行してください。',
     saveErrorFallback:
       'Storage の処理に失敗しました。もう一度実行してください。',
+  },
+  introCard: {
+    editEyebrow: 'Step 1 / 自己紹介カード',
+    editTitle: '自己紹介カードを作る。',
+    editDescription:
+      '入力は明示保存するまで端末へ残りません。名前だけが必須です。連絡先や自己紹介は渡したい分だけ入力してください。',
+    initialNotice:
+      '名前を入力し、端末内保存を明示してください。他の項目はすべて任意です。',
+    noticeTitles: {
+      empty: 'まだ自己紹介カードがありません。',
+      saved: '自己紹介カードを端末内へ明示保存しました。',
+      'validation-error': '入力を確認してください。',
+      'save-error': '保存に失敗しました。',
+      'delete-error': '削除に失敗しました。',
+      'storage-unavailable': '端末内 Storage を利用できません。',
+      'invalid-data': '端末内の保存データが不正です。',
+      'read-error': '保存済みの自己紹介カードを読み込めません。',
+    },
+    readErrorFallback:
+      'Storage の処理に失敗しました。もう一度実行してください。',
+    deleteErrorFallback:
+      'Storage の処理に失敗しました。もう一度実行してください。',
+    saveErrorFallback:
+      'Storage の処理に失敗しました。もう一度実行してください。',
+    nameLabel: '名前（必須）',
+    nameAccessibilityLabel: '名前',
+    nameHint: (maxLength) => `${maxLength} 文字以下で名前を入力します。`,
+    namePlaceholder: '例: 田中太郎',
+    nameCounter: (current, max) => `${current} / ${max}`,
+    titleLabel: '肩書き（任意）',
+    titlePlaceholder: '例: Engineer',
+    titleCounter: (current, max) => `${current} / ${max}`,
+    organizationLabel: '所属（任意）',
+    organizationPlaceholder: '例: TenkaCloud',
+    organizationCounter: (current, max) => `${current} / ${max}`,
+    selfIntroLabel: '自己紹介・いまやっていること（任意）',
+    selfIntroHint:
+      '会話のきっかけになる、いまやっていることを書きます。相手が読むだけで話しかけやすくなる内容がおすすめです。',
+    selfIntroPlaceholder: '例: LT でお話しした話題を深掘りしています。',
+    selfIntroCounter: (current, max) => `${current} / ${max}`,
+    emailLabel: 'メールアドレス（任意）',
+    emailPlaceholder: '例: taro@example.com',
+    phoneLabel: '電話番号（任意）',
+    phonePlaceholder: '例: 090-1234-5678',
+    linksLabel: 'リンク（任意、1 行に 1 件、最大 5 件）',
+    linksHint: 'GitHub、X、Web サイト等の URL を 1 行ずつ入力します。',
+    linksPlaceholder: 'https://github.com/example',
+    linksCounter: (current, max) => `${current} / ${max} 件`,
+    byteUsageLabel: (current, max) => `vCard の目安: ${current} / ${max} byte`,
+    byteUsageOverBudget: (current, max) =>
+      `vCard が上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
+    saveButton: (saving) =>
+      saving ? '端末内に保存中' : '自己紹介カードを端末内に明示保存',
+    saveButtonHint: '検証済みの自己紹介カードをこの端末だけに保存します。',
+    cardEyebrow: 'Intro Card',
+    cardTitle: '自己紹介カード',
+    cardDescription:
+      '相手はこの QR をカメラで読むだけで連絡先に登録できます。アプリのインストールは不要です。',
+    qrAccessibilityLabel: '自己紹介カードの QR コード',
+    qrExplanation: '相手はカメラで読むだけで連絡先登録できます。',
+    editButton: '編集する',
+    editButtonHint: '自己紹介カードの内容を編集します。',
+    deleteButton: 'カードを削除する',
+    deleteButtonHint:
+      '端末内の自己紹介カードを削除します。この操作は取り消せません。',
   },
 };
 
@@ -1625,6 +1757,8 @@ const en: AppMessages = {
     deleteAllButton: 'Delete all local data',
     confirmDeleteAllText: (count, bytes) =>
       `Delete ${count} item(s), ${bytes} bytes. An interrupted deletion resumes at next launch.`,
+    introCardExcludedNotice:
+      'Your Intro Card is not included in this action. To delete it, use "Delete card" on the card screen.',
     confirmDeleteAllButton: 'Confirm and delete all',
     cancelDeleteAllButton: 'Cancel full deletion',
     backButton: 'Back to Settings',
@@ -1784,6 +1918,70 @@ const en: AppMessages = {
   profileNotice: {
     readErrorFallback: 'Storage operation failed. Please try again.',
     saveErrorFallback: 'Storage operation failed. Please try again.',
+  },
+  introCard: {
+    editEyebrow: 'Step 1 / Intro Card',
+    editTitle: 'Create your Intro Card.',
+    editDescription:
+      'Nothing is kept on this device until you explicitly save. Only your name is required. Add contact details or a self-introduction only as much as you want to share.',
+    initialNotice:
+      'Enter your name and explicitly save on this device. All other fields are optional.',
+    noticeTitles: {
+      empty: 'No Intro Card yet.',
+      saved: 'Saved your Intro Card on this device.',
+      'validation-error': 'Please check your input.',
+      'save-error': 'Save failed.',
+      'delete-error': 'Delete failed.',
+      'storage-unavailable': 'Local storage is unavailable.',
+      'invalid-data': 'The saved data on this device is invalid.',
+      'read-error': 'Could not load the saved Intro Card.',
+    },
+    readErrorFallback: 'Storage operation failed. Please try again.',
+    saveErrorFallback: 'Storage operation failed. Please try again.',
+    deleteErrorFallback: 'Storage operation failed. Please try again.',
+    nameLabel: 'Name (required)',
+    nameAccessibilityLabel: 'Name',
+    nameHint: (maxLength) => `Enter your name, up to ${maxLength} characters.`,
+    namePlaceholder: 'e.g., Taro Tanaka',
+    nameCounter: (current, max) => `${current} / ${max}`,
+    titleLabel: 'Title (optional)',
+    titlePlaceholder: 'e.g., Engineer',
+    titleCounter: (current, max) => `${current} / ${max}`,
+    organizationLabel: 'Organization (optional)',
+    organizationPlaceholder: 'e.g., TenkaCloud',
+    organizationCounter: (current, max) => `${current} / ${max}`,
+    selfIntroLabel: 'About you / what you are doing (optional)',
+    selfIntroHint:
+      'Write what you are working on now, as a conversation starter. Something the other person can read and easily follow up on works best.',
+    selfIntroPlaceholder: 'e.g., Digging deeper into the topic from my talk.',
+    selfIntroCounter: (current, max) => `${current} / ${max}`,
+    emailLabel: 'Email (optional)',
+    emailPlaceholder: 'e.g., taro@example.com',
+    phoneLabel: 'Phone (optional)',
+    phonePlaceholder: 'e.g., 090-1234-5678',
+    linksLabel: 'Links (optional, one per line, up to 5)',
+    linksHint: 'Enter GitHub, X, or website URLs, one per line.',
+    linksPlaceholder: 'https://github.com/example',
+    linksCounter: (current, max) => `${current} / ${max}`,
+    byteUsageLabel: (current, max) =>
+      `vCard estimate: ${current} / ${max} byte`,
+    byteUsageOverBudget: (current, max) =>
+      `The vCard exceeds the limit (${current} / ${max} byte). Please shorten your input.`,
+    saveButton: (saving) =>
+      saving ? 'Saving on this device' : 'Save Intro Card on this device',
+    saveButtonHint: 'Saves the validated Intro Card only on this device.',
+    cardEyebrow: 'Intro Card',
+    cardTitle: 'Intro Card',
+    cardDescription:
+      'The other person can add you to their contacts just by scanning this QR with their camera. No app install needed.',
+    qrAccessibilityLabel: 'Intro Card QR code',
+    qrExplanation:
+      'The other person can add your contact by scanning with their camera.',
+    editButton: 'Edit',
+    editButtonHint: 'Edit the contents of your Intro Card.',
+    deleteButton: 'Delete card',
+    deleteButtonHint:
+      'Deletes the Intro Card on this device. This cannot be undone.',
   },
 };
 
