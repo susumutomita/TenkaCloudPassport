@@ -6,6 +6,10 @@ interface NoticeCardProps {
   readonly title: string;
 }
 
+/**
+ * Issue 72 D: primarySoft は surface と同値化（`#f5f5f7`）しているため、
+ * 名目どおり surface 地へ移行する。
+ */
 export default function NoticeCard({ body, title }: NoticeCardProps) {
   return (
     <View accessibilityRole="summary" style={styles.card}>
@@ -17,7 +21,7 @@ export default function NoticeCard({ body, title }: NoticeCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.surface,
     borderRadius: 14,
     gap: spacing.xs,
     padding: spacing.md,

@@ -4,7 +4,10 @@ import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
+import Card from '../components/Card';
+import ExpiryWarningBanner from '../components/ExpiryWarningBanner';
 import QrCodeView from '../components/QrCodeView';
+import StatusDot from '../components/StatusDot';
 import { type LoungeRoomState, ROOM_CAPACITY } from '../domain/lounge-room';
 import type { ParticipantId } from '../domain/session-identifiers';
 import { colors, spacing } from '../ui/theme';
@@ -60,14 +63,14 @@ export default function HostInviteScreen({
         </View>
       ) : (
         <>
-          <View style={styles.qrCard}>
+          <Card style={styles.qrCard}>
             <QrCodeView
               accessibilityLabel={t.qrAccessibilityLabel(remainingMinutes)}
               payload={inviteQrPayload}
             />
-          </View>
+          </Card>
           <View accessibilityRole="summary" style={styles.notice}>
-            <View style={[styles.statusDot, styles.warningDot]} />
+            <StatusDot style={styles.dotOffset} tone="warning" />
             <View style={styles.noticeBody}>
               <Text style={styles.noticeTitle}>
                 {t.remainingMinutesTitle(remainingMinutes)}
@@ -76,12 +79,9 @@ export default function HostInviteScreen({
             </View>
           </View>
           {notice.level === 'warning' ? (
-            <View accessibilityRole="alert" style={styles.expiryWarning}>
-              <View style={[styles.statusDot, styles.warningDot]} />
-              <Text style={styles.expiryWarningText}>{notice.message}</Text>
-            </View>
+            <ExpiryWarningBanner message={notice.message} />
           ) : null}
-          <View accessibilityRole="summary" style={styles.participants}>
+          <Card accessibilityRole="summary">
             <Text style={styles.participantsTitle}>
               {t.participantsTitle(participants.length, ROOM_CAPACITY)}
             </Text>
@@ -90,11 +90,9 @@ export default function HostInviteScreen({
                 key={participant.participantId}
                 style={styles.participantRow}
               >
-                <View
-                  style={[
-                    styles.statusDot,
-                    participant.ready ? styles.readyDot : styles.idleDot,
-                  ]}
+                <StatusDot
+                  style={styles.dotOffset}
+                  tone={participant.ready ? 'success' : 'idle'}
                 />
                 <Text
                   style={[
@@ -116,7 +114,7 @@ export default function HostInviteScreen({
             {participants.length < ROOM_CAPACITY ? (
               <Text style={styles.waitingText}>{t.waitingForGuest}</Text>
             ) : null}
-          </View>
+          </Card>
           {errorMessage ? (
             <Text accessibilityRole="alert" style={styles.error}>
               {errorMessage}
@@ -148,26 +146,10 @@ export default function HostInviteScreen({
 const styles = StyleSheet.create({
   qrCard: {
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderColor: colors.borderSubtle,
     borderRadius: 16,
-    borderWidth: 1,
-    padding: spacing.md,
   },
-  statusDot: {
-    borderRadius: 4,
-    height: 7,
+  dotOffset: {
     marginTop: 7,
-    width: 7,
-  },
-  warningDot: {
-    backgroundColor: colors.warning,
-  },
-  readyDot: {
-    backgroundColor: colors.success,
-  },
-  idleDot: {
-    backgroundColor: colors.disabled,
   },
   notice: {
     backgroundColor: colors.surface,
@@ -190,14 +172,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
-  },
-  participants: {
-    backgroundColor: colors.white,
-    borderColor: colors.borderSubtle,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: spacing.xs,
-    padding: spacing.md,
   },
   participantsTitle: {
     color: colors.ink,
@@ -222,20 +196,6 @@ const styles = StyleSheet.create({
   waitingText: {
     color: colors.muted,
     fontSize: 14,
-    lineHeight: 21,
-  },
-  expiryWarning: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  expiryWarningText: {
-    color: colors.warningText,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
     lineHeight: 21,
   },
   errorBox: {

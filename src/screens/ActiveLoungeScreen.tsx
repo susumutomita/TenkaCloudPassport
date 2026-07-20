@@ -8,10 +8,13 @@ import { interactionStatusNotice } from '../app/interaction-status-notice';
 import { providerStatusNotice } from '../app/provider-status-notice';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
+import Card from '../components/Card';
+import ExpiryWarningBanner from '../components/ExpiryWarningBanner';
+import StatusDot from '../components/StatusDot';
 import { type ClueId, clueById } from '../domain/clue-catalog';
 import type { ActiveLounge } from '../domain/lounge';
 import { colors, spacing } from '../ui/theme';
-import { monoFontFamily } from '../ui/typography';
+import { monoFontFamily, monoLabel } from '../ui/typography';
 
 interface ActiveLoungeScreenProps {
   readonly lounge: ActiveLounge;
@@ -99,7 +102,7 @@ function PassportSummary({
   readonly reduceMotion: boolean;
 }) {
   return (
-    <View style={styles.passport}>
+    <Card style={styles.passport}>
       <Text style={styles.passportTitle}>{title}</Text>
       <View style={styles.petNameRow}>
         {petEmoji ? (
@@ -112,7 +115,7 @@ function PassportSummary({
           {clueById(value).label}
         </Text>
       ))}
-    </View>
+    </Card>
   );
 }
 
@@ -163,7 +166,7 @@ export default function ActiveLoungeScreen({
         accessibilityLabel は付けない。
       */}
       <View style={styles.statusRow}>
-        <View style={[styles.statusDot, styles.infoDot]} />
+        <StatusDot tone="info" />
         <Text style={styles.interactionStatus}>
           {interactionStatusNotice('discovering', locale).message}
         </Text>
@@ -176,10 +179,7 @@ export default function ActiveLoungeScreen({
         <Text style={styles.noticeText}>{t.disposableNoticeText}</Text>
       </View>
       {notice.level === 'warning' ? (
-        <View accessibilityRole="alert" style={styles.expiryWarning}>
-          <View style={[styles.statusDot, styles.warningDot]} />
-          <Text style={styles.expiryWarningText}>{notice.message}</Text>
-        </View>
+        <ExpiryWarningBanner message={notice.message} />
       ) : null}
       {errorMessage ? (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -217,18 +217,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  statusDot: {
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  infoDot: {
-    backgroundColor: colors.info,
-  },
-  warningDot: {
-    backgroundColor: colors.warning,
-    marginTop: 6,
-  },
   interactionStatus: {
     color: colors.muted,
     flex: 1,
@@ -242,22 +230,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   passport: {
-    backgroundColor: colors.white,
-    borderColor: colors.borderSubtle,
-    borderRadius: 14,
-    borderWidth: 1,
     flex: 1,
-    gap: spacing.xs,
-    padding: spacing.md,
   },
   passportTitle: {
+    ...monoLabel,
     color: colors.mutedLight,
-    fontFamily: monoFontFamily,
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 0.8,
     marginBottom: spacing.xs,
-    textTransform: 'uppercase',
   },
   clue: {
     color: colors.muted,
@@ -291,20 +269,6 @@ const styles = StyleSheet.create({
   noticeText: {
     color: colors.muted,
     fontSize: 14,
-    lineHeight: 21,
-  },
-  expiryWarning: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  expiryWarningText: {
-    color: colors.warningText,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
     lineHeight: 21,
   },
   error: {

@@ -11,7 +11,7 @@ import {
   type PetEmoji,
   PUBLIC_PASSPORT_MAX_CLUES,
 } from '../domain/passport';
-import { colors, spacing } from '../ui/theme';
+import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 
 interface EncounterSetupScreenProps {
@@ -137,6 +137,7 @@ export default function EncounterSetupScreen({
 
 const styles = StyleSheet.create({
   summary: {
+    ...primaryEmphasisBorder,
     backgroundColor: colors.primarySoft,
     borderRadius: 14,
     gap: spacing.xs,

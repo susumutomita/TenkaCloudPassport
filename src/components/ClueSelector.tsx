@@ -4,7 +4,7 @@ import { MESSAGES } from '../app/i18n/messages';
 import { CLUE_IDS, type ClueId, clueById } from '../domain/clue-catalog';
 import { PASSPORT_FIELD_LIMITS } from '../domain/passport';
 import { colors, spacing } from '../ui/theme';
-import { monoFontFamily } from '../ui/typography';
+import { monoLabel } from '../ui/typography';
 
 interface ClueSelectorProps {
   readonly selectedIds: readonly ClueId[];
@@ -124,10 +124,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   category: {
+    ...monoLabel,
     color: colors.mutedLight,
-    fontFamily: monoFontFamily,
-    fontSize: 11,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
   },
 });

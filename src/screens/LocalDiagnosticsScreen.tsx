@@ -10,7 +10,7 @@ import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import JsonPreviewCard from '../components/JsonPreviewCard';
 import ScreenCard from '../components/ScreenCard';
-import { colors, spacing } from '../ui/theme';
+import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 
 interface LocalDiagnosticsScreenProps {
   readonly flow: LocalDiagnosticsFlow;
@@ -244,6 +244,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: '800' },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   notice: {
+    ...primaryEmphasisBorder,
     backgroundColor: colors.primarySoft,
     borderRadius: 10,
     color: colors.ink,
