@@ -4074,3 +4074,83 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
     `mv`（`rm` は使わない）して repository を汚さないようにした。次回も
     Playwright MCP のスクリーンショットを使うときは、出力先をリポジトリ配下に
     仮置きしてから移動する前提で計画する。
+
+### [自己紹介カードピボット] Issue 79 着手（調査フェーズ、実装はクラウド環境へ引き継ぎ） - 2026-07-20
+
+- 目的: プロダクトの軸を「名刺の否定」から「無料で渡せる自己紹介」へ転換する
+  Step 1（vCard QR）を実装する。正本は Issue 79 本文
+  （`gh issue view 79`）と `docs/specs/2026-07-20-digital-meishi-pivot.md`。
+- 制約: ブランチ `feat/intro-card-pivot`（main から分岐）。既存 Pet / Lounge /
+  Bridge のコード・テストは削除しない（導線から外すのみ）。`git add` は
+  明示ファイルのみ、`rm` / `npx` 禁止。カバレッジ 100%・`make before-commit`
+  全緑が完了条件。
+- タスク（Issue 本文の詳細設計どおり、進捗は「途中」節参照）:
+  - [ ] 1: `src/domain/intro-card.ts`（IntroCard 型 + createIntroCard +
+    IntroCardError）
+  - [ ] 2: `src/protocol/vcard.ts`（encodeVCard + サイズ検証 + jsQR
+    round-trip テスト）
+  - [ ] 3: `src/components/RealQrView.tsx`（実 QR 表示、白地固定・quiet zone
+    4 module・最小 240）
+  - [ ] 4: `src/screens/IntroCardEditScreen.tsx` /
+    `src/screens/IntroCardScreen.tsx`（新規 2 画面）
+  - [ ] 5: `default-intro-card-storage`（`local-profile-storage` 相当の
+    Web / Expo FileSystem 2 adapter）+ i18n `introCard` 節（ja / en）
+  - [ ] 6: `src/app/PassportApp.tsx` のメインフロー差し替え（保存済みカード
+    があれば IntroCardScreen、なければ IntroCardEditScreen。Settings /
+    Backup / Diagnostics 導線は維持）
+  - [ ] 7: `docs/adr/0026-intro-card-pivot.md`（ADR-0007 の該当部分を
+    supersede）+ `docs/privacy/data-inventory.md` 更新
+  - [ ] 8: 検証（`bun test src --coverage` 100%、typecheck、biome、staged
+    harness、`make before-commit`）+ code-reviewer レビュー + PR
+- 検証手順: 未実施（コード未着手のため）。
+- 進捗ログ:
+  - 2026-07-20 着手。ブランチ `feat/intro-card-pivot` を main
+    （`0a431e4`）から作成。Issue 79 本文と spec doc を読み、既存資産の
+    調査を行った。調査した実装パターン: `src/qr/encoder.ts`
+    （`QR_ENCODER_MAX_BYTES = 1024`、`encodeQr`）、
+    `src/protocol/qr-payload.ts`（`QrPayloadError` 系の per-module Error
+    慣行、`TCPQ1:` envelope は本機能では使わない方針を確認）、
+    `src/domain/lounge-invite.ts`（`createXxx` + 型付き Error の factory
+    慣行）、`src/qr/encoder.test.ts` の `rasterize` ヘルパ（jsQR round-trip
+    テストの手本）、`src/app/local-profile-storage.ts` /
+    `web-local-profile-storage.ts` /
+    `expo-file-system-local-profile-storage.ts` /
+    `default-local-profile-storage.ts`（Port + Web/Native 2 adapter +
+    factory の 4 ファイル構成、intro-card storage もこの構成を踏襲する）、
+    `src/components/{AppScreen,Card,ActionButton,QrCodeView}.tsx`
+    （新画面が使う UI atom。既存 `QrCodeView` は装飾用でハッシュベース、
+    実 QR 用の `RealQrView` は別コンポーネントとして新設が必要）、
+    `src/app/PassportApp.tsx`（1876 行。`SetupStage` の Union と
+    `restoring` → `ProfileHomeGate`（既定 `stage === 'profile'` で
+    `PassportCreationScreen`）が現在の起動時デフォルト導線。ここを
+    IntroCard の有無で分岐させる差し替えが必要。Settings /
+    Backup(`backupFlow`) / Diagnostics(`diagnosticsFlow`) は独立した
+    stage 判定なので導線を保ったまま流用できる）。
+  - 実装コードは 1 行も書いていない（調査のみ）。この時点で
+    コーディネーターから「残りはクラウド環境へ引き継ぐ」指示を受け、
+    WIP コミット + push で中断した。
+  - 未着手: domain / protocol / RealQrView / 2 画面 / storage / i18n /
+    PassportApp 配線 / ADR-0026 / privacy 台帳更新 / テスト全般 / 品質ゲート
+    / code-reviewer レビュー / PR 作成。すべて次の担当者が Issue 79 本文の
+    詳細設計どおりに着手する。
+  - まだ読んでいない・要確認: `docs/design/qr-invite-and-ready-flow.md`
+    の「M3 受け入れ基準」節（`RealQrView` の renderer 基準の正本）、
+    `src/screens/qr-invite-accessibility.test.ts`（既存 screen への
+    `react-native-svg` 禁止の対象範囲）、`src/app/i18n/messages.ts`
+    の既存節の形、`src/app/passport-app-stage-flow.test.ts`
+    （デフォルト stage 変更で壊れる可能性がある契約テスト）、
+    `docs/adr/0007-*.md`（supersede 対象）、
+    `docs/privacy/data-inventory.md` の既存フォーマット、
+    `docs/adr/0000-template.md`。
+- 振り返り:
+  - 状況: 実装未着手のまま方針転換でクラウド環境へ引き継ぐことになった。
+    ブランチと Plan.md の調査ログだけを WIP commit として残す。
+  - 引き継ぎ先への申し送り: Issue 79 本文が正本。上記タスク 1〜8 の順で
+    実装し、各ステップで TDD（テスト先行）を守ること。特に
+    `src/app/PassportApp.tsx` は非常に大きく複雑な状態機械なので、
+    デフォルト stage 差し替えは `ProfileHomeGate` 呼び出し部分
+    （ファイル末尾の return）と `applyStartupRecoveryResult` /
+    `resetAllLocalMemory` の初期 stage 決定ロジックの両方を IntroCard の
+    有無で分岐させる必要がある。既存 `passport-app-stage-flow.test.ts` が
+    デフォルト画面を前提にしている場合は、Issue の指示どおり「新フローの
+    契約」への書き換えとして最小限で更新し、変更理由を PR に列挙すること。
