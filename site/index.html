@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TenkaCloud Passport — 名刺交換の前に、会話を。</title>
-<meta name="description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<title>TenkaCloud Passport — 名刺がなくても、自己紹介は渡せる。</title>
+<meta name="description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで連絡先登録できる自己紹介カードです。" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="ja" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="en" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="x-default" href="https://susumutomita.github.io/TenkaCloudPassport/" />
-<meta property="og:title" content="TenkaCloud Passport — 名刺交換の前に、会話を。" />
-<meta property="og:description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<meta property="og:title" content="TenkaCloud Passport — 名刺がなくても、自己紹介は渡せる。" />
+<meta property="og:description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで連絡先登録できる自己紹介カードです。" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://susumutomita.github.io/TenkaCloudPassport/" />
 <meta property="og:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
@@ -18,8 +19,8 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:locale" content="ja_JP" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="TenkaCloud Passport — 名刺交換の前に、会話を。" />
-<meta name="twitter:description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<meta name="twitter:title" content="TenkaCloud Passport — 名刺がなくても、自己紹介は渡せる。" />
+<meta name="twitter:description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで連絡先登録できる自己紹介カードです。" />
 <meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
 <style>
   /* 外部リクエストゼロ (フォント含む)。テレメトリなしを掲げるページ自身も何も送らない。 */
@@ -91,38 +92,26 @@
   a.cta.quiet { color: var(--ink); border: 1px solid var(--border); background: var(--card); }
   a.cta.quiet:hover, a.cta.quiet:focus-visible { background: var(--surface); }
 
-  /* visa card (signature) */
-  .visa {
+  /* intro card preview (signature) */
+  .card-preview {
     background: var(--card);
     border: 1px solid var(--border-subtle); border-radius: 16px;
-    padding: 28px 26px 0; position: relative; overflow: hidden;
+    padding: 28px 26px; position: relative; overflow: hidden;
     box-shadow: 0 18px 44px -24px rgba(16, 17, 20, 0.35);
   }
-  .visa .row { display: flex; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); letter-spacing: 0.06em; }
-  .visa .row + .row { margin-top: 10px; }
-  .visa .row b { color: var(--ink); font-weight: 500; }
-  .visa .pets { font-size: 26px; letter-spacing: 0.35em; margin: 26px 0 14px; }
-  .stamp {
-    position: absolute; right: 22px; bottom: 58px; width: 118px; height: 118px;
-    border: 3px double var(--summit); border-radius: 50%;
-    color: var(--summit); display: grid; place-content: center; text-align: center;
-    font-weight: 700; line-height: 1.5;
-    transform: rotate(-9deg); opacity: 0.9;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='white'/%3E%3Ccircle cx='1' cy='2' r='.35' fill='black'/%3E%3C/svg%3E");
-    animation: press 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.4s backwards;
+  .cp-eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+    color: var(--muted-light); text-transform: uppercase;
   }
-  .stamp .t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; }
-  .stamp .m { font-size: 22px; }
-  @keyframes press {
-    from { transform: rotate(-16deg) scale(1.6); opacity: 0; }
-    to { transform: rotate(-9deg) scale(1); opacity: 0.9; }
+  .cp-name { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 14px; }
+  .cp-title { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .cp-intro {
+    margin-top: 16px; font-size: 14px; color: var(--ink); line-height: 1.8;
+    padding-top: 16px; border-top: 1px dashed var(--border-subtle);
   }
-  .mrz {
-    margin: 22px -26px 0; padding: 14px 26px; background: var(--surface);
-    border-top: 1px dashed var(--border);
-    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
-    color: var(--muted); white-space: nowrap; overflow: hidden;
-  }
+  .cp-qr-row { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+  .cp-qr { width: 76px; height: 76px; flex: none; border-radius: 6px; }
+  .cp-qr-caption { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.7; }
 
   /* sections */
   section { padding: 64px 0; border-top: 1px solid var(--border-subtle); }
@@ -152,6 +141,22 @@
   ul.privacy li { border-left: 3px solid var(--ink); padding: 4px 0 4px 18px; }
   ul.privacy b { display: block; font-size: 16px; letter-spacing: -0.01em; }
   ul.privacy span { font-size: 14px; color: var(--muted); }
+
+  ol.roadmap { list-style: none; counter-reset: rmstep; margin-top: 8px; display: grid; gap: 16px; }
+  ol.roadmap li {
+    counter-increment: rmstep; display: grid; grid-template-columns: 96px 1fr; gap: 20px;
+    padding: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--card);
+  }
+  ol.roadmap li .step-badge {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; height: fit-content;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  ol.roadmap li .step-badge::before { content: "STEP " counter(rmstep) " — "; }
+  ol.roadmap li.done .step-badge { background: rgba(47, 158, 99, 0.12); color: var(--success-text); }
+  ol.roadmap li.concept .step-badge { background: var(--surface); color: var(--muted); }
+  ol.roadmap h3 { font-size: 16px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  ol.roadmap p { color: var(--muted); font-size: 14.5px; }
+  .roadmap-note { margin-top: 20px; font-size: 14px; color: var(--muted); max-width: 46em; }
 
   table.status { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14.5px; }
   table.status th, table.status td { text-align: left; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
@@ -184,10 +189,10 @@
     .hero { grid-template-columns: 1fr; padding: 36px 0 52px; }
     .not-grid { grid-template-columns: 1fr; }
     ul.privacy { grid-template-columns: 1fr; }
-    .visa { margin-top: 8px; }
+    ol.roadmap li { grid-template-columns: 1fr; }
+    .card-preview { margin-top: 8px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .stamp { animation: none; }
     html { scroll-behavior: auto; }
   }
   :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
@@ -208,54 +213,85 @@
 
   <div class="hero">
     <div>
-      <p class="eyebrow">対面イベントのための、アカウント不要パスポート</p>
-      <h1>名刺交換の前に、<br />会話を。</h1>
+      <p class="eyebrow">対面イベントのための、無料の自己紹介カード</p>
+      <h1>名刺がなくても、<br />自己紹介は渡せる。</h1>
       <p class="lede">
-        TenkaCloud Passport はデジタル名刺ではありません。Owner が公開を許可した手掛かりだけを
-        Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋（Bridge）を 1 つ見つけて、
-        そっと退くアプリです。
+        LT の後に話しかけてもらえたのに、名刺を作っていなかった。有料の名刺サービスに
+        お金は払いたくない。TenkaCloud Passport は、名前・肩書き・自己紹介を QR で
+        見せるだけの、無料でアカウント不要のアプリです。相手はアプリを入れず、標準
+        カメラで読み取るだけで連絡先に登録できます。
       </p>
       <div class="cta-row">
         <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub で見る</a>
         <a class="cta quiet" href="#run">手元で動かす</a>
       </div>
     </div>
-    <div class="visa" role="img" aria-label="Lounge Visa のイメージ。20 分滞在・延長なし・満了で Lounge データ破棄。">
-      <div class="row"><span>TYPE</span><b>LOUNGE VISA</b></div>
-      <div class="row"><span>BEARER</span><b>PET（Owner の分身）</b></div>
-      <div class="row"><span>DURATION</span><b>20 MIN — 延長なし</b></div>
-      <div class="row"><span>CARRIES</span><b>公開を許可した手掛かりのみ</b></div>
-      <div class="row"><span>ON EXPIRY</span><b>Lounge データ破棄</b></div>
-      <div class="pets" aria-hidden="true">🐾 🐶 🐱 🦊 🐼 🐧</div>
-      <div class="stamp" aria-hidden="true">
-        <span class="t">ADMITTED</span>
-        <span class="m">20分</span>
-        <span class="t">LOUNGE ONLY</span>
+    <div class="card-preview" role="img" aria-label="自己紹介カードのプレビュー。名前・肩書き・自己紹介と、標準カメラで読み取れる QR コードを表示する。">
+      <span class="cp-eyebrow">Intro Card</span>
+      <div class="cp-name">田中太郎</div>
+      <div class="cp-title">Engineer · Acme Inc.（例）</div>
+      <p class="cp-intro">
+        「ローカルファーストなアプリを作っています。今日の LT の話、もっと聞きたい方はぜひ。」
+      </p>
+      <div class="cp-qr-row">
+        <svg class="cp-qr" viewBox="0 0 100 100" aria-hidden="true">
+          <rect width="100" height="100" fill="#fff"></rect>
+          <g fill="#1d1d1f">
+            <rect x="6" y="6" width="22" height="22"></rect>
+            <rect x="72" y="6" width="22" height="22"></rect>
+            <rect x="6" y="72" width="22" height="22"></rect>
+          </g>
+          <g fill="#fff">
+            <rect x="11" y="11" width="12" height="12"></rect>
+            <rect x="77" y="11" width="12" height="12"></rect>
+            <rect x="11" y="77" width="12" height="12"></rect>
+          </g>
+          <g fill="#1d1d1f">
+            <rect x="15" y="15" width="4" height="4"></rect>
+            <rect x="81" y="15" width="4" height="4"></rect>
+            <rect x="15" y="81" width="4" height="4"></rect>
+            <rect x="36" y="10" width="5" height="5"></rect>
+            <rect x="46" y="10" width="5" height="5"></rect>
+            <rect x="56" y="16" width="5" height="5"></rect>
+            <rect x="36" y="20" width="5" height="5"></rect>
+            <rect x="50" y="26" width="5" height="5"></rect>
+            <rect x="60" y="36" width="5" height="5"></rect>
+            <rect x="70" y="46" width="5" height="5"></rect>
+            <rect x="40" y="40" width="5" height="5"></rect>
+            <rect x="30" y="50" width="5" height="5"></rect>
+            <rect x="46" y="56" width="5" height="5"></rect>
+            <rect x="60" y="60" width="5" height="5"></rect>
+            <rect x="36" y="66" width="5" height="5"></rect>
+            <rect x="50" y="76" width="5" height="5"></rect>
+            <rect x="66" y="70" width="5" height="5"></rect>
+            <rect x="76" y="60" width="5" height="5"></rect>
+          </g>
+        </svg>
+        <span class="cp-qr-caption">標準カメラで読み取り<br />→ 連絡先に追加を提案</span>
       </div>
-      <div class="mrz" aria-hidden="true">P&lt;TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;NO&lt;ACCOUNT&lt;&lt;NO&lt;SERVER&lt;&lt;20MIN&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
     </div>
   </div>
 </div>
 
 <section>
   <div class="wrap">
-    <p class="sec-label">Not a business card</p>
+    <p class="sec-label">これは何ではないか</p>
     <h2>これは、何ではないか。</h2>
     <div class="not-grid">
       <div class="card">
         <p class="no">NOT / 01</p>
-        <h3>名刺管理アプリではない</h3>
-        <p>連絡先を集めません。氏名・メール・電話・会社名を入力する欄がそもそもありません。</p>
+        <h3>有料サブスクではない</h3>
+        <p>月額課金の名刺サービスではありません。無料で、アカウントの有効期限もありません。</p>
       </div>
       <div class="card">
         <p class="no">NOT / 02</p>
-        <h3>SNS ではない</h3>
-        <p>アカウントもフォローもありません。Lounge が終われば、残るのはあなたの記憶と会話だけです。</p>
+        <h3>アカウント登録はない</h3>
+        <p>サインアップもログインもありません。名前を入力したその場で、すぐ使えます。</p>
       </div>
       <div class="card">
         <p class="no">NOT / 03</p>
-        <h3>マッチングではない</h3>
-        <p>スコアで人を並べません。Pet が見つけるのは「最初のひと言」の橋を 1 つだけです。</p>
+        <h3>データを預からない</h3>
+        <p>自己紹介カードは端末の中だけに保存します。サーバーには何も送信しません。</p>
       </div>
     </div>
   </div>
@@ -264,33 +300,73 @@
 <section>
   <div class="wrap">
     <p class="sec-label">How it works</p>
-    <h2>Pet が橋を架け、人間が渡る。</h2>
+    <h2>渡すのは QR コード 1 枚だけ。</h2>
     <ol class="flow">
       <li>
         <div>
-          <h3>Pet を準備する</h3>
-          <p>アカウント登録なし。Pet の名前と絵文字、そして同梱カタログから選んだ「会話の材料」（Topics / Offer / Looking For）だけ。入力は明示保存するまで端末に残りません。</p>
+          <h3>自己紹介カードを作る</h3>
+          <p>名前（必須）・肩書き・所属・自己紹介・リンクを入力します。入力は明示保存するまで端末に残りません。</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>QR で 20 分の Lounge に入る</h3>
-          <p>Host が表示する使い捨ての招待 QR を読み取り、共有内容の Preview に明示同意してから参加します。Lounge は 20 分で必ず終わります。</p>
+          <h3>QR を見せる</h3>
+          <p>保存すると、名前・自己紹介と大きな実 QR コードが画面に表示されます。この画面を相手に見せるだけです。</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>Pet 同士が Bridge を 1 つ見つける</h3>
-          <p>公開を許可した手掛かりだけを突き合わせ、「この 2 人ならこの話題から始められる」という橋を 1 つ提案します。</p>
+          <h3>相手が標準カメラで読み取る</h3>
+          <p>アプリのインストールは不要です。iPhone / Android の標準カメラで QR を読み取ると、連絡先への追加が提案されます。</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>アプリは退く</h3>
-          <p>会話が始まったら、アプリの役目は終わりです。Lounge のデータは退出・Host 終了・20 分満了のいずれか最も早い契機で破棄されます。</p>
+          <h3>会話が続く</h3>
+          <p>自己紹介を読んだ相手から、次の話が始まります。名刺交換の代わりに、会話のきっかけを渡します。</p>
         </div>
       </li>
     </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="sec-label">Roadmap</p>
+    <h2>Step 1 は実装済み。その先は構想です。</h2>
+    <ol class="roadmap">
+      <li class="done">
+        <span class="step-badge">実装済み</span>
+        <div>
+          <h3>自己紹介カードを QR で渡す</h3>
+          <p>相手はアプリ不要、標準カメラで連絡先登録できます。本ページが説明している機能です。</p>
+        </div>
+      </li>
+      <li class="concept">
+        <span class="step-badge">構想</span>
+        <div>
+          <h3>受け取った相手をリサーチする</h3>
+          <p>受け取った側のアプリが、相手をインターネットで自動リサーチしてオントロジー（人物・活動・関心の構造）を作る構想です。「外部と通信しない」という現行方針の転換を伴うため、着手時に ADR で opt-in 設計を定めます。</p>
+        </div>
+      </li>
+      <li class="concept">
+        <span class="step-badge">構想</span>
+        <div>
+          <h3>近い人を可視化する</h3>
+          <p>イベント参加者の中で「やっていることが近い人」を可視化する構想です。</p>
+        </div>
+      </li>
+      <li class="concept">
+        <span class="step-badge">構想</span>
+        <div>
+          <h3>端末内エージェント同士が接点を見つける</h3>
+          <p>相手もアプリを入れたら、端末内 LLM エージェント同士が自己紹介を交換して次の打ち合わせにつながる話題を見つける構想です。既存の Pet / Lounge / Bridge の資産がここで主役に戻る想定です。</p>
+        </div>
+      </li>
+    </ol>
+    <p class="roadmap-note">
+      Step 2〜4 はまだ実装していません。「できます」とは書かず、構想として区別して掲載しています。
+    </p>
   </div>
 </section>
 
@@ -300,9 +376,9 @@
     <h2>預からない、が設計です。</h2>
     <ul class="privacy">
       <li><b>アカウント不要</b><span>登録もログインもありません。サーバーにあなたのデータはありません。</span></li>
-      <li><b>端末内で完結</b><span>Profile は端末の中だけ。持ち出しは自分で行う JSON Backup のみです。</span></li>
-      <li><b>20 分で破棄</b><span>Lounge 由来のデータは永続化せず、最早の契機で破棄します。</span></li>
-      <li><b>テレメトリなし</b><span>収集も送信もしません。AI 判定も端末内で完結する設計です。現在は Rules Provider が担い、Local LLM は Planned（default branch 未収載）です。</span></li>
+      <li><b>端末内で完結</b><span>自己紹介カードは端末の中だけ。持ち出しは自分で行う JSON Backup のみです。</span></li>
+      <li><b>共有は QR を見せる操作だけ</b><span>相手の情報を受け取る経路は持ちません。渡すのは自分のカードだけです。</span></li>
+      <li><b>テレメトリなし</b><span>収集も送信もしません。サーバーもアカウントも要求しない設計です。</span></li>
     </ul>
   </div>
 </section>
@@ -319,7 +395,7 @@
         <tr>
           <td>Repository 開発</td>
           <td><span class="badge ok">Implemented</span></td>
-          <td>Source・純 TypeScript Domain・Rules Provider・Web Export の検証。</td>
+          <td>自己紹介カードの作成・端末内保存・vCard QR 生成を含め、Source・純 TypeScript Domain・Rules Provider・Web Export をテストで検証。</td>
         </tr>
         <tr>
           <td>Source-only Candidate</td>
@@ -334,10 +410,10 @@
       </tbody>
     </table>
     <p class="status-note">
-      Browser・Expo Go・実機の実行証拠はいずれも Not run です。Local LLM・実 Camera QR・
-      実 Nearby Transport は default branch の Supported 能力ではありません。緑の CI を実機の
-      証拠とは呼ばず、未検証の能力を「動きます」と表示しない。この規律ごとオープンソースです。
-      詳細は <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.md">README</a> と
+      実機の標準カメラで QR を読み取り、連絡先追加が提案されることの実機検証は Not run です。
+      Browser・Expo Go の実行証拠も Not run です。緑の CI を実機の証拠とは呼ばず、未検証の能力を
+      「動きます」と表示しない。この規律ごとオープンソースです。詳細は
+      <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.md">README</a> と
       <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/releases/status.md">Release Status</a> を参照してください。
     </p>
   </div>
@@ -362,11 +438,11 @@ make start   <span class="c"># スマホの Expo Go で QR を読む</span></cod
   <div class="wrap">
     <div class="inner">
       <span>MIT License — <a href="https://github.com/susumutomita/TenkaCloudPassport">susumutomita/TenkaCloudPassport</a></span>
-      <span>会話が始まったら、アプリは退く。</span>
+      <span>名刺がなくても、自己紹介は渡せる。</span>
     </div>
   </div>
   <div class="mrz-footer" aria-hidden="true">
-    <div class="wrap">TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;MIT&lt;&lt;NO&lt;TELEMETRY&lt;&lt;ON&lt;DEVICE&lt;ONLY&lt;&lt;BRIDGE&lt;NOT&lt;NETWORK&lt;&lt;&lt;&lt;&lt;&lt;</div>
+    <div class="wrap">TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;MIT&lt;&lt;NO&lt;TELEMETRY&lt;&lt;ON&lt;DEVICE&lt;ONLY&lt;&lt;FREE&lt;NO&lt;ACCOUNT&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
   </div>
 </footer>
 </body>

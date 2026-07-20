@@ -2,14 +2,40 @@
 
 [English](./README.en.md)
 
-TenkaCloud Passport はデジタル名刺ではありません。Owner が公開を許可した手掛かりだけを Pet が扱い、
-対面で人間同士の会話を始める Bridge を 1 つ見つけて退く、アカウント不要の Expo アプリです。
+TenkaCloud Passport は、名刺がなくても自己紹介を渡せる、無料でアカウント不要の Expo アプリです。
+名前・肩書き・自己紹介を QR コードで見せるだけで、相手はアプリを入れずに標準カメラで連絡先へ
+登録できます。詳しくは [Landing Page](https://susumutomita.github.io/TenkaCloudPassport/) を
+見てください。
+
+## 何ができるか
+
+- 名前（必須）・肩書き・所属・自己紹介・リンクを入力し、明示保存するまで端末に残さない。
+- 保存すると、標準カメラで読み取れる実 QR コード（vCard 3.0）を表示する。
+- サーバーもアカウントも要求しない。データを端末の外へ持ち出す経路は、自分で行う
+  手動 JSON バックアップだけである。
+- 既存の Pet / Lounge / Bridge のコードとテストは残しているが、デフォルトの画面からは
+  外している。ロードマップ Step 4（端末内エージェント同士が接点を見つける構想）で
+  再登場する想定である。詳しくは LP の Roadmap 節を参照する。
+
+## 2 分で試す
+
+```bash
+make install
+make start
+```
+
+スマホに Expo Go を install し、Mac と同じ Network につないでから、Terminal に表示される
+QR を読み取ってください。起動すると、自己紹介カードの作成画面が開きます。名前を入力して
+保存すると、標準カメラで読み取れる QR コードの表示画面に進みます。
+
+実機の標準カメラでこの QR を読み取り、連絡先への追加が提案されることの実機検証は、本
+README を書いている時点で Not run です（クラウド環境から実機確認ができないため）。
 
 ## 現在の Release 状態
 
 | 対象 | 状態 | 現在できること | 停止条件 |
 | --- | --- | --- | --- |
-| Repository 開発 | `Implemented` | Source、純 TypeScript Domain、Rules Provider、Web Export を検証する。 | Green CI を実機証拠にしない。 |
+| Repository 開発 | `Implemented` | 自己紹介カードの端末内保存・vCard QR 生成を含め、Source、純 TypeScript Domain、Rules Provider、Web Export を検証する。 | Green CI を実機証拠にしない。 |
 | Source-only Candidate | `Experimental` | 固定 Commit から Draft Candidate を再現する。 | Public Release と呼ばない。既存出力を上書きしない。 |
 | Public OSS Alpha | `Blocked` | なし。 | 必須の物理 Gate が `Verified` になるまで公開しない。 |
 | Local Champion Walkthrough | `Experimental` | 文書、図、役割、停止条件だけを読み合わせる。 | 実参加者データ、実 QR、Nearby、Group セッション を使わない。 |

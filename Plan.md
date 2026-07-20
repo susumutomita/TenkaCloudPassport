@@ -4299,3 +4299,90 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
     0 fail、対象ファイルはすべて 100.00% / 100.00%、
     `bun scripts/check-duplication.ts --update` で baseline を
     `src/app: 74`（前回更新時の 116 から減少）まで ratchet down した。
+  - PR https://github.com/susumutomita/TenkaCloudPassport/pull/81 を作成し、
+    CI（Analyze x2、CodeQL、GitGuardian、ci x2）全緑を確認して
+    `gh pr merge --squash --delete-branch` で main へマージした
+    （`e785586`）。CodeRabbit のレビューは merge 時点で `pending` のままだった
+    （branch protection 未設定で必須チェックではないため、実 CI 全緑を
+    もって進めた）。
+
+### [LP / README 刷新] Issue 80 実装（タスク 1 の PR マージ後に着手） - 2026-07-20
+
+- 目的: Issue 80 の詳細設計に従い、LP（`site/index.html` / `site/en/index.html`）と
+  README（`README.md` / `README.en.md`）を「名刺の否定」軸から
+  「無料で渡せる自己紹介」軸へ刷新する。
+- 制約: ブランチ `docs/intro-card-lp-readme`（main から分岐、Issue 79 マージ後の
+  main 先頭 `e785586` から作成）。`src/` は触らない。og.png はブラウザがないため
+  再生成せず既存画像を維持し、その旨を PR と follow-up に記録する。
+  `bun textlint README.md` はゲート対象。doc-style（文末「。」・日英間半角スペース）
+  厳守。日英で fail-closed 語彙を同義に保つ。
+- タスク（Issue 80 本文の詳細設計どおり）:
+  - [ ] LP hero: 「名刺がなくても、自己紹介は渡せる。」軸への書き換え。
+    Lounge Visa スタンプ / MRZ を自己紹介カードのプレビューへ差し替え。
+  - [ ] LP「これは何ではないか」節: 有料サブスクではない / アカウント登録なし /
+    データを預からない、へ差し替え。
+  - [ ] LP How it works: カードを作る → QR を見せる → 相手は標準カメラで読む →
+    会話が始まる、の実フローへ。
+  - [ ] LP ロードマップ節新設: Step 2〜4 を「構想」ラベル付きで掲載
+    （fail-closed、できると書かない）。
+  - [ ] LP 現状表: Issue 79 の実装・検証状態と一致させる（実機カメラ読取は
+    Not run 等）。
+  - [ ] README.md / README.en.md: 「何ができるか」「2 分で試す」の 2 節を
+    冒頭に追加。旧軸の文言（「デジタル名刺ではありません」等）を新軸へ改稿。
+    Pet / Lounge はロードマップ Step 4 の構想として言及。
+  - [ ] `bun run web` でのブラウザ目視確認はクラウド環境のため実施不可
+    （Issue 79 と同様に PR へ明記）。実装済みの画面文言・フローは
+    Issue 79 でマージ済みの `src/app/i18n/messages.ts` の `introCard` 節と
+    `IntroCardScreen.tsx` / `IntroCardEditScreen.tsx` を正本として記述する。
+  - [ ] code-reviewer レビュー（重点: fail-closed 逸脱・日英同義・textlint）。
+  - [ ] `make before-commit` exit 0。
+- 検証手順: `bun textlint README.md`、`make before-commit`、site 2 ページを
+  `Read` で目視相当確認（実ブラウザなし）、外部リクエストゼロを HTML 内の
+  `<script src=`/`<link href=` 等の走査で確認。
+- 進捗ログ:
+  - `site/index.html` / `site/en/index.html`: hero copy を新軸へ書き換え、
+    Lounge Visa スタンプ / MRZ を `.card-preview`（名前・肩書き・自己紹介・
+    インライン SVG の QR モック）へ差し替え。「これは何ではないか」節・
+    How it works（4 step）・Roadmap 節（新設、Step 2〜4 を「構想」ラベル付き）・
+    Privacy 節・現状表・status-note を刷新。`<link rel="canonical">` を両方に
+    追加（既存にはなかった）。og.png は再生成せず既存画像を維持（follow-up
+    済み、ブラウザなし）。
+  - `README.md` / `README.en.md`: 冒頭に「何ができるか」「2 分で試す」の
+    2 節を追加。旧軸の導入文（「デジタル名刺ではありません」/
+    "not a digital business card"）を新軸へ改稿。Pet / Lounge / Bridge は
+    ロードマップ Step 4 の構想として言及。Repository 開発行の説明に
+    自己紹介カード検証を追記。
+  - `bun textlint README.md` 実行で 6 件のエラー（新規箇条書きが
+    「ですます」調だった、"Backup"/"既定" の表記揺れ）を検出し修正
+    （箇条書きは「である」調へ、「Backup」→「バックアップ」、
+    「既定」→「デフォルト」、この repo の既存表記に合わせた）。
+  - `make before-commit` 実行で `scripts/oss-alpha-release-docs.test.ts`
+    の契約テスト 1 件が落ちた。「日本語と英語の冒頭で Product 境界と
+    Public Release 停止を自己完結して説明する」テストが、旧軸の固定文言
+    「デジタル名刺ではありません」/"not a digital business card" を
+    先頭 1,500 文字以内に期待していた。新軸の同義文言（「名刺がなくても
+    自己紹介は渡せる」/"without a business card"）へ最小限で更新し、
+    2 節追加で本文が伸びた分（英語は日本語より同内容でも文字数が多い）
+    窓を 2,800 文字へ広げた。変更理由をテスト内コメントに残した。他の
+    288 件は無変更で green。
+  - code-reviewer によるセルフレビュー（fail-closed 逸脱・日英同義・
+    textlint 重点）を実施。実装中に気づかなかった `README.en.md` の
+    textlint エラー（"Backup" が `lint:text` の対象外だったため未検出）を
+    指摘され、文言を変えて解消（`/follow-up add` で `lint:text` の
+    対象範囲拡大を記録）。hero プレビューの例示氏名と自社名の組合せが
+    紛らわしい指摘を受け「Acme Inc.（例）」へ変更。Roadmap Step 4 の
+    文末が README より断定的だった点を「想定」を補って統一。LP の
+    現状表から Rules Provider の記載が抜けていた点を README と揃えて
+    追記。
+  - 最終確認: `bun textlint README.md` / `bunx textlint README.en.md`
+    ともに 0 件。`bun test scripts/` 289 pass 0 fail。
+    `bun test src --coverage` 1162 pass 0 fail、全ファイル 100%。
+    `bun run typecheck` clean。HTML の開閉タグ対応をスクリプトで確認
+    （不一致なし）。`make before-commit` exit 0（`bun run build:web` 含む）。
+- 振り返り:
+  - 問題: 冒頭に新節を追加すると、既存の「先頭 N 文字以内に特定文言を含む」
+    形の契約テストが、日英の文字数差（同じ意味でも英語の方が長くなる）で
+    片方だけ窓の外に出ることがある。
+  - 予防策: こうした固定長ウィンドウの契約テストを新規追加するときは、
+    日英どちらのテキストが典型的に長くなるかを踏まえて余裕を持たせるか、
+    「セクション区切りより前」のような構造的な境界で判定する方が壊れにくい。
