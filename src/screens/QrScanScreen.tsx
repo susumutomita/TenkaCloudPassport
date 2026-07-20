@@ -5,7 +5,7 @@ import { MESSAGES } from '../app/i18n/messages';
 import type { CameraPermissionState } from '../app/qr-scanner-port';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
-import { colors, spacing } from '../ui/theme';
+import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 
 interface QrScanScreenProps {
   readonly permissionState: CameraPermissionState;
@@ -89,6 +89,7 @@ export default function QrScanScreen({
 
 const styles = StyleSheet.create({
   notice: {
+    ...primaryEmphasisBorder,
     backgroundColor: colors.primarySoft,
     borderRadius: 14,
     gap: spacing.xs,

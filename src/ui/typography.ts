@@ -10,3 +10,17 @@ export const monoFontFamily = Platform.select({
   ios: 'Menlo',
   default: 'monospace',
 });
+
+/**
+ * Issue 72 C: mono 大文字キャプション（eyebrow を除く状態ラベル・カウンタ・ヒント）の
+ * 共有書式。letterSpacing が画面ごとに 0.6〜1.6 でドリフトしていたため、この 1 箇所へ
+ * 集約する。色は含めない。白地では mutedLight、ダーク面（ink 地）では white を
+ * 利用側が上書きする。
+ */
+export const monoLabel = {
+  fontFamily: monoFontFamily,
+  fontSize: 11,
+  fontWeight: '500',
+  letterSpacing: 0.8,
+  textTransform: 'uppercase',
+} as const;

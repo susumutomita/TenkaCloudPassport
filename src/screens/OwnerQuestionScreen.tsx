@@ -9,6 +9,8 @@ import {
 import { ownerQuestionDisclosure } from '../app/owner-question-disclosure';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
+import Card from '../components/Card';
+import StatusDot from '../components/StatusDot';
 import type { OwnerAnswerValue } from '../domain/match-evidence';
 import {
   OWNER_ANSWER_NOTE_MAX_LENGTH,
@@ -101,14 +103,14 @@ export default function OwnerQuestionScreen({
         </Text>
       </View>
       <View accessibilityRole="summary" style={styles.countdownBadge}>
-        <View style={styles.countdownDot} />
+        <StatusDot tone="warning" />
         <Text style={styles.countdown}>
           {t.countdown(formatRemainingSeconds(remainingMs))}
         </Text>
       </View>
-      <View style={styles.questionCard}>
+      <Card style={styles.questionCard}>
         <Text style={styles.question}>{question.displayText}</Text>
-      </View>
+      </Card>
       <View style={styles.field}>
         <Text nativeID="owner-answer-note-label" style={styles.label}>
           {t.noteLabel}
@@ -161,7 +163,7 @@ export default function OwnerQuestionScreen({
           />
         </>
       ) : (
-        <View accessibilityRole="summary" style={styles.confirm}>
+        <Card accessibilityRole="summary" style={styles.confirm}>
           <Text style={styles.confirmTitle}>{t.confirmTitle}</Text>
           <Text style={styles.confirmText}>{t.confirmText}</Text>
           {trimmedNote ? (
@@ -183,7 +185,7 @@ export default function OwnerQuestionScreen({
             onPress={() => dispatchStage({ type: 'cancel-share' })}
             variant="secondary"
           />
-        </View>
+        </Card>
       )}
       <ActionButton
         accessibilityHint={t.exitButtonHint}
@@ -223,12 +225,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  countdownDot: {
-    backgroundColor: colors.warning,
-    borderRadius: 4,
-    height: 7,
-    width: 7,
-  },
   countdown: {
     color: colors.warningText,
     fontFamily: monoFontFamily,
@@ -236,11 +232,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   questionCard: {
-    backgroundColor: colors.white,
-    borderColor: colors.borderSubtle,
     borderRadius: 16,
-    borderWidth: 1,
-    padding: spacing.md,
   },
   question: {
     color: colors.ink,
@@ -273,12 +265,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   confirm: {
-    backgroundColor: colors.white,
-    borderColor: colors.borderSubtle,
-    borderRadius: 14,
-    borderWidth: 1,
     gap: spacing.sm,
-    padding: spacing.md,
   },
   confirmTitle: {
     color: colors.ink,

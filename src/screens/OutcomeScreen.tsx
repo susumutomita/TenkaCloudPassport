@@ -9,9 +9,11 @@ import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
+import ExpiryWarningBanner from '../components/ExpiryWarningBanner';
+import StatusDot from '../components/StatusDot';
 import type { RetiredLounge } from '../domain/lounge';
 import { colors, spacing } from '../ui/theme';
-import { monoFontFamily } from '../ui/typography';
+import { monoLabel } from '../ui/typography';
 
 interface OutcomeScreenProps {
   readonly lounge: RetiredLounge;
@@ -68,8 +70,13 @@ export default function OutcomeScreen({
     >
       <View style={styles.result}>
         <View style={styles.resultKindRow}>
-          <View style={styles.summitDot} />
-          <Text style={styles.resultKind}>
+          <StatusDot tone={hasBridge ? 'summit' : 'idle'} />
+          <Text
+            style={[
+              styles.resultKind,
+              hasBridge ? styles.resultKindBridge : styles.resultKindNoSignal,
+            ]}
+          >
             {hasBridge ? t.bridgeLabel : t.noSignalLabel}
           </Text>
         </View>
@@ -90,10 +97,7 @@ export default function OutcomeScreen({
         ) : null}
       </View>
       {notice.level === 'warning' ? (
-        <View accessibilityRole="alert" style={styles.expiryWarning}>
-          <View style={styles.expiryWarningDot} />
-          <Text style={styles.expiryWarningText}>{notice.message}</Text>
-        </View>
+        <ExpiryWarningBanner message={notice.message} />
       ) : null}
       {hasBridge ? (
         <ActionButton
@@ -129,19 +133,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
   },
-  summitDot: {
-    backgroundColor: colors.accent,
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
   resultKind: {
+    ...monoLabel,
+  },
+  // summit（accent ラベル）は bridge 限定にする（Issue 72 F / F-1TDS45）。no-signal は
+  // 橋が見つからなかった旨を祝祭的な演出にしないよう白 opacity 0.68 の muted 系へ落とす。
+  resultKindBridge: {
     color: colors.accent,
-    fontFamily: monoFontFamily,
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  },
+  resultKindNoSignal: {
+    color: colors.white,
+    opacity: 0.68,
   },
   message: {
     color: colors.white,
@@ -161,13 +163,10 @@ const styles = StyleSheet.create({
     opacity: 0.14,
   },
   sourceLabelsCaption: {
+    ...monoLabel,
     color: colors.white,
-    fontFamily: monoFontFamily,
-    fontSize: 11,
-    letterSpacing: 0.6,
     // デザイン値 .5 は 10px 級で AA を割るため、契約優先で .68 へ引き上げる。
     opacity: 0.68,
-    textTransform: 'uppercase',
   },
   sourceLabelsValue: {
     color: colors.white,
@@ -179,26 +178,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 18,
     opacity: 0.68,
-  },
-  expiryWarning: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  expiryWarningDot: {
-    backgroundColor: colors.warning,
-    borderRadius: 4,
-    height: 7,
-    marginTop: 6,
-    width: 7,
-  },
-  expiryWarningText: {
-    color: colors.warningText,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 21,
   },
 });

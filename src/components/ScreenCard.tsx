@@ -1,28 +1,25 @@
 import type { PropsWithChildren } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, spacing } from '../ui/theme';
+import { StyleSheet, Text } from 'react-native';
+import { colors } from '../ui/theme';
+import Card from './Card';
 
 interface ScreenCardProps extends PropsWithChildren {
   readonly title: string;
 }
 
+/**
+ * Issue 72 D: 旧トークン（surface + border）だったカード意匠を `Card` プリミティブ経由で
+ * Ink / Summit トークン（white + borderSubtle）へ移行する。
+ */
 export default function ScreenCard({ children, title }: ScreenCardProps) {
   return (
-    <View style={styles.card}>
+    <Card>
       <Text style={styles.title}>{title}</Text>
       {children}
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
   title: { color: colors.ink, fontSize: 18, fontWeight: '800' },
 });

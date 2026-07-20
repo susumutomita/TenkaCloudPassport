@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { colors, spacing } from './theme';
+import { colors, primaryEmphasisBorder, spacing } from './theme';
 
 /**
  * Issue 70: Ink / Summit リデザインのトークン正本を固定する。
@@ -105,5 +105,14 @@ describe('Ink / Summit カラートークン', () => {
 describe('余白トークン', () => {
   it('spacing はリデザイン前と同じ値を維持する', () => {
     expect(spacing).toEqual({ xs: 6, sm: 10, md: 16, lg: 24, xl: 32 });
+  });
+});
+
+describe('primaryEmphasisBorder（Issue 72 E: tint 単独の選択表現を防ぐ枠）', () => {
+  it('primary の 1px 枠だけを持ち、背景色・角丸・余白は含まない', () => {
+    expect(primaryEmphasisBorder).toEqual({
+      borderColor: colors.primary,
+      borderWidth: 1,
+    });
   });
 });

@@ -3795,3 +3795,122 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
     意匠へ寄せた。domain / 文言 / accessibility 契約は不変。theme.test.ts と
     brand-mark.test.ts を追加。src テスト 1030 件全緑・カバレッジ 100%・typecheck
     緑・biome 緑・harness staged エラー 0。
+
+### [Issue 72 Redesign 後続: UI reuse 統合と表現調整] - 2026-07-20
+
+- 目的: Issue 70 の /simplify・code-reviewer・User レビューで検出したフォローアップ
+  F-B3DSEY（StatusDot / ExpiryWarningBanner / monoLabel / カード意匠の reuse 統合）・
+  F-QGJCNV（primarySoft=surface 同値化によるスコープ外画面の選択アフォーダンス）・
+  F-1TDS45（OutcomeScreen no-signal の summit 演出の owner 判断）・
+  F-R1YKYB（react-native-svg の Web dev 警告と BrandMark の対面フロー展開）を解消する。
+  Issue 72 本文の A〜G を正本とし、設計の再検討はしない。
+- 制約: domain データ・文言・挙動は不変。既存の accessibility / touch-target /
+  font-scaling / qr-invite-accessibility 契約テストの挙動アサーションを弱めない。
+  site/・docs/adr/・scripts/ は触らない。カバレッジ 100% 維持。
+- タスク:
+  - [x] A: `src/components/StatusDot.tsx` 新設（tone→色写像 1 箇所、7px・radius 999、
+    View ベース）+ ソース契約テスト。4 画面のローカル statusDot 系スタイルを置換。
+  - [x] B: `src/components/ExpiryWarningBanner.tsx` 新設。HostInviteScreen の
+    `notice.level === 'warning'` 分岐は screen 側に残し qr-invite-accessibility.test.ts
+    の順序契約を壊さない。
+  - [x] C: `src/ui/typography.ts` に `monoLabel` 追加。9 箇所中 8 箇所を置換
+    （AppScreen.eyebrow は現状維持、Issue 明記）。
+  - [x] D: `src/components/Card.tsx` 新設。ScreenCard は内部で Card を使うよう移行、
+    NoticeCard は primarySoft → surface 地へ。5 箇所のインラインカードを置換。
+  - [x] E: primarySoft を tint 単独で使う箇所（EncounterSetupScreen.summary /
+    QrScanScreen.notice / LocalDiagnosticsScreen.notice / PilotMeasurementScreen.
+    noticeText）へ `borderColor: colors.primary` を併用。toggleEnabled /
+    BackupNoticeBanner は既に border 併用済みのため据え置き（監査のみ）。
+  - [x] F: OutcomeScreen no-signal を idle トーン + 白 opacity 0.68 ラベルへ、summit は
+    bridge 限定へ変更（Issue 提案どおり）。PR に before/after を明記。
+  - [x] G: react-native-svg-web の `accessible` prop 非 boolean 属性警告を調査。
+    BrandMark は `from 'react-native'` 禁止・`accessible={false}` 保持の契約テスト
+    (brand-mark.test.ts) があるため、ライブラリ側 (`WebShape.prepare`) の rest 展開が
+    原因と確認できれば Issue にコメントし close 時に記録する。対面フロー画面が
+    AppScreen 経由のみで react-native-svg を直接 import していないことは grep で確認
+    済み（既に満たしている）。
+- 検証手順: `bun test src --coverage`（100%）、`bun run typecheck`、
+  `bunx biome check --write src`、`bun scripts/architecture-harness.ts --staged
+  --fail-on=error`、`make before-commit`、`bun run web` スモーク。
+- 進捗ログ:
+  - 2026-07-20 着手。ブランチ `feat/issue-72-redesign-reuse`。既存契約テスト
+    （qr-invite-accessibility.test.ts の順序検査・touch-target.test.ts のスタイル名
+    抽出・font-scaling.test.ts の固定 height 検査）を grep で事前確認。
+  - 2026-07-20 A〜F を TDD で実装。新規ソース契約テスト 9 ファイル
+    （status-dot / expiry-warning-banner / card / screen-card / notice-card /
+    typography / outcome-no-signal-tone / primary-soft-border-affordance と
+    既存ファイル拡張）を先に Red で書き、実装で Green にした。G は
+    `bun run web` を起動し Playwright で console を実採取して
+    react-native-svg-web の `WebShape.prepare`（`accessible` 属性を未フィルタで DOM
+    へ転送）が原因と確定し、Issue へ調査結果をコメント
+    （https://github.com/susumutomita/TenkaCloudPassport/issues/72#issuecomment-5020337158）。
+    対面フロー画面の AppScreen 経由確認は grep で全 20 Screen 該当・0 件の直接 import
+    を確認済み。code-reviewer subagent によるレビューを実施（blocker 0、should-fix
+    1 件・nit 3 件、対応は下記振り返りを参照）。`/security-review` は新規セキュリティ
+    影響なしと判定（純粋な UI 意匠変更で I/O・通信・認証・暗号を触らない）。最終検証:
+    `bun test src --coverage` 1076 件全緑・カバレッジ 100%、`bun run typecheck` 緑、
+    `bunx biome check src` 緑、`bun scripts/architecture-harness.ts --staged
+    --fail-on=error` エラー 0、`make before-commit` exit 0（`build:web` 含む）、
+    `bun run web` を Playwright でスモーク（PassportCreationScreen / Settings /
+    LocalDiagnosticsScreen / PilotMeasurementScreen を巡回し Card / NoticeCard の
+    枠線描画を確認、console は文書化済みの react-native-svg-web 警告 1 件のみ）。
+    スモークで生成した `.playwright-mcp/` とスクリーンショットは scratchpad へ退避し
+    コミット対象から外した。
+- 振り返り:
+  - 問題 1: code-reviewer から C（monoLabel）の適用範囲について指摘。
+    ActiveLounge.interactionStatus・HostInvite.noticeTitle・OwnerQuestion.countdown・
+    PassportCreation.counter の 4 箇所は、元スタイルに letterSpacing も
+    textTransform: uppercase も無い「本文・警告文・カウンタ」であり、monoLabel 化で
+    英語ロケール表示が大文字化し、fontSize/fontWeight も下がる（強調が弱まる方向の
+    見た目変化）。レンダリング検証基盤を持たないため契約テストでは検出できない。
+  - 根本原因 1: Issue 72 本文 C 節がこの 4 箇所を明示的に置換対象として指名しており
+    （「ActiveLounge...interactionStatus mono 部」「OwnerQuestion.countdown mono 部」
+    「HostInvite.participantState mono 部」「PassportCreation の mono ヒント」）、
+    Issue の記述をそのまま実装した。ただし Issue の前提文（「9 箇所で再組立てされ
+    letterSpacing がドリフト」）はこの 4 箇所には正確には当てはまらない（元々
+    letterSpacing/uppercase を持たない通常テキストだった）ため、Issue 記述と実態に
+    軽微な乖離があった。
+  - 予防策 1: code-reviewer の should-fix を受けて、この 4 箇所は monoLabel を
+    やめリデザイン前のスタイル値（`fontFamily: monoFontFamily` + 個別の fontSize /
+    fontWeight）へ戻した。monoLabel は真のキャプション 4 箇所（ClueSelector.category /
+    ActiveLounge.passportTitle / Outcome.resultKind / Outcome.sourceLabelsCaption）
+    にだけ残す。`redesign-reuse-adoption.test.ts` を新しい採用範囲に合わせて更新。
+    設計を正本として実装するときも、契約テストで検出できない視覚的な trade-off は
+    コードレビューで拾われうるため、レビュー観点（キャプションかどうかの実質判定）を
+    実装中にも自問する。
+  - 問題 2: ExpiryWarningBanner 内蔵の警告ドット marginTop が 7px へ統一されたことで、
+    旧 marginTop 6px だった ActiveLoungeScreen と OutcomeScreen の両方（HostInvite は
+    元々 7px）で 1px シフトする。当初の振り返りメモが ActiveLoungeScreen のみ言及して
+    おり不正確だった。code-reviewer 指摘で修正。
+  - 根本原因 2: 3 画面の marginTop 実値を横並びで確認せず記録した。
+  - 予防策 2: 複数画面の統合時は変更前の値を一覧化してから記録する。
+  - 問題 3: 契約テストのソース文字列検査で自作コメントが誤って被検査文字列
+    （`notice.level` など）を含むと Red の原因になった。
+  - 根本原因 3: テスト対象のリテラルをそのままコメント文へ書いた。
+  - 予防策 3: テスト対象のリテラルをコメントで説明するときは部分文字列が一致しない
+    よう言い換える。
+  - 問題 4: `/simplify`（reuse・simplification・efficiency・altitude の 4 観点を並列
+    subagent で走らせる）で 3 件の実質的な指摘を受けた。(1) E で 4 画面へ
+    `borderColor: colors.primary` + `borderWidth: 1` を個別に再組立てし、
+    `BackupNoticeBanner` の既存パターンと合わせて実質同じ断片が 5 箇所化していた。
+    (2) `Card` が `children`・`style` しか受けないため、`accessibilityRole="summary"`
+    を保ちたい HostInvite の participants と OwnerQuestion の confirm が `Card` を
+    素の `View` で包む 1 段余分なネストを生んでいた。(3) `StatusDot` が
+    render のたびに `{ backgroundColor: TONE_COLORS[tone] }` を新規オブジェクトとして
+    組み立てており、このコンポーネント自身が解消しようとしていた「per-render の
+    style 再構築」を再導入していた。
+  - 根本原因 4: (1) は E をこの PR の他タスク（A〜D）と同じ「共有原子へ抽出する」
+    意識ではなく「4 箇所を個別に直す」意識で実装した。(2) は `Card` の props を
+    D の受け入れ基準どおり最小に保つことを優先し、利用側の accessibility 要件との
+    整合を後回しにした。(3) は `ActionButton` の `styles[variant]` パターンが
+    リポジトリに既にあったが踏襲しなかった。
+  - 予防策 4: `src/ui/theme.ts` に `primaryEmphasisBorder`（`monoLabel` と同じ
+    「色を含まない共有断片を spread する」パターン）を追加して E の 4 箇所を統一、
+    `Card` に `accessibilityRole` の pass-through を追加してラップ用 `View` を除去、
+    `StatusDot` を `ActionButton` と同じ `styles[variant]` 相当の
+    `styles[tone]` へ書き換えた。3 件とも診断済み subagent の指摘どおり適用し、
+    対応するテスト（`theme.test.ts` / `card.test.ts` /
+    `primary-soft-border-affordance.test.ts` / `status-dot.test.ts`）を合わせて
+    更新した。複数箇所へ同じスタイル断片を書くときは、実装中に「これは 2 箇所目以降か」
+    を都度自問し、共有原子の抽出パターン（本 PR 自身が確立した `monoLabel` /
+    `styles[variant]`）を最初から踏襲する。

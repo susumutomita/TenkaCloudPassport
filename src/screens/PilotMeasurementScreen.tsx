@@ -8,7 +8,7 @@ import AppScreen from '../components/AppScreen';
 import JsonPreviewCard from '../components/JsonPreviewCard';
 import NoticeCard from '../components/NoticeCard';
 import ScreenCard from '../components/ScreenCard';
-import { colors, spacing } from '../ui/theme';
+import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 
 interface PilotMeasurementScreenProps {
   readonly flow: PilotMeasurementFlow;
@@ -93,6 +93,7 @@ const styles = StyleSheet.create({
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   status: { color: colors.muted, fontSize: 16, lineHeight: 24 },
   noticeText: {
+    ...primaryEmphasisBorder,
     backgroundColor: colors.primarySoft,
     borderRadius: 10,
     color: colors.ink,
