@@ -22,7 +22,7 @@
   },
   "trustedDependencies": [],
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --go",
     "dev": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",

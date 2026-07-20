@@ -3724,3 +3724,18 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
   - 予防策: 着手時に Issue ブランチを作って WIP でも早期にコミットする。セッション
     終了時に未コミット変更を残さない。salvage 判断は今回のように docs/specs の
     5 役割レビューと jsQR のような独立実装での機械検証を通してから main へ入れる。
+
+### [make start によるスマホ起動のワンコマンド化] - 2026-07-20
+
+- 目的: スマホ (Expo Go) での起動を `make start` 一発にする。素の `expo start` は
+  expo-dev-client の存在で Development Build モードになり、Expo Go の QR 読取では
+  起動できないため `--go` で固定する。
+- タスク: Makefile target 追加 / README の Expo Go 節を `make start` へ更新 /
+  AGENTS.md コマンド一覧へ追加。
+- 制約: `nr dev` (Development Build 向け) の挙動は変えない。
+- 検証手順: `make start` 起動後、Metro が待受し iOS 向け bundle が HTTP 200 で
+  配信されることを確認した。QR は TTY で表示される。
+- 進捗ログ: 2026-07-20 実装・検証済み。レビューで package.json の `start` script が
+  dev-client モードのまま名前衝突している点を指摘され、`expo start --go` へ揃えた。
+- 振り返り: 問題なし。`expo start` のモード自動切替 (dev-client 検出) のような
+  ツール側の暗黙挙動は、コマンドを増やす前に CLI 実装で根拠を確認する。

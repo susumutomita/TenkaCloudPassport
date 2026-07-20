@@ -54,11 +54,12 @@ Expo Go が成功したと推測しません。
 ### 3. Expo Go
 
 ```bash
-make install_ci
-bun run start
+make start
 ```
 
-同一 Network の Expo Go から Metro の QR を読み、初期画面が開くことを確認します。Expo Go は任意の Custom
+スマホに Expo Go を install し、Mac と同じ Network につないでから、Terminal に表示される QR を
+Expo Go で読み取ります。`make start` は依存関係が未インストールならインストールしてから、`expo-dev-client` のデフォルトを
+上書きして Expo Go 向けモード（`--go`）で開発サーバーを起動します。Expo Go は任意の Custom
 Native Code を追加できないため、Local LLM と実 Nearby Transport は対象外です。接続できない場合は
 Network 前提を確認し、解消しなければ `Not run` のまま Web 経路へ戻ります。
 
