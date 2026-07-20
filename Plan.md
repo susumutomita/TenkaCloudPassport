@@ -4008,3 +4008,69 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
     「日本語 128 文字」シナリオが `createLoungeInvite` 経由では実際には作れない旨を
     明記した。参照する正本資料の前提が現行コードと食い違っていないかは、
     実装前に一度は実行して確かめる。
+
+### [LP] OGP / Twitter card・共有画像・英語版ページ（Issue 74） - 2026-07-20
+
+- 目的: フォローアップ F-V7GVV7（`01KXYVCRDK2AQE5W4H89V7GVV7`）を解消する。
+  `site/index.html`（Ink / Summit 版 LP）に OGP / Twitter card メタと共有画像
+  `site/og.png` を追加し、README.en.md の語彙に合わせた英語版 `site/en/index.html`
+  を新設して JA / EN 相互リンクと hreflang を張る。正本は Issue 74 本文。
+- 制約: `rm` 禁止（`git rm` を使う）、`npx` 禁止（`bunx`）、`src/` と `docs/` と
+  `scripts/` は触らない（Plan.md を除く）、マージはしない。fail-closed の状態語彙
+  （Implemented / Experimental / Blocked、環境は Not run、Local LLM は Planned）を
+  日英で同義に保ち、能力を過大表示しない。外部リクエストゼロ（フォント・スクリプト・
+  画像すべて自ホスト）を厳守する。og.png 生成用の一時 HTML は commit しない。
+- タスク:
+  - [x] 1: `site/index.html` の head に og:title / og:description / og:type /
+    og:url / og:image（絶対 URL）/ og:locale ja_JP と twitter:card
+    summary_large_image / twitter:title / twitter:description / twitter:image
+    を追加する。
+  - [x] 2: scratchpad に一時 `og-source.html`（1200x630）を作り、Playwright で
+    スクリーンショットして `site/og.png`（200 KB 以下）を生成する。一時ファイルは
+    commit しない。
+  - [x] 3: `site/en/index.html` を新設する。構成・意匠は日本語版と同一、コピーは
+    README.en.md の語彙で英訳し、fail-closed 状態表を同義に保つ。lang="en"、
+    og:locale en_US。
+  - [x] 4: 両ページ header に JA / EN 切替リンクを追加し、
+    `<link rel="alternate" hreflang="ja|en|x-default">` を両方向に張る。
+- 検証手順: `python3 -m http.server`（9000 番台）で `site/` を配信し、Playwright で
+  ja / en 双方をスクリーンショット確認（表示崩れ・リンク切れ・外部リクエストなし）。
+  `make before-commit`（exit 0 必須、site/ はゲート対象外だが通しで確認）。
+  code-reviewer subagent によるレビュー。PR 作成後 `/follow-up resolve F-V7GVV7
+  <PR URL>`。
+- 進捗ログ:
+  - 2026-07-20 着手。ブランチ `feat/issue-74-lp-ogp-en`。1 は `site/index.html`
+    head に og: / twitter: メタと `<link rel="alternate" hreflang="ja|en|x-default">`
+    を追加。2 は scratchpad
+    （`/private/tmp/.../scratchpad/og/og-source.html`、1200x630、ink 地
+    `#1d1d1f` + 山頂マーク白 + summit `#ff6a32` の小要素）を `python3 -m
+    http.server 9142` で配信し、Playwright MCP
+    （`mcp__playwright__browser_navigate` / `browser_resize` /
+    `browser_take_screenshot`）でスクリーンショットして `site/og.png`
+    （1200x630、64397 byte、200 KB 以下）を生成した。3 は README.en.md の語彙
+    （Pet / Owner / Bridge / Lounge / fail-closed 状態語彙）で
+    `site/en/index.html` を新設。4 は両ページ header に `en/` / `../`
+    の相対パスによる JA / EN 切替リンクを追加（絶対パス `/TenkaCloudPassport/...`
+    だとローカル検証時に 404 するため相対パスへ変更）。ローカル検証は
+    `site/` を `python3 -m http.server 9142` で配信し、Playwright で ja / en
+    両方をフルページスクリーンショットし、`browser_network_requests` で
+    外部リクエストゼロ（自ホストの HTML リクエストのみ）を確認、header の
+    EN → JA → EN リンク遷移も実クリックで確認した。`make before-commit` は
+    exit 0（1079 テスト全緑・coverage 100%・architecture-harness Error 0・
+    dup_check OK・biome の指摘は `scripts/android-release-identity.ts`
+    （本 PR 対象外・pre-existing）のみ）。スクリーンショットや
+    `og-source.html`、Playwright の `.playwright-mcp/` 出力は commit せず
+    scratchpad へ退避した。
+- 振り返り:
+  - 問題: `mcp__playwright__browser_take_screenshot` はリポジトリ配下
+    （`.playwright-mcp` または cwd 直下）にしか書き込めず、scratchpad
+    （`/private/tmp` 配下）を出力先に指定すると `File access denied` になった。
+  - 根本原因: Playwright MCP のファイル書き込みは許可された root
+    （プロジェクトディレクトリと `.playwright-mcp`）に制限されており、
+    セッション scratchpad はその allow list に含まれない。
+  - 予防策: 一旦リポジトリ直下（またはデフォルトの `.playwright-mcp`）へ
+    出力させてから `mv` で目的地（`site/og.png` や scratchpad）へ移動する
+    2 段階の運用にした。生成後は `.playwright-mcp/` ごと scratchpad へ
+    `mv`（`rm` は使わない）して repository を汚さないようにした。次回も
+    Playwright MCP のスクリーンショットを使うときは、出力先をリポジトリ配下に
+    仮置きしてから移動する前提で計画する。
