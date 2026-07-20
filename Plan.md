@@ -3739,3 +3739,16 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
   dev-client モードのまま名前衝突している点を指摘され、`expo start --go` へ揃えた。
 - 振り返り: 問題なし。`expo start` のモード自動切替 (dev-client 検出) のような
   ツール側の暗黙挙動は、コマンドを増やす前に CLI 実装で根拠を確認する。
+
+### [GitHub Pages ランディングページ] - 2026-07-20
+
+- 目的: プロダクトの LP を GitHub Pages で公開する。fail-closed の状態表記
+  (Implemented / Experimental / Blocked) を守り、配布物がない段階で
+  ダウンロード導線を置かない。
+- 制約: アプリ本体・品質ゲートに影響しない静的 site/ のみ。workflow は repo 規約
+  どおり full SHA ピン・最小権限・run ステップなし。
+- タスク: site/index.html (自己完結・査証スタンプ + MRZ 帯のデザイン) /
+  .github/workflows/pages.yml / Pages の workflow ソース有効化。
+- 検証手順: ローカル配信でヒーロー・全景 Screenshot を確認。マージ後に
+  Pages workflow の成功と公開 URL の 200 を確認する。
+- 進捗ログ: 2026-07-20 実装・ローカル確認済み。

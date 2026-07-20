@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TenkaCloud Passport — 名刺交換の前に、会話を。</title>
+<meta name="description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>" />
+<style>
+  /* 外部リクエストゼロ (フォント含む)。テレメトリなしを掲げるページ自身も何も送らない。 */
+  :root {
+    --paper: #f5f1e8;
+    --paper-deep: #ece6d8;
+    --ink: #17201d;
+    --ink-soft: #4c5a54;
+    --pine: #2e5e4e;
+    --shu: #b53a26; /* 朱肉 */
+    --hairline: rgba(23, 32, 29, 0.18);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", sans-serif;
+    --serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.9;
+    font-size: 16px;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+  /* header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.02em; }
+  .brand::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #d96c2f; }
+  header a.gh {
+    font-family: var(--mono); font-size: 13px; color: var(--ink);
+    text-decoration: none; border: 1px solid var(--hairline); border-radius: 999px;
+    padding: 6px 16px; transition: background 0.2s;
+  }
+  header a.gh:hover, header a.gh:focus-visible { background: var(--paper-deep); }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: center; padding: 72px 0 88px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em;
+    color: var(--pine); text-transform: uppercase; margin-bottom: 20px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 900; font-size: clamp(34px, 5.2vw, 56px);
+    line-height: 1.45; letter-spacing: 0.02em;
+  }
+  .hero p.lede { margin-top: 24px; color: var(--ink-soft); max-width: 34em; }
+  .hero .cta-row { margin-top: 36px; display: flex; gap: 16px; flex-wrap: wrap; }
+  a.cta {
+    font-family: var(--sans); font-weight: 700; font-size: 15px; text-decoration: none;
+    padding: 12px 28px; border-radius: 6px; transition: transform 0.15s, background 0.2s;
+  }
+  a.cta.primary { background: var(--ink); color: var(--paper); }
+  a.cta.primary:hover, a.cta.primary:focus-visible { background: var(--pine); transform: translateY(-1px); }
+  a.cta.quiet { color: var(--ink); border: 1px solid var(--hairline); }
+  a.cta.quiet:hover, a.cta.quiet:focus-visible { background: var(--paper-deep); }
+
+  /* visa card (signature) */
+  .visa {
+    background: linear-gradient(160deg, #fbf8f0, #f1ebdd);
+    border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 28px 26px 0; position: relative; overflow: hidden;
+    box-shadow: 0 18px 40px -24px rgba(23, 32, 29, 0.4);
+  }
+  .visa .row { display: flex; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); letter-spacing: 0.06em; }
+  .visa .row + .row { margin-top: 10px; }
+  .visa .row b { color: var(--ink); font-weight: 500; }
+  .visa .pets { font-size: 26px; letter-spacing: 0.35em; margin: 26px 0 14px; }
+  .stamp {
+    position: absolute; right: 22px; bottom: 58px; width: 118px; height: 118px;
+    border: 3px double var(--shu); border-radius: 50%;
+    color: var(--shu); display: grid; place-content: center; text-align: center;
+    font-family: var(--serif); font-weight: 700; line-height: 1.5;
+    transform: rotate(-9deg); opacity: 0.88;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='white'/%3E%3Ccircle cx='1' cy='2' r='.35' fill='black'/%3E%3C/svg%3E");
+    animation: press 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.4s backwards;
+  }
+  .stamp .t { font-size: 12px; letter-spacing: 0.2em; }
+  .stamp .m { font-size: 22px; }
+  @keyframes press {
+    from { transform: rotate(-16deg) scale(1.6); opacity: 0; }
+    to { transform: rotate(-9deg) scale(1); opacity: 0.88; }
+  }
+  .mrz {
+    margin: 22px -26px 0; padding: 14px 26px; background: var(--paper-deep);
+    border-top: 1px dashed var(--hairline);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+    color: var(--ink-soft); white-space: nowrap; overflow: hidden;
+  }
+
+  /* sections */
+  section { padding: 64px 0; border-top: 1px solid var(--hairline); }
+  .sec-label {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em;
+    color: var(--pine); text-transform: uppercase; margin-bottom: 28px;
+  }
+  h2 { font-family: var(--serif); font-weight: 700; font-size: clamp(24px, 3.2vw, 32px); line-height: 1.6; margin-bottom: 20px; }
+
+  .not-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 32px; }
+  .not-grid .card { border: 1px solid var(--hairline); border-radius: 8px; padding: 24px; background: #faf7ef; }
+  .not-grid .card .no { font-family: var(--mono); font-size: 12px; color: var(--shu); letter-spacing: 0.1em; margin-bottom: 10px; }
+  .not-grid .card h3 { font-size: 16px; margin-bottom: 8px; }
+  .not-grid .card p { font-size: 14px; color: var(--ink-soft); }
+
+  ol.flow { list-style: none; counter-reset: step; margin-top: 8px; }
+  ol.flow li { counter-increment: step; display: grid; grid-template-columns: 64px 1fr; gap: 20px; padding: 22px 0; border-bottom: 1px dashed var(--hairline); }
+  ol.flow li:last-child { border-bottom: none; }
+  ol.flow li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono); font-size: 22px; color: var(--pine);
+  }
+  ol.flow h3 { font-size: 17px; margin-bottom: 6px; }
+  ol.flow p { color: var(--ink-soft); font-size: 15px; max-width: 44em; }
+
+  ul.privacy { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 32px; margin-top: 8px; }
+  ul.privacy li { border-left: 3px solid var(--pine); padding: 4px 0 4px 18px; }
+  ul.privacy b { display: block; font-size: 16px; }
+  ul.privacy span { font-size: 14px; color: var(--ink-soft); }
+
+  table.status { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14.5px; }
+  table.status th, table.status td { text-align: left; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  table.status th { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink-soft); font-weight: 500; }
+  .badge { font-family: var(--mono); font-size: 12px; padding: 3px 10px; border-radius: 4px; white-space: nowrap; }
+  .badge.ok { background: rgba(46, 94, 78, 0.12); color: var(--pine); }
+  .badge.exp { background: rgba(217, 108, 47, 0.14); color: #7a4016; }
+  .badge.blocked { background: rgba(181, 58, 38, 0.12); color: #8f2c1c; }
+  .status-note { margin-top: 20px; font-size: 14px; color: var(--ink-soft); max-width: 46em; }
+
+  pre.run {
+    background: var(--ink); color: #e8ede9; border-radius: 8px;
+    padding: 24px 28px; font-family: var(--mono); font-size: 14px; line-height: 2;
+    overflow-x: auto; margin-top: 24px;
+  }
+  pre.run .c { color: #8fa89c; }
+  .run-note { margin-top: 16px; font-size: 14px; color: var(--ink-soft); }
+
+  footer { border-top: 1px solid var(--hairline); margin-top: 32px; }
+  footer .inner { display: flex; justify-content: space-between; align-items: center; padding: 28px 0; font-size: 14px; color: var(--ink-soft); flex-wrap: wrap; gap: 12px; }
+  footer a { color: var(--ink); }
+  .mrz-footer {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-soft);
+    background: var(--paper-deep); padding: 12px 0; white-space: nowrap; overflow: hidden;
+  }
+
+  @media (max-width: 780px) {
+    .hero { grid-template-columns: 1fr; padding: 40px 0 56px; }
+    .not-grid { grid-template-columns: 1fr; }
+    ul.privacy { grid-template-columns: 1fr; }
+    .visa { margin-top: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stamp { animation: none; }
+    html { scroll-behavior: auto; }
+  }
+  :focus-visible { outline: 2px solid var(--pine); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">TenkaCloud Passport</div>
+    <a class="gh" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub →</a>
+  </header>
+
+  <div class="hero">
+    <div>
+      <p class="eyebrow">対面イベントのための、アカウント不要パスポート</p>
+      <h1>名刺交換の前に、<br />会話を。</h1>
+      <p class="lede">
+        TenkaCloud Passport はデジタル名刺ではありません。Owner が公開を許可した手掛かりだけを
+        Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋（Bridge）を 1 つ見つけて、
+        そっと退くアプリです。
+      </p>
+      <div class="cta-row">
+        <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub で見る</a>
+        <a class="cta quiet" href="#run">手元で動かす</a>
+      </div>
+    </div>
+    <div class="visa" role="img" aria-label="Lounge Visa のイメージ。20 分滞在・延長なし・満了で Lounge データ破棄。">
+      <div class="row"><span>TYPE</span><b>LOUNGE VISA</b></div>
+      <div class="row"><span>BEARER</span><b>PET（Owner の分身）</b></div>
+      <div class="row"><span>DURATION</span><b>20 MIN — 延長なし</b></div>
+      <div class="row"><span>CARRIES</span><b>公開を許可した手掛かりのみ</b></div>
+      <div class="row"><span>ON EXPIRY</span><b>Lounge データ破棄</b></div>
+      <div class="pets" aria-hidden="true">🐾 🐶 🐱 🦊 🐼 🐧</div>
+      <div class="stamp" aria-hidden="true">
+        <span class="t">ADMITTED</span>
+        <span class="m">20分</span>
+        <span class="t">LOUNGE ONLY</span>
+      </div>
+      <div class="mrz" aria-hidden="true">P&lt;TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;NO&lt;ACCOUNT&lt;&lt;NO&lt;SERVER&lt;&lt;20MIN&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <p class="sec-label">Not a business card</p>
+    <h2>これは、何ではないか。</h2>
+    <div class="not-grid">
+      <div class="card">
+        <p class="no">NOT / 01</p>
+        <h3>名刺管理アプリではない</h3>
+        <p>連絡先を集めません。氏名・メール・電話・会社名を入力する欄がそもそもありません。</p>
+      </div>
+      <div class="card">
+        <p class="no">NOT / 02</p>
+        <h3>SNS ではない</h3>
+        <p>アカウントもフォローもありません。Lounge が終われば、残るのはあなたの記憶と会話だけです。</p>
+      </div>
+      <div class="card">
+        <p class="no">NOT / 03</p>
+        <h3>マッチングではない</h3>
+        <p>スコアで人を並べません。Pet が見つけるのは「最初のひと言」の橋を 1 つだけです。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="sec-label">How it works</p>
+    <h2>Pet が橋を架け、人間が渡る。</h2>
+    <ol class="flow">
+      <li>
+        <div>
+          <h3>Pet を準備する</h3>
+          <p>アカウント登録なし。Pet の名前と絵文字、そして同梱カタログから選んだ「会話の材料」（Topics / Offer / Looking For）だけ。入力は明示保存するまで端末に残りません。</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>QR で 20 分の Lounge に入る</h3>
+          <p>Host が表示する使い捨ての招待 QR を読み取り、共有内容の Preview に明示同意してから参加します。Lounge は 20 分で必ず終わります。</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Pet 同士が Bridge を 1 つ見つける</h3>
+          <p>公開を許可した手掛かりだけを突き合わせ、「この 2 人ならこの話題から始められる」という橋を 1 つ提案します。</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>アプリは退く</h3>
+          <p>会話が始まったら、アプリの役目は終わりです。Lounge のデータは退出・Host 終了・20 分満了のいずれか最も早い契機で破棄されます。</p>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="sec-label">Privacy by design</p>
+    <h2>預からない、が設計です。</h2>
+    <ul class="privacy">
+      <li><b>アカウント不要</b><span>登録もログインもありません。サーバーにあなたのデータはありません。</span></li>
+      <li><b>端末内で完結</b><span>Profile は端末の中だけ。持ち出しは自分で行う JSON Backup のみです。</span></li>
+      <li><b>20 分で破棄</b><span>Lounge 由来のデータは永続化せず、最早の契機で破棄します。</span></li>
+      <li><b>テレメトリなし</b><span>収集も送信もしません。AI 判定も端末内で完結する設計です。現在は Rules Provider が担い、Local LLM は Planned（default branch 未収載）です。</span></li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="sec-label">Current status — fail closed</p>
+    <h2>できることを、できるとだけ言う。</h2>
+    <table class="status">
+      <thead>
+        <tr><th scope="col">対象</th><th scope="col">状態</th><th scope="col">いまできること</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Repository 開発</td>
+          <td><span class="badge ok">Implemented</span></td>
+          <td>Source・純 TypeScript Domain・Rules Provider・Web Export の検証。</td>
+        </tr>
+        <tr>
+          <td>Source-only Candidate</td>
+          <td><span class="badge exp">Experimental</span></td>
+          <td>固定 Commit から Draft Candidate を再現する。Public Release とは呼ばない。</td>
+        </tr>
+        <tr>
+          <td>Public OSS Alpha</td>
+          <td><span class="badge blocked">Blocked</span></td>
+          <td>なし。実機の物理 Gate が Verified になるまで公開しません。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="status-note">
+      Browser・Expo Go・実機の実行証拠はいずれも Not run です。Local LLM・実 Camera QR・
+      実 Nearby Transport は default branch の Supported 能力ではありません。緑の CI を実機の
+      証拠とは呼ばず、未検証の能力を「動きます」と表示しない。この規律ごとオープンソースです。
+      詳細は <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.md">README</a> と
+      <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/releases/status.md">Release Status</a> を参照してください。
+    </p>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <p class="sec-label">Try it</p>
+    <h2>手元で動かす。</h2>
+    <pre class="run"><code>git clone https://github.com/susumutomita/TenkaCloudPassport.git
+cd TenkaCloudPassport
+make install
+make start   <span class="c"># スマホの Expo Go で QR を読む</span></code></pre>
+    <p class="run-note">
+      スマホに Expo Go を install し、Mac と同じ Network につないでから、Terminal に表示される
+      QR を読み取ってください。Browser で試す場合は <code>bun run web</code> です。
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="inner">
+      <span>MIT License — <a href="https://github.com/susumutomita/TenkaCloudPassport">susumutomita/TenkaCloudPassport</a></span>
+      <span>会話が始まったら、アプリは退く。</span>
+    </div>
+  </div>
+  <div class="mrz-footer" aria-hidden="true">
+    <div class="wrap">TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;MIT&lt;&lt;NO&lt;TELEMETRY&lt;&lt;ON&lt;DEVICE&lt;ONLY&lt;&lt;BRIDGE&lt;NOT&lt;NETWORK&lt;&lt;&lt;&lt;&lt;&lt;</div>
+  </div>
+</footer>
+</body>
+</html>
