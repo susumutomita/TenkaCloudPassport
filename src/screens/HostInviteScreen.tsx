@@ -8,6 +8,7 @@ import QrCodeView from '../components/QrCodeView';
 import { type LoungeRoomState, ROOM_CAPACITY } from '../domain/lounge-room';
 import type { ParticipantId } from '../domain/session-identifiers';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
 
 interface HostInviteScreenProps {
   readonly room: LoungeRoomState;
@@ -59,18 +60,24 @@ export default function HostInviteScreen({
         </View>
       ) : (
         <>
-          <QrCodeView
-            accessibilityLabel={t.qrAccessibilityLabel(remainingMinutes)}
-            payload={inviteQrPayload}
-          />
+          <View style={styles.qrCard}>
+            <QrCodeView
+              accessibilityLabel={t.qrAccessibilityLabel(remainingMinutes)}
+              payload={inviteQrPayload}
+            />
+          </View>
           <View accessibilityRole="summary" style={styles.notice}>
-            <Text style={styles.noticeTitle}>
-              {t.remainingMinutesTitle(remainingMinutes)}
-            </Text>
-            <Text style={styles.noticeText}>{t.screenshotRiskNotice}</Text>
+            <View style={[styles.statusDot, styles.warningDot]} />
+            <View style={styles.noticeBody}>
+              <Text style={styles.noticeTitle}>
+                {t.remainingMinutesTitle(remainingMinutes)}
+              </Text>
+              <Text style={styles.noticeText}>{t.screenshotRiskNotice}</Text>
+            </View>
           </View>
           {notice.level === 'warning' ? (
             <View accessibilityRole="alert" style={styles.expiryWarning}>
+              <View style={[styles.statusDot, styles.warningDot]} />
               <Text style={styles.expiryWarningText}>{notice.message}</Text>
             </View>
           ) : null}
@@ -79,20 +86,35 @@ export default function HostInviteScreen({
               {t.participantsTitle(participants.length, ROOM_CAPACITY)}
             </Text>
             {participants.map((participant) => (
-              <Text
+              <View
                 key={participant.participantId}
                 style={styles.participantRow}
               >
-                {t.participantRow(
-                  participant.participantId === hostParticipantId
-                    ? t.participantYou
-                    : t.participantGuest,
-                  participant.ready ? t.participantReady : t.participantNotReady
-                )}
-              </Text>
+                <View
+                  style={[
+                    styles.statusDot,
+                    participant.ready ? styles.readyDot : styles.idleDot,
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.participantText,
+                    participant.ready ? styles.participantReadyText : undefined,
+                  ]}
+                >
+                  {t.participantRow(
+                    participant.participantId === hostParticipantId
+                      ? t.participantYou
+                      : t.participantGuest,
+                    participant.ready
+                      ? t.participantReady
+                      : t.participantNotReady
+                  )}
+                </Text>
+              </View>
             ))}
             {participants.length < ROOM_CAPACITY ? (
-              <Text style={styles.participantRow}>{t.waitingForGuest}</Text>
+              <Text style={styles.waitingText}>{t.waitingForGuest}</Text>
             ) : null}
           </View>
           {errorMessage ? (
@@ -124,25 +146,54 @@ export default function HostInviteScreen({
 }
 
 const styles = StyleSheet.create({
-  notice: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 14,
-    gap: spacing.xs,
+  qrCard: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
     padding: spacing.md,
   },
+  statusDot: {
+    borderRadius: 4,
+    height: 7,
+    marginTop: 7,
+    width: 7,
+  },
+  warningDot: {
+    backgroundColor: colors.warning,
+  },
+  readyDot: {
+    backgroundColor: colors.success,
+  },
+  idleDot: {
+    backgroundColor: colors.disabled,
+  },
+  notice: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  noticeBody: {
+    flex: 1,
+    gap: spacing.xs,
+  },
   noticeTitle: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '800',
+    color: colors.warningText,
+    fontFamily: monoFontFamily,
+    fontSize: 13,
+    fontWeight: '700',
   },
   noticeText: {
-    color: colors.ink,
+    color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
   },
   participants: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.white,
+    borderColor: colors.borderSubtle,
     borderRadius: 14,
     borderWidth: 1,
     gap: spacing.xs,
@@ -154,19 +205,35 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   participantRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  participantText: {
     color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  participantReadyText: {
+    color: colors.successText,
+    fontWeight: '600',
+  },
+  waitingText: {
+    color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
   },
   expiryWarning: {
     backgroundColor: colors.surface,
-    borderColor: colors.danger,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
     padding: spacing.md,
   },
   expiryWarningText: {
-    color: colors.danger,
+    color: colors.warningText,
+    flex: 1,
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 21,

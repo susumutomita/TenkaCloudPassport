@@ -4,6 +4,7 @@ import { MESSAGES } from '../app/i18n/messages';
 import { CLUE_IDS, type ClueId, clueById } from '../domain/clue-catalog';
 import { PASSPORT_FIELD_LIMITS } from '../domain/passport';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
 
 interface ClueSelectorProps {
   readonly selectedIds: readonly ClueId[];
@@ -76,9 +77,9 @@ const styles = StyleSheet.create({
   },
   option: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderColor: colors.border,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.md,
@@ -97,8 +98,8 @@ const styles = StyleSheet.create({
   },
   checkbox: {
     alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 7,
+    borderColor: colors.disabled,
+    borderRadius: 6,
     borderWidth: 2,
     height: 24,
     justifyContent: 'center',
@@ -123,7 +124,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   category: {
-    color: colors.muted,
-    fontSize: 12,
+    color: colors.mutedLight,
+    fontFamily: monoFontFamily,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
 });

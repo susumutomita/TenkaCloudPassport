@@ -19,6 +19,7 @@ export default function ActionButton({
   accessibilityHint,
 }: ActionButtonProps) {
   const isPrimary = variant === 'primary';
+  const pressedStyle = isPrimary ? styles.primaryPressed : styles.pressed;
   return (
     <Pressable
       accessibilityRole="button"
@@ -30,11 +31,17 @@ export default function ActionButton({
       style={({ pressed }) => [
         styles.button,
         styles[variant],
-        pressed && !disabled ? styles.pressed : undefined,
+        pressed && !disabled ? pressedStyle : undefined,
         disabled ? styles.disabled : undefined,
       ]}
     >
-      <Text style={[styles.label, !isPrimary ? styles.darkLabel : undefined]}>
+      <Text
+        style={[
+          styles.label,
+          !isPrimary ? styles.darkLabel : undefined,
+          disabled ? styles.disabledLabel : undefined,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -44,9 +51,9 @@ export default function ActionButton({
 const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    minHeight: 50,
+    minHeight: 52,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -56,27 +63,37 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   secondary: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderColor: colors.border,
   },
   danger: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderColor: colors.danger,
+  },
+  primaryPressed: {
+    backgroundColor: colors.primaryPressed,
+    borderColor: colors.primaryPressed,
   },
   pressed: {
     opacity: 0.78,
   },
+  // ink 塗りのまま薄くすると文字が読めない灰色地になるため、disabled は
+  // surface 地 + disabled 文字へ落とす（docs/design/2026-07-20-ink-summit-redesign.md
+  // のエッジケース）。
   disabled: {
-    backgroundColor: colors.disabled,
-    borderColor: colors.disabled,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderSubtle,
   },
   label: {
     color: colors.white,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
   },
   darkLabel: {
     color: colors.ink,
+  },
+  disabledLabel: {
+    color: colors.disabled,
   },
 });

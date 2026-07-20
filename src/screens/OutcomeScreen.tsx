@@ -11,6 +11,7 @@ import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import type { RetiredLounge } from '../domain/lounge';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
 
 interface OutcomeScreenProps {
   readonly lounge: RetiredLounge;
@@ -65,13 +66,17 @@ export default function OutcomeScreen({
       title={hasBridge ? t.bridgeTitle : t.noSignalTitle}
       description={t.description}
     >
-      <View style={[styles.result, !hasBridge ? styles.noSignal : undefined]}>
-        <Text style={styles.resultKind}>
-          {hasBridge ? t.bridgeLabel : t.noSignalLabel}
-        </Text>
+      <View style={styles.result}>
+        <View style={styles.resultKindRow}>
+          <View style={styles.summitDot} />
+          <Text style={styles.resultKind}>
+            {hasBridge ? t.bridgeLabel : t.noSignalLabel}
+          </Text>
+        </View>
         <Text style={styles.message}>{message}</Text>
         {sourceLabels.length > 0 ? (
           <View style={styles.sourceLabels}>
+            <View style={styles.divider} />
             <Text style={styles.sourceLabelsCaption}>
               {t.sourceLabelCaption}
             </Text>
@@ -86,6 +91,7 @@ export default function OutcomeScreen({
       </View>
       {notice.level === 'warning' ? (
         <View accessibilityRole="alert" style={styles.expiryWarning}>
+          <View style={styles.expiryWarningDot} />
           <Text style={styles.expiryWarningText}>{notice.message}</Text>
         </View>
       ) : null}
@@ -110,59 +116,87 @@ export default function OutcomeScreen({
 }
 
 const styles = StyleSheet.create({
+  // Bridge / no-signal ともに ink 地。summit はグラデーションを足さず、accent の
+  // ドット + ラベルという小要素だけで表す（docs/design/2026-07-20-ink-summit-redesign.md）。
   result: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ink,
     borderRadius: 18,
     gap: spacing.md,
     padding: spacing.lg,
   },
-  noSignal: {
-    backgroundColor: colors.ink,
+  resultKindRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  summitDot: {
+    backgroundColor: colors.accent,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
   },
   resultKind: {
-    color: colors.primarySoft,
-    fontSize: 13,
-    fontWeight: '800',
+    color: colors.accent,
+    fontFamily: monoFontFamily,
+    fontSize: 12,
+    fontWeight: '500',
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   message: {
     color: colors.white,
-    fontSize: 23,
-    fontWeight: '800',
-    lineHeight: 34,
+    fontSize: 21,
+    fontWeight: '600',
+    lineHeight: 32,
   },
   sourceLabels: {
-    borderColor: colors.primarySoft,
-    borderTopWidth: 1,
     gap: spacing.xs,
-    paddingTop: spacing.sm,
+  },
+  // ダーク面の区切りは白の低不透明度で表す。border に opacity を個別指定できないため
+  // 専用の View で描く。
+  divider: {
+    backgroundColor: colors.white,
+    height: 1,
+    marginBottom: spacing.xs,
+    opacity: 0.14,
   },
   sourceLabelsCaption: {
-    color: colors.primarySoft,
-    fontSize: 12,
-    fontWeight: '800',
+    color: colors.white,
+    fontFamily: monoFontFamily,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    // デザイン値 .5 は 10px 級で AA を割るため、契約優先で .68 へ引き上げる。
+    opacity: 0.68,
     textTransform: 'uppercase',
   },
   sourceLabelsValue: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '500',
   },
   generatedNoteCaption: {
-    color: colors.primarySoft,
-    fontSize: 12,
+    color: colors.white,
+    fontSize: 11,
     lineHeight: 18,
+    opacity: 0.68,
   },
   expiryWarning: {
     backgroundColor: colors.surface,
-    borderColor: colors.danger,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.sm,
     padding: spacing.md,
   },
+  expiryWarningDot: {
+    backgroundColor: colors.warning,
+    borderRadius: 4,
+    height: 7,
+    marginTop: 6,
+    width: 7,
+  },
   expiryWarningText: {
-    color: colors.danger,
+    color: colors.warningText,
+    flex: 1,
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 21,

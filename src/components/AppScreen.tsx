@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../ui/theme';
+import { monoFontFamily } from '../ui/typography';
+import BrandMark from './BrandMark';
 
 interface AppScreenProps {
   readonly eyebrow: string;
@@ -22,8 +24,10 @@ export default function AppScreen({
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.brandRow}>
-          <View style={styles.brandMark} />
-          <Text style={styles.brand}>TenkaCloud Passport</Text>
+          <BrandMark size={20} />
+          <Text style={styles.brand}>
+            TenkaCloud <Text style={styles.brandSub}>Passport</Text>
+          </Text>
         </View>
         <Text style={styles.eyebrow}>{eyebrow}</Text>
         <Text style={styles.title}>{title}</Text>
@@ -52,24 +56,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: 44,
   },
-  brandMark: {
-    backgroundColor: colors.accent,
-    borderRadius: 6,
-    height: 14,
-    transform: [{ rotate: '45deg' }],
-    width: 14,
-  },
   brand: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  brandSub: {
+    color: colors.mutedLight,
   },
   eyebrow: {
-    color: colors.primary,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1.4,
+    color: colors.mutedLight,
+    fontFamily: monoFontFamily,
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 1.6,
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
   },

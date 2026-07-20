@@ -3752,3 +3752,46 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
 - 検証手順: ローカル配信でヒーロー・全景 Screenshot を確認。マージ後に
   Pages workflow の成功と公開 URL の 200 を確認する。
 - 進捗ログ: 2026-07-20 実装・ローカル確認済み。
+
+### [Issue 70 Ink / Summit リデザイン] - 2026-07-20
+
+- 目的: claude.ai/design の「TenkaCloud Passport Redesign.dc.html」を正本に、アプリと
+  LP の視覚を TenkaCloud 本体と同じ Ink / Summit ブランドへ統一する。
+- 制約: domain データ・文言・挙動は不変。フォントはシステムフォント。WCAG 2.1 AA を
+  意匠より優先。カバレッジ 100% 維持。
+- タスク:
+  - [x] DesignSync でデザイン正本を取得
+  - [x] 仕様書・設計書 (承認済み)・Issue 70 作成
+  - [ ] 5 役割並列実装 (theme.ts / BrandMark + react-native-svg / 5 画面)
+  - [x] ADR-0025 (ブランド統一と react-native-svg 採用)
+  - [x] LP の Ink / Summit 化 (site/index.html)
+  - [ ] 統合・品質ゲート・PR
+- 検証手順: `bun test src --coverage` 全緑 100%、accessibility 契約テスト維持、
+  `bun run web` で新トークン描画をスモーク確認、`make before-commit` 全緑。
+- 進捗ログ:
+  - 2026-07-20 ヒアリング (適用範囲 / フォント / ビジュアルのみ / LP 同 PR) 承認。
+    仕様・設計承認。ADR-0025 と LP 更新を先行実施、5 役割並列実装を起動。
+  - 2026-07-20 5 役割完了。react-native-svg 15.15.4 採用、BrandMark + 5 画面 +
+    theme 差し替え、全 1031 テスト・カバレッジ 100%。統合で QA/PM/User 指摘を反映:
+    warning ドットを #b07708 へ (3:1 確保)・状態ドット 3:1 テスト追加・providerStatus を
+    muted へ・設計書の disabled 記述訂正。code-reviewer (blocker なし)・/security-review
+    (指摘ゼロ、react-native-svg のサプライチェーン確認)・/simplify を通過。/simplify では
+    BrandMark の memo 化と ActionButton の三項平坦化を適用し、共有コンポーネント抽出
+    (StatusDot / ExpiryWarningBanner / monoLabel / カード) は契約テストとの衝突回避のため
+    F-B3DSEY として別 PR へ集約。bun run web で新トークン描画をスモーク確認。
+- 振り返り:
+  - 問題: デザイン正本 (dc.html) の値をそのまま写経すると WCAG AA を割る箇所
+    (warning ドット 2.95:1・未 Ready ラベル・disabled) があった。
+  - 根本原因: mock はプレゼン用でアクセシビリティ検証を経ていない。
+  - 予防策: デザイン取り込み時は色値を WCAG 式で機械検証し (theme.test.ts)、意匠より
+    契約を優先する。ソーステキスト契約テスト (react-native-svg 禁止・順序) を持つ画面は
+    リファクタ前に検査対象文字列を確認する。
+  - 2026-07-20 Developer ロール実装完了。TDD で theme.ts をトークン対応表どおり
+    差し替え (mutedLight / borderSubtle / success / successText / info / warning /
+    warningText を追加)、BrandMark (react-native-svg 15.15.4、SDK 57 互換版を
+    bunx expo install で固定) と mono フォント helper (src/ui/typography.ts) を新設。
+    AppScreen ヘッダーを BrandMark + ロックアップへ、ActionButton を ink 塗り /
+    白地 secondary radius 12 へ、5 画面のカード・状態ドット・eyebrow を dc.html の
+    意匠へ寄せた。domain / 文言 / accessibility 契約は不変。theme.test.ts と
+    brand-mark.test.ts を追加。src テスト 1030 件全緑・カバレッジ 100%・typecheck
+    緑・biome 緑・harness staged エラー 0。
