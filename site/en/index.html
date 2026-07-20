@@ -1,28 +1,28 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TenkaCloud Passport — 名刺交換の前に、会話を。</title>
-<meta name="description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<title>TenkaCloud Passport — Conversation before business cards.</title>
+<meta name="description" content="Account-free, on-device only. A passport for in-person events: a Pet brings only the clues its Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute Lounge, and then steps back." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
 <link rel="alternate" hreflang="ja" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="en" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="x-default" href="https://susumutomita.github.io/TenkaCloudPassport/" />
-<meta property="og:title" content="TenkaCloud Passport — 名刺交換の前に、会話を。" />
-<meta property="og:description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<meta property="og:title" content="TenkaCloud Passport — Conversation before business cards." />
+<meta property="og:description" content="Account-free, on-device only. A passport for in-person events: a Pet brings only the clues its Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute Lounge, and then steps back." />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="https://susumutomita.github.io/TenkaCloudPassport/" />
+<meta property="og:url" content="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <meta property="og:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
-<meta property="og:locale" content="ja_JP" />
+<meta property="og:locale" content="en_US" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="TenkaCloud Passport — 名刺交換の前に、会話を。" />
-<meta name="twitter:description" content="アカウント不要・端末内完結。Owner が公開を許可した手掛かりだけを Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋を 1 つ見つけて退く、対面イベントのためのパスポートです。" />
+<meta name="twitter:title" content="TenkaCloud Passport — Conversation before business cards." />
+<meta name="twitter:description" content="Account-free, on-device only. A passport for in-person events: a Pet brings only the clues its Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute Lounge, and then steps back." />
 <meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
 <style>
-  /* 外部リクエストゼロ (フォント含む)。テレメトリなしを掲げるページ自身も何も送らない。 */
-  /* ブランドトークン (ink / muted / border / summit / successText / warningText) は
-     src/ui/theme.ts と同値を保つ。canvas とバッジの blocked-text は LP 専用の色。 */
+  /* Zero external requests (including fonts). A page that claims no telemetry sends none itself. */
+  /* Brand tokens (ink / muted / border / summit / successText / warningText) must stay in sync
+     with src/ui/theme.ts. canvas and the badge blocked-text are LP-only colors. */
   :root {
     --canvas: #e7e8ec;
     --canvas-high: #f5f6f8;
@@ -199,35 +199,35 @@
       <span>TenkaCloud <span class="co">Passport</span></span>
     </div>
     <div class="hdr-links">
-      <a class="lang" href="en/" hreflang="en" lang="en">EN</a>
+      <a class="lang" href="../" hreflang="ja" lang="ja">JA</a>
       <a class="gh" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub →</a>
     </div>
   </header>
 
   <div class="hero">
     <div>
-      <p class="eyebrow">対面イベントのための、アカウント不要パスポート</p>
-      <h1>名刺交換の前に、<br />会話を。</h1>
+      <p class="eyebrow">An account-free passport for in-person events</p>
+      <h1>Conversation,<br />before business cards.</h1>
       <p class="lede">
-        TenkaCloud Passport はデジタル名刺ではありません。Owner が公開を許可した手掛かりだけを
-        Pet が持ち寄り、20 分だけの Lounge で人間同士の会話の橋（Bridge）を 1 つ見つけて、
-        そっと退くアプリです。
+        TenkaCloud Passport is not a digital business card. Your Pet brings only the clues your
+        Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute
+        Lounge, and then quietly steps back.
       </p>
       <div class="cta-row">
-        <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub で見る</a>
-        <a class="cta quiet" href="#run">手元で動かす</a>
+        <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">View on GitHub</a>
+        <a class="cta quiet" href="#run">Run it yourself</a>
       </div>
     </div>
-    <div class="visa" role="img" aria-label="Lounge Visa のイメージ。20 分滞在・延長なし・満了で Lounge データ破棄。">
+    <div class="visa" role="img" aria-label="An illustration of a Lounge Visa: 20-minute stay, no extensions, Lounge data discarded on expiry.">
       <div class="row"><span>TYPE</span><b>LOUNGE VISA</b></div>
-      <div class="row"><span>BEARER</span><b>PET（Owner の分身）</b></div>
-      <div class="row"><span>DURATION</span><b>20 MIN — 延長なし</b></div>
-      <div class="row"><span>CARRIES</span><b>公開を許可した手掛かりのみ</b></div>
-      <div class="row"><span>ON EXPIRY</span><b>Lounge データ破棄</b></div>
+      <div class="row"><span>BEARER</span><b>PET (Owner's proxy)</b></div>
+      <div class="row"><span>DURATION</span><b>20 MIN — no extensions</b></div>
+      <div class="row"><span>CARRIES</span><b>Only clues explicitly shared</b></div>
+      <div class="row"><span>ON EXPIRY</span><b>Lounge data discarded</b></div>
       <div class="pets" aria-hidden="true">🐾 🐶 🐱 🦊 🐼 🐧</div>
       <div class="stamp" aria-hidden="true">
         <span class="t">ADMITTED</span>
-        <span class="m">20分</span>
+        <span class="m">20MIN</span>
         <span class="t">LOUNGE ONLY</span>
       </div>
       <div class="mrz" aria-hidden="true">P&lt;TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;NO&lt;ACCOUNT&lt;&lt;NO&lt;SERVER&lt;&lt;20MIN&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
@@ -238,22 +238,22 @@
 <section>
   <div class="wrap">
     <p class="sec-label">Not a business card</p>
-    <h2>これは、何ではないか。</h2>
+    <h2>What this is not.</h2>
     <div class="not-grid">
       <div class="card">
         <p class="no">NOT / 01</p>
-        <h3>名刺管理アプリではない</h3>
-        <p>連絡先を集めません。氏名・メール・電話・会社名を入力する欄がそもそもありません。</p>
+        <h3>Not a contact manager</h3>
+        <p>It does not collect contacts. There is no field for name, email, phone, or company.</p>
       </div>
       <div class="card">
         <p class="no">NOT / 02</p>
-        <h3>SNS ではない</h3>
-        <p>アカウントもフォローもありません。Lounge が終われば、残るのはあなたの記憶と会話だけです。</p>
+        <h3>Not a social network</h3>
+        <p>No accounts, no follows. When the Lounge ends, all that remains is your memory and the conversation.</p>
       </div>
       <div class="card">
         <p class="no">NOT / 03</p>
-        <h3>マッチングではない</h3>
-        <p>スコアで人を並べません。Pet が見つけるのは「最初のひと言」の橋を 1 つだけです。</p>
+        <h3>Not a matching app</h3>
+        <p>It does not rank people by score. Your Pet finds exactly one Bridge — an opening line to start with.</p>
       </div>
     </div>
   </div>
@@ -262,30 +262,30 @@
 <section>
   <div class="wrap">
     <p class="sec-label">How it works</p>
-    <h2>Pet が橋を架け、人間が渡る。</h2>
+    <h2>Your Pet builds the bridge. You cross it.</h2>
     <ol class="flow">
       <li>
         <div>
-          <h3>Pet を準備する</h3>
-          <p>アカウント登録なし。Pet の名前と絵文字、そして同梱カタログから選んだ「会話の材料」（Topics / Offer / Looking For）だけ。入力は明示保存するまで端末に残りません。</p>
+          <h3>Prepare your Pet</h3>
+          <p>No account required. Just your Pet's name, an emoji, and conversation material (Topics / Offer / Looking For) chosen from the bundled catalog. Nothing leaves your device until you explicitly save it.</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>QR で 20 分の Lounge に入る</h3>
-          <p>Host が表示する使い捨ての招待 QR を読み取り、共有内容の Preview に明示同意してから参加します。Lounge は 20 分で必ず終わります。</p>
+          <h3>Join a 20-minute Lounge with a QR code</h3>
+          <p>Scan the Host's one-time invite QR, explicitly confirm the Preview of what you are about to share, and join. Every Lounge ends at 20 minutes, no exceptions.</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>Pet 同士が Bridge を 1 つ見つける</h3>
-          <p>公開を許可した手掛かりだけを突き合わせ、「この 2 人ならこの話題から始められる」という橋を 1 つ提案します。</p>
+          <h3>Pets find one Bridge together</h3>
+          <p>Only the clues you chose to share are matched, surfacing one Bridge — a topic these two people could start talking about.</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>アプリは退く</h3>
-          <p>会話が始まったら、アプリの役目は終わりです。Lounge のデータは退出・Host 終了・20 分満了のいずれか最も早い契機で破棄されます。</p>
+          <h3>The app steps back</h3>
+          <p>Once the conversation starts, the app's job is done. Lounge data is discarded on whichever comes first: leaving, the Host ending it, or the 20-minute expiry.</p>
         </div>
       </li>
     </ol>
@@ -295,12 +295,12 @@
 <section>
   <div class="wrap">
     <p class="sec-label">Privacy by design</p>
-    <h2>預からない、が設計です。</h2>
+    <h2>Not holding your data is the design.</h2>
     <ul class="privacy">
-      <li><b>アカウント不要</b><span>登録もログインもありません。サーバーにあなたのデータはありません。</span></li>
-      <li><b>端末内で完結</b><span>Profile は端末の中だけ。持ち出しは自分で行う JSON Backup のみです。</span></li>
-      <li><b>20 分で破棄</b><span>Lounge 由来のデータは永続化せず、最早の契機で破棄します。</span></li>
-      <li><b>テレメトリなし</b><span>収集も送信もしません。AI 判定も端末内で完結する設計です。現在は Rules Provider が担い、Local LLM は Planned（default branch 未収載）です。</span></li>
+      <li><b>No account</b><span>No sign-up, no login. Your data never touches a server.</span></li>
+      <li><b>Everything stays on-device</b><span>Your Profile lives only on your device. The only way it leaves is a JSON Backup you export yourself.</span></li>
+      <li><b>Discarded after 20 minutes</b><span>Lounge data is never persisted; it is discarded at the earliest possible moment.</span></li>
+      <li><b>No telemetry</b><span>Nothing is collected or transmitted. AI decisions are designed to run entirely on-device. Today that is handled by a Rules Provider; Local LLM is Planned (not yet in the default branch).</span></li>
     </ul>
   </div>
 </section>
@@ -308,35 +308,36 @@
 <section>
   <div class="wrap">
     <p class="sec-label">Current status — fail closed</p>
-    <h2>できることを、できるとだけ言う。</h2>
+    <h2>We only claim what is actually true.</h2>
     <table class="status">
       <thead>
-        <tr><th scope="col">対象</th><th scope="col">状態</th><th scope="col">いまできること</th></tr>
+        <tr><th scope="col">Scope</th><th scope="col">State</th><th scope="col">Allowed now</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td>Repository 開発</td>
+          <td>Repository development</td>
           <td><span class="badge ok">Implemented</span></td>
-          <td>Source・純 TypeScript Domain・Rules Provider・Web Export の検証。</td>
+          <td>Validate source, pure TypeScript Domain, Rules Provider, and Web Export.</td>
         </tr>
         <tr>
           <td>Source-only Candidate</td>
           <td><span class="badge exp">Experimental</span></td>
-          <td>固定 Commit から Draft Candidate を再現する。Public Release とは呼ばない。</td>
+          <td>Reproduce a draft candidate from one fixed commit. Not called a public release.</td>
         </tr>
         <tr>
           <td>Public OSS Alpha</td>
           <td><span class="badge blocked">Blocked</span></td>
-          <td>なし。実機の物理 Gate が Verified になるまで公開しません。</td>
+          <td>Nothing. Not published until every physical device gate is Verified.</td>
         </tr>
       </tbody>
     </table>
     <p class="status-note">
-      Browser・Expo Go・実機の実行証拠はいずれも Not run です。Local LLM・実 Camera QR・
-      実 Nearby Transport は default branch の Supported 能力ではありません。緑の CI を実機の
-      証拠とは呼ばず、未検証の能力を「動きます」と表示しない。この規律ごとオープンソースです。
-      詳細は <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.md">README</a> と
-      <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/releases/status.md">Release Status</a> を参照してください。
+      Browser, Expo Go, and physical-device execution evidence are all Not run. Local LLM, real
+      camera QR, and real Nearby Transport are not Supported capabilities on the default branch.
+      We do not call green CI physical-device evidence, and we do not display an unverified
+      capability as "it works." This discipline ships with the open source, too. See the
+      <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.en.md">README</a> and
+      <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/releases/status.md">Release Status</a> for details.
     </p>
   </div>
 </section>
@@ -344,14 +345,14 @@
 <section id="run">
   <div class="wrap">
     <p class="sec-label">Try it</p>
-    <h2>手元で動かす。</h2>
+    <h2>Run it yourself.</h2>
     <pre class="run"><code>git clone https://github.com/susumutomita/TenkaCloudPassport.git
 cd TenkaCloudPassport
 make install
-make start   <span class="c"># スマホの Expo Go で QR を読む</span></code></pre>
+make start   <span class="c"># scan the QR from Expo Go on your phone</span></code></pre>
     <p class="run-note">
-      スマホに Expo Go を install し、Mac と同じ Network につないでから、Terminal に表示される
-      QR を読み取ってください。Browser で試す場合は <code>bun run web</code> です。
+      Install Expo Go on your phone, connect it to the same network as your Mac, then scan the QR
+      code shown in the terminal. To try it in a browser instead, run <code>bun run web</code>.
     </p>
   </div>
 </section>
@@ -360,7 +361,7 @@ make start   <span class="c"># スマホの Expo Go で QR を読む</span></cod
   <div class="wrap">
     <div class="inner">
       <span>MIT License — <a href="https://github.com/susumutomita/TenkaCloudPassport">susumutomita/TenkaCloudPassport</a></span>
-      <span>会話が始まったら、アプリは退く。</span>
+      <span>Once the conversation starts, the app steps back.</span>
     </div>
   </div>
   <div class="mrz-footer" aria-hidden="true">
