@@ -135,3 +135,12 @@ before-commit: architecture_harness harness_test release_test_coverage pre_relea
 .PHONY: dev
 dev:
 	bun run dev
+
+# スマホ (Expo Go) 向けのワンコマンド起動。expo-dev-client が入っているため素の
+# `expo start` は Development Build モードになり、Expo Go の QR 読取では起動できない。
+# `--go` で Expo Go モードに固定する。
+.PHONY: start
+start:
+	@[ -d node_modules ] || $(MAKE) install
+	@echo "スマホに Expo Go を入れ、Mac と同じ Network (Wi-Fi) につないでから、下に出る QR を読み取ってください。"
+	bunx expo start --go
