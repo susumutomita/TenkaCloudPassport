@@ -47,7 +47,11 @@ describe('BrandMark（山頂マーク）のソース契約', () => {
     expect(text).not.toContain('<Text');
     expect(text).not.toContain("from 'react-native'");
     expect(text).not.toContain('accessibilityLabel');
-    expect(text).toContain('accessible={false}');
+    // `accessible={false}` は react-native-svg の Web 実装が DOM へそのまま転送し
+    // React の invalid-attribute 警告になるため、Web でも valid な `aria-hidden` で
+    // 支援技術から隠す（native では RN が accessibilityElementsHidden 等へ写像する）。
+    expect(text).toContain('aria-hidden={true}');
+    expect(text).not.toContain('accessible={false}');
   });
 
   it('色の 16 進値を直書きせず theme のトークンだけを使う', async () => {

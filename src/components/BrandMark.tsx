@@ -19,7 +19,7 @@ interface BrandMarkProps {
  */
 function BrandMark({ size = 20, color = colors.ink }: BrandMarkProps) {
   return (
-    <Svg accessible={false} height={size} viewBox="0 0 120 120" width={size}>
+    <Svg aria-hidden={true} height={size} viewBox="0 0 120 120" width={size}>
       <Rect x={26} y={24} width={68} height={12} rx={6} fill={color} />
       <Path
         d="M26 90 L60 48 L94 90"
