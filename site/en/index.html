@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TenkaCloud Passport — Conversation before business cards.</title>
-<meta name="description" content="Account-free, on-device only. A passport for in-person events: a Pet brings only the clues its Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute Lounge, and then steps back." />
+<title>TenkaCloud Passport — You can hand off an introduction without a business card.</title>
+<meta name="description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to save your contact." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="ja" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="en" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="x-default" href="https://susumutomita.github.io/TenkaCloudPassport/" />
-<meta property="og:title" content="TenkaCloud Passport — Conversation before business cards." />
-<meta property="og:description" content="Account-free, on-device only. A passport for in-person events: a Pet brings only the clues its Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute Lounge, and then steps back." />
+<meta property="og:title" content="TenkaCloud Passport — You can hand off an introduction without a business card." />
+<meta property="og:description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to save your contact." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <meta property="og:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
@@ -18,8 +19,8 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:locale" content="en_US" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="TenkaCloud Passport — Conversation before business cards." />
-<meta name="twitter:description" content="Account-free, on-device only. A passport for in-person events: a Pet brings only the clues its Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute Lounge, and then steps back." />
+<meta name="twitter:title" content="TenkaCloud Passport — You can hand off an introduction without a business card." />
+<meta name="twitter:description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to save your contact." />
 <meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
 <style>
   /* Zero external requests (including fonts). A page that claims no telemetry sends none itself. */
@@ -91,38 +92,26 @@
   a.cta.quiet { color: var(--ink); border: 1px solid var(--border); background: var(--card); }
   a.cta.quiet:hover, a.cta.quiet:focus-visible { background: var(--surface); }
 
-  /* visa card (signature) */
-  .visa {
+  /* intro card preview (signature) */
+  .card-preview {
     background: var(--card);
     border: 1px solid var(--border-subtle); border-radius: 16px;
-    padding: 28px 26px 0; position: relative; overflow: hidden;
+    padding: 28px 26px; position: relative; overflow: hidden;
     box-shadow: 0 18px 44px -24px rgba(16, 17, 20, 0.35);
   }
-  .visa .row { display: flex; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); letter-spacing: 0.06em; }
-  .visa .row + .row { margin-top: 10px; }
-  .visa .row b { color: var(--ink); font-weight: 500; }
-  .visa .pets { font-size: 26px; letter-spacing: 0.35em; margin: 26px 0 14px; }
-  .stamp {
-    position: absolute; right: 22px; bottom: 58px; width: 118px; height: 118px;
-    border: 3px double var(--summit); border-radius: 50%;
-    color: var(--summit); display: grid; place-content: center; text-align: center;
-    font-weight: 700; line-height: 1.5;
-    transform: rotate(-9deg); opacity: 0.9;
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='white'/%3E%3Ccircle cx='1' cy='2' r='.35' fill='black'/%3E%3C/svg%3E");
-    animation: press 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.4s backwards;
+  .cp-eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+    color: var(--muted-light); text-transform: uppercase;
   }
-  .stamp .t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; }
-  .stamp .m { font-size: 22px; }
-  @keyframes press {
-    from { transform: rotate(-16deg) scale(1.6); opacity: 0; }
-    to { transform: rotate(-9deg) scale(1); opacity: 0.9; }
+  .cp-name { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 14px; }
+  .cp-title { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .cp-intro {
+    margin-top: 16px; font-size: 14px; color: var(--ink); line-height: 1.8;
+    padding-top: 16px; border-top: 1px dashed var(--border-subtle);
   }
-  .mrz {
-    margin: 22px -26px 0; padding: 14px 26px; background: var(--surface);
-    border-top: 1px dashed var(--border);
-    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
-    color: var(--muted); white-space: nowrap; overflow: hidden;
-  }
+  .cp-qr-row { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+  .cp-qr { width: 76px; height: 76px; flex: none; border-radius: 6px; }
+  .cp-qr-caption { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.7; }
 
   /* sections */
   section { padding: 64px 0; border-top: 1px solid var(--border-subtle); }
@@ -152,6 +141,22 @@
   ul.privacy li { border-left: 3px solid var(--ink); padding: 4px 0 4px 18px; }
   ul.privacy b { display: block; font-size: 16px; letter-spacing: -0.01em; }
   ul.privacy span { font-size: 14px; color: var(--muted); }
+
+  ol.roadmap { list-style: none; counter-reset: rmstep; margin-top: 8px; display: grid; gap: 16px; }
+  ol.roadmap li {
+    counter-increment: rmstep; display: grid; grid-template-columns: 96px 1fr; gap: 20px;
+    padding: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--card);
+  }
+  ol.roadmap li .step-badge {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; height: fit-content;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  ol.roadmap li .step-badge::before { content: "STEP " counter(rmstep) " — "; }
+  ol.roadmap li.done .step-badge { background: rgba(47, 158, 99, 0.12); color: var(--success-text); }
+  ol.roadmap li.concept .step-badge { background: var(--surface); color: var(--muted); }
+  ol.roadmap h3 { font-size: 16px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  ol.roadmap p { color: var(--muted); font-size: 14.5px; }
+  .roadmap-note { margin-top: 20px; font-size: 14px; color: var(--muted); max-width: 46em; }
 
   table.status { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14.5px; }
   table.status th, table.status td { text-align: left; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
@@ -184,10 +189,10 @@
     .hero { grid-template-columns: 1fr; padding: 36px 0 52px; }
     .not-grid { grid-template-columns: 1fr; }
     ul.privacy { grid-template-columns: 1fr; }
-    .visa { margin-top: 8px; }
+    ol.roadmap li { grid-template-columns: 1fr; }
+    .card-preview { margin-top: 8px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .stamp { animation: none; }
     html { scroll-behavior: auto; }
   }
   :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
@@ -208,54 +213,86 @@
 
   <div class="hero">
     <div>
-      <p class="eyebrow">An account-free passport for in-person events</p>
-      <h1>Conversation,<br />before business cards.</h1>
+      <p class="eyebrow">A free intro card for in-person events</p>
+      <h1>No business card,<br />no problem.</h1>
       <p class="lede">
-        TenkaCloud Passport is not a digital business card. Your Pet brings only the clues your
-        Owner explicitly chose to share, finds one Bridge to a human conversation in a 20-minute
-        Lounge, and then quietly steps back.
+        Someone came up to talk after your lightning talk, but you never printed business
+        cards — and you do not want to pay for a paid card service either. TenkaCloud
+        Passport shows your name, title, and self-introduction as a QR code, for free and
+        without an account. The other person needs no app; their phone's standard camera
+        is enough to save your contact.
       </p>
       <div class="cta-row">
         <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">View on GitHub</a>
         <a class="cta quiet" href="#run">Run it yourself</a>
       </div>
     </div>
-    <div class="visa" role="img" aria-label="An illustration of a Lounge Visa: 20-minute stay, no extensions, Lounge data discarded on expiry.">
-      <div class="row"><span>TYPE</span><b>LOUNGE VISA</b></div>
-      <div class="row"><span>BEARER</span><b>PET (Owner's proxy)</b></div>
-      <div class="row"><span>DURATION</span><b>20 MIN — no extensions</b></div>
-      <div class="row"><span>CARRIES</span><b>Only clues explicitly shared</b></div>
-      <div class="row"><span>ON EXPIRY</span><b>Lounge data discarded</b></div>
-      <div class="pets" aria-hidden="true">🐾 🐶 🐱 🦊 🐼 🐧</div>
-      <div class="stamp" aria-hidden="true">
-        <span class="t">ADMITTED</span>
-        <span class="m">20MIN</span>
-        <span class="t">LOUNGE ONLY</span>
+    <div class="card-preview" role="img" aria-label="A preview of an Intro Card: name, title, self-introduction, and a QR code that a standard camera can scan.">
+      <span class="cp-eyebrow">Intro Card</span>
+      <div class="cp-name">Taro Tanaka</div>
+      <div class="cp-title">Engineer · Acme Inc. (example)</div>
+      <p class="cp-intro">
+        "I build local-first apps. If you want to talk more about today's talk, let's chat."
+      </p>
+      <div class="cp-qr-row">
+        <svg class="cp-qr" viewBox="0 0 100 100" aria-hidden="true">
+          <rect width="100" height="100" fill="#fff"></rect>
+          <g fill="#1d1d1f">
+            <rect x="6" y="6" width="22" height="22"></rect>
+            <rect x="72" y="6" width="22" height="22"></rect>
+            <rect x="6" y="72" width="22" height="22"></rect>
+          </g>
+          <g fill="#fff">
+            <rect x="11" y="11" width="12" height="12"></rect>
+            <rect x="77" y="11" width="12" height="12"></rect>
+            <rect x="11" y="77" width="12" height="12"></rect>
+          </g>
+          <g fill="#1d1d1f">
+            <rect x="15" y="15" width="4" height="4"></rect>
+            <rect x="81" y="15" width="4" height="4"></rect>
+            <rect x="15" y="81" width="4" height="4"></rect>
+            <rect x="36" y="10" width="5" height="5"></rect>
+            <rect x="46" y="10" width="5" height="5"></rect>
+            <rect x="56" y="16" width="5" height="5"></rect>
+            <rect x="36" y="20" width="5" height="5"></rect>
+            <rect x="50" y="26" width="5" height="5"></rect>
+            <rect x="60" y="36" width="5" height="5"></rect>
+            <rect x="70" y="46" width="5" height="5"></rect>
+            <rect x="40" y="40" width="5" height="5"></rect>
+            <rect x="30" y="50" width="5" height="5"></rect>
+            <rect x="46" y="56" width="5" height="5"></rect>
+            <rect x="60" y="60" width="5" height="5"></rect>
+            <rect x="36" y="66" width="5" height="5"></rect>
+            <rect x="50" y="76" width="5" height="5"></rect>
+            <rect x="66" y="70" width="5" height="5"></rect>
+            <rect x="76" y="60" width="5" height="5"></rect>
+          </g>
+        </svg>
+        <span class="cp-qr-caption">Scan with a standard camera<br />→ Add to Contacts is offered</span>
       </div>
-      <div class="mrz" aria-hidden="true">P&lt;TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;NO&lt;ACCOUNT&lt;&lt;NO&lt;SERVER&lt;&lt;20MIN&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
     </div>
   </div>
 </div>
 
 <section>
   <div class="wrap">
-    <p class="sec-label">Not a business card</p>
+    <p class="sec-label">What this is not</p>
     <h2>What this is not.</h2>
     <div class="not-grid">
       <div class="card">
         <p class="no">NOT / 01</p>
-        <h3>Not a contact manager</h3>
-        <p>It does not collect contacts. There is no field for name, email, phone, or company.</p>
+        <h3>Not a paid subscription</h3>
+        <p>This is not a monthly-fee card service. It is free, with no account to expire.</p>
       </div>
       <div class="card">
         <p class="no">NOT / 02</p>
-        <h3>Not a social network</h3>
-        <p>No accounts, no follows. When the Lounge ends, all that remains is your memory and the conversation.</p>
+        <h3>Not an account sign-up</h3>
+        <p>No sign-up, no login. Enter your name and you can use it right away.</p>
       </div>
       <div class="card">
         <p class="no">NOT / 03</p>
-        <h3>Not a matching app</h3>
-        <p>It does not rank people by score. Your Pet finds exactly one Bridge — an opening line to start with.</p>
+        <h3>Not a data custodian</h3>
+        <p>Your Intro Card is saved only on your device. Nothing is sent to a server.</p>
       </div>
     </div>
   </div>
@@ -264,33 +301,73 @@
 <section>
   <div class="wrap">
     <p class="sec-label">How it works</p>
-    <h2>Your Pet builds the bridge. You cross it.</h2>
+    <h2>All you hand over is one QR code.</h2>
     <ol class="flow">
       <li>
         <div>
-          <h3>Prepare your Pet</h3>
-          <p>No account required. Just your Pet's name, an emoji, and conversation material (Topics / Offer / Looking For) chosen from the bundled catalog. Nothing leaves your device until you explicitly save it.</p>
+          <h3>Create your Intro Card</h3>
+          <p>Enter your name (required), title, organization, self-introduction, and links. Nothing leaves your device until you explicitly save it.</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>Join a 20-minute Lounge with a QR code</h3>
-          <p>Scan the Host's one-time invite QR, explicitly confirm the Preview of what you are about to share, and join. Every Lounge ends at 20 minutes, no exceptions.</p>
+          <h3>Show the QR code</h3>
+          <p>Once saved, your name, self-introduction, and a large, real QR code appear on screen. Just show this screen to the other person.</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>Pets find one Bridge together</h3>
-          <p>Only the clues you chose to share are matched, surfacing one Bridge — a topic these two people could start talking about.</p>
+          <h3>They scan it with a standard camera</h3>
+          <p>No app install required. Scanning the QR with an iPhone or Android standard camera offers to add you as a contact.</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>The app steps back</h3>
-          <p>Once the conversation starts, the app's job is done. Lounge data is discarded on whichever comes first: leaving, the Host ending it, or the 20-minute expiry.</p>
+          <h3>The conversation continues</h3>
+          <p>After reading your self-introduction, the other person picks up the conversation from there. This replaces exchanging business cards with handing over a conversation starter.</p>
         </div>
       </li>
     </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="sec-label">Roadmap</p>
+    <h2>Step 1 is implemented. Everything after that is a concept.</h2>
+    <ol class="roadmap">
+      <li class="done">
+        <span class="step-badge">Implemented</span>
+        <div>
+          <h3>Hand off an Intro Card as a QR code</h3>
+          <p>The other person needs no app, just a standard camera, to save your contact. This is the feature described on this page.</p>
+        </div>
+      </li>
+      <li class="concept">
+        <span class="step-badge">Concept</span>
+        <div>
+          <h3>Research the person you received</h3>
+          <p>A concept where the receiving app automatically researches the other person online and builds an ontology (a structure of who they are, what they do, and what they care about). This requires reversing the current "no external communication" policy, so an ADR will define an opt-in design when work starts.</p>
+        </div>
+      </li>
+      <li class="concept">
+        <span class="step-badge">Concept</span>
+        <div>
+          <h3>Visualize people nearby</h3>
+          <p>A concept for visualizing which event attendees are doing something close to what you do.</p>
+        </div>
+      </li>
+      <li class="concept">
+        <span class="step-badge">Concept</span>
+        <div>
+          <h3>On-device agents find a connection</h3>
+          <p>A concept where, once the other person also has the app, on-device LLM agents exchange introductions to find a topic that could lead to a follow-up meeting. The existing Pet / Lounge / Bridge assets are expected to return to center stage here.</p>
+        </div>
+      </li>
+    </ol>
+    <p class="roadmap-note">
+      Steps 2 through 4 are not implemented yet. We list them as concepts and do not describe them as things you can do today.
+    </p>
   </div>
 </section>
 
@@ -300,9 +377,9 @@
     <h2>Not holding your data is the design.</h2>
     <ul class="privacy">
       <li><b>No account</b><span>No sign-up, no login. Your data never touches a server.</span></li>
-      <li><b>Everything stays on-device</b><span>Your Profile lives only on your device. The only way it leaves is a JSON Backup you export yourself.</span></li>
-      <li><b>Discarded after 20 minutes</b><span>Lounge data is never persisted; it is discarded at the earliest possible moment.</span></li>
-      <li><b>No telemetry</b><span>Nothing is collected or transmitted. AI decisions are designed to run entirely on-device. Today that is handled by a Rules Provider; Local LLM is Planned (not yet in the default branch).</span></li>
+      <li><b>Everything stays on-device</b><span>Your Intro Card lives only on your device. The only way it leaves is a JSON Backup you export yourself.</span></li>
+      <li><b>Sharing is just showing a QR code</b><span>There is no path for receiving someone else's information. You only ever hand over your own card.</span></li>
+      <li><b>No telemetry</b><span>Nothing is collected or transmitted. The design requires no server and no account.</span></li>
     </ul>
   </div>
 </section>
@@ -319,7 +396,7 @@
         <tr>
           <td>Repository development</td>
           <td><span class="badge ok">Implemented</span></td>
-          <td>Validate source, pure TypeScript Domain, Rules Provider, and Web Export.</td>
+          <td>Creating and saving an Intro Card on-device and generating a vCard QR are verified by tests, alongside source, pure TypeScript Domain, the Rules Provider, and Web Export.</td>
         </tr>
         <tr>
           <td>Source-only Candidate</td>
@@ -334,10 +411,10 @@
       </tbody>
     </table>
     <p class="status-note">
-      Browser, Expo Go, and physical-device execution evidence are all Not run. Local LLM, real
-      camera QR, and real Nearby Transport are not Supported capabilities on the default branch.
-      We do not call green CI physical-device evidence, and we do not display an unverified
-      capability as "it works." This discipline ships with the open source, too. See the
+      Scanning the QR code with a physical device's standard camera and confirming that it offers
+      to add a contact is Not run. Browser and Expo Go execution evidence are also Not run. We do
+      not call green CI physical-device evidence, and we do not display an unverified capability as
+      "it works." This discipline ships with the open source, too. See the
       <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.en.md">README</a> and
       <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/releases/status.md">Release Status</a> for details.
     </p>
@@ -363,11 +440,11 @@ make start   <span class="c"># scan the QR from Expo Go on your phone</span></co
   <div class="wrap">
     <div class="inner">
       <span>MIT License — <a href="https://github.com/susumutomita/TenkaCloudPassport">susumutomita/TenkaCloudPassport</a></span>
-      <span>Once the conversation starts, the app steps back.</span>
+      <span>No business card, no problem.</span>
     </div>
   </div>
   <div class="mrz-footer" aria-hidden="true">
-    <div class="wrap">TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;MIT&lt;&lt;NO&lt;TELEMETRY&lt;&lt;ON&lt;DEVICE&lt;ONLY&lt;&lt;BRIDGE&lt;NOT&lt;NETWORK&lt;&lt;&lt;&lt;&lt;&lt;</div>
+    <div class="wrap">TENKACLOUD&lt;&lt;PASSPORT&lt;&lt;MIT&lt;&lt;NO&lt;TELEMETRY&lt;&lt;ON&lt;DEVICE&lt;ONLY&lt;&lt;FREE&lt;NO&lt;ACCOUNT&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
   </div>
 </footer>
 </body>

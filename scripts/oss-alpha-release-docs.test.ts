@@ -342,13 +342,24 @@ describe('Issue 29: OSS Alpha の初回導線契約', () => {
       read('README.md'),
       read('README.en.md'),
     ]);
+    // Issue 80: 「何ができるか」「2 分で試す」の 2 節を冒頭へ追加した分、Product
+    // 境界（旧「デジタル名刺ではありません」→ 自己紹介カード軸の説明）から
+    // Release 状態表までの距離が伸びた。英語版は同じ内容でも文字数が多いため、
+    // 日本語側だけが収まる 1,500 文字では英語側の "Public OSS Alpha" / "Blocked"
+    // が窓の外に出る。「冒頭で自己完結する」という契約の意図は変えず、窓を
+    // 2 節分だけ広げる。
+    const windowSize = 2_800;
 
-    expect(japanese.slice(0, 1_500)).toContain('デジタル名刺ではありません');
-    expect(japanese.slice(0, 1_500)).toContain('Public OSS Alpha');
-    expect(japanese.slice(0, 1_500)).toContain('Blocked');
-    expect(english.slice(0, 1_500)).toContain('not a digital business card');
-    expect(english.slice(0, 1_500)).toContain('Public OSS Alpha');
-    expect(english.slice(0, 1_500)).toContain('Blocked');
+    expect(japanese.slice(0, windowSize)).toContain(
+      '名刺がなくても自己紹介を渡せる'
+    );
+    expect(japanese.slice(0, windowSize)).toContain('Public OSS Alpha');
+    expect(japanese.slice(0, windowSize)).toContain('Blocked');
+    expect(english.slice(0, windowSize)).toContain(
+      'an introduction without a business'
+    );
+    expect(english.slice(0, windowSize)).toContain('Public OSS Alpha');
+    expect(english.slice(0, windowSize)).toContain('Blocked');
     expect(english).not.toMatch(/[ぁ-んァ-ン一-龠]/);
     for (const source of [japanese, english]) {
       const normalized = source.toLowerCase();
