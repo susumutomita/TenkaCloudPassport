@@ -1,5 +1,6 @@
 import type { LoungeInvite } from '../domain/lounge-invite';
 import type { PublicPassport } from '../domain/passport';
+import { QR_ENCODER_MAX_BYTES } from '../qr/encoder';
 import { parseLoungeInvite } from './lounge-invite-schema';
 import { parsePublicPassport } from './schema';
 import {
@@ -16,7 +17,10 @@ import {
  */
 export const QR_FAMILY_PREFIX = 'TCPQ';
 export const QR_PROTOCOL_PREFIX = 'TCPQ1:';
-export const QR_PAYLOAD_MAX_BYTES = 1024;
+// 正本は `src/qr/encoder.ts` の QR_ENCODER_MAX_BYTES（qr は依存ゼロの leaf のため
+// protocol → qr の依存方向で re-export する。encoder.test.ts の等価 assert は
+// この単一ソース化が崩れたときの tripwire として残す。Issue 73 #2）。
+export const QR_PAYLOAD_MAX_BYTES = QR_ENCODER_MAX_BYTES;
 const QR_JSON_MAX_DEPTH = 6;
 const QR_PROTOCOL_VERSION = { major: 1, minor: 2 } as const;
 
