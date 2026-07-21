@@ -213,6 +213,30 @@ export function isValidIntroCardLinkFormat(link: string): boolean {
   return URL_PATTERN.test(link);
 }
 
+/**
+ * リンク 1 件分の形式（文字数上限・http/https 形式）を検証する。`validatedLinks`
+ * の配列走査と、Issue 93 の `validateIntroCardFieldValue`（保存前の欄単位
+ * バリデーション）の両方が、この 1 件分の判定を再利用する（判定基準の
+ * 二重定義・drift を防ぐ）。呼び出し側で既に `normalizeInputText(...).trim()`
+ * 済みの値を渡す前提（このため引数名は正規化前の生値ではなく `normalized`）。
+ */
+function assertValidLinkFormat(normalized: string): void {
+  if (normalized.length > INTRO_CARD_LINK_MAX_LENGTH) {
+    throw new IntroCardError(
+      'FIELD_TOO_LONG',
+      `リンクは ${INTRO_CARD_LINK_MAX_LENGTH} 文字以下で入力してください。`,
+      'links'
+    );
+  }
+  if (!isValidIntroCardLinkFormat(normalized)) {
+    throw new IntroCardError(
+      'INVALID_URL',
+      'リンクは http:// または https:// から始まる URL にしてください。',
+      'links'
+    );
+  }
+}
+
 function validatedLinks(
   links: readonly string[] | undefined
 ): readonly string[] | undefined {
@@ -229,20 +253,7 @@ function validatedLinks(
     );
   }
   for (const link of normalized) {
-    if (link.length > INTRO_CARD_LINK_MAX_LENGTH) {
-      throw new IntroCardError(
-        'FIELD_TOO_LONG',
-        `リンクは ${INTRO_CARD_LINK_MAX_LENGTH} 文字以下で入力してください。`,
-        'links'
-      );
-    }
-    if (!isValidIntroCardLinkFormat(link)) {
-      throw new IntroCardError(
-        'INVALID_URL',
-        'リンクは http:// または https:// から始まる URL にしてください。',
-        'links'
-      );
-    }
+    assertValidLinkFormat(link);
   }
   return normalized;
 }
@@ -312,4 +323,118 @@ export function createIntroCard(input: CreateIntroCardInput): IntroCard {
     email,
     phone,
   });
+}
+
+/**
+ * Issue 93: 保存前（入力中・フォーカスアウト時）に 1 欄だけを検証する入力。
+ * `links` は画面に複数の入力欄（X/GitHub/LinkedIn/Portfolio/自由リンク）が
+ * あるが、domain からは 1 件分の文字列を渡してもらう（名前付き欄は呼び出し側
+ * `src/screens/intro-card-links.ts` が `normalizeNamedLink` を適用してから
+ * 渡す。ここでは URL 形式・文字数上限だけを見る）。
+ * altitude レビュー指摘: `{ field: Exclude<IntroCardField, 'links'>; value:
+ * string } | { field: 'links'; value: string }`（1 つ目の member 自体が
+ * `field` の union）と書くと、`field` ごとに独立した discriminated union
+ * member にならないため、`Exclude<..., { field: 'name' }>` で `'name'` だけを
+ * 型レベルで除外できない（`validateIntroCardOtherFieldValue` に `case 'name':
+ * return;` という到達しない no-op が必要だった）。mapped type で
+ * `IntroCardField` を distribute し、`field` ごとに真に独立した object 型の
+ * union にすることで、`Exclude` が正しく機能し、呼び出し元の
+ * `if (input.field === 'name')` 分岐による通常の型絞り込みだけで
+ * `'name'` を除いた型が得られるようにする。
+ */
+export type IntroCardFieldValueInput = {
+  [Field in IntroCardField]: { readonly field: Field; readonly value: string };
+}[IntroCardField];
+
+/**
+ * 名前の「未入力」は保存時（`errorFieldKey==='name'`）にだけ案内する。
+ * 真っさらな画面で名前欄をタップしてすぐ離れただけで赤字が出るのは、
+ * 「急かさない」という望ましい体験に反するため、NAME_REQUIRED だけは
+ * ここで握り潰す（文字数超過は validatedName をそのまま再利用するため
+ * 引き続き案内する）。`validateIntroCardFieldValue` の Cognitive Complexity を
+ * 抑えるため、name 用の特例だけをこの private 関数へ切り出す。
+ */
+function validateIntroCardNameFieldValue(value: string): string | null {
+  try {
+    validatedName(value);
+    return null;
+  } catch (error: unknown) {
+    if (error instanceof IntroCardError) {
+      return error.code === 'NAME_REQUIRED' ? null : error.message;
+    }
+    throw error;
+  }
+}
+
+/**
+ * name 以外の各欄を検証する。`validateIntroCardFieldValue` から
+ * Cognitive Complexity を抑えるために切り出した（switch 本体自体は
+ * `createIntroCard` の分岐をなぞるだけで、独自の判定ロジックは持たない）。
+ * `IntroCardFieldValueInput` が `field` ごとに独立した discriminated union
+ * member であるため、呼び出し元の `if (input.field === 'name') return ...;`
+ * だけで `'name'` を除いた型がここへ渡り、到達しない no-op 分岐は不要。
+ */
+function validateIntroCardOtherFieldValue(
+  input: Exclude<IntroCardFieldValueInput, { readonly field: 'name' }>
+): void {
+  switch (input.field) {
+    case 'title':
+      validatedOptionalField(
+        input.value,
+        INTRO_CARD_TITLE_MAX_LENGTH,
+        '肩書き',
+        'title'
+      );
+      return;
+    case 'organization':
+      validatedOptionalField(
+        input.value,
+        INTRO_CARD_ORGANIZATION_MAX_LENGTH,
+        '所属',
+        'organization'
+      );
+      return;
+    case 'selfIntro':
+      validatedOptionalField(
+        input.value,
+        INTRO_CARD_SELF_INTRO_MAX_LENGTH,
+        '自己紹介',
+        'selfIntro'
+      );
+      return;
+    case 'email':
+      validatedEmail(input.value);
+      return;
+    case 'phone':
+      validatedPhone(input.value);
+      return;
+    default: {
+      // input.field === 'links'（呼び出し側で正規化済みの 1 件分の値）。
+      const normalized = normalizeInputText(input.value).trim();
+      if (normalized.length === 0) return;
+      assertValidLinkFormat(normalized);
+    }
+  }
+}
+
+/**
+ * `createIntroCard` が使う private validator をそのまま呼び、例外を投げる
+ * 代わりにメッセージ文字列（問題なければ `null`）を返す。保存時の検証と
+ * 完全に同じ関数を再利用することで、画面側が独自にロジックを再実装して
+ * 保存時の判定と drift する（Issue 92 で code-reviewer に指摘された bug
+ * class）ことを構造的に防ぐ。
+ */
+export function validateIntroCardFieldValue(
+  input: IntroCardFieldValueInput
+): string | null {
+  if (input.field === 'name') {
+    return validateIntroCardNameFieldValue(input.value);
+  }
+  try {
+    validateIntroCardOtherFieldValue(input);
+    return null;
+  } catch (error: unknown) {
+    if (error instanceof IntroCardError) return error.message;
+    throw error;
+  }
 }

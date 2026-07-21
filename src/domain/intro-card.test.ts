@@ -10,6 +10,7 @@ import {
   INTRO_CARD_TITLE_MAX_LENGTH,
   IntroCardError,
   type IntroCardField,
+  validateIntroCardFieldValue,
 } from './intro-card';
 
 function repeat(character: string, length: number): string {
@@ -376,5 +377,179 @@ describe('createIntroCard の全角・不可視文字の正規化（Issue 92: iO
     });
 
     expect(card.links).toEqual([`https://example.com/${'👨‍👩'}`]);
+  });
+});
+
+/**
+ * Issue 93: 保存前（入力中・フォーカスアウト時）の 1 欄バリデーション。
+ * `createIntroCard` と同じ private validator を再利用しているかどうかは、
+ * 「保存時に FIELD_TOO_LONG/INVALID_* になるケースが、ここでも同じ
+ * メッセージで返ってくる」ことで間接的に固定する（メッセージ文字列が
+ * 2 箇所に分かれて drift する余地をなくす）。
+ */
+describe('validateIntroCardFieldValue', () => {
+  it('name が空文字の場合、null を返す（保存前に急かさない）', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'name', value: '' })
+    ).toBeNull();
+  });
+
+  it('name が空白のみの場合も null を返す', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'name', value: '   ' })
+    ).toBeNull();
+  });
+
+  it(`name が ${INTRO_CARD_NAME_MAX_LENGTH + 1} 文字の場合、createIntroCard と同じ FIELD_TOO_LONG メッセージを返す`, () => {
+    const name = repeat('あ', INTRO_CARD_NAME_MAX_LENGTH + 1);
+    const thrown = captureError(() => createIntroCard({ name }));
+    const liveMessage = validateIntroCardFieldValue({
+      field: 'name',
+      value: name,
+    });
+
+    expect(thrown).toBeInstanceOf(IntroCardError);
+    expect(liveMessage).toBe((thrown as IntroCardError).message);
+  });
+
+  it('name が有効な場合、null を返す', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'name', value: '田中太郎' })
+    ).toBeNull();
+  });
+
+  it('title が空文字の場合、null を返す（任意項目）', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'title', value: '' })
+    ).toBeNull();
+  });
+
+  it(`title が ${INTRO_CARD_TITLE_MAX_LENGTH + 1} 文字の場合、createIntroCard と同じメッセージを返す`, () => {
+    const title = repeat('あ', INTRO_CARD_TITLE_MAX_LENGTH + 1);
+    const thrown = captureError(() =>
+      createIntroCard({ name: '田中太郎', title })
+    );
+    const liveMessage = validateIntroCardFieldValue({
+      field: 'title',
+      value: title,
+    });
+
+    expect(liveMessage).toBe((thrown as IntroCardError).message);
+  });
+
+  it(`organization が ${INTRO_CARD_ORGANIZATION_MAX_LENGTH + 1} 文字の場合、エラーメッセージを返す`, () => {
+    const organization = repeat('あ', INTRO_CARD_ORGANIZATION_MAX_LENGTH + 1);
+
+    expect(
+      validateIntroCardFieldValue({
+        field: 'organization',
+        value: organization,
+      })
+    ).not.toBeNull();
+  });
+
+  it(`selfIntro が ${INTRO_CARD_SELF_INTRO_MAX_LENGTH + 1} 文字の場合、エラーメッセージを返す`, () => {
+    const selfIntro = repeat('あ', INTRO_CARD_SELF_INTRO_MAX_LENGTH + 1);
+
+    expect(
+      validateIntroCardFieldValue({ field: 'selfIntro', value: selfIntro })
+    ).not.toBeNull();
+  });
+
+  it('email が空文字の場合、null を返す（任意項目）', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'email', value: '' })
+    ).toBeNull();
+  });
+
+  it('email が不正な形式の場合、createIntroCard と同じメッセージを返す', () => {
+    const thrown = captureError(() =>
+      createIntroCard({ name: '田中太郎', email: 'not-an-email' })
+    );
+    const liveMessage = validateIntroCardFieldValue({
+      field: 'email',
+      value: 'not-an-email',
+    });
+
+    expect(liveMessage).toBe((thrown as IntroCardError).message);
+  });
+
+  it('email が正しい形式の場合、null を返す', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'email', value: 'taro@example.com' })
+    ).toBeNull();
+  });
+
+  it('phone が空文字の場合、null を返す（任意項目）', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'phone', value: '' })
+    ).toBeNull();
+  });
+
+  it('phone に許可されない文字（英字）を含む場合、createIntroCard と同じメッセージを返す', () => {
+    const thrown = captureError(() =>
+      createIntroCard({ name: '田中太郎', phone: 'abc' })
+    );
+    const liveMessage = validateIntroCardFieldValue({
+      field: 'phone',
+      value: 'abc',
+    });
+
+    expect(liveMessage).toBe((thrown as IntroCardError).message);
+  });
+
+  it('links が空文字の場合、null を返す（任意項目）', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'links', value: '' })
+    ).toBeNull();
+  });
+
+  it('links が空白のみの場合、null を返す', () => {
+    expect(
+      validateIntroCardFieldValue({ field: 'links', value: '   ' })
+    ).toBeNull();
+  });
+
+  it('links が http/https から始まらない場合、createIntroCard と同じメッセージを返す', () => {
+    const thrown = captureError(() =>
+      createIntroCard({ name: '田中太郎', links: ['example.com'] })
+    );
+    const liveMessage = validateIntroCardFieldValue({
+      field: 'links',
+      value: 'example.com',
+    });
+
+    expect(liveMessage).toBe((thrown as IntroCardError).message);
+  });
+
+  it(`links が ${INTRO_CARD_LINK_MAX_LENGTH + 1} 文字の場合、createIntroCard と同じメッセージを返す`, () => {
+    const link = `https://example.com/${repeat('a', INTRO_CARD_LINK_MAX_LENGTH)}`;
+    const thrown = captureError(() =>
+      createIntroCard({ name: '田中太郎', links: [link] })
+    );
+    const liveMessage = validateIntroCardFieldValue({
+      field: 'links',
+      value: link,
+    });
+
+    expect(liveMessage).toBe((thrown as IntroCardError).message);
+  });
+
+  it('links が有効な URL の場合、null を返す', () => {
+    expect(
+      validateIntroCardFieldValue({
+        field: 'links',
+        value: 'https://github.com/example',
+      })
+    ).toBeNull();
+  });
+
+  it('links に全角文字が混入していても正規化してから検証する（Issue 92 と同じ正規化パイプライン）', () => {
+    expect(
+      validateIntroCardFieldValue({
+        field: 'links',
+        value: 'https://example.com/ｔａｒｏ',
+      })
+    ).toBeNull();
   });
 });
