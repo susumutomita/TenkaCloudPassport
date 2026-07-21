@@ -352,6 +352,29 @@
     selfIntro.hidden = false;
   }
 
+  // Issue 90: 既知サービスの hostname はサービス名ラベルに、それ以外は
+  // hostname に読み替えて表示する（生の URL 文字列より読みやすい）。
+  // `src/screens/intro-card-links.ts` の `HOST_SERVICE_MATCHERS` と同じ
+  // hostname 集合（`www.` は除いて比較する）。
+  const KNOWN_LINK_HOST_LABELS = {
+    'x.com': 'X',
+    'twitter.com': 'X',
+    'github.com': 'GitHub',
+    'linkedin.com': 'LinkedIn',
+  };
+
+  /** `link` が解析できない場合は、リンク文字列そのものを安全な既定値にする。 */
+  function linkLabel(link) {
+    try {
+      const hostname = new URL(link).hostname
+        .replace(/^www\./i, '')
+        .toLowerCase();
+      return KNOWN_LINK_HOST_LABELS[hostname] ?? hostname;
+    } catch {
+      return link;
+    }
+  }
+
   function renderLinks(card) {
     if (!card.links || card.links.length === 0) return;
     const linksContainer = document.getElementById('card-links');
@@ -360,7 +383,7 @@
       anchor.href = link;
       anchor.target = '_blank';
       anchor.rel = 'noopener noreferrer';
-      anchor.textContent = link;
+      anchor.textContent = linkLabel(link);
       linksContainer.appendChild(anchor);
     });
     linksContainer.hidden = false;

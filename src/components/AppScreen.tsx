@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  SafeAreaView,
+  ScrollView,
+  type ScrollViewProps,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { colors, spacing } from '../ui/theme';
 import { monoFontFamily } from '../ui/typography';
 import BrandMark from './BrandMark';
@@ -9,6 +16,13 @@ interface AppScreenProps {
   readonly title: string;
   readonly description: string;
   readonly children: ReactNode;
+  /**
+   * Issue 90: 多くの単一行入力を持つ画面（`IntroCardEditScreen` 等）が、
+   * スクロールでキーボードを閉じられるよう `"on-drag"` を渡せるようにする
+   * optional prop。既定は React Native の `ScrollView` の既定値（`"none"`）の
+   * まま変えず、他の全 Screen の挙動には影響しない。
+   */
+  readonly keyboardDismissMode?: ScrollViewProps['keyboardDismissMode'];
 }
 
 export default function AppScreen({
@@ -16,11 +30,13 @@ export default function AppScreen({
   title,
   description,
   children,
+  keyboardDismissMode,
 }: AppScreenProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         contentContainerStyle={styles.content}
+        keyboardDismissMode={keyboardDismissMode}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.brandRow}>

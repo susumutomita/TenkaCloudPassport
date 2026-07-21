@@ -6,10 +6,10 @@ function source(fileName: string): Promise<string> {
 }
 
 describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
-  it('編集画面は名前必須・自己紹介・連絡先・保存の順に配置し、全入力に label を付ける', async () => {
+  it('編集画面は名前必須・自己紹介・連絡先・リンク・保存の順に配置し、全入力に label を付ける（Issue 90: リンクは名前付き欄 + 自由リンク）', async () => {
     const text = await source('IntroCardEditScreen.tsx');
 
-    expect(text.match(/<TextInput/g)).toHaveLength(7);
+    expect(text.match(/<TextInput/g)).toHaveLength(11);
     expectInOrder(text, [
       't.nameLabel',
       't.titleLabel',
@@ -18,6 +18,11 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
       't.emailLabel',
       't.phoneLabel',
       't.linksLabel',
+      't.linkXLabel',
+      't.linkGithubLabel',
+      't.linkLinkedinLabel',
+      't.linkPortfolioLabel',
+      't.addLinkButton',
       't.byteUsageLabel',
       't.saveButton(saving)',
     ]);
@@ -93,5 +98,119 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     expect(text).toContain("from '../domain/intro-card'");
     expect(text).toContain('INTRO_CARD_NAME_MAX_LENGTH');
     expect(text).toContain('INTRO_CARD_MAX_LINKS');
+  });
+
+  it('編集画面の単一行入力は保存ボタン以外を return キーで次へ進め、最後は明示的にキーボードを閉じる（Issue 90）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    // 名前 → 肩書き → 所属 → 自己紹介（multiline、チェーンの終端） →
+    // メール → 電話 → X → GitHub → LinkedIn → Portfolio という、return キーで
+    // 次のフィールドへ focus を移す chain を持つ。
+    expectInOrder(text, [
+      "focusOrDismiss('title')",
+      "focusOrDismiss('organization')",
+      "focusOrDismiss('selfIntro')",
+      "focusOrDismiss('phone')",
+      "focusOrDismiss('linkX')",
+      "focusOrDismiss('linkGithub')",
+      "focusOrDismiss('linkLinkedin')",
+      "focusOrDismiss('linkPortfolio')",
+    ]);
+    // チェーン対象の単一行入力はフォーカス移動時の点滅を避けるため
+    // submitBehavior="submit" を固定する（RN 0.86 では blurOnSubmit の
+    // 後継 API、code-reviewer 指摘で移行済み）。
+    expect(
+      text.match(/submitBehavior="submit"/g)?.length ?? 0
+    ).toBeGreaterThanOrEqual(9);
+    // 自由リンクが 0 件のときは Portfolio が最後の欄になり done + dismiss、
+    // 1 件以上あるときは最後の自由リンク行が done + dismiss になる。
+    expect(text).toContain(
+      "returnKeyType={afterPortfolioKey === undefined ? 'done' : 'next'}"
+    );
+    expect(text).toContain(
+      "returnKeyType={nextRefKey === undefined ? 'done' : 'next'}"
+    );
+    expect(text).toContain('Keyboard.dismiss()');
+  });
+
+  it('保存ボタン押下時に明示的に Keyboard.dismiss() する', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+    const start = text.indexOf('function handleSave(): void {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expectInOrder(body, ['Keyboard.dismiss()', 'onSave()']);
+    expect(text).toContain('onPress={handleSave}');
+  });
+
+  it('自己紹介欄は multiline のまま return で改行し、AppScreen に keyboardDismissMode="on-drag" を渡してスクロールで閉じられるようにする', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    expect(text).toContain('keyboardDismissMode="on-drag"');
+    const selfIntroStart = text.indexOf("ref={registerFieldRef('selfIntro')}");
+    const fieldStart = text.lastIndexOf('<TextInput', selfIntroStart);
+    const fieldEnd = text.indexOf('/>', selfIntroStart);
+    const selfIntroField = text.slice(fieldStart, fieldEnd);
+    expect(selfIntroField).toContain('multiline');
+    expect(selfIntroField).not.toContain('onSubmitEditing');
+    expect(selfIntroField).not.toContain('returnKeyType');
+  });
+
+  it('リンク欄は X / GitHub / LinkedIn / Portfolio の名前付き単一行入力と、自由リンクの動的追加・削除を持つ（Issue 90）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    expect(text).toContain("from './intro-card-links'");
+    expect(text).toContain('nonEmptyLinkCount(');
+    expect(text).toContain('onChangeLinkX');
+    expect(text).toContain('onChangeLinkGithub');
+    expect(text).toContain('onChangeLinkLinkedin');
+    expect(text).toContain('onChangeLinkPortfolio');
+    expect(text).toContain('onAddOtherLink');
+    expect(text).toContain('onRemoveOtherLink');
+    expect(text).toContain('onChangeOtherLink');
+    expect(text).toContain('disabled={!canAddOtherLink}');
+  });
+
+  it('自由リンクの削除ボタンは accessibilityLabel を index 付きで持つ（複数行を区別できる）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    expect(text).toContain(
+      'accessibilityLabel={t.removeLinkButtonLabel(index + 1)}'
+    );
+    expect(text).toContain('accessibilityRole="button"');
+  });
+
+  it('自由リンク行の React key は配列 index ではなく mount 内不変の行 id を使う（code-reviewer 指摘: 削除時の誤アンマウント防止）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    expect(text).toContain('function useOtherLinkRowIds(');
+    expect(text).toContain('<View key={rowIds[index] ?? refKey}');
+    expect(text).not.toContain('<View key={key} style={styles.otherLinkRow}');
+    // 追加・削除は handler 内で id の追加・除去とアプリ側 callback 呼び出しを
+    // 同じ tick で行い、re-render 時に rowIds と otherLinks の長さがずれない
+    // ようにする。
+    expectInOrder(text, [
+      'function handleAddOtherLink(): void {',
+      'appendRowId();',
+      'onAddOtherLink();',
+    ]);
+    expectInOrder(text, [
+      'function handleRemoveOtherLink(index: number): void {',
+      'removeRowIdAt(index);',
+      'onRemoveOtherLink(index);',
+    ]);
+    expect(text).toContain('onPress={handleAddOtherLink}');
+    expect(text).toContain('onPress={() => handleRemoveOtherLink(index)}');
+  });
+
+  it('リンク件数が上限を超えたら byte 予算超過と同じスタイルで件数表示を警告色にする（code-reviewer 指摘: 追加時以外の超過が見た目で分からない問題）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    expect(text).toContain(
+      'const overLinkCount = linkCount > INTRO_CARD_MAX_LINKS;'
+    );
+    expect(text).toContain(
+      '<Text style={overLinkCount ? styles.byteUsageOverBudget : styles.limit}>'
+    );
   });
 });
