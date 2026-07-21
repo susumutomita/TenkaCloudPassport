@@ -1274,18 +1274,19 @@ const ja: AppMessages = {
     linksHint: 'GitHub、X、Web サイト等の URL を 1 行ずつ入力します。',
     linksPlaceholder: 'https://github.com/example',
     linksCounter: (current, max) => `${current} / ${max} 件`,
-    byteUsageLabel: (current, max) => `vCard の目安: ${current} / ${max} byte`,
+    byteUsageLabel: (current, max) => `QR の目安: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
-      `vCard が上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
+      `QR の上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
     saveButton: (saving) =>
       saving ? '端末内に保存中' : '自己紹介カードを端末内に明示保存',
     saveButtonHint: '検証済みの自己紹介カードをこの端末だけに保存します。',
     cardEyebrow: 'Intro Card',
     cardTitle: '自己紹介カード',
     cardDescription:
-      '相手はこの QR をカメラで読むだけで連絡先に登録できます。アプリのインストールは不要です。',
+      '相手はこの QR をカメラで読むとブラウザで自己紹介ページが開きます。連絡先への追加は相手がページ内で選べます。アプリのインストールは不要です。',
     qrAccessibilityLabel: '自己紹介カードの QR コード',
-    qrExplanation: '相手はカメラで読むだけで連絡先登録できます。',
+    qrExplanation:
+      '相手はカメラで読むとブラウザで自己紹介が開きます。連絡先への追加はページ内で相手が選べます。',
     editButton: '編集する',
     editButtonHint: '自己紹介カードの内容を編集します。',
     deleteButton: 'カードを削除する',
@@ -1963,20 +1964,19 @@ const en: AppMessages = {
     linksHint: 'Enter GitHub, X, or website URLs, one per line.',
     linksPlaceholder: 'https://github.com/example',
     linksCounter: (current, max) => `${current} / ${max}`,
-    byteUsageLabel: (current, max) =>
-      `vCard estimate: ${current} / ${max} byte`,
+    byteUsageLabel: (current, max) => `QR estimate: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
-      `The vCard exceeds the limit (${current} / ${max} byte). Please shorten your input.`,
+      `This exceeds the QR limit (${current} / ${max} byte). Please shorten your input.`,
     saveButton: (saving) =>
       saving ? 'Saving on this device' : 'Save Intro Card on this device',
     saveButtonHint: 'Saves the validated Intro Card only on this device.',
     cardEyebrow: 'Intro Card',
     cardTitle: 'Intro Card',
     cardDescription:
-      'The other person can add you to their contacts just by scanning this QR with their camera. No app install needed.',
+      'Scanning this QR with their camera opens your intro page in their browser. They can choose whether to add you to their contacts from that page. No app install needed.',
     qrAccessibilityLabel: 'Intro Card QR code',
     qrExplanation:
-      'The other person can add your contact by scanning with their camera.',
+      'Scanning with their camera opens your intro in their browser. Adding your contact is a choice they make on that page.',
     editButton: 'Edit',
     editButtonHint: 'Edit the contents of your Intro Card.',
     deleteButton: 'Delete card',

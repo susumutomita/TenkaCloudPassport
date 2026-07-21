@@ -47,13 +47,16 @@ import {
   type ParticipantId,
 } from '../domain/session-identifiers';
 import {
+  encodeIntroCardUrl,
+  introCardUrlByteLength,
+} from '../protocol/intro-card-url';
+import {
   createLoungeJoinRequest,
   encodeLoungeJoinRequest,
   type IssuedLoungeHandshake,
   issueLoungeHandshake,
 } from '../protocol/lounge-handshake';
 import { encodeQrPayload } from '../protocol/qr-payload';
-import { encodeVCard, vCardByteLength } from '../protocol/vcard';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
 import BackupExportScreen from '../screens/BackupExportScreen';
@@ -605,7 +608,7 @@ interface IntroCardEditBranchProps {
   readonly linksText: string;
   readonly notice: IntroCardNotice;
   readonly saving: boolean;
-  readonly vCardByteUsage: number;
+  readonly cardUrlByteUsage: number;
   readonly onChangeName: (value: string) => void;
   readonly onChangeTitle: (value: string) => void;
   readonly onChangeOrganization: (value: string) => void;
@@ -674,7 +677,7 @@ function IntroCardStageGate({
       saving={edit.saving}
       selfIntro={edit.selfIntro}
       title={edit.title}
-      vCardByteUsage={edit.vCardByteUsage}
+      cardUrlByteUsage={edit.cardUrlByteUsage}
     />
   );
 }
@@ -1390,9 +1393,11 @@ export default function PassportApp({
     setIntroCardSaving(true);
     try {
       const card = createIntroCard(introCardDraftAsShape());
-      // vCard 化と 1,024 byte 上限の検証をここで通す（保存後の表示画面では
-      // 再検証せずそのまま QR 化できる前提を保つ）。
-      encodeVCard(card);
+      // 自己紹介ページ URL 化と 1,024 byte 上限の検証をここで通す（保存後の
+      // 表示画面では再検証せずそのまま QR 化できる前提を保つ。Issue 84 で
+      // QR の中身が vCard 直埋めから URL へ変わったため、検証対象も
+      // encodeVCard から encodeIntroCardUrl へ揃える）。
+      encodeIntroCardUrl(card);
       await introCardStorage.save(card);
       introCardRef.current = card;
       setIntroCard(card);
@@ -2151,6 +2156,7 @@ export default function PassportApp({
       }}
       introCard={introCard}
       introCardEdit={{
+        cardUrlByteUsage: introCardUrlByteLength(introCardDraftAsShape()),
         email: introCardDraftEmail,
         linksText: introCardDraftLinksText,
         name: introCardDraftName,
@@ -2168,7 +2174,6 @@ export default function PassportApp({
         saving: introCardSaving,
         selfIntro: introCardDraftSelfIntro,
         title: introCardDraftTitle,
-        vCardByteUsage: vCardByteLength(introCardDraftAsShape()),
       }}
       locale={locale}
       onDeleteIntroCard={() => void deleteIntroCard()}

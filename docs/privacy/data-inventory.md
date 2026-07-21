@@ -15,8 +15,8 @@
 本書では、Pet が Lounge 内で交換するアプリケーションデータの日本語正本名を Pet Message とする。
 Issue 3 の不変条件にある Peer Message は同じデータ種別を指し、実装の型名は本書で固定しない。
 
-Local Private Profile、Public Passport、QR（Intro Card の vCard QR を除く）、Pet Message、
-バックアップは、次の値を受け付けない。
+Local Private Profile、Public Passport、QR（Intro Card の自己紹介ページ URL を除く）、
+Pet Message、バックアップは、次の値を受け付けない。
 
 - 氏名、アカウント名、メールアドレス、電話番号、住所、連絡先、写真である。
 - 安定 ID、端末 ID、広告 ID、Cookie ID、永続する公開鍵である。
@@ -25,11 +25,16 @@ Local Private Profile、Public Passport、QR（Intro Card の vCard QR を除く
 - Pet Name と任意の Owner Alias 以外の自由記述、ファイル添付、端末の絶対パスである。
 
 [ADR-0026](../adr/0026-intro-card-pivot.md) は、この最小化契約から Intro Card（自己紹介
-カード）を明示的に除外する。Intro Card は Owner が自分自身について任意入力する氏名
-（必須）・肩書き・所属・自己紹介・リンク・メールアドレス・電話番号を端末内に保持し、
-Owner が QR を提示する 1 方向の操作でだけ共有する。相手の情報を受け取る経路は持たない。
-Local Private Profile、Public Passport、Lounge Invite QR、Pet Message、既存の JSON
-バックアップにはこの例外を適用せず、上記の禁止を維持する。
+カード）を明示的に除外する。[ADR-0027](../adr/0027-intro-card-url-viewer.md) は、共有の
+実現方式を vCard 直埋めから自己紹介ページ URL へ変更する。QR はフラグメントに氏名・
+任意項目を base64url と JSON で埋め込んだ URL であり、`site/c/index.html`（完全静的・
+外部リクエストゼロ）が相手のブラウザ内だけでデコードして表示する。フラグメントは HTTP
+リクエストでサーバーへ送信されないため、この経路でも Owner のデータを預からない。
+Intro Card は Owner が自分自身について任意入力する氏名（必須）・肩書き・所属・自己紹介・
+リンク・メールアドレス・電話番号を端末内に保持し、Owner が QR を提示する 1 方向の操作
+でだけ共有する。相手の情報を受け取る経路は持たない。Local Private Profile、Public
+Passport、Lounge Invite QR、Pet Message、既存の JSON バックアップにはこの例外を適用せず、
+上記の禁止を維持する。
 
 Pet Name と Owner Alias は 24 UTF-16 code unit 以下の表示用文字列だけを許可する。Owner Alias は
 空を許可し、本名を要求しない。UI は氏名、連絡先、会社名、機密情報を入力しないよう案内する。
@@ -107,8 +112,9 @@ Role cohort、Locale cohort、Journey stage、Outcome class、Behavior code、Ev
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 手掛かりカタログ | `L0` | アプリの版管理済み資産である。 | 分類、値、表示文言、カタログ版である。 | アプリ領域である。 | Owner の画面と端末内 Pet である。 | アプリの版と同じである。 | アプリ更新または削除である。 | 否である。 |
 | Local Private Profile | `L1` | Owner が明示保存する。 | `schemaVersion`、Pet 表示情報、任意 Alias、手掛かり候補、Languages である。 | OS のアプリ専用保護領域である。 | Owner と端末内 Pet だけである。 | Owner が削除するまでである。 | 個別削除、Profile 初期化、アプリ削除である。 | 可である。 |
-| 自己紹介カード（Intro Card） | `L1`（ADR-0026 の例外） | Owner が明示保存する。 | 氏名（必須）、任意の肩書き・所属・自己紹介・リンク（最大 5 件）・メールアドレス・電話番号である。相手の情報は含まない。 | OS のアプリ専用保護領域（Local Private Profile とは別ファイル・別キー）である。 | Owner 自身と、Owner が QR を提示した相手の標準カメラである。 | Owner が削除するまでである。 | 個別削除、アプリ削除である。 | 否である（手動 JSON バックアップ統合は follow-up）。 |
-| 自己紹介カード QR（vCard） | `L2` | 保存済み Intro Card から表示のたびに再生成する。 | vCard 3.0（`BEGIN:VCARD`〜`END:VCARD`）。氏名、任意項目、1,024 byte 以内である。 | 画面表示中のメモリだけである。 | QR を撮影する人（標準カメラで連絡先へ取り込める）である。 | 表示中だけである。 | 画面を閉じる、カード編集・削除である。 | 否である。 |
+| 自己紹介カード（Intro Card） | `L1`（ADR-0026 の例外） | Owner が明示保存する。 | 氏名（必須）、任意の肩書き・所属・自己紹介・リンク（最大 5 件）・メールアドレス・電話番号である。相手の情報は含まない。 | OS のアプリ専用保護領域（Local Private Profile とは別ファイル・別キー）である。 | Owner 自身と、Owner が QR を提示した相手（相手のブラウザで開く自己紹介ページ経由）である。 | Owner が削除するまでである。 | 個別削除、アプリ削除である。 | 否である（手動 JSON バックアップ統合は follow-up）。 |
+| 自己紹介カード QR（自己紹介ページ URL、ADR-0027） | `L2` | 保存済み Intro Card から表示のたびに再生成する。 | `https://susumutomita.github.io/TenkaCloudPassport/c#<base64url(JSON)>`。フラグメントに氏名・任意項目を埋め込む。URL 全体で 1,024 byte 以内である。 | 画面表示中のメモリだけである。 | QR を撮影した人（相手のブラウザが `site/c/index.html` を開く。フラグメントはサーバーへ送信されない）である。 | 表示中だけである。 | 画面を閉じる、カード編集・削除である。 | 否である。 |
+| 自己紹介ページ表示（ビューア、`site/c/index.html`） | `L2` | 相手のブラウザが QR の URL を開き、fragment を相手の端末内 JS だけで decode する。 | Intro Card と同じ内容（氏名、任意項目）である。サーバーは fragment を受け取らないため関与しない。 | 相手のブラウザのメモリと画面だけである。 | 相手自身である。相手が「連絡先に追加」を押した場合だけ、相手のブラウザ内で `.vcf` を追加生成し相手の連絡先アプリへ渡す。 | 相手がページを閉じるまでである。 | 相手がページを閉じる、または明示操作をやめるである。 | 否である（Owner 側の Export 対象外。相手側の操作は Owner のアプリの管理外）。 |
 | Public Passport | `L2` | Owner の確認操作により Local Private Profile から投影する。 | `schemaVersion`、Pet Name、今回 ON にした任意表示情報、Languages、最大 3 件の手掛かりである。 | 現在の QR を作る間のメモリだけである。 | QR を見る人と参加を許可された Pet である。 | 投影から最大 20 分である。 | QR の閉鎖、再生成、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
 | QR 参加情報 | `L2` | Lounge を作成する Owner の端末が生成する。 | Protocol 版、使い捨て Lounge ID、Join Secret、Discovery Hint、Transport Fingerprint、発行時刻、満了時刻、定員、Required Capability である。 | 画面と生成中のメモリだけである。 | QR を撮影または読み取れる人である。 | 発行から最大 20 分である。 | Join Secret の受理、QR の閉鎖、Rotation、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
 | 参加 capability | `L2` | Host が参加 Pet ごとに暗号学的乱数から生成する。 | 1 回限りの Join Secret と、Host の HMAC 検証状態である。 | QR と Host のメモリだけである。 | raw Secret は QR を読み取る Pet だけであり、Key Buffer は共有しない。 | 発行から最大 20 分かつ Lounge の残り時間以内である。 | 受理時の Key Buffer 上書き、QR の閉鎖、Rotation、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
