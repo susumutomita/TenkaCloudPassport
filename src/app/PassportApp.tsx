@@ -68,6 +68,7 @@ import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
 import IntroCardEditScreen, {
+  type IntroCardEditFieldKey,
   type IntroCardEditScreenProps,
 } from '../screens/IntroCardEditScreen';
 import IntroCardScreen from '../screens/IntroCardScreen';
@@ -75,6 +76,8 @@ import {
   addOtherLink,
   buildIntroCardLinks,
   classifyIntroCardLinks,
+  firstInvalidNamedLinkField,
+  type IntroCardLinksDraft,
   removeOtherLink,
   updateOtherLink,
 } from '../screens/intro-card-links';
@@ -262,6 +265,25 @@ function backupImportValidationView(
     return { kind: 'rejected', message: result.message };
   }
   return { kind: 'parsed', items: result.items };
+}
+
+/**
+ * Issue 92: 保存失敗時、どの入力欄へ focus し直下にエラーを出すかを 1 つ特定する。
+ * `IntroCardNotice.field`（domain 由来、`links` は単一フィールドにまとまる）を、
+ * `links` の場合だけ `firstInvalidNamedLinkField`（`intro-card-links.ts`）で
+ * その時点の draft から実際に問題のある名前付き欄まで絞り込む。件数超過
+ * （5 件超）等、どの 1 欄にも起因しない場合は絞り込めず `undefined` を返し、
+ * 呼び出し側は既存の画面上部 Notice・`overLinkCount` の見た目に委ねる。
+ */
+function resolveIntroCardErrorFieldKey(
+  notice: IntroCardNotice,
+  linksDraft: IntroCardLinksDraft
+): IntroCardEditFieldKey | undefined {
+  if (notice.kind !== 'validation-error' || notice.field === undefined) {
+    return undefined;
+  }
+  if (notice.field !== 'links') return notice.field;
+  return firstInvalidNamedLinkField(linksDraft);
 }
 
 function isBackupStage(
@@ -657,6 +679,7 @@ function IntroCardStageGate({
   return (
     <IntroCardEditScreen
       email={edit.email}
+      errorFieldKey={edit.errorFieldKey}
       linkGithub={edit.linkGithub}
       linkLinkedin={edit.linkLinkedin}
       linkPortfolio={edit.linkPortfolio}
@@ -754,6 +777,13 @@ export default function PassportApp({
     kind: 'empty',
     message: MESSAGES[DEFAULT_LOCALE].introCard.initialNotice,
   });
+  // Issue 92: 保存失敗時にどの入力欄へ focus するか（`IntroCardEditScreen` の
+  // `errorFieldKey` prop にそのまま渡す）。`introCardNotice` と同じタイミングで
+  // 更新し、新しい失敗が起きるたびに `resolveIntroCardErrorFieldKey` で
+  // 保存時点のスナップショットから 1 回だけ解決する（Plan.md 設計節）。
+  const [introCardErrorFieldKey, setIntroCardErrorFieldKey] = useState<
+    IntroCardEditFieldKey | undefined
+  >(undefined);
   const [petName, setPetName] = useState('');
   const [petEmoji, setPetEmoji] = useState<PetEmoji>('🐾');
   const [ownerAlias, setOwnerAlias] = useState('');
@@ -1373,6 +1403,24 @@ export default function PassportApp({
   }
 
   /**
+   * リンク系 4 名前付き欄 + 自由リンクの現在の draft を `IntroCardLinksDraft`
+   * 形へまとめる。`introCardDraftAsShape`（保存時の配列組み立て）と
+   * `saveIntroCard` の catch 節（`resolveIntroCardErrorFieldKey` へ渡す、
+   * Issue 92）の両方が同じ形を必要とするため、ここへ一本化する
+   * （simplify レビュー指摘: 同じ 5 プロパティの object literal が
+   * 2 箇所にコピペされていた）。
+   */
+  function introCardLinksDraftShape(): IntroCardLinksDraft {
+    return {
+      x: introCardDraftLinkX,
+      github: introCardDraftLinkGithub,
+      linkedin: introCardDraftLinkLinkedin,
+      portfolio: introCardDraftLinkPortfolio,
+      otherLinks: introCardDraftOtherLinks,
+    };
+  }
+
+  /**
    * Issue 79: 空文字・空白のみは undefined 扱いにする正規化は `createIntroCard`
    * 自身が担う（`src/domain/intro-card.ts`）ため、ここでは draft の生文字列を
    * そのまま渡すだけでよい。`links` は Issue 90 で「X / GitHub / LinkedIn /
@@ -1385,13 +1433,7 @@ export default function PassportApp({
       title: introCardDraftTitle,
       organization: introCardDraftOrganization,
       selfIntro: introCardDraftSelfIntro,
-      links: buildIntroCardLinks({
-        x: introCardDraftLinkX,
-        github: introCardDraftLinkGithub,
-        linkedin: introCardDraftLinkLinkedin,
-        portfolio: introCardDraftLinkPortfolio,
-        otherLinks: introCardDraftOtherLinks,
-      }),
+      links: buildIntroCardLinks(introCardLinksDraftShape()),
       email: introCardDraftEmail,
       phone: introCardDraftPhone,
     };
@@ -1421,6 +1463,7 @@ export default function PassportApp({
       kind: 'empty',
       message: MESSAGES[locale].introCard.initialNotice,
     });
+    setIntroCardErrorFieldKey(undefined);
     setStage('intro-card-edit');
   }
 
@@ -1441,9 +1484,17 @@ export default function PassportApp({
         kind: 'saved',
         message: MESSAGES[locale].introCard.noticeTitles.saved,
       });
+      setIntroCardErrorFieldKey(undefined);
       setStage('intro-card');
     } catch (error: unknown) {
-      setIntroCardNotice(introCardNoticeFromError(error, 'save', locale));
+      const nextNotice = introCardNoticeFromError(error, 'save', locale);
+      setIntroCardNotice(nextNotice);
+      // Issue 92: 失敗時点の draft（現在の入力値）のスナップショットから
+      // 1 回だけ「どの欄が原因か」を解決する。画面側で都度再計算しない理由は
+      // Plan.md 設計節（入力中に focus が奪われる体験を避けるため）。
+      setIntroCardErrorFieldKey(
+        resolveIntroCardErrorFieldKey(nextNotice, introCardLinksDraftShape())
+      );
     } finally {
       setIntroCardSaving(false);
     }
@@ -1469,10 +1520,12 @@ export default function PassportApp({
         kind: 'empty',
         message: MESSAGES[locale].introCard.initialNotice,
       });
+      setIntroCardErrorFieldKey(undefined);
       setStage('intro-card-edit');
     } catch (error: unknown) {
       // stage は変えない（'intro-card' に留まる）。失敗時の Notice は
-      // IntroCardScreen 側（deleteError prop）で表示する。
+      // IntroCardScreen 側（deleteError prop）で表示する。delete 操作は
+      // 編集画面の入力欄に紐づかないため errorFieldKey は対象外（undefined のまま）。
       setIntroCardNotice(introCardNoticeFromError(error, 'delete', locale));
     }
   }
@@ -2198,6 +2251,7 @@ export default function PassportApp({
       introCardEdit={{
         cardUrlByteUsage: introCardUrlByteLength(introCardDraftAsShape()),
         email: introCardDraftEmail,
+        errorFieldKey: introCardErrorFieldKey,
         linkGithub: introCardDraftLinkGithub,
         linkLinkedin: introCardDraftLinkLinkedin,
         linkPortfolio: introCardDraftLinkPortfolio,

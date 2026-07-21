@@ -9,6 +9,7 @@ import {
   INTRO_CARD_SELF_INTRO_MAX_LENGTH,
   INTRO_CARD_TITLE_MAX_LENGTH,
   IntroCardError,
+  type IntroCardField,
 } from './intro-card';
 
 function repeat(character: string, length: number): string {
@@ -24,14 +25,20 @@ function captureError(run: () => unknown): unknown {
   }
 }
 
+/**
+ * Issue 92: `IntroCardError.field` は保存失敗時に画面側がどの入力欄へ
+ * focus するかの根拠になるため、すべての検証エラーで期待値を固定する。
+ */
 function expectIntroCardError(
   captured: unknown,
-  code: IntroCardError['code']
+  code: IntroCardError['code'],
+  field: IntroCardField
 ): void {
   expect(captured).toBeInstanceOf(IntroCardError);
   if (captured instanceof IntroCardError) {
     expect(captured.code).toBe(code);
     expect(captured.name).toBe('IntroCardError');
+    expect(captured.field).toBe(field);
   }
 }
 
@@ -73,13 +80,13 @@ describe('createIntroCard', () => {
   it('name が空文字の場合、NAME_REQUIRED を投げる', () => {
     const error = captureError(() => createIntroCard({ name: '' }));
 
-    expectIntroCardError(error, 'NAME_REQUIRED');
+    expectIntroCardError(error, 'NAME_REQUIRED', 'name');
   });
 
   it('name が空白のみの場合、NAME_REQUIRED を投げる', () => {
     const error = captureError(() => createIntroCard({ name: '   ' }));
 
-    expectIntroCardError(error, 'NAME_REQUIRED');
+    expectIntroCardError(error, 'NAME_REQUIRED', 'name');
   });
 
   it(`name が ${INTRO_CARD_NAME_MAX_LENGTH} 文字ちょうどの場合、受理する`, () => {
@@ -95,7 +102,7 @@ describe('createIntroCard', () => {
 
     const error = captureError(() => createIntroCard({ name }));
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'name');
   });
 
   it('title・organization・selfIntro が空文字の場合、undefined へ正規化する', () => {
@@ -119,7 +126,7 @@ describe('createIntroCard', () => {
       })
     );
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'title');
   });
 
   it(`organization が ${INTRO_CARD_ORGANIZATION_MAX_LENGTH + 1} 文字の場合、FIELD_TOO_LONG を投げる`, () => {
@@ -130,7 +137,7 @@ describe('createIntroCard', () => {
       })
     );
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'organization');
   });
 
   it(`selfIntro が ${INTRO_CARD_SELF_INTRO_MAX_LENGTH} 文字ちょうどの場合、受理する`, () => {
@@ -149,7 +156,7 @@ describe('createIntroCard', () => {
       })
     );
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'selfIntro');
   });
 
   it('links が空配列の場合、undefined へ正規化する', () => {
@@ -194,7 +201,7 @@ describe('createIntroCard', () => {
       createIntroCard({ name: '田中太郎', links })
     );
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'links');
   });
 
   it(`links の要素が ${INTRO_CARD_LINK_MAX_LENGTH + 1} 文字の場合、FIELD_TOO_LONG を投げる`, () => {
@@ -204,7 +211,7 @@ describe('createIntroCard', () => {
       createIntroCard({ name: '田中太郎', links: [longLink] })
     );
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'links');
   });
 
   it('links の要素が http/https で始まらない場合、INVALID_URL を投げる', () => {
@@ -212,7 +219,7 @@ describe('createIntroCard', () => {
       createIntroCard({ name: '田中太郎', links: ['ftp://example.com'] })
     );
 
-    expectIntroCardError(error, 'INVALID_URL');
+    expectIntroCardError(error, 'INVALID_URL', 'links');
   });
 
   it('email が空文字の場合、undefined へ正規化する', () => {
@@ -235,7 +242,7 @@ describe('createIntroCard', () => {
       createIntroCard({ name: '田中太郎', email: 'taro-example.com' })
     );
 
-    expectIntroCardError(error, 'INVALID_EMAIL');
+    expectIntroCardError(error, 'INVALID_EMAIL', 'email');
   });
 
   it('email にドメイン部の . がない場合、INVALID_EMAIL を投げる', () => {
@@ -243,7 +250,7 @@ describe('createIntroCard', () => {
       createIntroCard({ name: '田中太郎', email: 'taro@example' })
     );
 
-    expectIntroCardError(error, 'INVALID_EMAIL');
+    expectIntroCardError(error, 'INVALID_EMAIL', 'email');
   });
 
   it('phone が空文字の場合、undefined へ正規化する', () => {
@@ -268,7 +275,7 @@ describe('createIntroCard', () => {
       })
     );
 
-    expectIntroCardError(error, 'FIELD_TOO_LONG');
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'phone');
   });
 
   it('phone に許可されていない文字（英字）を含む場合、INVALID_PHONE を投げる', () => {
@@ -276,7 +283,7 @@ describe('createIntroCard', () => {
       createIntroCard({ name: '田中太郎', phone: '090-abcd-5678' })
     );
 
-    expectIntroCardError(error, 'INVALID_PHONE');
+    expectIntroCardError(error, 'INVALID_PHONE', 'phone');
   });
 
   it('phone の許可文字（数字・+・-・()・空白）をすべて受理する', () => {
@@ -286,5 +293,88 @@ describe('createIntroCard', () => {
     });
 
     expect(card.phone).toBe('+81 (90) 1234-5678');
+  });
+});
+
+describe('createIntroCard の全角・不可視文字の正規化（Issue 92: iOS 日本語キーボード対策）', () => {
+  it('email に全角＠が混入している場合、正規化して半角として受理する（実機で報告された事象そのもの）', () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      email: 'taro＠example.com',
+    });
+
+    expect(card.email).toBe('taro@example.com');
+  });
+
+  it('email に全角英数字が混入している場合、正規化して半角として受理する', () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      email: 'ｔａｒｏ@example.com',
+    });
+
+    expect(card.email).toBe('taro@example.com');
+  });
+
+  it('name にゼロ幅スペースが混入している場合、除去して保存する', () => {
+    const card = createIntroCard({ name: '田中\u200B太郎' });
+
+    expect(card.name).toBe('田中太郎');
+  });
+
+  it('name に半角カタカナが混入している場合、正規化して全角カタカナで保存する', () => {
+    const card = createIntroCard({ name: '山田ﾀﾛｳ' });
+
+    expect(card.name).toBe('山田タロウ');
+  });
+
+  it('phone に全角数字が混入している場合、正規化して半角で保存する', () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      phone: '０９０-１２３４-５６７８',
+    });
+
+    expect(card.phone).toBe('090-1234-5678');
+  });
+
+  it('links の要素に全角文字が混入している場合、正規化してから http/https 検証を通す', () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      links: ['ｈｔｔｐｓ://example.com'],
+    });
+
+    expect(card.links).toEqual(['https://example.com']);
+  });
+
+  it('正規化で文字数が展開され上限を超える場合、FIELD_TOO_LONG を投げる（合字展開のエッジケース）', () => {
+    // "㍻"（U+337B、SQUARE ERA NAME HEISEI）は NFKC 正規化で「平成」の 2 文字へ
+    // 展開される。正規化前は 50 文字ちょうど（上限内）でも、正規化後は 51 文字になる。
+    const name = `${repeat('あ', INTRO_CARD_NAME_MAX_LENGTH - 1)}㍻`;
+
+    const error = captureError(() => createIntroCard({ name }));
+
+    expectIntroCardError(error, 'FIELD_TOO_LONG', 'name');
+  });
+
+  it('selfIntro に ZWJ（U+200D）結合絵文字シーケンスが含まれる場合、分裂させず保存する（code-reviewer 指摘: ゼロ幅文字の一律除去が絵文字を壊す回帰防止）', () => {
+    // 複数の人物絵文字を U+200D（ZERO WIDTH JOINER）でつないだ結合絵文字
+    // シーケンス（例: 家族の絵文字）。U+200D を無条件除去すると、見た目が
+    // 「1 つの家族」から「4 人がバラバラに並んだだけ」に変わってしまう。
+    const familyEmoji = '👨‍👩‍👧‍👦';
+
+    const card = createIntroCard({
+      name: '田中太郎',
+      selfIntro: `よろしくお願いします ${familyEmoji}`,
+    });
+
+    expect(card.selfIntro).toBe(`よろしくお願いします ${familyEmoji}`);
+  });
+
+  it('links に ZWJ（U+200D）を含む値がある場合も除去せずそのまま検証する（http/https 判定に影響しない）', () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      links: [`https://example.com/${'👨‍👩'}`],
+    });
+
+    expect(card.links).toEqual([`https://example.com/${'👨‍👩'}`]);
   });
 });

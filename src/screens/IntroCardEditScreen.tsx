@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Keyboard,
   Pressable,
@@ -18,11 +18,28 @@ import {
   INTRO_CARD_ORGANIZATION_MAX_LENGTH,
   INTRO_CARD_SELF_INTRO_MAX_LENGTH,
   INTRO_CARD_TITLE_MAX_LENGTH,
+  type IntroCardField,
 } from '../domain/intro-card';
 import { QR_ENCODER_MAX_BYTES } from '../qr/encoder';
 import { colors, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
-import { nonEmptyLinkCount } from './intro-card-links';
+import {
+  type IntroCardLinkFieldKey,
+  nonEmptyLinkCount,
+} from './intro-card-links';
+
+/**
+ * Issue 92: 保存失敗時に focus・直下エラー表示の対象にする入力欄の識別子。
+ * 名前・肩書き・所属・自己紹介・メール・電話は `IntroCardField`
+ * （`src/domain/intro-card.ts`）から `Exclude` で導出し（手で列挙し直すと
+ * `IntroCardField` が変わったときに drift しうる、code-reviewer 指摘）、
+ * リンク系は `IntroCardLinkFieldKey`（`intro-card-links.ts`）を再利用する
+ * （domain から見ると `links` は単一フィールドだが、画面には複数の
+ * 名前付き欄があるため、それだけは別の型に置き換える）。
+ */
+export type IntroCardEditFieldKey =
+  | Exclude<IntroCardField, 'links'>
+  | IntroCardLinkFieldKey;
 
 export interface IntroCardEditScreenProps {
   readonly name: string;
@@ -37,6 +54,11 @@ export interface IntroCardEditScreenProps {
   readonly linkPortfolio: string;
   readonly otherLinks: readonly string[];
   readonly notice: IntroCardNotice;
+  /**
+   * Issue 92: 保存失敗の原因になった 1 欄（`PassportApp.tsx` が保存時点の
+   * draft から解決済み）。この欄へ focus し、直下にエラーメッセージを表示する。
+   */
+  readonly errorFieldKey: IntroCardEditFieldKey | undefined;
   readonly saving: boolean;
   readonly cardUrlByteUsage: number;
   readonly locale?: Locale;
@@ -79,6 +101,21 @@ function Notice({
 }
 
 /**
+ * Issue 92: 保存失敗の原因になった欄の直下に、上部 Notice と同じ message を
+ * 表示する。上部 Notice（`storage-unavailable` 等、フィールド非依存のエラーは
+ * 引き続きそちらだけで案内する）と重複するが、長いフォームのどこが悪いかを
+ * 探す手間を減らすトレードオフとして許容する（Plan.md 設計節）。
+ */
+function FieldError({ message }: { readonly message: string | null }) {
+  if (message === null) return null;
+  return (
+    <Text accessibilityRole="alert" style={styles.dangerCaption}>
+      {message}
+    </Text>
+  );
+}
+
+/**
  * Issue 90: 単一行入力（名前・肩書き・所属・メール・電話・各名前付きリンク・
  * 自由リンク行）の return キーで次の欄へフォーカスを移す。`useRef` は
  * key（フィールド名 / `otherLink-<index>`）で引く map にし、自由リンクの
@@ -90,19 +127,26 @@ function Notice({
 function useFieldFocusChain() {
   const fieldRefs = useRef<Record<string, TextInput | null>>({});
 
-  function registerFieldRef(key: string) {
-    return (instance: TextInput | null) => {
+  // simplify レビュー指摘: `registerFieldRef`・`focusOrDismiss` を毎 render
+  // 新しい関数として作ると、Issue 92 の保存失敗 focus 用 `useEffect` の依存配列に
+  // `focusOrDismiss` を含めた際、他の欄への入力（無関係な再 render）のたびに
+  // effect 本体が再実行されてしまう。`fieldRefs`（`useRef`、参照が安定）だけを
+  // 閉じ込めるため `useCallback` で安定化し、根本から解消する（対症療法の
+  // 追加 ref ガードを effect 側に持たせない）。
+  const registerFieldRef = useCallback(
+    (key: string) => (instance: TextInput | null) => {
       fieldRefs.current[key] = instance;
-    };
-  }
+    },
+    []
+  );
 
-  function focusOrDismiss(nextKey: string | undefined): void {
+  const focusOrDismiss = useCallback((nextKey: string | undefined): void => {
     if (nextKey === undefined) {
       Keyboard.dismiss();
       return;
     }
     fieldRefs.current[nextKey]?.focus();
-  }
+  }, []);
 
   return { registerFieldRef, focusOrDismiss };
 }
@@ -164,6 +208,7 @@ export default function IntroCardEditScreen({
   linkPortfolio,
   otherLinks,
   notice,
+  errorFieldKey,
   saving,
   cardUrlByteUsage,
   locale = DEFAULT_LOCALE,
@@ -205,6 +250,36 @@ export default function IntroCardEditScreen({
   const { rowIds, appendRowId, removeRowIdAt } = useOtherLinkRowIds(otherLinks);
   const afterPortfolioKey = otherLinks.length > 0 ? 'otherLink-0' : undefined;
 
+  // Issue 92: 保存失敗時、画面上部へ戻さず該当欄へ focus する。RN の
+  // `ScrollView`（`AppScreen`）は内部の `TextInput` が `.focus()` で
+  // first responder になった時点で可視領域へ自動スクロールするネイティブ機構を
+  // 持つため、追加の座標計算・手動 scroll は行わない（Plan.md 設計節、
+  // 代替案 A を却下した理由）。
+  // 「再 focus すべき新しい失敗が起きたか」は `notice`（`saveIntroCard` の
+  // catch 節で保存の都度新しいオブジェクト参照になる、`PassportApp.tsx`）を
+  // 依存に含めて判定する（`errorFieldKey` の値だけを依存にすると、同じ欄が
+  // 原因のまま連続して保存に失敗したとき 2 回目以降 focus されない
+  // code-reviewer 指摘があったため）。`focusOrDismiss` は `useFieldFocusChain`
+  // 側で `useCallback` により安定した参照になっているため（simplify レビュー
+  // 指摘、対症療法のガード ref を追加する代わりに根本を安定化した）、
+  // 他の欄への入力（無関係な再 render）のたびに effect 本体が再実行される
+  // ことはない。
+  useEffect(() => {
+    // `notice.kind` を明示的に読むことで、`notice`（値そのものは使わず参照の
+    // 変化だけをトリガーにしたい）を biome の exhaustive-deps 違反にせず
+    // 依存として保つ。加えて、`errorFieldKey` は validation-error 以外の
+    // notice では常に undefined のはずだが、ここでも二重に確認しておく。
+    if (notice.kind !== 'validation-error') return;
+    if (errorFieldKey !== undefined) focusOrDismiss(errorFieldKey);
+  }, [errorFieldKey, notice, focusOrDismiss]);
+
+  const errorFieldMessage =
+    notice.kind === 'validation-error' ? notice.message : null;
+
+  function fieldErrorMessage(key: IntroCardEditFieldKey): string | null {
+    return errorFieldKey === key ? errorFieldMessage : null;
+  }
+
   function handleSave(): void {
     Keyboard.dismiss();
     onSave();
@@ -243,6 +318,7 @@ export default function IntroCardEditScreen({
           style={styles.input}
           value={name}
         />
+        <FieldError message={fieldErrorMessage('name')} />
         <Text style={styles.limit}>
           {t.nameCounter(name.length, INTRO_CARD_NAME_MAX_LENGTH)}
         </Text>
@@ -260,6 +336,7 @@ export default function IntroCardEditScreen({
           style={styles.input}
           value={title}
         />
+        <FieldError message={fieldErrorMessage('title')} />
         <Text style={styles.limit}>
           {t.titleCounter(title.length, INTRO_CARD_TITLE_MAX_LENGTH)}
         </Text>
@@ -277,6 +354,7 @@ export default function IntroCardEditScreen({
           style={styles.input}
           value={organization}
         />
+        <FieldError message={fieldErrorMessage('organization')} />
         <Text style={styles.limit}>
           {t.organizationCounter(
             organization.length,
@@ -296,6 +374,7 @@ export default function IntroCardEditScreen({
           style={[styles.input, styles.multilineInput]}
           value={selfIntro}
         />
+        <FieldError message={fieldErrorMessage('selfIntro')} />
         <Text style={styles.limit}>
           {t.selfIntroCounter(
             selfIntro.length,
@@ -307,6 +386,7 @@ export default function IntroCardEditScreen({
         <Text style={styles.label}>{t.emailLabel}</Text>
         <TextInput
           autoCapitalize="none"
+          autoCorrect={false}
           submitBehavior="submit"
           keyboardType="email-address"
           onChangeText={onChangeEmail}
@@ -317,6 +397,7 @@ export default function IntroCardEditScreen({
           style={styles.input}
           value={email}
         />
+        <FieldError message={fieldErrorMessage('email')} />
       </View>
       <View style={styles.field}>
         <Text style={styles.label}>{t.phoneLabel}</Text>
@@ -331,6 +412,7 @@ export default function IntroCardEditScreen({
           style={styles.input}
           value={phone}
         />
+        <FieldError message={fieldErrorMessage('phone')} />
       </View>
       <View style={styles.field}>
         <Text style={styles.label}>{t.linksLabel}</Text>
@@ -340,6 +422,7 @@ export default function IntroCardEditScreen({
           <TextInput
             autoCapitalize="none"
             submitBehavior="submit"
+            keyboardType="url"
             onChangeText={onChangeLinkX}
             onSubmitEditing={() => focusOrDismiss('linkGithub')}
             placeholder={t.linkXPlaceholder}
@@ -348,12 +431,14 @@ export default function IntroCardEditScreen({
             style={styles.input}
             value={linkX}
           />
+          <FieldError message={fieldErrorMessage('linkX')} />
         </View>
         <View style={styles.linkField}>
           <Text style={styles.linkFieldLabel}>{t.linkGithubLabel}</Text>
           <TextInput
             autoCapitalize="none"
             submitBehavior="submit"
+            keyboardType="url"
             onChangeText={onChangeLinkGithub}
             onSubmitEditing={() => focusOrDismiss('linkLinkedin')}
             placeholder={t.linkGithubPlaceholder}
@@ -362,12 +447,14 @@ export default function IntroCardEditScreen({
             style={styles.input}
             value={linkGithub}
           />
+          <FieldError message={fieldErrorMessage('linkGithub')} />
         </View>
         <View style={styles.linkField}>
           <Text style={styles.linkFieldLabel}>{t.linkLinkedinLabel}</Text>
           <TextInput
             autoCapitalize="none"
             submitBehavior="submit"
+            keyboardType="url"
             onChangeText={onChangeLinkLinkedin}
             onSubmitEditing={() => focusOrDismiss('linkPortfolio')}
             placeholder={t.linkLinkedinPlaceholder}
@@ -376,6 +463,7 @@ export default function IntroCardEditScreen({
             style={styles.input}
             value={linkLinkedin}
           />
+          <FieldError message={fieldErrorMessage('linkLinkedin')} />
         </View>
         <View style={styles.linkField}>
           <Text style={styles.linkFieldLabel}>{t.linkPortfolioLabel}</Text>
@@ -391,6 +479,7 @@ export default function IntroCardEditScreen({
             style={styles.input}
             value={linkPortfolio}
           />
+          <FieldError message={fieldErrorMessage('linkPortfolio')} />
         </View>
         {otherLinks.map((link, index) => {
           // ref/フォーカスチェーン用の key は現在の描画順（position）に対する
@@ -398,33 +487,36 @@ export default function IntroCardEditScreen({
           // `rowIds[index]`（mount 以降不変）を使い、削除時に別の行の
           // TextInput が誤ってアンマウントされないようにする
           // （code-reviewer 指摘、上の `useOtherLinkRowIds` を参照）。
-          const refKey = `otherLink-${index}`;
+          const refKey = `otherLink-${index}` as const;
           const nextRefKey =
             index + 1 < otherLinks.length
               ? `otherLink-${index + 1}`
               : undefined;
           return (
-            <View key={rowIds[index] ?? refKey} style={styles.otherLinkRow}>
-              <TextInput
-                autoCapitalize="none"
-                submitBehavior="submit"
-                keyboardType="url"
-                onChangeText={(value) => onChangeOtherLink(index, value)}
-                onSubmitEditing={() => focusOrDismiss(nextRefKey)}
-                placeholder={t.otherLinkPlaceholder}
-                ref={registerFieldRef(refKey)}
-                returnKeyType={nextRefKey === undefined ? 'done' : 'next'}
-                style={[styles.input, styles.otherLinkInput]}
-                value={link}
-              />
-              <Pressable
-                accessibilityLabel={t.removeLinkButtonLabel(index + 1)}
-                accessibilityRole="button"
-                onPress={() => handleRemoveOtherLink(index)}
-                style={styles.removeLinkButton}
-              >
-                <Text style={styles.removeLinkButtonGlyph}>×</Text>
-              </Pressable>
+            <View key={rowIds[index] ?? refKey} style={styles.otherLinkGroup}>
+              <View style={styles.otherLinkRow}>
+                <TextInput
+                  autoCapitalize="none"
+                  submitBehavior="submit"
+                  keyboardType="url"
+                  onChangeText={(value) => onChangeOtherLink(index, value)}
+                  onSubmitEditing={() => focusOrDismiss(nextRefKey)}
+                  placeholder={t.otherLinkPlaceholder}
+                  ref={registerFieldRef(refKey)}
+                  returnKeyType={nextRefKey === undefined ? 'done' : 'next'}
+                  style={[styles.input, styles.otherLinkInput]}
+                  value={link}
+                />
+                <Pressable
+                  accessibilityLabel={t.removeLinkButtonLabel(index + 1)}
+                  accessibilityRole="button"
+                  onPress={() => handleRemoveOtherLink(index)}
+                  style={styles.removeLinkButton}
+                >
+                  <Text style={styles.removeLinkButtonGlyph}>×</Text>
+                </Pressable>
+              </View>
+              <FieldError message={fieldErrorMessage(refKey)} />
             </View>
           );
         })}
@@ -435,11 +527,11 @@ export default function IntroCardEditScreen({
           onPress={handleAddOtherLink}
           variant="secondary"
         />
-        <Text style={overLinkCount ? styles.byteUsageOverBudget : styles.limit}>
+        <Text style={overLinkCount ? styles.dangerCaption : styles.limit}>
           {t.linksCounter(linkCount, INTRO_CARD_MAX_LINKS)}
         </Text>
       </View>
-      <Text style={overBudget ? styles.byteUsageOverBudget : styles.limit}>
+      <Text style={overBudget ? styles.dangerCaption : styles.limit}>
         {overBudget
           ? t.byteUsageOverBudget(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)
           : t.byteUsageLabel(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)}
@@ -519,7 +611,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
-  byteUsageOverBudget: {
+  // byte 予算超過（保存前の見積り）と、保存失敗の原因になった欄の直下エラー
+  // （Issue 92）は見た目が同じ「警告色の注記」のため 1 つのスタイルを共用する
+  // （simplify レビュー指摘: 内容が同一のスタイルを 2 つ定義していた）。
+  dangerCaption: {
     color: colors.danger,
     fontSize: 13,
     fontWeight: '700',
@@ -532,6 +627,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: '700',
+  },
+  // Issue 92: 自由リンク 1 行分（入力+削除ボタンの otherLinkRow）と、その
+  // 直下のエラー表示をまとめる外側の View。key はこちらへ移した
+  // （`otherLinkRow` 自体のスタイルは維持し、内側の行構造は変えない）。
+  otherLinkGroup: {
+    gap: spacing.xs,
   },
   otherLinkRow: {
     alignItems: 'center',

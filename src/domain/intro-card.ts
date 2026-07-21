@@ -34,6 +34,25 @@ export type IntroCardErrorCode =
   | 'INVALID_SHARE_URL';
 
 /**
+ * Issue 92: 保存失敗時にどの入力欄が原因かを画面側で特定するための識別子。
+ * `createIntroCard` が検証する入力フィールドとちょうど 1 対 1 で対応する
+ * （`links` は画面には X/GitHub/LinkedIn/Portfolio/自由リンクの複数欄があるが、
+ * domain から見ると `IntroCard.links: readonly string[]` という単一フィールドの
+ * ため、ここでは 1 種類にまとめる。画面層でどの名前付き欄が原因かを絞り込む
+ * 処理は `src/screens/intro-card-links.ts` の `firstInvalidNamedLinkField` が担う）。
+ * `CARD_TOO_LARGE`（`vcard.ts`）・`INVALID_SHARE_URL`（`intro-card-url.ts`）は
+ * どの入力欄の問題でもないため対象外（`IntroCardError.field` は未設定のまま）。
+ */
+export type IntroCardField =
+  | 'name'
+  | 'title'
+  | 'organization'
+  | 'selfIntro'
+  | 'links'
+  | 'email'
+  | 'phone';
+
+/**
  * `src/protocol/qr-payload.ts` の `QrPayloadError` 等と同形の per-module Error 慣行。
  * `CARD_TOO_LARGE` は `createIntroCard` 自体は投げず、QR 化の byte 数検証を行う
  * protocol 層のエンコーダがこのクラスを再利用して投げる。現在の本番経路は
@@ -49,11 +68,19 @@ export type IntroCardErrorCode =
  */
 export class IntroCardError extends Error {
   readonly code: IntroCardErrorCode;
+  // `exactOptionalPropertyTypes` 下で明示 `undefined` を代入できるよう、
+  // `withIntroCardOptionalFields` と同じく `?:` を使わず union で宣言する。
+  readonly field: IntroCardField | undefined;
 
-  constructor(code: IntroCardErrorCode, message: string) {
+  constructor(
+    code: IntroCardErrorCode,
+    message: string,
+    field?: IntroCardField
+  ) {
     super(message);
     this.name = 'IntroCardError';
     this.code = code;
+    this.field = field;
   }
 }
 
@@ -106,41 +133,84 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^[0-9+\-() ]+$/;
 const URL_PATTERN = /^https?:\/\//;
 
+// ゼロ幅スペース（U+200B）・BOM/ゼロ幅非改行スペース（U+FEFF）。NFKC 正規化は
+// これらを分解・除去しない（`String.prototype.normalize('NFKC')` の実測で確認
+// 済み）ため、別途除去する。ゼロ幅（非）結合子（U+200C・U+200D）は除去対象に
+// 含めない（code-reviewer 指摘）: U+200D（ZWJ）は複数の絵文字を 1 グリフに
+// 結合する絵文字シーケンス（家族・カップル・職業＋性別等）に必須で、除去すると
+// 複数の独立した絵文字に分裂して selfIntro 等の自由記述欄の内容を保存時に
+// 静かに壊す。U+200C（ZWNJ）もインド系スクリプトの正しい字形結合に使われうる。
+// どちらも「見た目に現れない不正な文字」ではなく正当な用途を持つため対象外にする。
+const ZERO_WIDTH_CHARACTERS_PATTERN = /[\u200B\uFEFF]/g;
+
+/**
+ * Issue 92: iOS 日本語キーボードでの入力（全角 `＠`・全角英数・不可視文字の
+ * 混入）を吸収する。NFKC 正規化で全角英数・全角記号（全角 `＠` → `@` を含む）を
+ * 半角へ解決し、続けてゼロ幅文字を除去する。trim より前に適用することで、
+ * 「正規化後に文字数上限を超える」ケース（例: `㍻` は NFKC で `平成` の 2 文字へ
+ * 展開される）も、この後段の長さ検証がそのまま拾う。
+ * `src/screens/intro-card-links.ts` の `firstInvalidNamedLinkField`
+ * （保存失敗時にどの名前付きリンク欄が原因かを絞り込む画面層の処理）が、
+ * ここでの正規化を経ていない値で判定すると誤ったフィールドへ focus しうる
+ * （code-reviewer 指摘）ため、export して同じ正規化を再利用できるようにする。
+ */
+export function normalizeInputText(value: string): string {
+  return value.normalize('NFKC').replace(ZERO_WIDTH_CHARACTERS_PATTERN, '');
+}
+
 /** 空文字・空白のみは undefined に正規化する（Issue 79 詳細設計）。 */
 function normalizeOptional(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const trimmed = value.trim();
+  const trimmed = normalizeInputText(value).trim();
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
 function validatedOptionalField(
   value: string | undefined,
   maxLength: number,
-  fieldName: string
+  fieldName: string,
+  field: IntroCardField
 ): string | undefined {
   const normalized = normalizeOptional(value);
   if (normalized === undefined) return undefined;
   if (normalized.length > maxLength) {
     throw new IntroCardError(
       'FIELD_TOO_LONG',
-      `${fieldName} は ${maxLength} 文字以下で入力してください。`
+      `${fieldName} は ${maxLength} 文字以下で入力してください。`,
+      field
     );
   }
   return normalized;
 }
 
 function validatedName(value: string): string {
-  const trimmed = value.trim();
+  const trimmed = normalizeInputText(value).trim();
   if (trimmed.length < 1) {
-    throw new IntroCardError('NAME_REQUIRED', '名前を入力してください。');
+    throw new IntroCardError(
+      'NAME_REQUIRED',
+      '名前を入力してください。',
+      'name'
+    );
   }
   if (trimmed.length > INTRO_CARD_NAME_MAX_LENGTH) {
     throw new IntroCardError(
       'FIELD_TOO_LONG',
-      `名前は ${INTRO_CARD_NAME_MAX_LENGTH} 文字以下で入力してください。`
+      `名前は ${INTRO_CARD_NAME_MAX_LENGTH} 文字以下で入力してください。`,
+      'name'
     );
   }
   return trimmed;
+}
+
+/**
+ * リンクが `http://` または `https://` から始まる形式かどうかを判定する。
+ * `validatedLinks` 自身の判定と、画面層（`src/screens/intro-card-links.ts`）が
+ * 保存失敗時にどの入力欄（X/GitHub/LinkedIn/Portfolio/自由リンク）が原因かを
+ * 絞り込む処理（`firstInvalidNamedLinkField`）の両方が同じ正規表現を参照できる
+ * よう、ここへ 1 本化する（判定基準の二重定義・drift を防ぐ）。
+ */
+export function isValidIntroCardLinkFormat(link: string): boolean {
+  return URL_PATTERN.test(link);
 }
 
 function validatedLinks(
@@ -148,26 +218,29 @@ function validatedLinks(
 ): readonly string[] | undefined {
   if (links === undefined) return undefined;
   const normalized = links
-    .map((link) => link.trim())
+    .map((link) => normalizeInputText(link).trim())
     .filter((link) => link.length > 0);
   if (normalized.length === 0) return undefined;
   if (normalized.length > INTRO_CARD_MAX_LINKS) {
     throw new IntroCardError(
       'FIELD_TOO_LONG',
-      `リンクは ${INTRO_CARD_MAX_LINKS} 件までにしてください。`
+      `リンクは ${INTRO_CARD_MAX_LINKS} 件までにしてください。`,
+      'links'
     );
   }
   for (const link of normalized) {
     if (link.length > INTRO_CARD_LINK_MAX_LENGTH) {
       throw new IntroCardError(
         'FIELD_TOO_LONG',
-        `リンクは ${INTRO_CARD_LINK_MAX_LENGTH} 文字以下で入力してください。`
+        `リンクは ${INTRO_CARD_LINK_MAX_LENGTH} 文字以下で入力してください。`,
+        'links'
       );
     }
-    if (!URL_PATTERN.test(link)) {
+    if (!isValidIntroCardLinkFormat(link)) {
       throw new IntroCardError(
         'INVALID_URL',
-        'リンクは http:// または https:// から始まる URL にしてください。'
+        'リンクは http:// または https:// から始まる URL にしてください。',
+        'links'
       );
     }
   }
@@ -180,7 +253,8 @@ function validatedEmail(value: string | undefined): string | undefined {
   if (!EMAIL_PATTERN.test(normalized)) {
     throw new IntroCardError(
       'INVALID_EMAIL',
-      'メールアドレスの形式が不正です。'
+      'メールアドレスの形式が不正です。',
+      'email'
     );
   }
   return normalized;
@@ -192,13 +266,15 @@ function validatedPhone(value: string | undefined): string | undefined {
   if (normalized.length > INTRO_CARD_PHONE_MAX_LENGTH) {
     throw new IntroCardError(
       'FIELD_TOO_LONG',
-      `電話番号は ${INTRO_CARD_PHONE_MAX_LENGTH} 文字以下で入力してください。`
+      `電話番号は ${INTRO_CARD_PHONE_MAX_LENGTH} 文字以下で入力してください。`,
+      'phone'
     );
   }
   if (!PHONE_PATTERN.test(normalized)) {
     throw new IntroCardError(
       'INVALID_PHONE',
-      '電話番号に使える文字は数字と + - ( ) 空白だけです。'
+      '電話番号に使える文字は数字と + - ( ) 空白だけです。',
+      'phone'
     );
   }
   return normalized;
@@ -209,17 +285,20 @@ export function createIntroCard(input: CreateIntroCardInput): IntroCard {
   const title = validatedOptionalField(
     input.title,
     INTRO_CARD_TITLE_MAX_LENGTH,
-    '肩書き'
+    '肩書き',
+    'title'
   );
   const organization = validatedOptionalField(
     input.organization,
     INTRO_CARD_ORGANIZATION_MAX_LENGTH,
-    '所属'
+    '所属',
+    'organization'
   );
   const selfIntro = validatedOptionalField(
     input.selfIntro,
     INTRO_CARD_SELF_INTRO_MAX_LENGTH,
-    '自己紹介'
+    '自己紹介',
+    'selfIntro'
   );
   const links = validatedLinks(input.links);
   const email = validatedEmail(input.email);
