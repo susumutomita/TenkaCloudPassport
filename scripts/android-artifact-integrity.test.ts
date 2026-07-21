@@ -29,6 +29,7 @@ import {
   readAndroidReleaseVersionCode,
   verifyAndroidArtifactChecksum,
 } from './android-artifact-integrity';
+import { runCapturedProcess } from './process-capture';
 
 const directories: string[] = [];
 const EXPECTED_SHA256 =
@@ -614,53 +615,63 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
     await writeFile(apkPath, 'signed apk bytes');
 
-    const writeProcess = Bun.spawn(['bun', scriptPath, 'write', apkPath], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    expect(await writeProcess.exited).toBe(0);
-    expect(await new Response(writeProcess.stdout).text()).toContain(
+    const writeResult = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'write',
+      apkPath,
+    ]);
+    expect(writeResult.exitCode).toBe(0);
+    expect(new TextDecoder().decode(writeResult.stdout)).toContain(
       EXPECTED_SHA256
     );
 
     const checksumPath = `${apkPath}.sha256`;
-    const verifyProcess = Bun.spawn(
-      ['bun', scriptPath, 'verify', apkPath, checksumPath],
-      { stdout: 'pipe', stderr: 'pipe' }
-    );
-    expect(await verifyProcess.exited).toBe(0);
+    const verifyResult = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'verify',
+      apkPath,
+      checksumPath,
+    ]);
+    expect(verifyResult.exitCode).toBe(0);
 
     await writeFile(apkPath, 'changed apk bytes');
-    const rejectedProcess = Bun.spawn(
-      ['bun', scriptPath, 'verify', apkPath, checksumPath],
-      { stdout: 'pipe', stderr: 'pipe' }
-    );
-    expect(await rejectedProcess.exited).toBe(1);
-    expect(await new Response(rejectedProcess.stderr).text()).toContain(
-      'CHECKSUM_MISMATCH'
-    );
+    const rejectedResult = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'verify',
+      apkPath,
+      checksumPath,
+    ]);
+    expect(rejectedResult.exitCode).toBe(1);
+    expect(rejectedResult.stderr).toContain('CHECKSUM_MISMATCH');
   });
 
   it('CLI の version は app.json と過去 Release を比較し、同値を非 0 で拒否する', async () => {
     const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
     const appConfigPath = join(import.meta.dir, '..', 'app.json');
-    const acceptedProcess = Bun.spawn(
-      ['bun', scriptPath, 'version', appConfigPath, '0'],
-      { stdout: 'pipe', stderr: 'pipe' }
-    );
-    expect(await acceptedProcess.exited).toBe(0);
-    expect(await new Response(acceptedProcess.stdout).text()).toContain(
+    const acceptedResult = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'version',
+      appConfigPath,
+      '0',
+    ]);
+    expect(acceptedResult.exitCode).toBe(0);
+    expect(new TextDecoder().decode(acceptedResult.stdout)).toContain(
       'versionCode 1 > 0'
     );
 
-    const rejectedProcess = Bun.spawn(
-      ['bun', scriptPath, 'version', appConfigPath, '1'],
-      { stdout: 'pipe', stderr: 'pipe' }
-    );
-    expect(await rejectedProcess.exited).toBe(1);
-    expect(await new Response(rejectedProcess.stderr).text()).toContain(
-      'VERSION_CODE_NOT_INCREMENTED'
-    );
+    const rejectedResult = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'version',
+      appConfigPath,
+      '1',
+    ]);
+    expect(rejectedResult.exitCode).toBe(1);
+    expect(rejectedResult.stderr).toContain('VERSION_CODE_NOT_INCREMENTED');
   });
 
   it.each([
@@ -674,14 +685,15 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
   ])('CLI の過去 versionCode は正規の 10 進整数でない「%s」を拒否する', async (previousVersionCode) => {
     const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
     const appConfigPath = join(import.meta.dir, '..', 'app.json');
-    const process = Bun.spawn(
-      ['bun', scriptPath, 'version', appConfigPath, previousVersionCode],
-      { stdout: 'pipe', stderr: 'pipe' }
-    );
+    const result = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'version',
+      appConfigPath,
+      previousVersionCode,
+    ]);
 
-    expect(await process.exited).toBe(1);
-    expect(await new Response(process.stderr).text()).toContain(
-      'INVALID_PREVIOUS_VERSION_CODE'
-    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('INVALID_PREVIOUS_VERSION_CODE');
   });
 });

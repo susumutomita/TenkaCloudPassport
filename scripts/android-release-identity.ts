@@ -26,6 +26,10 @@ import {
   createApprovedToolchainSnapshot,
   type ToolchainFingerprint,
 } from './android-toolchain-integrity';
+import {
+  type BoundedProcessResult,
+  runBoundedProcess,
+} from './process-capture-bounded';
 
 const RELEASE_SCHEMA_VERSION = 1;
 const MAX_TOOL_OUTPUT_BYTES = 256 * 1024;
@@ -69,17 +73,6 @@ interface ProcessResult {
 }
 
 type ProcessEnvironment = Readonly<Record<string, string>>;
-
-function spawnReleaseProcess(
-  command: readonly string[],
-  cwd: string,
-  environment?: ProcessEnvironment
-) {
-  const options = { cwd, stderr: 'pipe' as const, stdout: 'pipe' as const };
-  return environment === undefined
-    ? Bun.spawn([...command], options)
-    : Bun.spawn([...command], { ...options, env: { ...environment } });
-}
 
 export interface GitToolIdentity {
   readonly git: string;
@@ -319,36 +312,6 @@ export function parseApksignerCertificateSha256(output: string): string {
   return digest;
 }
 
-async function readBoundedProcessStream(
-  stream: ReadableStream<Uint8Array>,
-  onOverflow: () => void,
-  failureCode: 'ANDROID_TOOL_FAILED' | 'GIT_SOURCE_MISMATCH'
-): Promise<string> {
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
-      total += result.value.byteLength;
-      if (total > MAX_TOOL_OUTPUT_BYTES) {
-        onOverflow();
-        throw new AndroidArtifactIntegrityError(
-          failureCode,
-          failureCode === 'ANDROID_TOOL_FAILED'
-            ? 'Android release tool output exceeded the safe limit.'
-            : 'Git output exceeded the safe release verification limit.'
-        );
-      }
-      chunks.push(result.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return Buffer.concat(chunks, total).toString('utf8');
-}
-
 function processFailed(
   failureCode: 'ANDROID_TOOL_FAILED' | 'GIT_SOURCE_MISMATCH'
 ): AndroidArtifactIntegrityError {
@@ -360,42 +323,6 @@ function processFailed(
   );
 }
 
-function settledProcessResult(
-  outcomes: readonly PromiseSettledResult<string | number>[],
-  failureCode: 'ANDROID_TOOL_FAILED' | 'GIT_SOURCE_MISMATCH'
-): {
-  readonly exitCode: number;
-  readonly stderr: string;
-  readonly stdout: string;
-} {
-  const rejected = outcomes.find(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected'
-  );
-  if (rejected?.reason instanceof AndroidArtifactIntegrityError) {
-    throw rejected.reason;
-  }
-  if (rejected !== undefined) throw processFailed(failureCode);
-  const [stdoutResult, stderrResult, exitResult] = outcomes;
-  if (
-    stdoutResult?.status !== 'fulfilled' ||
-    typeof stdoutResult.value !== 'string' ||
-    stderrResult?.status !== 'fulfilled' ||
-    typeof stderrResult.value !== 'string' ||
-    exitResult?.status !== 'fulfilled' ||
-    typeof exitResult.value !== 'number'
-  ) {
-    throw new AndroidArtifactIntegrityError(
-      failureCode,
-      'Release process returned an invalid result.'
-    );
-  }
-  return {
-    exitCode: exitResult.value,
-    stderr: stderrResult.value,
-    stdout: stdoutResult.value,
-  };
-}
-
 async function runProcess(
   command: readonly string[],
   cwd: string,
@@ -403,42 +330,18 @@ async function runProcess(
   timeoutMilliseconds: number,
   environment?: ProcessEnvironment
 ): Promise<ProcessResult> {
-  let child: ReturnType<typeof spawnReleaseProcess>;
+  let result: BoundedProcessResult;
   try {
-    child = spawnReleaseProcess(command, cwd, environment);
+    result = await runBoundedProcess(command, {
+      cwd,
+      ...(environment === undefined ? {} : { env: environment }),
+      maxOutputBytes: MAX_TOOL_OUTPUT_BYTES,
+      timeoutMilliseconds,
+    });
   } catch {
     throw processFailed(failureCode);
   }
-  let overflow = false;
-  let timedOut = false;
-  const stopOnOverflow = () => {
-    overflow = true;
-    try {
-      child.kill(9);
-    } catch {
-      // Process が先に終了していても overflow 判定を優先する。
-    }
-  };
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    try {
-      child.kill(9);
-    } catch {
-      // Process が先に終了していても timeout 判定を優先する。
-    }
-  }, timeoutMilliseconds);
-  let outcomes: readonly PromiseSettledResult<string | number>[];
-  try {
-    outcomes = await Promise.allSettled([
-      readBoundedProcessStream(child.stdout, stopOnOverflow, failureCode),
-      readBoundedProcessStream(child.stderr, stopOnOverflow, failureCode),
-      child.exited,
-    ]);
-  } finally {
-    clearTimeout(timeout);
-    child.unref();
-  }
-  if (timedOut) {
+  if (result.timedOut) {
     throw new AndroidArtifactIntegrityError(
       failureCode,
       failureCode === 'ANDROID_TOOL_FAILED'
@@ -446,9 +349,16 @@ async function runProcess(
         : 'Git exceeded the 15 second release verification timeout.'
     );
   }
-  const result = settledProcessResult(outcomes, failureCode);
-  if (overflow || result.exitCode !== 0) throw processFailed(failureCode);
-  return result;
+  if (result.overflowed !== false) {
+    throw new AndroidArtifactIntegrityError(
+      failureCode,
+      failureCode === 'ANDROID_TOOL_FAILED'
+        ? 'Android release tool output exceeded the safe limit.'
+        : 'Git output exceeded the safe release verification limit.'
+    );
+  }
+  if (result.exitCode !== 0) throw processFailed(failureCode);
+  return { stderr: result.stderr, stdout: result.stdout };
 }
 
 function gitEnvironment(git: string): ProcessEnvironment {

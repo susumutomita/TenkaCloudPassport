@@ -22,6 +22,7 @@ import {
   createApprovedToolchainSnapshot,
   fingerprintToolchainDirectory,
 } from './android-toolchain-integrity';
+import { runCapturedProcess } from './process-capture';
 
 const directories: string[] = [];
 
@@ -194,13 +195,15 @@ describe('Issue 28: Android verifier toolchain fingerprint', () => {
     await writeFile(join(root, 'runtime.jar'), 'runtime');
     const expected = await fingerprintToolchainDirectory(root);
     const scriptPath = join(import.meta.dir, 'android-toolchain-integrity.ts');
-    const process = Bun.spawn(['bun', scriptPath, 'fingerprint', root], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+    const result = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      'fingerprint',
+      root,
+    ]);
 
-    expect(await process.exited).toBe(0);
-    expect(await new Response(process.stdout).text()).toBe(
+    expect(result.exitCode).toBe(0);
+    expect(new TextDecoder().decode(result.stdout)).toBe(
       `${expected.sha256}  ${root}\n`
     );
   });

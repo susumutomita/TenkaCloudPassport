@@ -15,6 +15,7 @@ import { pipeline } from 'node:stream/promises';
 import { openEntryExclusiveNative as openDarwinEntryExclusive } from './atomic-output-publisher-darwin';
 import { openEntryExclusiveNative as openLinuxEntryExclusive } from './atomic-output-publisher-linux';
 import { isolatedGitEnv } from './git-env-isolation';
+import { runProcessStdoutIntoSink } from './process-capture';
 
 export interface ExclusiveOutputRecord {
   readonly byteLength: number;
@@ -110,21 +111,6 @@ export async function writeExclusiveOutput(
     }
     descriptor = openExclusiveEntryAt(parentDescriptor, fileName);
     fchmodSync(descriptor, 0o600);
-    const source =
-      command.length === 0
-        ? standardInput
-        : Bun.spawn(command, {
-            cwd: workingDirectory,
-            // `command` is `git show <commit>:<path>` in every current caller
-            // (`source-release.ts`). Stripping GIT_DIR-family vars keeps this
-            // scoped to `cwd` even when the parent process inherited them from
-            // an active git hook invocation; it is a no-op for non-git
-            // commands, so this is safe even though this module itself is
-            // generic (see `git-env-isolation.ts` for why this matters).
-            env: isolatedGitEnv(),
-            stdout: 'pipe',
-            stderr: 'pipe',
-          });
     const output = createWriteStream(fileName, {
       fd: descriptor,
       autoClose: false,
@@ -136,14 +122,22 @@ export async function writeExclusiveOutput(
       hash.update(chunk);
       byteLength += chunk.byteLength;
     });
-    if (source instanceof ReadableStream) {
-      await pipeline(Readable.from(source), hashingStream, output);
+    if (command.length === 0) {
+      await pipeline(Readable.from(standardInput), hashingStream, output);
     } else {
-      const [exitCode, stderr] = await Promise.all([
-        source.exited,
-        new Response(source.stderr).text(),
-        pipeline(Readable.from(source.stdout), hashingStream, output),
-      ]);
+      // `command` is `git show <commit>:<path>` in every current caller
+      // (`source-release.ts`). Stripping GIT_DIR-family vars keeps this
+      // scoped to `cwd` even when the parent process inherited them from
+      // an active git hook invocation; it is a no-op for non-git commands,
+      // so this is safe even though this module itself is generic (see
+      // `git-env-isolation.ts` for why this matters).
+      const { exitCode, stderr } = await runProcessStdoutIntoSink(
+        command,
+        async (stdout) => {
+          await pipeline(stdout, hashingStream, output);
+        },
+        { cwd: workingDirectory, env: isolatedGitEnv() }
+      );
       if (exitCode !== 0) {
         throw new Error(`Output source command failed: ${stderr.trim()}`);
       }

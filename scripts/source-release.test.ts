@@ -32,6 +32,7 @@ import {
   writeExclusiveOutput,
 } from './exclusive-output-writer';
 import { isolatedGitEnv } from './git-env-isolation';
+import { runCapturedProcess } from './process-capture';
 import {
   assertNoKnownSecretContent,
   assertSafeTrackedPaths,
@@ -71,25 +72,21 @@ async function runGit(
   root: string,
   arguments_: readonly string[]
 ): Promise<string> {
-  const process = Bun.spawn(['git', ...arguments_], {
-    cwd: root,
-    env: {
-      ...isolatedGitEnv(),
-      GIT_AUTHOR_DATE: '2026-07-18T00:00:00Z',
-      GIT_COMMITTER_DATE: '2026-07-18T00:00:00Z',
-    },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-  ]);
+  const { exitCode, stdout, stderr } = await runCapturedProcess(
+    ['git', ...arguments_],
+    {
+      cwd: root,
+      env: {
+        ...isolatedGitEnv(),
+        GIT_AUTHOR_DATE: '2026-07-18T00:00:00Z',
+        GIT_COMMITTER_DATE: '2026-07-18T00:00:00Z',
+      },
+    }
+  );
   if (exitCode !== 0) {
     throw new Error(`git ${arguments_.join(' ')} failed: ${stderr}`);
   }
-  return stdout.trim();
+  return new TextDecoder().decode(stdout).trim();
 }
 
 function processEnv(): Record<string, string | undefined> {
@@ -117,7 +114,7 @@ async function validateDuringCandidateMutation(
   const oldAccessTime = new Date('2000-01-01T00:00:00.000Z');
   utimesSync(watchedFile, oldAccessTime, watchedStatus.mtime);
   const accessTimeThreshold = lstatSync(watchedFile).atimeMs;
-  const competitor = Bun.spawn(
+  const competitorResult = runCapturedProcess(
     [
       'bun',
       '-e',
@@ -154,20 +151,17 @@ async function validateDuringCandidateMutation(
         TASK_REPLACEMENT_FILE: replacementFile,
         TASK_WATCHED_FILE: watchedFile,
       },
-      stderr: 'pipe',
-      stdout: 'pipe',
     }
   );
   while (!existsSync(readyFile)) await Bun.sleep(1);
-  const [validation, competitorExitCode, stderr] = await Promise.all([
+  const [validation, competitor] = await Promise.all([
     Promise.allSettled([
       validateSourceReleaseDirectory(outputDirectory, TEST_VERSION),
     ]).then(([result]) => result),
-    competitor.exited,
-    new Response(competitor.stderr).text(),
+    competitorResult,
   ]);
-  expect(stderr).toBe('');
-  return { competitorExitCode, validation };
+  expect(competitor.stderr).toBe('');
+  return { competitorExitCode: competitor.exitCode, validation };
 }
 
 async function createReleaseRepository(): Promise<string> {
@@ -277,17 +271,13 @@ async function createReleaseRepository(): Promise<string> {
 }
 
 async function archiveEntries(archivePath: string): Promise<readonly string[]> {
-  const process = Bun.spawn(['tar', '-tzf', archivePath], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
+  const { exitCode, stdout, stderr } = await runCapturedProcess([
+    'tar',
+    '-tzf',
+    archivePath,
   ]);
   if (exitCode !== 0) throw new Error(`tar listing failed: ${stderr}`);
-  return stdout.trim().split('\n');
+  return new TextDecoder().decode(stdout).trim().split('\n');
 }
 
 describe('Issue 79 回帰: 継承した GIT_DIR / GIT_WORK_TREE から fixture リポジトリを分離する', () => {
@@ -341,7 +331,7 @@ describe('Issue 79 回帰: 継承した GIT_DIR / GIT_WORK_TREE から fixture �
       GIT_DIR: path.join(decoyRoot, '.git'),
       GIT_WORK_TREE: decoyRoot,
     };
-    const child = Bun.spawn(
+    const { exitCode, stderr } = await runCapturedProcess(
       [
         'bun',
         '-e',
@@ -374,14 +364,11 @@ describe('Issue 79 回帰: 継承した GIT_DIR / GIT_WORK_TREE から fixture �
         await runGit(root, ['commit', '-m', 'test: create release fixture']);
         `,
       ],
-      { env: inheritedEnv, stdout: 'pipe', stderr: 'pipe' }
+      { env: inheritedEnv }
     );
-    const [exitCode, , stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    if (exitCode !== 0) throw new Error(`fixture child failed: ${stderr}`);
+    if (exitCode !== 0) {
+      throw new Error(`fixture child failed: ${stderr}`);
+    }
     expect(exitCode).toBe(0);
 
     const decoyLogAfter = await runGit(decoyRoot, ['log', '--oneline']);
@@ -1740,7 +1727,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     const expectedHash = createHash('sha256')
       .update(fixtureContents)
       .digest('hex');
-    const child = Bun.spawn(
+    const { exitCode, stdout, stderr } = await runCapturedProcess(
       [
         'bun',
         '-e',
@@ -1777,18 +1764,11 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
           TASK_STREAM_FILE_NAME: fixtureName,
           TASK_WARMUP_NAME: warmupName,
         },
-        stderr: 'pipe',
-        stdout: 'pipe',
       }
     );
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
     expect(stderr).toBe('');
     expect(exitCode).toBe(0);
-    const result = JSON.parse(stdout) as {
+    const result = JSON.parse(new TextDecoder().decode(stdout)) as {
       readonly byteLength: number;
       readonly peakRssDelta: number;
       readonly sha256: string;
@@ -1812,9 +1792,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     expect(source).toContain(
       "path.join(import.meta.dir, 'exclusive-output-writer.ts')"
     );
-    expect(writer).toContain(
-      'pipeline(Readable.from(source.stdout), hashingStream, output)'
-    );
+    expect(writer).toContain('await pipeline(stdout, hashingStream, output)');
     expect(writer).toContain('fstatSync(descriptor, { bigint: true })');
     expect(source).toContain('await assertRecordedOutputFiles(transaction)');
     expect(source).not.toMatch(/archiveBytes|git archive stdout/);

@@ -20,6 +20,7 @@ import {
 import type { ExclusiveOutputRecord } from './exclusive-output-writer';
 import { isolatedGitEnv } from './git-env-isolation';
 import { firstDecodedDuplicateJsoncKey } from './jsonc-duplicate-key';
+import { runCapturedProcess } from './process-capture';
 
 const SEMVER =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
@@ -413,24 +414,17 @@ async function runCommandBytes(
   command: readonly string[],
   cwd: string
 ): Promise<Uint8Array> {
-  const process = Bun.spawn([...command], {
+  const { exitCode, stdout, stderr } = await runCapturedProcess(command, {
     cwd,
     env: isolatedGitEnv(),
-    stdout: 'pipe',
-    stderr: 'pipe',
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).arrayBuffer(),
-    new Response(process.stderr).text(),
-  ]);
   if (exitCode !== 0) {
     throw new ReleaseCandidateError(
       'COMMAND_FAILED',
       `${command[0]} command failed: ${stderr.trim() || `exit ${exitCode}`}`
     );
   }
-  return new Uint8Array(stdout);
+  return stdout;
 }
 
 async function runExclusiveOutputWriter(
@@ -447,7 +441,7 @@ async function runExclusiveOutputWriter(
         ? new TextEncoder().encode(source.contents)
         : source.contents
       : undefined;
-  const child = Bun.spawn(
+  const captured = await runCapturedProcess(
     [
       'bun',
       '-e',
@@ -462,16 +456,11 @@ async function runExclusiveOutputWriter(
     ],
     {
       cwd: transaction.staging.path,
-      stdin,
-      stdout: 'pipe',
-      stderr: 'pipe',
+      ...(stdin === undefined ? {} : { stdin }),
     }
   );
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const { exitCode, stderr } = captured;
+  const stdout = new TextDecoder().decode(captured.stdout);
   if (exitCode !== 0) {
     throw new ReleaseCandidateError(
       'COMMAND_FAILED',

@@ -23,6 +23,7 @@ import {
   parseApksignerCertificateSha256,
 } from './android-release-identity';
 import { isolatedGitEnv } from './git-env-isolation';
+import { runCapturedProcess } from './process-capture';
 
 const directories: string[] = [];
 const SOURCE_COMMIT = 'a'.repeat(40);
@@ -50,17 +51,15 @@ async function approvedExecutablePath(executablePath: string) {
 async function approvedGit() {
   let approved = await approvedExecutable('git');
   if (process.platform === 'darwin' && approved.path === '/usr/bin/git') {
-    const process = Bun.spawn(['/usr/bin/xcrun', '--find', 'git'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [exitCode, stdout, stderr] = await Promise.all([
-      process.exited,
-      new Response(process.stdout).text(),
-      new Response(process.stderr).text(),
+    const { exitCode, stdout, stderr } = await runCapturedProcess([
+      '/usr/bin/xcrun',
+      '--find',
+      'git',
     ]);
     if (exitCode !== 0) throw new Error(stderr);
-    approved = await approvedExecutable(stdout.trim());
+    approved = await approvedExecutable(
+      new TextDecoder().decode(stdout).trim()
+    );
   }
   return { git: approved.path, gitSha256: approved.sha256 };
 }
@@ -92,19 +91,12 @@ async function cleanupTree(path: string): Promise<void> {
  * Issue 79 実装中に実際に踏んだ）。
  */
 async function runGit(repositoryPath: string, ...arguments_: string[]) {
-  const process = Bun.spawn(['git', ...arguments_], {
-    cwd: repositoryPath,
-    env: isolatedGitEnv(),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-  ]);
+  const { exitCode, stdout, stderr } = await runCapturedProcess(
+    ['git', ...arguments_],
+    { cwd: repositoryPath, env: isolatedGitEnv() }
+  );
   if (exitCode !== 0) throw new Error(stderr);
-  return stdout.trimEnd();
+  return new TextDecoder().decode(stdout).trimEnd();
 }
 
 afterEach(async () => {
@@ -378,12 +370,13 @@ describe('Issue 28: Android Release Binary identity 境界', () => {
 
   it('CLI help は tool fingerprint を含む完全な引数契約を返す', async () => {
     const scriptPath = join(import.meta.dir, 'android-release-identity.ts');
-    const process = Bun.spawn(['bun', scriptPath, '--help'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    expect(await process.exited).toBe(0);
-    const output = await new Response(process.stdout).text();
+    const { exitCode, stdout } = await runCapturedProcess([
+      'bun',
+      scriptPath,
+      '--help',
+    ]);
+    expect(exitCode).toBe(0);
+    const output = new TextDecoder().decode(stdout);
     expect(output).toContain('<toolchain-sha256>');
     expect(output).toContain('<java-runtime-sha256>');
     expect(output).toContain('<git-sha256>');
