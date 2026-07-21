@@ -36,6 +36,20 @@ browser is Not run as of this README (a cloud environment cannot perform physica
 contact is an optional action the other person chooses inside that page, and it requires them to be online at
 scan time.
 
+## Current release state
+
+| Scope | State | Allowed now | Stop condition |
+| --- | --- | --- | --- |
+| Repository development | `Implemented` | Validate source, pure TypeScript Domain, Rules Provider, and Web Export, including on-device Intro Card storage and QR generation that encodes the Intro Card page URL. | Never treat green CI as physical-device evidence. |
+| Source-only candidate | `Experimental` | Reproduce a draft candidate from one fixed commit. | Do not call it a public release or overwrite an existing output. |
+| Public OSS Alpha | `Blocked` | Nothing. | Do not publish until every required physical gate is `Verified`. |
+| Local Champion walkthrough | `Experimental` | Review documents, diagrams, roles, and stop conditions. | Do not use real participant data, real QR, Nearby, or a group Lounge. |
+| Product Lounge | `Blocked / Not run` | Nothing. | Wait for distribution, device, Nearby, accessibility, full-delete, and dry-run evidence. |
+
+`Implemented / Experimental / Planned` describe source maturity. `Verified / Not run / Blocked` describe evidence for
+one environment. They are not interchangeable. See the
+[Release Status and Device Matrix](./docs/releases/status.md) for evidence per combination.
+
 ### Try it from your phone with no dev environment (Web version on GitHub Pages)
 
 If you have neither a Mac nor Expo Go handy, open the Web version we publish on GitHub Pages directly in
@@ -50,20 +64,6 @@ your phone's browser.
 - On iOS Safari, tap the Share icon and choose "Add to Home Screen"; on Android Chrome, open the menu and
   choose "Add to Home Screen" or "Install app". Either way you get an icon on your home screen that launches
   the app directly. This is not App Store or Play Store distribution.
-
-## Current release state
-
-| Scope | State | Allowed now | Stop condition |
-| --- | --- | --- | --- |
-| Repository development | `Implemented` | Validate source, pure TypeScript Domain, Rules Provider, and Web Export, including on-device Intro Card storage and QR generation that encodes the Intro Card page URL. | Never treat green CI as physical-device evidence. |
-| Source-only candidate | `Experimental` | Reproduce a draft candidate from one fixed commit. | Do not call it a public release or overwrite an existing output. |
-| Public OSS Alpha | `Blocked` | Nothing. | Do not publish until every required physical gate is `Verified`. |
-| Local Champion walkthrough | `Experimental` | Review documents, diagrams, roles, and stop conditions. | Do not use real participant data, real QR, Nearby, or a group Lounge. |
-| Product Lounge | `Blocked / Not run` | Nothing. | Wait for distribution, device, Nearby, accessibility, full-delete, and dry-run evidence. |
-
-`Implemented / Experimental / Planned` describe source maturity. `Verified / Not run / Blocked` describe evidence for
-one environment. They are not interchangeable. See the
-[Release Status and Device Matrix](./docs/releases/status.md) for evidence per combination.
 
 ## Choose one entry path
 
