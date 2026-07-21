@@ -4534,3 +4534,65 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
     予防策: 静的ページを「hash を変えて複数回開く」形で検証するときは、実機の
     QR スキャンが常に新規タブ/新規起動である前提を明示した上で、検証も
     タブ単位で行う（同一タブでの hash 変更検証は「別のケース」として区別する）。
+
+### [LP / README の QR コピー更新（ADR-0027 実挙動への追従）] - 2026-07-21
+
+#### 目的
+
+PR 85 / 86（Issue 84、ADR-0027）で QR の中身を vCard 直埋めから自己紹介ページ URL へ
+変更したが、`site/index.html`・`site/en/index.html`・`README.md`・`README.en.md` には
+「標準カメラで読むだけで連絡先へ登録できる」という旧（vCard 直埋め）体験の文言が
+残っていた（follow-up `01KY10WC3PNX4KG3FR1A38HB4N`）。LP / README の記述を実挙動
+（読むとブラウザで自己紹介ページが開き、連絡先追加はページ内のボタンを押した場合
+だけの任意操作）に合わせる。
+
+#### 制約
+
+- `src/` は変更しない。対象は LP 2 ファイルと README 2 ファイルのみ。
+- 誇張しない（fail-closed）。「連絡先に登録できる」と断定せず、任意操作であることを
+  明示する。
+- 受け手がオンラインである必要がある点（ADR-0027 の Bad）を、read 者に誤解を与えない
+  範囲で自然に触れる。
+- 日英で同義を保つ。
+
+#### タスク
+
+1. 4 ファイルを grep し、vCard 直埋め・カメラで即連絡先登録という文言をすべて洗い出す。
+2. 各箇所を新体験の文言へ更新する（meta description、hero lede、QR caption、How it
+   works、Roadmap、Status table、status-note/Not run 節）。
+3. `bun textlint README.md`、`make before-commit` を通す。
+4. follow-up `01KY10WC3PNX4KG3FR1A38HB4N` を本 PR で解消する。
+
+#### 検証手順
+
+- 4 ファイルに対する grep で `vCard 3.0` / 「連絡先...提案」/ 「連絡先...登録」/
+  `save your contact` / `offers to add` が残っていないことを確認する。
+- `bun textlint README.md` で文体エラーがないことを確認する。
+- `make before-commit` で architecture-harness・harness_test・dup_check・lint_text・
+  lint が通ることを確認する。
+
+#### 進捗ログ
+
+- 2026-07-21: `docs/adr/0027-intro-card-url-viewer.md` と `site/c/index.html`
+  （実装済みビューア）を読み、実挙動（ブラウザで開く・連絡先追加は任意ボタン・
+  データはサーバー未送信・受け手はオンライン必須）を確認した。
+- 2026-07-21: `site/index.html`・`site/en/index.html`・`README.md`・`README.en.md`
+  の該当箇所（meta description 3 箇所、hero lede、QR caption、How it works、
+  Roadmap 実装済み項目、Status table の vCard QR 生成記述、status-note の
+  Not run 節）を新体験の文言へ更新した。ステータス表の「vCard QR 生成」は
+  「自己紹介ページ URL の QR 生成」へ言い換え、実際にテストで検証している対象
+  （`encodeIntroCardUrl`）に合わせた。
+  Not run 節・README の実機検証節では「ブラウザで自己紹介ページが開くこと」を
+  Not run の対象に言い換え、連絡先追加が任意操作である旨と、受け手のオンライン
+  要件を How it works / README の該当段落へ自然に追記した。
+  grep で 4 ファイルの旧文言残存なしを確認した。
+
+#### 振り返り
+
+- 今回の作業は「機能実装後にコピーが追従していなかった」ケースで、実装 PR
+  （85/86）の follow-up として scope 外に切り出されていた。実装 PR のスコープを
+  絞ったこと自体は妥当だが、ユーザー向け文言（LP / README）の追従漏れは検索性の
+  低いテキスト差分では気づきにくい。予防策: QR やコアフローの実挙動を変える PR では、
+  `grep -rn` で旧仕様のキーワード（今回は「vCard」「連絡先...提案」等）を
+  `site/` と `README*.md` に対しても機械的に流し、ヒットした場合は同 PR で直すか
+  follow-up として明示的に記録する運用を徹底する。
