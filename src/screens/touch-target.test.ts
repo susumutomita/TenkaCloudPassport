@@ -71,4 +71,11 @@ describe('Touch Target が 44 pt 以上である', () => {
       extractStyleNumber(text, 'toggle', 'minHeight')
     ).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
   });
+
+  it('IntroCardEditScreen の自由リンク削除ボタンは共有定数を使って 44 pt 以上を強制する（Issue 90）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+    expect(text).toContain("from '../ui/touch-target'");
+    expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
+    expect(text).toContain('minWidth: MIN_TOUCH_TARGET');
+  });
 });

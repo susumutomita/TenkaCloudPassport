@@ -67,8 +67,17 @@ import ConversationSelfReportScreen from '../screens/ConversationSelfReportScree
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
 import HostInviteScreen from '../screens/HostInviteScreen';
-import IntroCardEditScreen from '../screens/IntroCardEditScreen';
+import IntroCardEditScreen, {
+  type IntroCardEditScreenProps,
+} from '../screens/IntroCardEditScreen';
 import IntroCardScreen from '../screens/IntroCardScreen';
+import {
+  addOtherLink,
+  buildIntroCardLinks,
+  classifyIntroCardLinks,
+  removeOtherLink,
+  updateOtherLink,
+} from '../screens/intro-card-links';
 import LocalDiagnosticsScreen from '../screens/LocalDiagnosticsScreen';
 import OutcomeScreen from '../screens/OutcomeScreen';
 import OwnerQuestionScreen from '../screens/OwnerQuestionScreen';
@@ -598,26 +607,16 @@ const INTRO_CARD_STAGES: ReadonlySet<SetupStage> = new Set([
  * `edit` に 1 つの object としてまとめ、`ProfileHomeGate` の `creation` / `encounter`
  * と同じ形にする。
  */
-interface IntroCardEditBranchProps {
-  readonly name: string;
-  readonly title: string;
-  readonly organization: string;
-  readonly selfIntro: string;
-  readonly email: string;
-  readonly phone: string;
-  readonly linksText: string;
-  readonly notice: IntroCardNotice;
-  readonly saving: boolean;
-  readonly cardUrlByteUsage: number;
-  readonly onChangeName: (value: string) => void;
-  readonly onChangeTitle: (value: string) => void;
-  readonly onChangeOrganization: (value: string) => void;
-  readonly onChangeSelfIntro: (value: string) => void;
-  readonly onChangeEmail: (value: string) => void;
-  readonly onChangePhone: (value: string) => void;
-  readonly onChangeLinksText: (value: string) => void;
-  readonly onSave: () => void;
-}
+/**
+ * Issue 90 の code-reviewer 指摘（重複解消）: `IntroCardEditScreenProps` と
+ * ほぼ同じ形（`locale`・`onOpenBackup`・`onOpenSettings` の 3 つだけ
+ * `IntroCardStageGate` 側の引数として別に渡す）を手で並べて重複させず、
+ * `Omit` で screen 側の型から直接導出する（jscpd の重複検出・型の drift 両方を防ぐ）。
+ */
+type IntroCardEditBranchProps = Omit<
+  IntroCardEditScreenProps,
+  'locale' | 'onOpenBackup' | 'onOpenSettings'
+>;
 
 interface IntroCardStageGateProps {
   readonly stage: SetupStage;
@@ -658,21 +657,31 @@ function IntroCardStageGate({
   return (
     <IntroCardEditScreen
       email={edit.email}
-      linksText={edit.linksText}
+      linkGithub={edit.linkGithub}
+      linkLinkedin={edit.linkLinkedin}
+      linkPortfolio={edit.linkPortfolio}
+      linkX={edit.linkX}
       locale={locale}
       name={edit.name}
       notice={edit.notice}
+      onAddOtherLink={edit.onAddOtherLink}
       onChangeEmail={edit.onChangeEmail}
-      onChangeLinksText={edit.onChangeLinksText}
+      onChangeLinkGithub={edit.onChangeLinkGithub}
+      onChangeLinkLinkedin={edit.onChangeLinkLinkedin}
+      onChangeLinkPortfolio={edit.onChangeLinkPortfolio}
+      onChangeLinkX={edit.onChangeLinkX}
       onChangeName={edit.onChangeName}
       onChangeOrganization={edit.onChangeOrganization}
+      onChangeOtherLink={edit.onChangeOtherLink}
       onChangePhone={edit.onChangePhone}
       onChangeSelfIntro={edit.onChangeSelfIntro}
       onChangeTitle={edit.onChangeTitle}
       onOpenBackup={onOpenBackup}
       onOpenSettings={onOpenSettings}
+      onRemoveOtherLink={edit.onRemoveOtherLink}
       onSave={edit.onSave}
       organization={edit.organization}
+      otherLinks={edit.otherLinks}
       phone={edit.phone}
       saving={edit.saving}
       selfIntro={edit.selfIntro}
@@ -727,7 +736,19 @@ export default function PassportApp({
   const [introCardDraftSelfIntro, setIntroCardDraftSelfIntro] = useState('');
   const [introCardDraftEmail, setIntroCardDraftEmail] = useState('');
   const [introCardDraftPhone, setIntroCardDraftPhone] = useState('');
-  const [introCardDraftLinksText, setIntroCardDraftLinksText] = useState('');
+  // Issue 90: リンク欄を「1 行 1 リンクの改行区切り textarea」から「X / GitHub /
+  // LinkedIn / Portfolio の名前付き単一行入力 4 つ + 自由リンクの動的追加」へ
+  // 変更した。組み立て・逆分類は `../screens/intro-card-links` の純粋関数へ
+  // 切り出し、domain（`IntroCard.links: readonly string[]`）は変えない。
+  const [introCardDraftLinkX, setIntroCardDraftLinkX] = useState('');
+  const [introCardDraftLinkGithub, setIntroCardDraftLinkGithub] = useState('');
+  const [introCardDraftLinkLinkedin, setIntroCardDraftLinkLinkedin] =
+    useState('');
+  const [introCardDraftLinkPortfolio, setIntroCardDraftLinkPortfolio] =
+    useState('');
+  const [introCardDraftOtherLinks, setIntroCardDraftOtherLinks] = useState<
+    readonly string[]
+  >([]);
   const [introCardSaving, setIntroCardSaving] = useState(false);
   const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>({
     kind: 'empty',
@@ -1354,8 +1375,9 @@ export default function PassportApp({
   /**
    * Issue 79: 空文字・空白のみは undefined 扱いにする正規化は `createIntroCard`
    * 自身が担う（`src/domain/intro-card.ts`）ため、ここでは draft の生文字列を
-   * そのまま渡すだけでよい。`links` だけは改行区切りの単一 TextInput（Issue 79
-   * 詳細設計、5 件の個別欄より単純な構成）から配列へ変換する。
+   * そのまま渡すだけでよい。`links` は Issue 90 で「X / GitHub / LinkedIn /
+   * Portfolio の名前付き欄 + 自由リンク」の draft から `buildIntroCardLinks`
+   * （ユーザー名だけの入力をサービス別 URL へ補完する）で組み立てる。
    */
   function introCardDraftAsShape(): IntroCard {
     return {
@@ -1363,7 +1385,13 @@ export default function PassportApp({
       title: introCardDraftTitle,
       organization: introCardDraftOrganization,
       selfIntro: introCardDraftSelfIntro,
-      links: introCardDraftLinksText.split('\n'),
+      links: buildIntroCardLinks({
+        x: introCardDraftLinkX,
+        github: introCardDraftLinkGithub,
+        linkedin: introCardDraftLinkLinkedin,
+        portfolio: introCardDraftLinkPortfolio,
+        otherLinks: introCardDraftOtherLinks,
+      }),
       email: introCardDraftEmail,
       phone: introCardDraftPhone,
     };
@@ -1376,7 +1404,15 @@ export default function PassportApp({
     setIntroCardDraftSelfIntro(card.selfIntro ?? '');
     setIntroCardDraftEmail(card.email ?? '');
     setIntroCardDraftPhone(card.phone ?? '');
-    setIntroCardDraftLinksText((card.links ?? []).join('\n'));
+    // Issue 90: 保存済みの `links`（フラット配列）を、hostname が既知サービス
+    // （x.com/twitter.com・github.com・linkedin.com）に一致する最初の 1 件だけ
+    // 対応欄へ割り当て、残りは自由リンクへ戻す（`classifyIntroCardLinks`）。
+    const classifiedLinks = classifyIntroCardLinks(card.links ?? []);
+    setIntroCardDraftLinkX(classifiedLinks.x);
+    setIntroCardDraftLinkGithub(classifiedLinks.github);
+    setIntroCardDraftLinkLinkedin(classifiedLinks.linkedin);
+    setIntroCardDraftLinkPortfolio(classifiedLinks.portfolio);
+    setIntroCardDraftOtherLinks(classifiedLinks.otherLinks);
   }
 
   function openIntroCardEdit(): void {
@@ -1424,7 +1460,11 @@ export default function PassportApp({
       setIntroCardDraftSelfIntro('');
       setIntroCardDraftEmail('');
       setIntroCardDraftPhone('');
-      setIntroCardDraftLinksText('');
+      setIntroCardDraftLinkX('');
+      setIntroCardDraftLinkGithub('');
+      setIntroCardDraftLinkLinkedin('');
+      setIntroCardDraftLinkPortfolio('');
+      setIntroCardDraftOtherLinks([]);
       setIntroCardNotice({
         kind: 'empty',
         message: MESSAGES[locale].introCard.initialNotice,
@@ -2158,18 +2198,35 @@ export default function PassportApp({
       introCardEdit={{
         cardUrlByteUsage: introCardUrlByteLength(introCardDraftAsShape()),
         email: introCardDraftEmail,
-        linksText: introCardDraftLinksText,
+        linkGithub: introCardDraftLinkGithub,
+        linkLinkedin: introCardDraftLinkLinkedin,
+        linkPortfolio: introCardDraftLinkPortfolio,
+        linkX: introCardDraftLinkX,
         name: introCardDraftName,
         notice: introCardNotice,
+        onAddOtherLink: () =>
+          setIntroCardDraftOtherLinks((current) => addOtherLink(current)),
         onChangeEmail: setIntroCardDraftEmail,
-        onChangeLinksText: setIntroCardDraftLinksText,
+        onChangeLinkGithub: setIntroCardDraftLinkGithub,
+        onChangeLinkLinkedin: setIntroCardDraftLinkLinkedin,
+        onChangeLinkPortfolio: setIntroCardDraftLinkPortfolio,
+        onChangeLinkX: setIntroCardDraftLinkX,
         onChangeName: setIntroCardDraftName,
         onChangeOrganization: setIntroCardDraftOrganization,
+        onChangeOtherLink: (index, value) =>
+          setIntroCardDraftOtherLinks((current) =>
+            updateOtherLink(current, index, value)
+          ),
         onChangePhone: setIntroCardDraftPhone,
         onChangeSelfIntro: setIntroCardDraftSelfIntro,
         onChangeTitle: setIntroCardDraftTitle,
+        onRemoveOtherLink: (index) =>
+          setIntroCardDraftOtherLinks((current) =>
+            removeOtherLink(current, index)
+          ),
         onSave: () => void saveIntroCard(),
         organization: introCardDraftOrganization,
+        otherLinks: introCardDraftOtherLinks,
         phone: introCardDraftPhone,
         saving: introCardSaving,
         selfIntro: introCardDraftSelfIntro,

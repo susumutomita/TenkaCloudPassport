@@ -595,8 +595,19 @@ export interface AppMessages {
     readonly phonePlaceholder: string;
     readonly linksLabel: string;
     readonly linksHint: string;
-    readonly linksPlaceholder: string;
     readonly linksCounter: (current: number, max: number) => string;
+    readonly linkXLabel: string;
+    readonly linkXPlaceholder: string;
+    readonly linkGithubLabel: string;
+    readonly linkGithubPlaceholder: string;
+    readonly linkLinkedinLabel: string;
+    readonly linkLinkedinPlaceholder: string;
+    readonly linkPortfolioLabel: string;
+    readonly linkPortfolioPlaceholder: string;
+    readonly otherLinkPlaceholder: string;
+    readonly addLinkButton: string;
+    readonly addLinkButtonHint: string;
+    readonly removeLinkButtonLabel: (index: number) => string;
     readonly byteUsageLabel: (current: number, max: number) => string;
     readonly byteUsageOverBudget: (current: number, max: number) => string;
     readonly saveButton: (saving: boolean) => string;
@@ -1270,10 +1281,23 @@ const ja: AppMessages = {
     emailPlaceholder: '例: taro@example.com',
     phoneLabel: '電話番号（任意）',
     phonePlaceholder: '例: 090-1234-5678',
-    linksLabel: 'リンク（任意、1 行に 1 件、最大 5 件）',
-    linksHint: 'GitHub、X、Web サイト等の URL を 1 行ずつ入力します。',
-    linksPlaceholder: 'https://github.com/example',
+    linksLabel: 'リンク（任意、最大 5 件）',
+    linksHint:
+      'X・GitHub・LinkedIn はユーザー名だけでも入力できます。Portfolio とその他のリンクは URL を入力してください。',
     linksCounter: (current, max) => `${current} / ${max} 件`,
+    linkXLabel: 'X（旧 Twitter）',
+    linkXPlaceholder: '例: taro_tanaka（または完全な URL）',
+    linkGithubLabel: 'GitHub',
+    linkGithubPlaceholder: '例: taro-tanaka（または完全な URL）',
+    linkLinkedinLabel: 'LinkedIn',
+    linkLinkedinPlaceholder: '例: taro-tanaka（または完全な URL）',
+    linkPortfolioLabel: 'Portfolio（任意、URL のみ）',
+    linkPortfolioPlaceholder: '例: https://taro-tanaka.example.com',
+    otherLinkPlaceholder: '例: https://example.com',
+    addLinkButton: 'その他のリンクを追加',
+    addLinkButtonHint:
+      '自由な URL の入力欄を追加します。名前付き欄と合わせて最大 5 件までです。',
+    removeLinkButtonLabel: (index) => `その他のリンク ${index} を削除`,
     byteUsageLabel: (current, max) => `QR の目安: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `QR の上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
@@ -1960,10 +1984,23 @@ const en: AppMessages = {
     emailPlaceholder: 'e.g., taro@example.com',
     phoneLabel: 'Phone (optional)',
     phonePlaceholder: 'e.g., 090-1234-5678',
-    linksLabel: 'Links (optional, one per line, up to 5)',
-    linksHint: 'Enter GitHub, X, or website URLs, one per line.',
-    linksPlaceholder: 'https://github.com/example',
+    linksLabel: 'Links (optional, up to 5)',
+    linksHint:
+      'For X, GitHub, and LinkedIn, a username alone is enough. Portfolio and other links need a full URL.',
     linksCounter: (current, max) => `${current} / ${max}`,
+    linkXLabel: 'X (formerly Twitter)',
+    linkXPlaceholder: 'e.g., taro_tanaka (or a full URL)',
+    linkGithubLabel: 'GitHub',
+    linkGithubPlaceholder: 'e.g., taro-tanaka (or a full URL)',
+    linkLinkedinLabel: 'LinkedIn',
+    linkLinkedinPlaceholder: 'e.g., taro-tanaka (or a full URL)',
+    linkPortfolioLabel: 'Portfolio (optional, URL only)',
+    linkPortfolioPlaceholder: 'e.g., https://taro-tanaka.example.com',
+    otherLinkPlaceholder: 'e.g., https://example.com',
+    addLinkButton: 'Add another link',
+    addLinkButtonHint:
+      'Adds a free-form URL field. Up to 5 links in total, including the named fields.',
+    removeLinkButtonLabel: (index) => `Remove other link ${index}`,
     byteUsageLabel: (current, max) => `QR estimate: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `This exceeds the QR limit (${current} / ${max} byte). Please shorten your input.`,

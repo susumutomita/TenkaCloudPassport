@@ -1,6 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -9,7 +15,9 @@
         "noExplicitAny": "error",
         "noConsole": {
           "level": "error",
-          "options": { "allow": ["warn", "error"] }
+          "options": {
+            "allow": ["warn", "error"]
+          }
         },
         "noEmptyBlockStatements": "error",
         "noTsIgnore": "error"
@@ -17,14 +25,18 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "error",
-          "options": { "maxAllowedComplexity": 15 }
+          "options": {
+            "maxAllowedComplexity": 15
+          }
         }
       },
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error"
       },
-      "style": { "noNonNullAssertion": "error" }
+      "style": {
+        "noNonNullAssertion": "error"
+      }
     }
   },
   "formatter": {
@@ -48,13 +60,22 @@
       "!**/build",
       "!**/coverage",
       "!**/.next",
-      "!**/*.lock"
+      "!**/*.lock",
+      "!**/ios",
+      "!**/android",
+      "!**/.expo"
     ]
   },
   "overrides": [
     {
       "includes": ["scripts/**"],
-      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
     }
   ]
 }

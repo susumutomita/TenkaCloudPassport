@@ -121,8 +121,35 @@ describe('自己紹介ページビューワー（site/c/index.html、Issue 84）
     expectInOrder(body, [
       "anchor.target = '_blank'",
       "anchor.rel = 'noopener noreferrer'",
-      'anchor.textContent = link',
+      'anchor.textContent = linkLabel(link)',
     ]);
+  });
+
+  it('リンクの hostname が既知サービス（X / GitHub / LinkedIn）ならサービス名ラベルを、それ以外は hostname を表示する（Issue 90）', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function linkLabel(link) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    // textContent 経由のみで表示する安全契約（innerHTML 不使用）は既存テストで
+    // 固定済みのため、ここではラベル解決ロジック自体を検査する。
+    expect(body).toContain('new URL(link).hostname');
+    expect(body).toContain('KNOWN_LINK_HOST_LABELS[hostname] ?? hostname');
+    expect(text).toContain("'x.com': 'X'");
+    expect(text).toContain("'twitter.com': 'X'");
+    expect(text).toContain("'github.com': 'GitHub'");
+    expect(text).toContain("'linkedin.com': 'LinkedIn'");
+  });
+
+  it('linkLabel は URL として解析できない値を安全にそのまま返す（フェイルセーフ、例外を投げない）', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function linkLabel(link) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain('try {');
+    expect(body).toContain('} catch {');
+    expect(body).toContain('return link;');
   });
 
   it('連絡先に追加ボタンは vCard 3.0 を組み立てて Blob URL 経由で .vcf をダウンロードさせる', async () => {
