@@ -4,14 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TenkaCloud Passport — You can hand off an introduction without a business card.</title>
-<meta name="description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to save your contact." />
+<meta name="description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to open your Intro Card page. Adding a contact is optional and happens only inside that page; nothing is ever sent to a server." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
 <link rel="canonical" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="ja" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="en" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="x-default" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <meta property="og:title" content="TenkaCloud Passport — You can hand off an introduction without a business card." />
-<meta property="og:description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to save your contact." />
+<meta property="og:description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to open your Intro Card page. Adding a contact is optional and happens only inside that page; nothing is ever sent to a server." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <meta property="og:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
@@ -20,7 +20,7 @@
 <meta property="og:locale" content="en_US" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="TenkaCloud Passport — You can hand off an introduction without a business card." />
-<meta name="twitter:description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to save your contact." />
+<meta name="twitter:description" content="Free, no account, on-device only. Just show a QR code — the other person needs no app, only their phone's standard camera, to open your Intro Card page. Adding a contact is optional and happens only inside that page; nothing is ever sent to a server." />
 <meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
 <style>
   /* Zero external requests (including fonts). A page that claims no telemetry sends none itself. */
@@ -220,7 +220,8 @@
         cards — and you do not want to pay for a paid card service either. TenkaCloud
         Passport shows your name, title, and self-introduction as a QR code, for free and
         without an account. The other person needs no app; their phone's standard camera
-        is enough to save your contact.
+        is enough to open your Intro Card page in a browser. Adding you to contacts is an
+        optional action they choose inside that page.
       </p>
       <div class="cta-row">
         <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">View on GitHub</a>
@@ -268,7 +269,7 @@
             <rect x="76" y="60" width="5" height="5"></rect>
           </g>
         </svg>
-        <span class="cp-qr-caption">Scan with a standard camera<br />→ Add to Contacts is offered</span>
+        <span class="cp-qr-caption">Scan with a standard camera<br />→ Your Intro Card page opens</span>
       </div>
     </div>
   </div>
@@ -318,7 +319,7 @@
       <li>
         <div>
           <h3>They scan it with a standard camera</h3>
-          <p>No app install required. Scanning the QR with an iPhone or Android standard camera offers to add you as a contact.</p>
+          <p>No app install required. Scanning the QR with an iPhone or Android standard camera opens your Intro Card page in a browser (the other person needs to be online). Adding you to contacts is an optional action inside that page.</p>
         </div>
       </li>
       <li>
@@ -340,7 +341,7 @@
         <span class="step-badge">Implemented</span>
         <div>
           <h3>Hand off an Intro Card as a QR code</h3>
-          <p>The other person needs no app, just a standard camera, to save your contact. This is the feature described on this page.</p>
+          <p>The other person needs no app, just a standard camera, to open your Intro Card page. Adding you to contacts is an optional action they choose inside that page. This is the feature described on this page.</p>
         </div>
       </li>
       <li class="concept">
@@ -396,7 +397,7 @@
         <tr>
           <td>Repository development</td>
           <td><span class="badge ok">Implemented</span></td>
-          <td>Creating and saving an Intro Card on-device and generating a vCard QR are verified by tests, alongside source, pure TypeScript Domain, the Rules Provider, and Web Export.</td>
+          <td>Creating and saving an Intro Card on-device and generating a QR that encodes the Intro Card page URL are verified by tests, alongside source, pure TypeScript Domain, the Rules Provider, and Web Export.</td>
         </tr>
         <tr>
           <td>Source-only Candidate</td>
@@ -411,8 +412,9 @@
       </tbody>
     </table>
     <p class="status-note">
-      Scanning the QR code with a physical device's standard camera and confirming that it offers
-      to add a contact is Not run. Browser and Expo Go execution evidence are also Not run. We do
+      Scanning the QR code with a physical device's standard camera and confirming that it opens
+      the Intro Card page in a browser is Not run. Adding a contact is an optional action inside
+      that page. Browser and Expo Go execution evidence are also Not run. We do
       not call green CI physical-device evidence, and we do not display an unverified capability as
       "it works." This discipline ships with the open source, too. See the
       <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.en.md">README</a> and

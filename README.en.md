@@ -3,15 +3,18 @@
 [Japanese](./README.md)
 
 TenkaCloud Passport is a free, account-free Expo app that lets you hand off an introduction without a business
-card. Show your name, title, and self-introduction as a QR code, and the other person can save your contact using
-only their phone's standard camera — no app install required. See the
+card. Show your name, title, and self-introduction as a QR code; the other person needs no app, just their
+phone's standard camera, to open your Intro Card page in a browser. Adding you to contacts is an optional
+action they choose inside that page. See the
 [landing page](https://susumutomita.github.io/TenkaCloudPassport/en/) for details.
 
 ## What it does
 
 - Enter your name (required), title, organization, self-introduction, and links. Nothing stays on the device until
   you explicitly save it.
-- Once saved, it shows a real QR code (vCard 3.0) that a standard camera can scan.
+- Once saved, it shows a real QR code (a URL to your Intro Card page) that a standard camera can scan. Scanning
+  it opens the page in the other person's browser; adding you to contacts is an optional action they choose
+  inside that page.
 - No server and no account are required. The only way data leaves the device is a manual JSON export you perform yourself.
 - The existing Pet / Lounge / Bridge code and tests are kept but removed from the default screens. They are
   expected to return in roadmap Step 4 (a concept for on-device agents finding a connection). See the Roadmap
@@ -28,14 +31,16 @@ Install Expo Go on your phone, connect it to the same network as your Mac, then 
 terminal. The app opens on the Intro Card creation screen. Enter a name and save it, and you move to the screen
 that shows a QR code a standard camera can scan.
 
-Verifying on a physical device that scanning this QR with a standard camera offers to add a contact is Not run as
-of this README (a cloud environment cannot perform physical-device verification).
+Verifying on a physical device that scanning this QR with a standard camera opens the Intro Card page in a
+browser is Not run as of this README (a cloud environment cannot perform physical-device verification). Adding a
+contact is an optional action the other person chooses inside that page, and it requires them to be online at
+scan time.
 
 ## Current release state
 
 | Scope | State | Allowed now | Stop condition |
 | --- | --- | --- | --- |
-| Repository development | `Implemented` | Validate source, pure TypeScript Domain, Rules Provider, and Web Export, including on-device Intro Card storage and vCard QR generation. | Never treat green CI as physical-device evidence. |
+| Repository development | `Implemented` | Validate source, pure TypeScript Domain, Rules Provider, and Web Export, including on-device Intro Card storage and QR generation that encodes the Intro Card page URL. | Never treat green CI as physical-device evidence. |
 | Source-only candidate | `Experimental` | Reproduce a draft candidate from one fixed commit. | Do not call it a public release or overwrite an existing output. |
 | Public OSS Alpha | `Blocked` | Nothing. | Do not publish until every required physical gate is `Verified`. |
 | Local Champion walkthrough | `Experimental` | Review documents, diagrams, roles, and stop conditions. | Do not use real participant data, real QR, Nearby, or a group Lounge. |

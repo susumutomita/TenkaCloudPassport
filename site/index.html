@@ -4,14 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TenkaCloud Passport — 名刺がなくても、自己紹介は渡せる。</title>
-<meta name="description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで連絡先登録できる自己紹介カードです。" />
+<meta name="description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで自己紹介ページが開きます。連絡先への追加はページ内で相手が選べる任意操作で、データはサーバーへ送信されません。" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
 <link rel="canonical" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="ja" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <link rel="alternate" hreflang="en" href="https://susumutomita.github.io/TenkaCloudPassport/en/" />
 <link rel="alternate" hreflang="x-default" href="https://susumutomita.github.io/TenkaCloudPassport/" />
 <meta property="og:title" content="TenkaCloud Passport — 名刺がなくても、自己紹介は渡せる。" />
-<meta property="og:description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで連絡先登録できる自己紹介カードです。" />
+<meta property="og:description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで自己紹介ページが開きます。連絡先への追加はページ内で相手が選べる任意操作で、データはサーバーへ送信されません。" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://susumutomita.github.io/TenkaCloudPassport/" />
 <meta property="og:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
@@ -20,7 +20,7 @@
 <meta property="og:locale" content="ja_JP" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="TenkaCloud Passport — 名刺がなくても、自己紹介は渡せる。" />
-<meta name="twitter:description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで連絡先登録できる自己紹介カードです。" />
+<meta name="twitter:description" content="無料・アカウント不要・データは端末のみ。QR を見せるだけで、相手はアプリ不要・標準カメラで自己紹介ページが開きます。連絡先への追加はページ内で相手が選べる任意操作で、データはサーバーへ送信されません。" />
 <meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloudPassport/og.png" />
 <style>
   /* 外部リクエストゼロ (フォント含む)。テレメトリなしを掲げるページ自身も何も送らない。 */
@@ -219,7 +219,8 @@
         LT の後に話しかけてもらえたのに、名刺を作っていなかった。有料の名刺サービスに
         お金は払いたくない。TenkaCloud Passport は、名前・肩書き・自己紹介を QR で
         見せるだけの、無料でアカウント不要のアプリです。相手はアプリを入れず、標準
-        カメラで読み取るだけで連絡先に登録できます。
+        カメラで QR を読み取るだけで自己紹介ページが開きます。連絡先への追加は、
+        そのページ内で相手が選んだときだけの任意操作です。
       </p>
       <div class="cta-row">
         <a class="cta primary" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub で見る</a>
@@ -267,7 +268,7 @@
             <rect x="76" y="60" width="5" height="5"></rect>
           </g>
         </svg>
-        <span class="cp-qr-caption">標準カメラで読み取り<br />→ 連絡先に追加を提案</span>
+        <span class="cp-qr-caption">標準カメラで読み取り<br />→ 自己紹介ページが開く</span>
       </div>
     </div>
   </div>
@@ -317,7 +318,7 @@
       <li>
         <div>
           <h3>相手が標準カメラで読み取る</h3>
-          <p>アプリのインストールは不要です。iPhone / Android の標準カメラで QR を読み取ると、連絡先への追加が提案されます。</p>
+          <p>アプリのインストールは不要です。iPhone / Android の標準カメラで QR を読み取ると、ブラウザで自己紹介ページが開きます（相手がオンラインである必要があります）。連絡先への追加は、そのページ内のボタンを押した場合だけの任意操作です。</p>
         </div>
       </li>
       <li>
@@ -339,7 +340,7 @@
         <span class="step-badge">実装済み</span>
         <div>
           <h3>自己紹介カードを QR で渡す</h3>
-          <p>相手はアプリ不要、標準カメラで連絡先登録できます。本ページが説明している機能です。</p>
+          <p>相手はアプリ不要、標準カメラで自己紹介ページが開きます。連絡先への追加はページ内で相手が選ぶ任意操作です。本ページが説明している機能です。</p>
         </div>
       </li>
       <li class="concept">
@@ -395,7 +396,7 @@
         <tr>
           <td>Repository 開発</td>
           <td><span class="badge ok">Implemented</span></td>
-          <td>自己紹介カードの作成・端末内保存・vCard QR 生成を含め、Source・純 TypeScript Domain・Rules Provider・Web Export をテストで検証。</td>
+          <td>自己紹介カードの作成・端末内保存・自己紹介ページ URL の QR 生成を含め、Source・純 TypeScript Domain・Rules Provider・Web Export をテストで検証。</td>
         </tr>
         <tr>
           <td>Source-only Candidate</td>
@@ -410,8 +411,9 @@
       </tbody>
     </table>
     <p class="status-note">
-      実機の標準カメラで QR を読み取り、連絡先追加が提案されることの実機検証は Not run です。
-      Browser・Expo Go の実行証拠も Not run です。緑の CI を実機の証拠とは呼ばず、未検証の能力を
+      実機の標準カメラで QR を読み取り、ブラウザで自己紹介ページが開くことの実機検証は Not run です。
+      連絡先への追加はページ内のボタンを押した場合だけの任意操作です。Browser・Expo Go の実行証拠も
+      Not run です。緑の CI を実機の証拠とは呼ばず、未検証の能力を
       「動きます」と表示しない。この規律ごとオープンソースです。詳細は
       <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/README.md">README</a> と
       <a href="https://github.com/susumutomita/TenkaCloudPassport/blob/main/docs/releases/status.md">Release Status</a> を参照してください。
