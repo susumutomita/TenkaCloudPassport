@@ -210,7 +210,68 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
       'const overLinkCount = linkCount > INTRO_CARD_MAX_LINKS;'
     );
     expect(text).toContain(
-      '<Text style={overLinkCount ? styles.byteUsageOverBudget : styles.limit}>'
+      '<Text style={overLinkCount ? styles.dangerCaption : styles.limit}>'
+    );
+  });
+
+  it('email は autoCapitalize と autoCorrect を無効にし、電話・リンク系は用途別の keyboardType を持つ（Issue 92）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+    const emailStart = text.indexOf("ref={registerFieldRef('email')}");
+    const emailFieldStart = text.lastIndexOf('<TextInput', emailStart);
+    const emailFieldEnd = text.indexOf('/>', emailStart);
+    const emailField = text.slice(emailFieldStart, emailFieldEnd);
+
+    expect(emailField).toContain('autoCapitalize="none"');
+    expect(emailField).toContain('autoCorrect={false}');
+    expect(emailField).toContain('keyboardType="email-address"');
+    expect(text).toContain('keyboardType="phone-pad"');
+    // X / GitHub / LinkedIn / Portfolio / 自由リンクの 5 入力すべてが
+    // keyboardType="url" を持つ（Issue 90 では Portfolio・自由リンクのみ
+    // 設定されており、X/GitHub/LinkedIn が抜けていた）。
+    expect(text.match(/keyboardType="url"/g)).toHaveLength(5);
+  });
+
+  it('保存失敗の原因になった欄へ focus し、直下に同じメッセージを表示する（Issue 92: 画面上部へ戻さない）', async () => {
+    const text = await source('IntroCardEditScreen.tsx');
+
+    expect(text).toContain('function FieldError(');
+    expect(text).toContain(
+      'readonly errorFieldKey: IntroCardEditFieldKey | undefined;'
+    );
+    expect(text).toContain(
+      'function fieldErrorMessage(key: IntroCardEditFieldKey): string | null {'
+    );
+    expect(text).toContain('errorFieldKey === key ? errorFieldMessage : null');
+    // focus は「新しい保存失敗が起きたか」を notice の参照そのものを依存に
+    // 含めて判定する（code-reviewer 指摘: errorFieldKey の値だけを依存にすると、
+    // 同じ欄が原因のまま連続して保存に失敗したとき 2 回目以降 focus されない）。
+    // `focusOrDismiss` は `useFieldFocusChain` 側で `useCallback` により安定した
+    // 参照になっているため、無関係な再 render のたびに effect が再実行される
+    // ことはない（simplify レビュー指摘、ガード用の ref を別途持たない）。
+    expect(text).toContain(
+      'if (errorFieldKey !== undefined) focusOrDismiss(errorFieldKey);'
+    );
+    expect(text).toContain('}, [errorFieldKey, notice, focusOrDismiss]);');
+    expect(text).toContain('const registerFieldRef = useCallback(');
+    expect(text).toContain('const focusOrDismiss = useCallback(');
+    // 各入力欄の直下に FieldError を配置する（name・email・phone・4 名前付き
+    // リンク欄・自由リンク行すべて）。
+    for (const key of [
+      "fieldErrorMessage('name')",
+      "fieldErrorMessage('title')",
+      "fieldErrorMessage('organization')",
+      "fieldErrorMessage('selfIntro')",
+      "fieldErrorMessage('email')",
+      "fieldErrorMessage('phone')",
+      "fieldErrorMessage('linkX')",
+      "fieldErrorMessage('linkGithub')",
+      "fieldErrorMessage('linkLinkedin')",
+      "fieldErrorMessage('linkPortfolio')",
+    ]) {
+      expect(text).toContain(`<FieldError message={${key}} />`);
+    }
+    expect(text).toContain(
+      '<FieldError message={fieldErrorMessage(refKey)} />'
     );
   });
 });

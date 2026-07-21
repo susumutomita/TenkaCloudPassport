@@ -1,4 +1,4 @@
-import { IntroCardError } from '../domain/intro-card';
+import { IntroCardError, type IntroCardField } from '../domain/intro-card';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { IntroCardStorageError } from './intro-card-storage';
@@ -6,7 +6,15 @@ import { IntroCardStorageError } from './intro-card-storage';
 export type IntroCardNotice =
   | { readonly kind: 'empty'; readonly message: string }
   | { readonly kind: 'saved'; readonly message: string }
-  | { readonly kind: 'validation-error'; readonly message: string }
+  | {
+      readonly kind: 'validation-error';
+      readonly message: string;
+      // Issue 92: 保存失敗時にどの入力欄が原因かを画面側で特定し、focus と
+      // 直下のエラー表示に使う。`exactOptionalPropertyTypes` 下で明示
+      // `undefined` を代入できるよう、`IntroCardError.field` と同じく
+      // `?:` を使わず union で宣言する。
+      readonly field: IntroCardField | undefined;
+    }
   | { readonly kind: 'save-error'; readonly message: string }
   | { readonly kind: 'delete-error'; readonly message: string }
   | { readonly kind: 'storage-unavailable'; readonly message: string }
@@ -46,7 +54,11 @@ export function introCardNoticeFromError(
   locale: Locale = DEFAULT_LOCALE
 ): IntroCardNotice {
   if (error instanceof IntroCardError) {
-    return { kind: 'validation-error', message: error.message };
+    return {
+      kind: 'validation-error',
+      message: error.message,
+      field: error.field,
+    };
   }
   if (error instanceof IntroCardStorageError) {
     if (error.code === 'UNAVAILABLE') {

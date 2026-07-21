@@ -17,12 +17,41 @@ describe('Intro Card の Notice', () => {
   it('IntroCardError（入力検証）を validation-error として扱う', () => {
     const error = new IntroCardError(
       'NAME_REQUIRED',
-      '名前を入力してください。'
+      '名前を入力してください。',
+      'name'
     );
 
     expect(introCardNoticeFromError(error, 'save')).toEqual({
       kind: 'validation-error',
       message: '名前を入力してください。',
+      field: 'name',
+    });
+  });
+
+  it('IntroCardError の field をそのまま Notice へ引き継ぐ（Issue 92: 保存失敗時の該当欄 focus に使う）', () => {
+    const error = new IntroCardError(
+      'INVALID_EMAIL',
+      'メールアドレスの形式が不正です。',
+      'email'
+    );
+
+    expect(introCardNoticeFromError(error, 'save')).toEqual({
+      kind: 'validation-error',
+      message: 'メールアドレスの形式が不正です。',
+      field: 'email',
+    });
+  });
+
+  it('field を持たない IntroCardError（CARD_TOO_LARGE 等）は field: undefined の validation-error になる', () => {
+    const error = new IntroCardError(
+      'CARD_TOO_LARGE',
+      'vCard が QR の上限を超えています。'
+    );
+
+    expect(introCardNoticeFromError(error, 'save')).toEqual({
+      kind: 'validation-error',
+      message: 'vCard が QR の上限を超えています。',
+      field: undefined,
     });
   });
 

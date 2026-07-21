@@ -1,4 +1,9 @@
-import { INTRO_CARD_MAX_LINKS } from '../domain/intro-card';
+import {
+  INTRO_CARD_LINK_MAX_LENGTH,
+  INTRO_CARD_MAX_LINKS,
+  isValidIntroCardLinkFormat,
+  normalizeInputText,
+} from '../domain/intro-card';
 
 /**
  * Issue 90: カード編集画面のリンク欄を「1 行 1 リンクの改行区切り textarea」から
@@ -90,6 +95,85 @@ export function nonEmptyLinkCount(draft: IntroCardLinksDraft): number {
 /** 上限（`INTRO_CARD_MAX_LINKS`）に達していなければ自由リンクを追加してよい。 */
 export function canAddOtherLink(draft: IntroCardLinksDraft): boolean {
   return nonEmptyLinkCount(draft) < INTRO_CARD_MAX_LINKS;
+}
+
+/** 編集画面のリンク系入力欄を一意に指す key（focus・エラー表示の対象を絞り込む用）。 */
+export type IntroCardLinkFieldKey =
+  | 'linkX'
+  | 'linkGithub'
+  | 'linkLinkedin'
+  | 'linkPortfolio'
+  | `otherLink-${number}`;
+
+/**
+ * `NamedLinkService` から対応する編集画面欄の key への対応表。
+ * `NAMED_LINK_URL_PREFIX` 等と同じ「サービス種別をキーにした table」の
+ * 方針を踏襲し、`firstInvalidNamedLinkField` が 3 サービス分の候補を
+ * コピペで並べ直さずに済むようにする（simplify レビュー指摘）。
+ */
+const NAMED_LINK_FIELD_KEY: Record<NamedLinkService, IntroCardLinkFieldKey> = {
+  x: 'linkX',
+  github: 'linkGithub',
+  linkedin: 'linkLinkedin',
+};
+
+const NAMED_LINK_SERVICES: readonly NamedLinkService[] = [
+  'x',
+  'github',
+  'linkedin',
+];
+
+/**
+ * Issue 92: 保存失敗（`INVALID_URL`・リンク単体の文字数超過）の原因になった、
+ * X / GitHub / LinkedIn / Portfolio / 自由リンクのどの入力欄かを 1 件だけ
+ * 特定する。`buildIntroCardLinks` と同じ順序（X → GitHub → LinkedIn →
+ * Portfolio → 自由リンク）で走査し、`createIntroCard`（`validatedLinks`）が
+ * 実際に検証する正規化後の値と完全に同じパイプラインを再現する: named 欄は
+ * `normalizeNamedLink` 適用後、続けて `normalizeInputText`（NFKC + ゼロ幅除去、
+ * domain と共有）を通してから domain と同じ判定関数・上限定数
+ * （`isValidIntroCardLinkFormat` / `INTRO_CARD_LINK_MAX_LENGTH`、どちらも
+ * domain の export を再利用し二重定義しない）で判定する。
+ * code-reviewer 指摘: `normalizeInputText` を経ずに判定すると、全角文字を含むが
+ * 正規化後は有効なリンクを「無効」と誤判定し、domain が実際に失敗した箇所とは
+ * 異なる欄へ focus してしまう不具合があったため、ここで揃える。
+ * 「件数超過（5 件超）」はどの 1 欄の問題でもなく、domain（`validatedLinks`）も
+ * 個々のリンクの形式より先に件数だけを見て `FIELD_TOO_LONG` を投げるため、
+ * ここでも先に判定して `undefined` を返す（呼び出し側は既存の `overLinkCount`、
+ * byte 予算超過と同じ見た目の赤字件数表示に委ねる）。これを省くと、件数超過が
+ * 真因でも「たまたま形式が壊れている別リンク」の欄へ focus し、直下に無関係な
+ * 「5 件までに」というメッセージが出てしまう（code-reviewer 指摘）。
+ */
+export function firstInvalidNamedLinkField(
+  draft: IntroCardLinksDraft
+): IntroCardLinkFieldKey | undefined {
+  if (nonEmptyLinkCount(draft) > INTRO_CARD_MAX_LINKS) return undefined;
+
+  const candidates: ReadonlyArray<{
+    readonly key: IntroCardLinkFieldKey;
+    readonly value: string;
+  }> = [
+    ...NAMED_LINK_SERVICES.map((service) => ({
+      key: NAMED_LINK_FIELD_KEY[service],
+      value: normalizeInputText(
+        normalizeNamedLink(service, draft[service])
+      ).trim(),
+    })),
+    { key: 'linkPortfolio', value: normalizeInputText(draft.portfolio).trim() },
+    ...draft.otherLinks.map((link, index) => ({
+      key: `otherLink-${index}` as const,
+      value: normalizeInputText(link).trim(),
+    })),
+  ];
+  for (const candidate of candidates) {
+    if (candidate.value.length === 0) continue;
+    if (
+      !isValidIntroCardLinkFormat(candidate.value) ||
+      candidate.value.length > INTRO_CARD_LINK_MAX_LENGTH
+    ) {
+      return candidate.key;
+    }
+  }
+  return undefined;
 }
 
 /** 自由リンク欄の末尾に空の入力行を 1 件追加する。 */
