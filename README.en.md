@@ -36,6 +36,21 @@ browser is Not run as of this README (a cloud environment cannot perform physica
 contact is an optional action the other person chooses inside that page, and it requires them to be online at
 scan time.
 
+### Try it from your phone with no dev environment (Web version on GitHub Pages)
+
+If you have neither a Mac nor Expo Go handy, open the Web version we publish on GitHub Pages directly in
+your phone's browser.
+
+<https://susumutomita.github.io/TenkaCloudPassport/app/>
+
+- Data is stored in the browser's on-device storage. Switching browsers or devices does not carry your
+  card over.
+- The first load requires an online connection. Full offline support via a Service Worker is not
+  implemented yet (tracked as a follow-up).
+- On iOS Safari, tap the Share icon and choose "Add to Home Screen"; on Android Chrome, open the menu and
+  choose "Add to Home Screen" or "Install app". Either way you get an icon on your home screen that launches
+  the app directly. This is not App Store or Play Store distribution.
+
 ## Current release state
 
 | Scope | State | Allowed now | Stop condition |
