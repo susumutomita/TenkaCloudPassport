@@ -30,15 +30,22 @@ export type IntroCardErrorCode =
   | 'INVALID_URL'
   | 'INVALID_EMAIL'
   | 'INVALID_PHONE'
-  | 'CARD_TOO_LARGE';
+  | 'CARD_TOO_LARGE'
+  | 'INVALID_SHARE_URL';
 
 /**
  * `src/protocol/qr-payload.ts` の `QrPayloadError` 等と同形の per-module Error 慣行。
- * `CARD_TOO_LARGE` は `createIntroCard` 自体は投げず、`src/protocol/vcard.ts` の
- * `encodeVCard` が vCard 全体の byte 数を検証する際にこのクラスを再利用して投げる
- * （フィールド単体の妥当性と、複数フィールド合算の QR 収容可否は別の関心事だが、
+ * `CARD_TOO_LARGE` は `createIntroCard` 自体は投げず、QR 化の byte 数検証を行う
+ * protocol 層のエンコーダがこのクラスを再利用して投げる。現在の本番経路は
+ * `src/protocol/intro-card-url.ts` の `encodeIntroCardUrl`（QR に載せる自己紹介
+ * ページ URL 全体の byte 数を検証、Issue 84）であり、`src/protocol/vcard.ts` の
+ * `encodeVCard`（vCard 全体の byte 数を検証、将来の切替式用に残置）も同じコードを
+ * 投げる（フィールド単体の妥当性と、複数フィールド合算の QR 収容可否は別の関心事だが、
  * 呼び出し側から見ればどちらも「この Intro Card は保存・共有できない」という
  * 同じ意味の型付き Error であるため、クラスを分けない）。
+ * `INVALID_SHARE_URL`（Issue 84）は同じ理由で `src/protocol/intro-card-url.ts` の
+ * `decodeIntroCardUrlFragment` が、QR フラグメントを Intro Card として復元できない
+ * 場合（base64url 不正・JSON 不正・version 不一致・スキーマ不一致）に投げる。
  */
 export class IntroCardError extends Error {
   readonly code: IntroCardErrorCode;

@@ -4386,3 +4386,151 @@ Transcript、Owner Answer、Prompt、Model Output を再送しない。
   - 予防策: こうした固定長ウィンドウの契約テストを新規追加するときは、
     日英どちらのテキストが典型的に長くなるかを踏まえて余裕を持たせるか、
     「セクション区切りより前」のような構造的な境界で判定する方が壊れにくい。
+
+### [QR を自己紹介ページ方式へ変更] Issue 84 実装 - 2026-07-21
+
+- 目的: owner の実機フィードバック（「読んだら即・連絡先追加は受け手に迷惑」）を受け、
+  QR の中身を vCard 直埋めから「フラグメント埋め込み自己紹介ページ URL」へ変更する。
+  Issue 84 本文の詳細設計を正本とする。
+- 制約: ブランチ `feat/intro-card-url-viewer`（main 先頭 `daf4e6c` から分岐）。
+  TDD・日本語 BDD・No Mock・カバレッジ 100%。ポート 8081 は kill しない。site/ の
+  ローカル確認は 9000 番台。ADR 番号は既存 0026 の次として 0027 を採番（採番衝突なし
+  確認済み）。
+- タスク:
+  - [x] `src/protocol/intro-card-url.ts`（新規）: `encodeIntroCardUrl` /
+    `decodeIntroCardUrlFragment` / `introCardUrlByteLength`。base64url は依存追加せず
+    純 TypeScript で実装（`qr/encoder.ts` の依存ゼロ方針に合わせる）。
+  - [x] `IntroCardScreen.tsx` の QR 生成元を `encodeVCard` から `encodeIntroCardUrl` へ
+    差し替え、`vcard.ts` は削除しない（将来の切替式用、knip dead-code 報告は許容）。
+  - [x] 保存時検証（`PassportApp.tsx` の `saveIntroCard`）と編集画面の byte 使用量表示
+    も、実際に QR 化する対象（URL）に合わせて `encodeIntroCardUrl` /
+    `introCardUrlByteLength` へ切り替える（vCard 基準のまま残すと表示画面の
+    `useMemo` が未検証の超過で例外を投げる可能性があるため、設計逸脱ではなく整合性の
+    ための必須追従と判断）。
+  - [x] `site/c/index.html`（新規・完全静的・外部リクエストゼロ）: フラグメントを
+    ブラウザ内 JS で base64url + JSON デコードして表示。`textContent` のみ、
+    `javascript:` リンク破棄、`rel="noopener noreferrer"`、hash なし・JSON 不正時は
+    fail-closed。「連絡先に追加」ボタンで vCard 3.0 を組み立て `.vcf` ダウンロード。
+  - [x] `scripts/intro-card-viewer.test.ts`（新規、ソーステキスト検査）を
+    `scripts/tsconfig.scripts.json` の include へ追加。
+  - [x] `docs/adr/0027-intro-card-url-viewer.md`（新規）。ADR-0026 の QR 方式記述のみを
+    supersede し、Intro Card のデータ最小化契約からの除外自体は維持する。
+  - [x] `docs/privacy/data-inventory.md` の QR 記述を「vCard QR」から新方式へ更新。
+  - [x] `src/app/i18n/messages.ts` の `introCard.qrExplanation` /
+    `cardDescription` / `byteUsageLabel` / `byteUsageOverBudget`（ja / en）を新体験・
+    新基準に合わせて更新。
+  - [x] code-reviewer レビューで blocker / should-fix を反映。
+  - [x] `bun test src --coverage`（100%）/ `bun test scripts/` / typecheck / biome /
+    staged harness / `make before-commit` を確認。
+- 検証手順: 上記コマンド一式に加え、`site/c/index.html` を 9000 番台ポートで配信し、
+  ブラウザ操作可能なら実際にフラグメント付き URL を開いて表示・.vcf ダウンロードを
+  確認する（不可なら「未実施」と正直に記載）。
+- 進捗ログ:
+  - `src/protocol/intro-card-url.ts` / `intro-card-url.test.ts`: TDD で先にテストを書き
+    実装（Red → Green）。base64url は依存追加せず bit accumulator 方式で encode/decode
+    を実装し（groups-of-3/4 分岐を避け、noUncheckedIndexedAccess・分岐カバレッジ双方の
+    リスクを下げた）、decode は `src/protocol/validation.ts` の `strictRecord` /
+    `stringValue` / `arrayValue` / `assertLiteral` / `parseBoundedJson` を再利用し、
+    最終的に `createIntroCard` を通すことで domain 側の妥当性ルールを単一箇所に保った。
+    新しい `IntroCardError` code `INVALID_SHARE_URL` を追加。16 テスト（round-trip
+    全項目・日本語・絵文字・最小項目、CARD_TOO_LARGE 内訳検証、decode の 9 種類の
+    fail-closed 経路、jsQR 実 round-trip）で 100% coverage。
+  - `IntroCardScreen.tsx` / `IntroCardEditScreen.tsx` / `PassportApp.tsx`: QR 生成元を
+    `encodeVCard` → `encodeIntroCardUrl` へ切り替え。編集画面の byte 使用量 prop を
+    `vCardByteUsage` → `cardUrlByteUsage` へ改名し `introCardUrlByteLength` で計算する
+    よう変更（vCard 基準のまま残すと表示画面の QR 生成が未検証の byte 超過で例外を
+    投げ得るため、設計の逸脱ではなく整合性のための必須追従と判断。実際に全項目最大長の
+    カードで vCard 版 1,316 byte・URL 版 1,667 byte と計算し、URL 版の方が実質使える
+    文字数が少ないことを確認、ADR-0027 の Bad に記載）。既存の
+    `intro-card-app-wiring.test.ts` の `encodeVCard(card)` 期待値を
+    `encodeIntroCardUrl(card)` へ更新、`intro-card-accessibility.test.ts` に新規回帰
+    テストを追加。
+  - `src/app/i18n/messages.ts`: `qrExplanation` / `cardDescription` を
+    「ブラウザで自己紹介が開く・連絡先追加は相手が選べる」体験に、
+    `byteUsageLabel` / `byteUsageOverBudget` を「vCard」から「QR」の目安表示に
+    書き換え（ja / en 両方）。
+  - `site/c/index.html`（新規）: Ink / Summit トークンを `site/index.html` から流用し
+    完全静的・外部リクエストゼロで実装。`location.hash` を base64url + JSON で
+    ブラウザ内 decode、`textContent` のみで表示、リンクは `https?://` のみ許可し
+    `rel="noopener noreferrer"` を付与、hash なし・decode 失敗はそれぞれ専用の
+    fail-closed 状態を表示。「連絡先に追加」ボタンは Blob URL 経由で `.vcf` を
+    ダウンロードさせる。
+  - `scripts/intro-card-viewer.test.ts`（新規）: ヘッドレスブラウザ実行環境を持たない
+    ため `src/screens/*-accessibility.test.ts` と同じ慣行でソーステキスト検査を実装。
+    `scripts/tsconfig.scripts.json` の include へ追加。
+  - `docs/adr/0027-intro-card-url-viewer.md`（新規）・`docs/privacy/data-inventory.md`
+    （更新）: ADR-0026 の QR 方式記述のみを supersede し、Intro Card のデータ最小化
+    契約からの除外自体は維持する形で記載。
+  - `code-reviewer` サブエージェントでレビューを実施し、以下を反映した。
+    - blocker:「`site/c/index.html` の `TEL` 行が `card.phone` を未エスケープで
+      vCard に埋め込んでおり、攻撃者が細工した fragment から vCard インジェクション
+      が可能」。`escapeVCardValue(card.phone)` を適用して修正。
+    - medium:「html 側の独立実装が TS 側のスキーマ契約より緩い（未知 key を無視・
+      links の型/上限を検証せず黙って filter・文字数上限なし・email/phone の形式
+      検証なし）」。`src/domain/intro-card.ts` の同名定数・正規表現を複製し、
+      `hasOnlyKnownKeys` / `validatedName` / `validatedLinks` / `validatedEmail` /
+      `validatedPhone` を新設して all-or-nothing（`createIntroCard` と同じ、
+      どれか 1 フィールドでも不正なら fragment 全体を拒否）へ変更。
+      `scripts/intro-card-viewer.test.ts` に定数値の drift 検出テストと TEL
+      エスケープの回帰テストを追加（13 テストへ増加）。
+    - low: `src/domain/intro-card.ts` の `CARD_TOO_LARGE` JSDoc が
+      `encodeIntroCardUrl` に触れていなかった点を追記。`site/c/index.html` の
+      `[hidden] { display: none !important; }` の `!important` を、CSS の
+      specificity とソース順序を確認した上で削除（biome の
+      `noImportantStyles` warning が解消し 0 warning に）。ADR-0027 の
+      trailing slash の Tradeoff に `curl` で確認した `site/en/index.html` の
+      301 redirect の実例を追記。
+  - `site/c/index.html` の実ブラウザ確認: `python3 -m http.server 9091`
+    （site/c/ 配下）で配信し、Playwright で実施（クラウド環境だがブラウザ操作は
+    可能だった）。`bun -e` で `encodeIntroCardUrl` を実行し実データを含む URL を
+    生成、新しいタブで開いて確認した。
+    - hash なし → 「このページは QR から開きます」状態を確認。
+    - 全項目 + 不正リンク（`javascript:alert(1)`）を含む URL → medium 修正後の
+      all-or-nothing 検証により「QR の内容を読み取れませんでした」（decode-error）
+      へ fail-closed することを確認（修正前は該当リンクだけを黙って捨てて表示して
+      いたはずで、これも review 前の実装の抜けだった）。
+    - 不正リンクを除いた同じ全項目 URL → 名前・肩書き / 所属・自己紹介・リンク・
+      メール・電話番号が正しく表示され、`document.title` が
+      「田中太郎 さんの自己紹介 | TenkaCloud Passport」に更新されることを確認。
+      「連絡先に追加」ボタンをクリックし、`田中太郎.vcf` が実際にダウンロードされる
+      ことを確認（Playwright のダウンロードイベントで確認）。Console に error /
+      warning は 0 件。
+    - 発見: 同一タブ内で hash だけを変える `page.goto` は same-document navigation
+      になり script が再実行されないため、新しいタブを開いて確認する必要があった
+      （実機での QR 都度スキャンは常に新規タブ/新規起動になるため、この制約は実運用
+      には影響しない）。
+  - 最終確認: `bun test src --coverage` 1180 pass 0 fail、全ファイル 100% / 100%。
+    `bun test scripts/` 全 pass（新規 `intro-card-url.test.ts` 16、
+    `intro-card-viewer.test.ts` 13 を含む）。`bun run typecheck` clean。
+    `bun biome check .` 0 error（新規ファイルは 0 warning）。
+    `bun scripts/check-duplication.ts` baseline 以下。
+    `bun scripts/architecture-harness.ts --staged --fail-on=error` 0 件。
+    `make before-commit` exit 0（`bun run build:web` 含む）。
+    `bun run dead-code`（knip）: `vcard.ts` は自身の test file から参照され続けている
+    ため dead code としては報告されなかった（ADR-0027 の想定より良い結果）。
+- 振り返り:
+  - 問題 1: QR の中身を vCard 直埋めから URL へ変更する際、「何を QR 化するか」を
+    変えたのに「保存前にその byte 数を検証する関数」を一緒に切り替えないと、
+    保存は通るのに表示画面で例外を投げる不整合が生まれる。今回は実装しながら
+    気づけたが、見落としやすい。
+    予防策: QR 化のような「生成 → 検証 → 表示」の 3 段階を持つ機能を変更するときは、
+    生成元を変えたら検証対象・表示対象も同じ変更を通しで grep して確認する
+    （`encodeVCard` で検索して全呼び出し箇所を洗い出す、等）。
+  - 問題 2: `site/c/index.html` は「同じ契約を独立に再実装する」と最初から意図して
+    いたのに、初版では検証範囲（不明 key・文字数上限・email/phone 形式）が TS 側より
+    緩く、しかも `card.phone` のエスケープ漏れという実害のある blocker を生んだ。
+    ビルドステップを持たない静的ファイルで TS 側のロジックを import できない制約が、
+    「コピーし忘れる／簡略化してしまう」方向に自然に倒れやすいことを実感した。
+    予防策: こうした「意図的に独立実装する」ファイルは、実装時点で TS 側の検証関数
+    （`strictRecord` 等）を横に並べて 1 行ずつ対応させながら書く。数値上限や
+    正規表現は定数として複製し、複製元の値をテストで import して drift を機械的に
+    検出する（今回 `scripts/intro-card-viewer.test.ts` に追加した「drift 検出」
+    テストがこれに当たる）。エスケープ処理は「全フィールドに同じ関数を適用したか」
+    を diff で目視するのではなく、関数呼び出しの有無をテストで固定する。
+  - 問題 3: ヘッドレスブラウザの実行環境がない前提で作業していたが、実際には
+    Playwright が使え、同一タブでの hash-only navigation が same-document
+    navigation になり script が再実行されないという、実装のバグではなく検証手法側の
+    落とし穴に最初ぶつかった。
+    予防策: 静的ページを「hash を変えて複数回開く」形で検証するときは、実機の
+    QR スキャンが常に新規タブ/新規起動である前提を明示した上で、検証も
+    タブ単位で行う（同一タブでの hash 変更検証は「別のケース」として区別する）。

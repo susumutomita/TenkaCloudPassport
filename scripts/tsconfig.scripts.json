@@ -20,6 +20,7 @@
     "source-release-verify-cli.ts",
     "source-release.test.ts",
     "nearby-transport-static-screening.ts",
-    "nearby-transport-static-screening.test.ts"
+    "nearby-transport-static-screening.test.ts",
+    "intro-card-viewer.test.ts"
   ]
 }

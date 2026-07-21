@@ -24,7 +24,7 @@ export interface IntroCardEditScreenProps {
   readonly linksText: string;
   readonly notice: IntroCardNotice;
   readonly saving: boolean;
-  readonly vCardByteUsage: number;
+  readonly cardUrlByteUsage: number;
   readonly locale?: Locale;
   readonly onChangeName: (value: string) => void;
   readonly onChangeTitle: (value: string) => void;
@@ -66,7 +66,7 @@ function Notice({
  * 自己紹介カードピボット Step 1（Issue 79）の作成・編集画面。
  * `links` は domain 上 `readonly string[]`（最大 5 件）だが、動的な追加・削除 UI では
  * なく「1 行 1 件」の単一 TextInput にする（呼び出し側で改行区切りに変換する）。
- * 5 件の個別欄より状態管理が単純で、`vcard.ts` の `links` 契約とも素直に対応する。
+ * 5 件の個別欄より状態管理が単純で、`intro-card-url.ts` の `links` 契約とも素直に対応する。
  */
 export default function IntroCardEditScreen({
   name,
@@ -78,7 +78,7 @@ export default function IntroCardEditScreen({
   linksText,
   notice,
   saving,
-  vCardByteUsage,
+  cardUrlByteUsage,
   locale = DEFAULT_LOCALE,
   onChangeName,
   onChangeTitle,
@@ -93,7 +93,7 @@ export default function IntroCardEditScreen({
 }: IntroCardEditScreenProps) {
   const t = MESSAGES[locale].introCard;
   const common = MESSAGES[locale].common;
-  const overBudget = vCardByteUsage > QR_ENCODER_MAX_BYTES;
+  const overBudget = cardUrlByteUsage > QR_ENCODER_MAX_BYTES;
   return (
     <AppScreen
       description={t.editDescription}
@@ -200,8 +200,8 @@ export default function IntroCardEditScreen({
       </View>
       <Text style={overBudget ? styles.byteUsageOverBudget : styles.limit}>
         {overBudget
-          ? t.byteUsageOverBudget(vCardByteUsage, QR_ENCODER_MAX_BYTES)
-          : t.byteUsageLabel(vCardByteUsage, QR_ENCODER_MAX_BYTES)}
+          ? t.byteUsageOverBudget(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)
+          : t.byteUsageLabel(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)}
       </Text>
       <ActionButton
         accessibilityHint={t.saveButtonHint}
