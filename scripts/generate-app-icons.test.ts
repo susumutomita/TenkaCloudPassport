@@ -51,6 +51,8 @@ describe('generateAppIconAssets', () => {
   });
 
   it('再実行しても決定論的に同一バイト列を生成する（再現可能生成）', () => {
+    // 1024px アイコンを 2 回分（計 8 枚相当）フルレンダリングするため、
+    // 低速な CI runner では bun test の既定 5000ms timeout を超えることがある。
     const first = generateAppIconAssets();
     const second = generateAppIconAssets();
 
@@ -61,7 +63,7 @@ describe('generateAppIconAssets', () => {
         Buffer.compare(Buffer.from(asset.png), Buffer.from(other?.png ?? []))
       ).toBe(0);
     }
-  });
+  }, 30000);
 
   it('4 アセットとも decodeRgbaPng で読める、想定サイズの PNG である', () => {
     const assets = generateAppIconAssets();
@@ -185,6 +187,8 @@ describe('generateAppIconAssets', () => {
 
 describe('writeAppIconAssets', () => {
   it('repoRoot 配下の assets/ へ 4 ファイルを実際に書き出す', async () => {
+    // generateAppIconAssets() を内部と比較用の 2 回分実行するため、
+    // 低速な CI runner では bun test の既定 5000ms timeout を超えることがある。
     const repoRoot = await mkdtemp(join(tmpdir(), 'tenka-app-icons-'));
     directories.push(repoRoot);
     await mkdir(join(repoRoot, 'assets'), { recursive: true });
@@ -201,7 +205,7 @@ describe('writeAppIconAssets', () => {
       const writtenBytes = await readFile(writtenPath ?? '');
       expect(Buffer.compare(writtenBytes, Buffer.from(asset.png))).toBe(0);
     }
-  });
+  }, 30000);
 
   it('assets/ ディレクトリが存在しないときはエラーで fail-closed になる', async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), 'tenka-app-icons-missing-'));
