@@ -63,7 +63,7 @@ describe('prepareWebAppExport', () => {
     expect(html).toContain('<title>%WEB_TITLE%</title>');
   });
 
-  it('manifest.webmanifest に既定値（TenkaCloud Passport / Tier A の GitHub Pages URL）を書く', async () => {
+  it('manifest.webmanifest に既定値（TenkaCloud Passport / Cloudflare Workers の /app/ URL）を書く', async () => {
     const distDir = await temporaryDistDir();
     await writeMinimalDist(distDir);
 
@@ -83,7 +83,7 @@ describe('prepareWebAppExport', () => {
     expect(manifest.name).toBe('TenkaCloud Passport');
     expect(manifest.short_name).toBe('Passport');
     expect(manifest.display).toBe('standalone');
-    expect(manifest.start_url).toBe('/TenkaCloudPassport/app/');
+    expect(manifest.start_url).toBe('/app/');
     expect(manifest.background_color).toBe('#ffffff');
     expect(manifest.theme_color).toBe('#1d1d1f');
     expect(manifest.icons).toEqual([

@@ -5517,3 +5517,124 @@ reuse・simplification・efficiency・altitude の 4 観点で並列レビュー
   特に、この種のタイミングバグをソース契約テストだけで検出するのは
   構造的に難しいため、code-reviewer レビューを実装完了の必須ゲートとして
   厳格に運用し続ける。
+
+### [GitHub Pages から Cloudflare Workers へ移行（Issue 94）] - 2026-07-22
+
+#### 目的
+
+Issue 94 の詳細設計（本文および 2 件の追記が正本）に従い、静的配信を GitHub
+Pages から Cloudflare Workers（Workers Builds、Git 連携）へ移行し、
+`card.tenkacloud.com` で配信する。owner 保有の `tenkacloud.com` ドメイン配下へ
+一元化し、GitHub Pages の帯域制限を解消する。
+
+#### 制約
+
+- Workers Builds のビルドコマンド・デプロイコマンド（`npx wrangler deploy`）は
+  Cloudflare ダッシュボード側の設定であり、リポジトリの管理外（`npx` 禁止の
+  invariant はこのリポジトリ自身のコマンドが対象であり、Cloudflare 側の設定は
+  対象外）。`wrangler.toml` はこのビルドコマンドと整合させる。
+- `wrangler.toml` の `name` は owner がダッシュボードで作成したプロジェクト名
+  `tenkacloudpassport`（ハイフンなし）と厳密に一致させる。
+- PR 95（Cloudflare の Wrangler autoconfig が自動生成）はマージせず、使える設定
+  （`wrangler.jsonc` の雛形、`.gitignore` の追加、`wrangler` devDependency）を
+  参考にした上でクローズし、統合した旨をコメントする。
+- GitHub Pages 側は凍結する（`pages.yml` は削除するが、最後にデプロイされた
+  `github-pages` environment のコンテンツはそのまま残す）。既発行 QR
+  （`INTRO_CARD_VIEWER_URL` の旧 URL を含むフラグメント）が引き続き解決できる
+  ことを優先する。
+- `rm` / `npx` 禁止（自リポジトリのコマンドとして）・`git add` は明示ファイルのみ・
+  8081 kill 禁止・`ios/` / `node_modules` 不触。
+
+#### タスク
+
+1. `gh issue view 94` と `gh pr view/diff 95` を読み、`/wrangler` スキルで
+   `wrangler.toml` の `[assets]` 構文を確認する。
+2. PR 95 にコメントして close する（マージしない）。
+3. `wrangler.toml`（新規）を作成する。`name = "tenkacloudpassport"`、
+   `[assets] directory = "pages-dist"`、`not_found_handling = "none"`
+   （expo-router 等のクライアント側パスルーティングを使わないため）。
+4. `wrangler` を devDependency に追加し、`.gitignore` に `pages-dist/` /
+   `.wrangler` / `.dev.vars*` を追加する。
+5. URL 移行: `src/protocol/intro-card-url.ts` の `INTRO_CARD_VIEWER_URL`、
+   `app.json` の `experiments.baseUrl`（`/TenkaCloudPassport/app` → `/app`）、
+   `scripts/prepare-web-app-export.ts` の `DEFAULT_START_URL`、
+   `site/index.html` / `site/en/index.html` の OGP・hreflang・本文リンク、
+   README.md / README.en.md のリンク。関連する契約テスト
+   （`src/app/default-agent-model-provider.test.ts`、
+   `scripts/prepare-web-app-export.test.ts`、
+   `scripts/intro-card-viewer.test.ts`）を追従させる。
+6. `docs/privacy/data-inventory.md` の URL 記載を更新する。
+7. `.github/workflows/pages.yml` を削除する（凍結）。
+8. `docs/adr/0029-cloudflare-workers-hosting-migration.md` を作成する。
+9. `make before-commit` 一式・`bunx wrangler deploy --dry-run` 相当の設定検証 →
+   code-reviewer レビュー → commit → push → PR（Closes Issue 94 の URL）→ CI →
+   squash merge。
+10. マージ後、Workers Builds のデプロイ結果を
+    `tenkacloudpassport.<subdomain>.workers.dev` または `card.tenkacloud.com` への
+    `curl` で確認する（ダッシュボードのビルドログは見えないため、失敗時は
+    `wrangler.toml` とビルドコマンドの整合を再点検して修正 push する）。
+
+#### 検証手順
+
+- `bun test`（変更ファイルを含め全 pass）、`bun run typecheck`、
+  `bun biome check .`。
+- ローカルで `bun run build:web && bun scripts/prepare-web-app-export.ts dist
+  && mkdir -p pages-dist/app && cp -r site/. pages-dist/ && cp -r dist/.
+  pages-dist/app/` を実行し、Workers Builds のビルドコマンドと同じ成果物
+  `pages-dist/` が組み立てられることを確認する。
+- `bunx wrangler deploy --dry-run`（実デプロイなしで `wrangler.toml` の構文・
+  `pages-dist/` の存在を検証する）。
+- 上記 2 つの検証後、`./node_modules/.bin/rimraf pages-dist dist` で生成物を
+  削除してから `make before-commit` を回す（`pages-dist/` は `biome.json` の
+  除外対象外のため、残したまま lint すると誤って大量エラーになる。振り返り
+  節参照）。
+- `make before-commit` exit 0。
+- マージ後: `curl -o /dev/null -w '%{http_code}'` で
+  `card.tenkacloud.com/`・`/app/`・`/c/`（またはカスタムドメイン未紐付けの間は
+  `tenkacloudpassport.<subdomain>.workers.dev` の同パス）が 200 になることを
+  確認する。
+
+#### 進捗ログ
+
+- 2026-07-22: Issue 94 本文（追記 2 件含む）と PR 95 の diff を確認。PR 95 の
+  `wrangler.jsonc` は `assets.directory = "dist"` かつ JSON 形式だったが、Issue
+  の詳細設計（`wrangler.toml`・`directory = "pages-dist"`）を正本として採用し、
+  PR 95 は統合コメントの上で close した。
+- 2026-07-22: `/wrangler` スキルロード後、`node_modules/wrangler/config-schema.json`
+  で `assets`（`directory` / `binding` / `html_handling` / `not_found_handling` /
+  `run_worker_first`）の正確な field を確認し、`wrangler.toml` を作成した。
+  アプリが `expo-router` / `react-navigation` を使わずクライアント側ルーティングを
+  持たないことを確認し、`not_found_handling = "none"`（既定と同じ値を明示）とした。
+- 2026-07-22: URL 移行一式（`intro-card-url.ts`・`app.json`・
+  `prepare-web-app-export.ts`・`site/*.html`・README 日英）と関連テストを追従。
+  `site/c/index.html`（ビューア本体）はドメイン非依存設計（ADR-0027）のため
+  変更不要と確認し、`scripts/intro-card-viewer.test.ts` の契約テストを新ドメイン
+  基準に更新した。
+- 2026-07-22: `docs/adr/0029-cloudflare-workers-hosting-migration.md` を作成し、
+  GitHub Pages 凍結方針（`pages.yml` 削除、環境コンテンツは残置）を明記した。
+- 2026-07-22: code-reviewer レビューで 2 件（Plan.md の振り返り欠落・末尾の
+  断片文、`pages-dist/` をローカルで検証用に生成すると `make before-commit`
+  相当の biome 実行が生成物までスキャンして大量エラーになる点）の指摘を受け、
+  本節を追記して反映した。
+
+#### 振り返り
+
+- 問題: 本 PR 自身の検証手順（`bun run build:web` →
+  `prepare-web-app-export.ts` → `pages-dist/` 組み立て）をローカルで実行すると、
+  `biome.json` の `files.includes` に `dist` は除外パターンがある一方
+  `pages-dist` には無いため、`bun biome check .`（`make before-commit` の
+  `lint` ターゲット）が `pages-dist/` 配下の生成物（HTML/JSON）まで走査し、
+  5,000 件超の diagnostics で失敗する状態を実際に踏んだ。
+- 根本原因: `pages-dist/` はこのリポジトリ自身の Makefile / CI からは生成
+  されず、Cloudflare ダッシュボード側の Workers Builds コマンドだけが生成する
+  という前提を置いたが、`wrangler.toml` の動作検証（`bunx wrangler deploy
+  --dry-run`）のためには結局ローカルで同じ組み立てコマンドを手動実行する
+  必要があり、その前提が「CI では」正しくても「ローカル検証では」成立しない
+  ことを見落としていた。
+- 予防策: `biome.json` はこの PR では変更しない判断を維持しつつ（設定ファイル
+  編集はユーザー承認が必要という harness 制約があり、検証専用の一時生成物を
+  理由に緩めるべきではないと判断した）、代わりにこの節と検証手順に
+  「検証後は `./node_modules/.bin/rimraf pages-dist dist` で削除してから
+  ゲートを回す」ことを明記する。新しいローカル生成物ディレクトリを追加する
+  変更では、`biome.json` の除外要否と「ゲート実行前に必ず削除する」運用の
+  どちらを採るかを設計時点で決め、Plan.md の検証手順に手順として書き残す。

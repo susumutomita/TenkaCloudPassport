@@ -183,3 +183,14 @@ secrets/
 
 # Source-only release candidate output
 release-output/
+
+# Cloudflare Workers Builds ビルドチェーンが組み立てる配信物（site/ + dist/ の合成）。
+# 生成元: Cloudflare ダッシュボードのビルドコマンド（Issue 94、docs/adr/0029 参照）。
+pages-dist/
+
+# wrangler ローカル実行時の state・secrets（dry-run 検証・wrangler dev 用）。
+# 現時点で assets-only 構成のため .dev.vars は未使用だが、将来 secrets を
+# 追加した際にサンプルだけ commit できるよう先回りで except しておく。
+.wrangler
+.dev.vars*
+!.dev.vars.example
