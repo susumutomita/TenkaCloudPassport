@@ -32,7 +32,7 @@
       "favicon": "./assets/favicon.png"
     },
     "experiments": {
-      "baseUrl": "/TenkaCloudPassport/app"
+      "baseUrl": "/app"
     },
     "assetBundlePatterns": ["**/*"],
     "plugins": [

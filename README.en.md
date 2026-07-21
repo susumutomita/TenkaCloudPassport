@@ -6,7 +6,7 @@ TenkaCloud Passport is a free, account-free Expo app that lets you hand off an i
 card. Show your name, title, and self-introduction as a QR code; the other person needs no app, just their
 phone's standard camera, to open your Intro Card page in a browser. Adding you to contacts is an optional
 action they choose inside that page. See the
-[landing page](https://susumutomita.github.io/TenkaCloudPassport/en/) for details.
+[landing page](https://card.tenkacloud.com/en/) for details.
 
 ## What it does
 
@@ -50,12 +50,12 @@ scan time.
 one environment. They are not interchangeable. See the
 [Release Status and Device Matrix](./docs/releases/status.md) for evidence per combination.
 
-### Try it from your phone with no dev environment (Web version on GitHub Pages)
+### Try it from your phone with no dev environment (Web version)
 
-If you have neither a Mac nor Expo Go handy, open the Web version we publish on GitHub Pages directly in
-your phone's browser.
+If you have neither a Mac nor Expo Go handy, open the Web version we publish on Cloudflare Workers
+directly in your phone's browser.
 
-<https://susumutomita.github.io/TenkaCloudPassport/app/>
+<https://card.tenkacloud.com/app/>
 
 - Data is stored in the browser's on-device storage. Switching browsers or devices does not carry your
   card over.

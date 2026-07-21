@@ -172,14 +172,14 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(config).toContain('"expo-build-properties"');
   });
 
-  it('Issue 88: Expo Config は GitHub Pages の /app/ サブパス配信用 baseUrl を固定する', async () => {
+  it('Issue 94: Expo Config は Cloudflare Workers の /app/ サブパス配信用 baseUrl を固定する', async () => {
     const config = await source('../../app.json');
     const parsed = JSON.parse(config) as {
       expo?: { experiments?: { baseUrl?: string } };
     };
 
-    expect(config).toContain('"baseUrl": "/TenkaCloudPassport/app"');
-    expect(parsed.expo?.experiments?.baseUrl).toBe('/TenkaCloudPassport/app');
+    expect(config).toContain('"baseUrl": "/app"');
+    expect(parsed.expo?.experiments?.baseUrl).toBe('/app');
     expect(parsed.expo?.experiments?.baseUrl?.endsWith('/')).toBe(false);
   });
 });

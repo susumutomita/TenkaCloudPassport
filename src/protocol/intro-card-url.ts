@@ -24,10 +24,13 @@ import {
  * （ADR-0027 参照）。
  */
 
-// 末尾スラッシュ必須。`/c` は GitHub Pages が `/c/` へ 301 リダイレクトするため、
+// 末尾スラッシュ必須。Cloudflare Workers の静的アセット配信でも `/c` は
+// `not_found_handling` 既定の trailing slash 補完に依存せず、直接 `/c/` を指すことで
 // スキャン直後の 1 ホップと古いブラウザでのフラグメント欠落リスクを避ける。
-export const INTRO_CARD_VIEWER_URL =
-  'https://susumutomita.github.io/TenkaCloudPassport/c/';
+// Issue 94 で GitHub Pages（`susumutomita.github.io`）から移行した。旧 URL の
+// GitHub Pages 環境は凍結して残すため、既発行 QR（旧 URL のフラグメント）は
+// 引き続き解決できる（docs/adr/0029-cloudflare-workers-hosting-migration.md）。
+export const INTRO_CARD_VIEWER_URL = 'https://card.tenkacloud.com/c/';
 
 const INTRO_CARD_URL_PAYLOAD_VERSION = 1;
 // 実際に生成する payload は object -> array（links）の 2 段までしか深くならない。

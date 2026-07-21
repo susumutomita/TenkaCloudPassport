@@ -1,0 +1,22 @@
+# Cloudflare Workers Builds が push を起点にビルド & デプロイする設定ファイル。
+# ビルドコマンド・デプロイコマンド（`npx wrangler deploy`）は Cloudflare ダッシュボード側で
+# 設定済み（owner 管理・このリポジトリの管理外）。ここではその deploy が読む静的アセット
+# 配信の構成だけを定義する。詳細は Issue 94 本文と docs/adr/0029-cloudflare-workers-hosting-migration.md。
+#
+# name はダッシュボードで owner が作成した Workers プロジェクト名と一致させる必要がある
+# （ハイフンなし。npm package 名の "tenkacloud-passport" とは別物）。
+name = "tenkacloudpassport"
+compatibility_date = "2026-07-21"
+
+[observability]
+enabled = true
+
+[assets]
+# ビルドコマンドが組み立てる pages-dist/ を配信する。
+# pages-dist/            -> site/（LP・自己紹介ページビューア。ルート直下と /en/ /c/）
+# pages-dist/app/        -> dist/（Expo Web Export。/app/ サブパス）
+directory = "pages-dist"
+# アプリは expo-router / react-navigation を使わずクライアント側のパスルーティングを
+# 持たないため（画面遷移は component state のみ）、存在しないパスへの SPA フォールバックは
+# 不要と判断し、既定の "none"（真の 404）を明示する。
+not_found_handling = "none"

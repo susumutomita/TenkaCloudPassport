@@ -198,12 +198,14 @@ describe('自己紹介ページビューワー（site/c/index.html、Issue 84）
     expect(text).toMatch(/<meta\b[^>]*name=["']robots["'][^>]*noindex/i);
   });
 
-  it('QR の中身の URL であることを示す独自ドメイン文字列（susumutomita.github.io）はハードコードしない', async () => {
+  it('QR の中身の URL であることを示す独自ドメイン文字列（card.tenkacloud.com）はハードコードしない', async () => {
     const text = await readViewerSource();
 
     // ビューワーは location.hash だけを読み、自分自身の canonical URL を
     // 知る必要がない（`src/protocol/intro-card-url.ts` の INTRO_CARD_VIEWER_URL が
-    // 唯一の定義元）。
+    // 唯一の定義元）。Issue 94 で GitHub Pages（susumutomita.github.io）から
+    // card.tenkacloud.com へ移行した後も、この不変条件（ドメイン非依存）は変わらない。
+    expect(text).not.toContain('card.tenkacloud.com');
     expect(text).not.toContain('susumutomita.github.io');
   });
 });

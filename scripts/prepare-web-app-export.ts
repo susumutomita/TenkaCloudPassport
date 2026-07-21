@@ -4,9 +4,11 @@ import { generateBrandMarkIconPng } from './brand-mark-icon';
 
 /**
  * Issue 88: `bun run build:web`（`expo export --platform web`）が書き出した
- * `dist/` を、GitHub Pages `/TenkaCloudPassport/app/` サブパスでの PWA
- * （ホーム画面への追加）配信に必要な形へ仕上げる。設計は
- * `docs/design/2026-07-21-web-app-pages-distribution.md` を正本とする。
+ * `dist/` を、Cloudflare Workers（Issue 94 で GitHub Pages から移行、
+ * `docs/adr/0029-cloudflare-workers-hosting-migration.md`）の `/app/` サブパスでの
+ * PWA（ホーム画面への追加）配信に必要な形へ仕上げる。設計は
+ * `docs/design/2026-07-21-web-app-pages-distribution.md` を正本とする
+ * （配信先の移行以外の設計判断は同文書のまま有効）。
  *
  * Expo のデフォルト web template や `public/index.html` 差し替え機能は使わず、
  * build 後の `dist/index.html` を直接書き換える。理由は同設計書「案 b」を参照。
@@ -48,7 +50,7 @@ export interface PrepareWebAppExportResult {
 
 const DEFAULT_APP_NAME = 'TenkaCloud Passport';
 const DEFAULT_SHORT_NAME = 'Passport';
-const DEFAULT_START_URL = '/TenkaCloudPassport/app/';
+const DEFAULT_START_URL = '/app/';
 const DEFAULT_THEME_COLOR = '#1d1d1f';
 const DEFAULT_BACKGROUND_COLOR = '#ffffff';
 
