@@ -24,8 +24,10 @@ import {
  * （ADR-0027 参照）。
  */
 
+// 末尾スラッシュ必須。`/c` は GitHub Pages が `/c/` へ 301 リダイレクトするため、
+// スキャン直後の 1 ホップと古いブラウザでのフラグメント欠落リスクを避ける。
 export const INTRO_CARD_VIEWER_URL =
-  'https://susumutomita.github.io/TenkaCloudPassport/c';
+  'https://susumutomita.github.io/TenkaCloudPassport/c/';
 
 const INTRO_CARD_URL_PAYLOAD_VERSION = 1;
 // 実際に生成する payload は object -> array（links）の 2 段までしか深くならない。
