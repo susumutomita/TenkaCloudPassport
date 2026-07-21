@@ -1,14 +1,20 @@
 import type { IntroCard } from '../domain/intro-card';
 import {
+  type IntroCardDraftFields,
   IntroCardStorageError,
   type IntroCardStoragePort,
   parseStoredIntroCard,
+  parseStoredIntroCardDraft,
   serializeIntroCard,
+  serializeIntroCardDraft,
   unavailableIntroCardStorageError,
 } from './intro-card-storage';
 import type { WebKeyValueStorage } from './web-local-profile-storage';
 
 export const INTRO_CARD_STORAGE_KEY = 'tenkacloud-passport.intro-card';
+/** Issue 93: 確定カードとは別 key に、編集中の生入力（下書き）を保持する。 */
+export const INTRO_CARD_DRAFT_STORAGE_KEY =
+  'tenkacloud-passport.intro-card-draft';
 
 export class WebIntroCardStorageAdapter implements IntroCardStoragePort {
   constructor(private readonly storage: WebKeyValueStorage | null) {}
@@ -66,6 +72,57 @@ export class WebIntroCardStorageAdapter implements IntroCardStoragePort {
       throw new IntroCardStorageError(
         'DELETE_FAILED',
         '端末内 Storage から自己紹介カードを削除できませんでした。',
+        error
+      );
+    }
+  }
+
+  async loadDraft(): Promise<IntroCardDraftFields | null> {
+    if (!this.storage) throw unavailableIntroCardStorageError();
+    let raw: string | null;
+    try {
+      raw = this.storage.getItem(INTRO_CARD_DRAFT_STORAGE_KEY);
+    } catch (error: unknown) {
+      throw new IntroCardStorageError(
+        'READ_FAILED',
+        '端末内 Storage から下書きを読み込めませんでした。',
+        error
+      );
+    }
+    if (raw === null) return null;
+    try {
+      return parseStoredIntroCardDraft(raw);
+    } catch (error: unknown) {
+      throw new IntroCardStorageError(
+        'INVALID_DATA',
+        '端末内の下書きは有効な保存データではありません。',
+        error
+      );
+    }
+  }
+
+  async saveDraft(draft: IntroCardDraftFields): Promise<void> {
+    if (!this.storage) throw unavailableIntroCardStorageError();
+    const serialized = serializeIntroCardDraft(draft);
+    try {
+      this.storage.setItem(INTRO_CARD_DRAFT_STORAGE_KEY, serialized);
+    } catch (error: unknown) {
+      throw new IntroCardStorageError(
+        'WRITE_FAILED',
+        '端末内 Storage へ下書きを保存できませんでした。',
+        error
+      );
+    }
+  }
+
+  async clearDraft(): Promise<void> {
+    if (!this.storage) throw unavailableIntroCardStorageError();
+    try {
+      this.storage.removeItem(INTRO_CARD_DRAFT_STORAGE_KEY);
+    } catch (error: unknown) {
+      throw new IntroCardStorageError(
+        'DELETE_FAILED',
+        '端末内 Storage から下書きを削除できませんでした。',
         error
       );
     }

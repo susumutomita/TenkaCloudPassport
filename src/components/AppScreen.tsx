@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   ScrollView,
   type ScrollViewProps,
@@ -23,6 +25,15 @@ interface AppScreenProps {
    * まま変えず、他の全 Screen の挙動には影響しない。
    */
   readonly keyboardDismissMode?: ScrollViewProps['keyboardDismissMode'];
+  /**
+   * Issue 93: 保存・生成ボタン等を `ScrollView` の外（画面下部）へ固定したい
+   * 画面向けの optional prop。渡さない既存の全 Screen は今までどおり
+   * `children` の末尾にボタンを並べるだけで、レイアウトは変わらない。
+   * `KeyboardAvoidingView` で包み、キーボード表示中も footer が隠れないように
+   * する（iOS は `padding` behavior、Android は `windowSoftInputMode` の既定
+   * 挙動に委ねる。RN の標準パターン）。
+   */
+  readonly footer?: ReactNode;
 }
 
 export default function AppScreen({
@@ -31,25 +42,32 @@ export default function AppScreen({
   description,
   children,
   keyboardDismissMode,
+  footer,
 }: AppScreenProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardDismissMode={keyboardDismissMode}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoiding}
       >
-        <View style={styles.brandRow}>
-          <BrandMark size={20} />
-          <Text style={styles.brand}>
-            TenkaCloud <Text style={styles.brandSub}>Passport</Text>
-          </Text>
-        </View>
-        <Text style={styles.eyebrow}>{eyebrow}</Text>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>{description}</Text>
-        <View style={styles.body}>{children}</View>
-      </ScrollView>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardDismissMode={keyboardDismissMode}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.brandRow}>
+            <BrandMark size={20} />
+            <Text style={styles.brand}>
+              TenkaCloud <Text style={styles.brandSub}>Passport</Text>
+            </Text>
+          </View>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.description}>{description}</Text>
+          <View style={styles.body}>{children}</View>
+        </ScrollView>
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -58,6 +76,18 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: colors.background,
     flex: 1,
+  },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  footer: {
+    backgroundColor: colors.background,
+    borderTopColor: colors.borderSubtle,
+    borderTopWidth: 1,
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   content: {
     alignSelf: 'center',

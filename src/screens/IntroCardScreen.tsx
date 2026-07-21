@@ -9,6 +9,7 @@ import type { IntroCard } from '../domain/intro-card';
 import { encodeIntroCardUrl } from '../protocol/intro-card-url';
 import { encodeQr } from '../qr/encoder';
 import { colors, spacing } from '../ui/theme';
+import IntroCardPreview from './IntroCardPreview';
 
 export interface IntroCardScreenProps {
   readonly card: IntroCard;
@@ -47,9 +48,6 @@ export default function IntroCardScreen({
   const t = MESSAGES[locale].introCard;
   const common = MESSAGES[locale].common;
   const encodedQr = useMemo(() => encodeQr(encodeIntroCardUrl(card)), [card]);
-  const subtitle = [card.title, card.organization]
-    .filter((value): value is string => Boolean(value))
-    .join(' / ');
 
   return (
     <AppScreen
@@ -69,22 +67,15 @@ export default function IntroCardScreen({
         <RealQrView matrix={encodedQr.matrix} />
       </View>
       <Text style={styles.qrExplanation}>{t.qrExplanation}</Text>
-      <View style={styles.summary}>
-        <Text style={styles.name}>{card.name}</Text>
-        {subtitle.length > 0 ? (
-          <Text style={styles.subtitle}>{subtitle}</Text>
-        ) : null}
-        {card.selfIntro ? (
-          <Text style={styles.selfIntro}>{card.selfIntro}</Text>
-        ) : null}
-        {card.email ? <Text style={styles.contact}>{card.email}</Text> : null}
-        {card.phone ? <Text style={styles.contact}>{card.phone}</Text> : null}
-        {(card.links ?? []).map((link) => (
-          <Text key={link} style={styles.contact}>
-            {link}
-          </Text>
-        ))}
-      </View>
+      <IntroCardPreview
+        email={card.email}
+        links={card.links}
+        name={card.name}
+        organization={card.organization}
+        phone={card.phone}
+        selfIntro={card.selfIntro}
+        title={card.title}
+      />
       <ActionButton
         accessibilityHint={t.editButtonHint}
         label={t.editButton}
@@ -139,27 +130,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
-  },
-  summary: {
-    gap: spacing.xs,
-  },
-  name: {
-    color: colors.ink,
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 16,
-  },
-  selfIntro: {
-    color: colors.ink,
-    fontSize: 15,
-    lineHeight: 23,
-    marginTop: spacing.sm,
-  },
-  contact: {
-    color: colors.muted,
-    fontSize: 14,
   },
 });

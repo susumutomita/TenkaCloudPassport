@@ -106,6 +106,25 @@ export type IntroCardLinkFieldKey =
   | `otherLink-${number}`;
 
 /**
+ * Issue 93: 保存前（onBlur）の即時バリデーション用に、リンク系入力欄 1 つ分の
+ * 値を domain の `validateIntroCardFieldValue({ field: 'links', ... })` へ
+ * 渡す前の形へそろえる。X/GitHub/LinkedIn はユーザー名だけの入力を許可する
+ * 契約（Issue 90）があるため、`normalizeNamedLink` を適用しないまま検証すると
+ * 正しい入力を誤って無効判定してしまう（`firstInvalidNamedLinkField` が保存時に
+ * 踏む正規化パイプラインと同じものを、保存前にも適用する）。Portfolio・自由
+ * リンクは常に完全な URL を前提にしており補完しないため、そのまま返す。
+ */
+export function normalizedLinkFieldValue(
+  key: IntroCardLinkFieldKey,
+  rawValue: string
+): string {
+  if (key === 'linkX') return normalizeNamedLink('x', rawValue);
+  if (key === 'linkGithub') return normalizeNamedLink('github', rawValue);
+  if (key === 'linkLinkedin') return normalizeNamedLink('linkedin', rawValue);
+  return rawValue;
+}
+
+/**
  * `NamedLinkService` から対応する編集画面欄の key への対応表。
  * `NAMED_LINK_URL_PREFIX` 等と同じ「サービス種別をキーにした table」の
  * 方針を踏襲し、`firstInvalidNamedLinkField` が 3 サービス分の候補を

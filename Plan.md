@@ -5361,3 +5361,159 @@ reuse・simplification・efficiency・altitude の 4 観点で並列レビュー
   指摘は、いずれも本 PR の diff を超える設計変更（domain のエラー形状変更・
   新規共有 hook 抽出）のため、`/follow-up add` で記録し本 PR には含めない。
 
+
+### 自己紹介カード作成フロー再設計（名前だけで即生成 → プレビューで追記） - 2026-07-22
+
+目的: Issue 93（owner 実機録画フィードバック）。カード作成の入力負荷（録画で約 90 秒）を
+「名前だけで即座にカードを生成し、生成後のプレビューを見ながら任意項目を追記する」体験へ
+作り替える。Issue 90/92 でマージ済みの named-link UI・NFKC 正規化・エラー focus の上に組む。
+
+制約: 新しい Stage・新しい Screen ファイルを増やさない（設計文書の案 B）。連絡先 / GitHub /
+既存 JSON からの取り込みは設計だけ残し実装は follow-up Issue へ。No Mock・TDD・日本語 BDD・
+カバレッジ 100% を維持する。
+
+設計: `docs/design/2026-07-22-intro-card-creation-flow.md`（代替案 3 つ、画面遷移、下書き
+永続化のレース条件対策、onBlur バリデーションの drift 防止方針、タップ数契約）。
+
+タスク:
+- [x] 設計文書作成（代替案・画面遷移・エッジケース）
+- [x] `src/domain/intro-card.ts`: `validateIntroCardFieldValue` 追加（保存時 validator の再利用）
+- [x] `src/app/intro-card-storage.ts` 他: draft 用 `loadDraft`/`saveDraft`/`clearDraft` を
+      既存 `IntroCardStoragePort` へ追加（Web/Native 両 adapter・Unavailable adapter）
+- [x] `src/screens/intro-card-links.ts`: named link の onBlur 正規化ヘルパー追加
+- [x] `src/screens/IntroCardPreview.tsx` 新設（`IntroCardScreen`/`IntroCardEditScreen` 共用）
+- [x] `src/components/AppScreen.tsx`: sticky footer 用の `footer` prop 追加
+- [x] `src/screens/IntroCardEditScreen.tsx`: ライブプレビュー・任意項目の段階的開示・onBlur
+      inline validation を追加
+- [x] `src/app/PassportApp.tsx`: 下書き永続化の水和・反映・削除時クリアを配線
+- [x] follow-up Issue 作成（連絡先 / GitHub / JSON 取り込み → Issue 99）
+- [x] 品質ゲート一式・code-reviewer レビュー反映
+
+検証手順: `bun test src --coverage`（100%）、`bun run typecheck`、`bun biome check .`、
+`bun scripts/architecture-harness.ts --staged --fail-on=error`、`make before-commit`。
+
+進捗ログ:
+
+- 2026-07-22: 設計文書作成。実装開始。
+- 2026-07-22: 実装完了（domain の onBlur バリデーション・draft storage 2 adapter・
+  `IntroCardPreview` 共通化・`AppScreen` footer prop・`IntroCardEditScreen` の段階的開示・
+  `PassportApp` の下書き永続化）。`bun test src --coverage` 1281 pass / 100%、
+  `bun run typecheck`・`bun biome check .`・`bun scripts/architecture-harness.ts --staged
+  --fail-on=error`・`make before-commit` すべて green。follow-up Issue 99（連絡先/GitHub/
+  JSON 取り込み）作成、他 3 件は `.claude/state/follow-ups.jsonl` に記録。
+
+#### code-reviewer レビュー対応（2026-07-22）
+
+medium 2 件・low 3 件の指摘を受け、以下を反映した。
+
+- [medium] 名前欄の return キーが、任意項目セクションが折りたたまれている
+  （真っさらな新規作成の既定状態）間は無条件で `focusOrDismiss('title')` を
+  呼んでいたが、`title` の `TextInput` はセクションが開いているときしか
+  mount されないため、return キーを押しても無音で何も起きない実行時の
+  回帰があった。`afterNameKey`（セクション開閉に応じて `'title'` または
+  `undefined`）を導入し、閉じている間は最後の欄として `Keyboard.dismiss()`
+  にフォールバックするよう修正した。
+- [medium] 保存失敗時に「該当欄へ focus する effect」と「任意項目セクションを
+  自動展開する effect」が同じ commit 内で実行され、展開 effect が
+  `setOptionalSectionExpanded(true)` を呼んでも該当欄が実際に mount されるのは
+  次の commit のため、フォーカス effect は無音で no-op になっていた
+  （フォーカスの契約だけが静かに欠落する）。展開用 effect をフォーカス用
+  effect より前に宣言し、フォーカス用 effect の依存配列へ
+  `optionalSectionExpanded` を追加（effect 本体からは読まない意図的な
+  over-specification、`biome-ignore` で明示）することで、展開が反映された
+  次の commit でフォーカスをリトライするよう修正した。
+- [low] `IntroCardPreview` のリンク一覧が値そのものを React key に使っており、
+  Portfolio と自由リンクに同じ URL を入れる等で key が衝突しうる指摘を受け、
+  `${index}-${link}` へ変更した（読み取り専用の一覧のため index 併用でも
+  安全、`biome-ignore lint/suspicious/noArrayIndexKey` で明示）。
+- [low] 連絡先/GitHub/JSON 取り込みの follow-up が実際には記録されていない
+  （設計文書の「済み」という記述が事実と異なる）指摘を受け、Issue 99 を作成し
+  `.claude/state/follow-ups.jsonl` に記録した。
+- [low（follow-up 化）]: `createDefaultIntroCardStorage` の配線がテスト無し
+  （他の `default-*-storage.ts` も同様の既存踏襲）、Android の sticky footer が
+  キーボードに隠れないかの実機確認、`AppScreen` の footer prop レイアウトの
+  実機/シミュレータ確認は、いずれもこの環境（render harness 無し・実機無し）
+  では検証できないため follow-up として記録した（本 PR には含めない）。
+
+反映後、`bun test src --coverage`（1281 pass、変更ファイル 100%）・
+`bun run typecheck`・`bun biome check .`・`make before-commit` を再確認した。
+
+#### /simplify レビュー対応（2026-07-22）
+
+reuse・simplification・efficiency・altitude の 4 観点で並列レビューし、
+以下を反映した。
+
+- [reuse + simplification] `IntroCardEditScreen.tsx` の `buildIntroCardLinks`
+  が `nonEmptyLinkCount(linksDraft)`（`linkCount` 用）とライブプレビュー用
+  `useMemo` の 2 箇所で毎 render 実行されていた（同じ 5 フィールドの
+  object literal も 2 回組み立てていた）指摘を受け、`useMemo` を 1 本化し
+  `linkCount` は `previewLinks.length` から導出するよう変更した。
+- [simplification] `IntroCardEditScreen.tsx` の `IntroCardOptionalFieldsSnapshot`
+  / `hasAnyOptionalContent`（任意項目セクションの初期開閉判定）が、
+  `../app/intro-card-storage` の `IntroCardDraftFields` / `isEmptyIntroCardDraft`
+  と同じ 10 フィールドの空判定を独自の型・独自ロジックとして再実装していた
+  指摘を受け、`!isEmptyIntroCardDraft({ name: '', ...fields })` を再利用する
+  形へ置き換え、独自の型・関数を削除した。
+- [simplification] `UnavailableIntroCardStorageAdapter`（`intro-card-storage.ts`）
+  の 7 メソッドが同一の `Promise.reject(new IntroCardStorageError('UNAVAILABLE',
+  ...))` をコピペしていた（本 PR で 3 メソッド追加し合計 7 箇所へ拡大していた）
+  指摘を受け、`rejectUnavailable<T>()` という 1 つの private helper へ集約した。
+- [altitude] `isEmptyIntroCardDraft`（`intro-card-storage.ts`）の再利用に伴い、
+  空白文字だけの入力を「値あり」と誤判定する余地（reuse レビューが
+  `hasAnyOptionalContent` 側で指摘した raw-length チェックと
+  `nonEmptyLinkCount`/`buildIntroCardLinks` の trim-aware チェックの乖離と
+  同じ class）を精査し、`isEmptyIntroCardDraft` の単一行・複数行の文字列欄を
+  `trim()` してから判定するよう修正した（`otherLinks` は行そのものの有無を
+  維持したい意図的な仕様のため対象外）。
+- [altitude] `src/domain/intro-card.ts` の `validateIntroCardOtherFieldValue`
+  にあった到達しない `case 'name': return;`（`IntroCardFieldValueInput` の
+  1 つ目の union member 自体が `field` の union だったため、`Exclude` で
+  `'name'` だけを型レベルで除外できず、型の健全性のためだけに置いていた
+  no-op）を指摘され、mapped type で `IntroCardField` を distribute した
+  真の discriminated union に組み直すことで、呼び出し元の通常の型絞り込み
+  だけで `'name'` を除いた型が得られるようにし、no-op 分岐を削除した。
+- [altitude] `IntroCardEditScreen.tsx` の保存失敗時フォーカス effect に
+  足していた `biome-ignore lint/correctness/useExhaustiveDependencies`
+  （`optionalSectionExpanded` を effect 本体では読まないまま依存に加える
+  対症療法）を指摘され、`useFieldFocusChain`（`registerFieldRef` /
+  `focusOrDismiss`）自体に「対象欄がまだ mount されていなければ pending
+  focus として覚え、実際に mount された瞬間に focus する」仕組みを実装する
+  根本対応へ置き換えた。これにより effect の依存配列は素直なままになり、
+  `biome-ignore` も不要になった。
+- [efficiency（却下・理由記録）]: 下書き永続化 effect（`PassportApp.tsx`）が
+  キーストロークごとに実 I/O 書き込みを行う点を debounce すべきという指摘を
+  受けたが、却下した。理由は設計文書に明記済み（レンダリング基盤が無く
+  `setTimeout` の実際の挙動を実行検証できないリスクの方が、書込み回数の
+  最適化より大きいと判断した）。
+- [簡素化として却下・follow-up 化]: `PassportApp.tsx` の
+  `introCardDraftFieldsSnapshot`/`applyIntroCardDraftFields`（11 個の discrete
+  `useState` を 1 つの `IntroCardDraftFields` object state へ束ねれば
+  不要という指摘）と、`IntroCardDraftFields` が `IntroCardLinksDraft` と
+  同じ 5 リンクフィールドを別名で並べている点（`links: IntroCardLinksDraft`
+  として nest すべきという指摘）は、いずれも Issue 79/90/92 由来の既存
+  11-state アーキテクチャを本 PR の diff を超えて広く変更する必要があるため
+  見送った。本 PR（下書き機能）がその既存の断片化のコストを増幅している
+  という指摘は妥当なため、別 PR での再構成を検討する価値があると記録する。
+
+反映後、`bun test src --coverage`（1284 pass、変更ファイル 100%）・
+`bun run typecheck`・`bun biome check .`・`make before-commit` を再確認した。
+
+#### 振り返り
+
+- 問題: `IntroCardEditScreen.tsx` はレンダリング用テスト基盤（React Testing
+  Library 相当）を持たないため、ソーステキスト契約テストでは
+  「構造として存在する」ことしか固定できず、`useEffect` の実行順序・ref の
+  mount タイミングという実行時の振る舞いに起因するバグ（フォーカスの
+  2 件）は、テストが全て green のままレビューまで見逃されていた。
+- 根本原因: 段階的開示（条件付きレンダリング）を導入したことで、既存の
+  Issue 92 由来の「保存失敗時に該当欄へ focus する」処理が、対象欄が
+  常に mount されている前提から、mount されているかどうかが動的に変わる
+  前提へと暗黙に変わった。この前提変化はレビュー観点表（設計文書の
+  エッジケース節）には明示的に書いていなかった。
+- 予防策: 条件付きレンダリング（折りたたみ・タブ切替等）を導入する変更では、
+  「対象要素が常に mount されているとは限らない」ことを設計文書の
+  エッジケース節に明記し、`useEffect` の実行順序・依存関係を図（テキストで
+  可）に起こしてからコードを書く。render harness を持たないリポジトリでは
+  特に、この種のタイミングバグをソース契約テストだけで検出するのは
+  構造的に難しいため、code-reviewer レビューを実装完了の必須ゲートとして
+  厳格に運用し続ける。

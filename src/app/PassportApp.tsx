@@ -109,7 +109,12 @@ import {
   type IntroCardNotice,
   introCardNoticeFromError,
 } from './intro-card-notice';
-import type { IntroCardStoragePort } from './intro-card-storage';
+import {
+  EMPTY_INTRO_CARD_DRAFT_FIELDS,
+  type IntroCardDraftFields,
+  type IntroCardStoragePort,
+  isEmptyIntroCardDraft,
+} from './intro-card-storage';
 import {
   LocalDataAccessBlockedError,
   type LocalDataControl,
@@ -784,6 +789,77 @@ export default function PassportApp({
   const [introCardErrorFieldKey, setIntroCardErrorFieldKey] = useState<
     IntroCardEditFieldKey | undefined
   >(undefined);
+  // Issue 93: 起動時の下書き読込・水和が終わったかどうか。これが `true` になる前は
+  // 下書き永続化 effect（`introCardDraftPersistEffect` 相当、後述）を実行しない。
+  // マウント直後は下書き全欄が空 state で始まるため、ガードなしだと
+  // 「全欄空 → clearDraft()」が非同期の `loadDraft()` より先に完了し、
+  // まだ読み込んでいない下書きファイルを消してしまうレース条件になりうる
+  // （docs/design/2026-07-22-intro-card-creation-flow.md 設計節）。
+  const [introCardDraftHydrated, setIntroCardDraftHydrated] = useState(false);
+
+  /**
+   * Issue 93: 編集画面の 11 個の draft state をまとめて 1 つの
+   * `IntroCardDraftFields`（下書き Storage の保存形）へ変換する。
+   * `introCardLinksDraftShape()`（後述）はリンク 5 種だけの形（保存時の配列
+   * 組み立て・Issue 92 のエラー欄解決で使う既存の形）のため、それとは別に
+   * 名前・肩書き等の単一欄も含めた「下書き永続化用の全欄スナップショット」を
+   * ここへ一本化する。起動時 effect・下書き永続化 effect の両方から参照する
+   * ため `useCallback` で安定化する（同じ 11 個の draft state を依存に持つ）。
+   */
+  const introCardDraftFieldsSnapshot = useCallback(
+    (): IntroCardDraftFields => ({
+      name: introCardDraftName,
+      title: introCardDraftTitle,
+      organization: introCardDraftOrganization,
+      selfIntro: introCardDraftSelfIntro,
+      email: introCardDraftEmail,
+      phone: introCardDraftPhone,
+      linkX: introCardDraftLinkX,
+      linkGithub: introCardDraftLinkGithub,
+      linkLinkedin: introCardDraftLinkLinkedin,
+      linkPortfolio: introCardDraftLinkPortfolio,
+      otherLinks: introCardDraftOtherLinks,
+    }),
+    [
+      introCardDraftName,
+      introCardDraftTitle,
+      introCardDraftOrganization,
+      introCardDraftSelfIntro,
+      introCardDraftEmail,
+      introCardDraftPhone,
+      introCardDraftLinkX,
+      introCardDraftLinkGithub,
+      introCardDraftLinkLinkedin,
+      introCardDraftLinkPortfolio,
+      introCardDraftOtherLinks,
+    ]
+  );
+
+  /**
+   * `IntroCardDraftFields`（下書き Storage から読み戻した形、または
+   * `loadIntroCardDraftFrom` が保存済みカードから組み立てた形）を、11 個の
+   * draft state へ反映する唯一の場所。起動時の下書き水和と、既存カードを
+   * 開くときの初期値組み立てのどちらもここへ一本化する
+   * （同じ 11 個の setState 呼び出しを 2 箇所に複製しない）。`setState` の
+   * setter 自体は React が安定した参照を保証するが、起動時 effect の依存配列に
+   * 明示するため `useCallback` で包む。
+   */
+  const applyIntroCardDraftFields = useCallback(
+    (fields: IntroCardDraftFields): void => {
+      setIntroCardDraftName(fields.name);
+      setIntroCardDraftTitle(fields.title);
+      setIntroCardDraftOrganization(fields.organization);
+      setIntroCardDraftSelfIntro(fields.selfIntro);
+      setIntroCardDraftEmail(fields.email);
+      setIntroCardDraftPhone(fields.phone);
+      setIntroCardDraftLinkX(fields.linkX);
+      setIntroCardDraftLinkGithub(fields.linkGithub);
+      setIntroCardDraftLinkLinkedin(fields.linkLinkedin);
+      setIntroCardDraftLinkPortfolio(fields.linkPortfolio);
+      setIntroCardDraftOtherLinks(fields.otherLinks);
+    },
+    []
+  );
   const [petName, setPetName] = useState('');
   const [petEmoji, setPetEmoji] = useState<PetEmoji>('🐾');
   const [ownerAlias, setOwnerAlias] = useState('');
@@ -1207,10 +1283,20 @@ export default function PassportApp({
         }
         return null;
       }),
-    ]).then(([result, loadedIntroCard]) => {
+      // Issue 93: 下書き（未保存の編集中入力）の読込は nice-to-have であり、
+      // 失敗しても起動そのものを妨げない・独自の Notice も出さない
+      // （`.catch(() => null)` で「下書きなし」へ握り潰す）。
+      introCardStorage.loadDraft().catch(() => null),
+    ]).then(([result, loadedIntroCard, loadedDraft]) => {
       if (!active) return;
       introCardRef.current = loadedIntroCard;
       setIntroCard(loadedIntroCard);
+      if (loadedDraft && !isEmptyIntroCardDraft(loadedDraft)) {
+        applyIntroCardDraftFields(loadedDraft);
+      }
+      // 下書きの水和が済んだことを示す。`result.kind` の分岐（Profile Recovery の
+      // 成否）とは独立の関心事のため、早期 return より前で必ず立てる。
+      setIntroCardDraftHydrated(true);
       if (result.kind === 'recovery-failed') {
         setLastDiagnosticError(startupDiagnosticError(result.error));
         diagnosticsFlow.enterRecovery(result.error);
@@ -1222,11 +1308,35 @@ export default function PassportApp({
       active = false;
     };
   }, [
+    applyIntroCardDraftFields,
     diagnosticsFlow.enterRecovery,
     introCardStorage,
     localDataControl,
     localProfileStorage,
   ]);
+
+  /**
+   * Issue 93: 編集画面の入力欄（11 個の draft state）が変わるたびに、下書き
+   * Storage へ反映する。「アプリを一度離れて戻っても入力内容を維持する」ため。
+   * debounce タイマーは使わない設計判断（docs/design/2026-07-22 設計節: レンダリング
+   * 基盤がなく `setTimeout` の実際の挙動を実行検証できないリスクの方が、書込み回数の
+   * 最適化より大きいと判断した）。書込みは fire-and-forget（`.catch(() => undefined)`）
+   * とし、下書きの読み書き失敗が編集操作そのものを妨げないようにする。
+   * 全欄が空へ戻ったら（例: 削除操作後）`saveDraft` ではなく `clearDraft` を呼び、
+   * 保存済みカードが無いのに下書きファイルだけが残り続けることを防ぐ。
+   * `introCardDraftHydrated` が `true` になるまでは何もしない（起動時の
+   * `loadDraft()` と競合して、読み込む前に消してしまうレースを防ぐ、起動時
+   * effect のコメント参照）。
+   */
+  useEffect(() => {
+    if (!introCardDraftHydrated) return;
+    const fields = introCardDraftFieldsSnapshot();
+    if (isEmptyIntroCardDraft(fields)) {
+      introCardStorage.clearDraft().catch(() => undefined);
+    } else {
+      introCardStorage.saveDraft(fields).catch(() => undefined);
+    }
+  }, [introCardDraftFieldsSnapshot, introCardDraftHydrated, introCardStorage]);
 
   /**
    * Issue 11: Active Lounge の 1 秒 tick / Background 復帰の両方が、Lounge 本体の期限
@@ -1440,25 +1550,33 @@ export default function PassportApp({
   }
 
   function loadIntroCardDraftFrom(card: IntroCard): void {
-    setIntroCardDraftName(card.name);
-    setIntroCardDraftTitle(card.title ?? '');
-    setIntroCardDraftOrganization(card.organization ?? '');
-    setIntroCardDraftSelfIntro(card.selfIntro ?? '');
-    setIntroCardDraftEmail(card.email ?? '');
-    setIntroCardDraftPhone(card.phone ?? '');
     // Issue 90: 保存済みの `links`（フラット配列）を、hostname が既知サービス
     // （x.com/twitter.com・github.com・linkedin.com）に一致する最初の 1 件だけ
     // 対応欄へ割り当て、残りは自由リンクへ戻す（`classifyIntroCardLinks`）。
     const classifiedLinks = classifyIntroCardLinks(card.links ?? []);
-    setIntroCardDraftLinkX(classifiedLinks.x);
-    setIntroCardDraftLinkGithub(classifiedLinks.github);
-    setIntroCardDraftLinkLinkedin(classifiedLinks.linkedin);
-    setIntroCardDraftLinkPortfolio(classifiedLinks.portfolio);
-    setIntroCardDraftOtherLinks(classifiedLinks.otherLinks);
+    applyIntroCardDraftFields({
+      name: card.name,
+      title: card.title ?? '',
+      organization: card.organization ?? '',
+      selfIntro: card.selfIntro ?? '',
+      email: card.email ?? '',
+      phone: card.phone ?? '',
+      linkX: classifiedLinks.x,
+      linkGithub: classifiedLinks.github,
+      linkLinkedin: classifiedLinks.linkedin,
+      linkPortfolio: classifiedLinks.portfolio,
+      otherLinks: classifiedLinks.otherLinks,
+    });
   }
 
   function openIntroCardEdit(): void {
-    if (introCard) loadIntroCardDraftFrom(introCard);
+    // Issue 93: 下書き（未保存の編集中入力）が既にあれば、それを保存済み
+    // カードの値より優先する（「保存されていない直近の入力」のほうが新しい）。
+    // 下書きが空（このセッションでまだ何も編集していない）のときだけ、
+    // 従来どおり保存済みカードから初期値を組み立てる。
+    if (introCard && isEmptyIntroCardDraft(introCardDraftFieldsSnapshot())) {
+      loadIntroCardDraftFrom(introCard);
+    }
     setIntroCardNotice({
       kind: 'empty',
       message: MESSAGES[locale].introCard.initialNotice,
@@ -1503,19 +1621,16 @@ export default function PassportApp({
   async function deleteIntroCard(): Promise<void> {
     try {
       await introCardStorage.remove();
+      // Issue 93: 下書き永続化 effect も全欄空になった時点で自動的に
+      // `clearDraft()` を呼ぶが、effect の実行（次の commit）を待たずに
+      // ここで明示的に呼ぶ。アプリがこの直後に強制終了された場合でも、
+      // 削除したカードの断片が下書きとして残り続け、次回起動時に
+      // 「消したはずのカード」の内容が編集画面へ蘇る不具合を避けるため
+      // （fire-and-forget、削除操作の成否には影響させない）。
+      introCardStorage.clearDraft().catch(() => undefined);
       introCardRef.current = null;
       setIntroCard(null);
-      setIntroCardDraftName('');
-      setIntroCardDraftTitle('');
-      setIntroCardDraftOrganization('');
-      setIntroCardDraftSelfIntro('');
-      setIntroCardDraftEmail('');
-      setIntroCardDraftPhone('');
-      setIntroCardDraftLinkX('');
-      setIntroCardDraftLinkGithub('');
-      setIntroCardDraftLinkLinkedin('');
-      setIntroCardDraftLinkPortfolio('');
-      setIntroCardDraftOtherLinks([]);
+      applyIntroCardDraftFields(EMPTY_INTRO_CARD_DRAFT_FIELDS);
       setIntroCardNotice({
         kind: 'empty',
         message: MESSAGES[locale].introCard.initialNotice,

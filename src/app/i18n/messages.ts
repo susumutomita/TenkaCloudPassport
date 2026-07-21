@@ -579,6 +579,11 @@ export interface AppMessages {
     readonly nameHint: (maxLength: number) => string;
     readonly namePlaceholder: string;
     readonly nameCounter: (current: number, max: number) => string;
+    readonly previewNamePlaceholder: string;
+    readonly optionalSectionShowLabel: string;
+    readonly optionalSectionShowHint: string;
+    readonly optionalSectionHideLabel: string;
+    readonly optionalSectionHideHint: string;
     readonly titleLabel: string;
     readonly titlePlaceholder: string;
     readonly titleCounter: (current: number, max: number) => string;
@@ -1266,6 +1271,12 @@ const ja: AppMessages = {
     nameHint: (maxLength) => `${maxLength} 文字以下で名前を入力します。`,
     namePlaceholder: '例: 田中太郎',
     nameCounter: (current, max) => `${current} / ${max}`,
+    previewNamePlaceholder: '名前を入力するとここに表示されます。',
+    optionalSectionShowLabel: '任意項目を追加する',
+    optionalSectionShowHint:
+      '所属・自己紹介・メール・電話・リンクなど、渡したい分だけ追加できます。',
+    optionalSectionHideLabel: '任意項目を閉じる',
+    optionalSectionHideHint: '任意項目の入力欄を折りたたみます。',
     titleLabel: '肩書き（任意）',
     titlePlaceholder: '例: Engineer',
     titleCounter: (current, max) => `${current} / ${max}`,
@@ -1969,6 +1980,12 @@ const en: AppMessages = {
     nameHint: (maxLength) => `Enter your name, up to ${maxLength} characters.`,
     namePlaceholder: 'e.g., Taro Tanaka',
     nameCounter: (current, max) => `${current} / ${max}`,
+    previewNamePlaceholder: 'Your name will appear here once entered.',
+    optionalSectionShowLabel: 'Add optional details',
+    optionalSectionShowHint:
+      'Add as much as you want to share: organization, self-intro, email, phone, links.',
+    optionalSectionHideLabel: 'Hide optional details',
+    optionalSectionHideHint: 'Collapses the optional input fields.',
     titleLabel: 'Title (optional)',
     titlePlaceholder: 'e.g., Engineer',
     titleCounter: (current, max) => `${current} / ${max}`,
