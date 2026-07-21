@@ -40,6 +40,7 @@
     "check:pre-release": "bun scripts/architecture-harness.ts --pre-release --fail-on=error",
     "dup:check": "bun scripts/check-duplication.ts",
     "dup:baseline": "bun scripts/check-duplication.ts --update",
+    "generate:app-icons": "bun scripts/generate-app-icons.ts",
     "dead-code": "knip --no-config-hints",
     "lint-staged": "lint-staged",
     "format": "bun biome format --write .",

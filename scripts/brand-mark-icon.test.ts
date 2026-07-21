@@ -107,6 +107,105 @@ describe('renderBrandMarkIconRgba', () => {
   });
 });
 
+describe('Issue 91: renderBrandMarkIconRgba の options（markScale / colors）', () => {
+  it('markScale を省略しても options={} を渡しても、markScale:1 の明示指定と完全一致する（後方互換）', () => {
+    const omitted = renderBrandMarkIconRgba(120);
+    const empty = renderBrandMarkIconRgba(120, {});
+    const explicit = renderBrandMarkIconRgba(120, { markScale: 1 });
+
+    expect(omitted).toEqual(empty);
+    expect(omitted).toEqual(explicit);
+  });
+
+  it('markScale が 0 以下、または 1 を超えるときは Error を投げる', () => {
+    expect(() => renderBrandMarkIconRgba(120, { markScale: 0 })).toThrow(
+      /markScale は 0 より大きく 1 以下にする/
+    );
+    expect(() => renderBrandMarkIconRgba(120, { markScale: -0.5 })).toThrow(
+      /markScale は 0 より大きく 1 以下にする/
+    );
+    expect(() => renderBrandMarkIconRgba(120, { markScale: 1.01 })).toThrow(
+      /markScale は 0 より大きく 1 以下にする/
+    );
+  });
+
+  it('markScale < 1 のとき、viewBox 中心をキャンバス中心に固定したままマークを縮小する', () => {
+    const size = 1200;
+    const markScale = 0.5;
+    const effectiveScale =
+      (size * markScale) / BRAND_MARK_ICON_GEOMETRY.viewBoxSize;
+    // bar 内部かつ角丸 (rx=6) の影響を受けない点 (75, 30)。
+    // markScale=1 ならこの viewBox 座標はキャンバス中心から right=15 上方の
+    // pixel (900, 300) に写るが、markScale=0.5 では中心へ寄って (675, 450) に写る。
+    const barInteriorViewBox = { vx: 75, vy: 30 };
+    const shrunkPx = Math.round(
+      size / 2 + (barInteriorViewBox.vx - 60) * effectiveScale
+    );
+    const shrunkPy = Math.round(
+      size / 2 + (barInteriorViewBox.vy - 60) * effectiveScale
+    );
+
+    const shrunk = renderBrandMarkIconRgba(size, { markScale });
+    const full = renderBrandMarkIconRgba(size, { markScale: 1 });
+
+    // 縮小後は bar 内部点がキャンバス中心寄りの (shrunkPx, shrunkPy) で白になる。
+    expect(pixelAt(shrunk, size, shrunkPx, shrunkPy)).toEqual({
+      r: BRAND_MARK_ICON_GEOMETRY.white.r,
+      g: BRAND_MARK_ICON_GEOMETRY.white.g,
+      b: BRAND_MARK_ICON_GEOMETRY.white.b,
+      a: 255,
+    });
+    // 等倍 (markScale=1) では同じ絶対 pixel 位置はまだ bar 内部まで届いておらず
+    // 背景色のままである。同じ絶対座標で挙動が変わることが縮小の証拠になる。
+    expect(pixelAt(full, size, shrunkPx, shrunkPy)).toEqual({
+      r: BRAND_MARK_ICON_GEOMETRY.ink.r,
+      g: BRAND_MARK_ICON_GEOMETRY.ink.g,
+      b: BRAND_MARK_ICON_GEOMETRY.ink.b,
+      a: 255,
+    });
+    // 縮小してもキャンバス四隅は引き続き背景色（Ink）で塗りつぶされる。
+    for (const [cx, cy] of [
+      [2, 2],
+      [size - 3, 2],
+      [2, size - 3],
+      [size - 3, size - 3],
+    ] as const) {
+      expect(pixelAt(shrunk, size, cx, cy)).toEqual({
+        r: BRAND_MARK_ICON_GEOMETRY.ink.r,
+        g: BRAND_MARK_ICON_GEOMETRY.ink.g,
+        b: BRAND_MARK_ICON_GEOMETRY.ink.b,
+        a: 255,
+      });
+    }
+  });
+
+  it('colors を渡すと背景色とマーク色を入れ替えられる（splash-icon 用の白地 + ink マーク）', () => {
+    const size = 120;
+    const rgba = renderBrandMarkIconRgba(size, {
+      colors: {
+        background: BRAND_MARK_ICON_GEOMETRY.white,
+        mark: BRAND_MARK_ICON_GEOMETRY.ink,
+      },
+    });
+    const { x, y, width, height } = BRAND_MARK_ICON_GEOMETRY.bar;
+    const centerX = Math.round(x + width / 2);
+    const centerY = Math.round(y + height / 2);
+
+    expect(pixelAt(rgba, size, 2, 2)).toEqual({
+      r: BRAND_MARK_ICON_GEOMETRY.white.r,
+      g: BRAND_MARK_ICON_GEOMETRY.white.g,
+      b: BRAND_MARK_ICON_GEOMETRY.white.b,
+      a: 255,
+    });
+    expect(pixelAt(rgba, size, centerX, centerY)).toEqual({
+      r: BRAND_MARK_ICON_GEOMETRY.ink.r,
+      g: BRAND_MARK_ICON_GEOMETRY.ink.g,
+      b: BRAND_MARK_ICON_GEOMETRY.ink.b,
+      a: 255,
+    });
+  });
+});
+
 describe('generateBrandMarkIconPng', () => {
   it('192 / 512 のどちらでも decodeRgbaPng が読める正しい PNG を生成する', () => {
     for (const size of [192, 512]) {
