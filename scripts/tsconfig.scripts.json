@@ -33,6 +33,8 @@
     "brand-mark-icon.ts",
     "brand-mark-icon.test.ts",
     "prepare-web-app-export.ts",
-    "prepare-web-app-export.test.ts"
+    "prepare-web-app-export.test.ts",
+    "generate-app-icons.ts",
+    "generate-app-icons.test.ts"
   ]
 }

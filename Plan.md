@@ -5638,3 +5638,160 @@ Pages から Cloudflare Workers（Workers Builds、Git 連携）へ移行し、
   ゲートを回す」ことを明記する。新しいローカル生成物ディレクトリを追加する
   変更では、`biome.json` の除外要否と「ゲート実行前に必ず削除する」運用の
   どちらを採るかを設計時点で決め、Plan.md の検証手順に手順として書き残す。
+
+### [Issue 91 TenkaCloud アプリアイコン] - 2026-07-22
+
+#### 目的
+
+アプリアイコン 4 アセット（`icon.png` / `adaptive-icon.png` / `favicon.png` /
+`splash-icon.png`）を、Ink / Summit リデザイン（`docs/design/2026-07-20-ink-summit-redesign.md`）
+の山頂マークへ、外部ツールに頼らない決定論的な生成スクリプトで差し替える。
+
+#### 制約
+
+- Issue 91 の詳細設計を正本とする。手描き・外部 GUI ツールでのバイナリ持ち込みはしない。
+- 既存の `scripts/brand-mark-icon.ts`（Issue 88, PWA アイコン生成）・
+  `scripts/png-encoder.ts` を再利用・拡張する。新しい npm 依存は増やさない。
+- `app.json` の変更は `adaptiveIcon.backgroundColor` と `splash.backgroundColor` のみ。
+  アセットのファイルパス自体は変更しない。
+- `rm` / `npx` 禁止・`git add` は明示ファイルのみ・8081 kill 禁止・`ios/` /
+  `node_modules` 不触。
+
+#### 設計判断
+
+**アイコン 4 種の色・スケール**: `renderBrandMarkIconRgba` は Ink 背景 + 白マーク固定
+だったため、`options?: { markScale?: number; colors?: { background; mark } }` を追加して
+拡張する（デフォルト値は既存呼び出し元と完全互換にし、`scripts/brand-mark-icon.test.ts`
+の既存アサーションを変更しない）。
+
+- 案 A: 4 アセットそれぞれに個別のラスタライズ関数を新規実装する。
+  - 利点: 用途ごとに最適化しやすい。
+  - 欠点: Issue 88 の bar/peak 幾何定数・アンチエイリアス実装が 4 箇所に重複し、
+    `BrandMark.tsx` との drift 検出（Issue 88 のテスト）が個別実装には効かなくなる。
+- 案 B: `renderBrandMarkIconRgba` に `markScale` と `colors` の options を足して 1 実装を
+  使い回す（採用）。
+  - 利点: 既存の drift 検出・アンチエイリアス実装をそのまま 4 アセットへ適用できる。
+    `markScale` はピクセル→viewBox 変換を「viewBox 中心をキャンバス中心に固定して
+    スケールする」形に一般化するだけで、`markScale=1` は数式的に既存の非中心化
+    変換と完全に一致する（回帰なし）。
+  - 欠点: 関数のオプション面が増える。JSDoc で用途ごとの呼び出し例を明記して緩和する。
+
+案 B を選ぶ。
+
+**Android adaptive icon のセーフゾーン**: Android の公式ガイドでは 108dp キャンバスに対し
+中央 72dp（66.67%、四捨五入で 66%）が全ランチャーで欠けずに見える safe zone。Issue 91 の
+「中央 66%」という記述に合わせ `ADAPTIVE_ICON_SAFE_ZONE_RATIO = 0.66` を明示定数として
+`generate-app-icons.ts` に置く（0.6667 との差は数 px 程度で安全側）。
+
+**iOS の透過禁止への対応**: `node_modules/@expo/prebuild-config` の `withIosIcons.js` は
+`generateUniversalIconAsync` で `removeTransparency: true` / `backgroundColor: '#ffffff'`
+を強制しており、`expo prebuild` / `expo run:ios` の段階で iOS 用アイコンは常に不透明へ
+flatten される。本スクリプトが生成する RGBA PNG は全ピクセル alpha=255（実質不透明）なので
+この flatten は no-op であり、iOS 側での追加対応は不要と判断した（コードで確認済み）。
+
+**ファイル出力方式**: `scripts/prepare-web-app-export.ts` と同じ
+`import.meta.main` ガード付き `main()` を踏襲し、`generateAppIconAssets()`（純関数、
+4 アセットの `{ assetPath, png }` を返す）と、それを実際に `assets/*.png` へ書き出す
+CLI 部分を分離する。決定論のテストは純関数の再実行結果を `Buffer.compare` 相当で
+比較して担保し、実ファイル書き込みは E2E的な検証を薄く 1 本追加するに留める。
+
+#### タスク
+
+1. Plan.md 追記（本節）。
+2. TDD: `scripts/brand-mark-icon.test.ts` に `markScale` / `colors` options のテストを
+   追加 → `scripts/brand-mark-icon.ts` を拡張（Red → Green）。
+3. TDD: `scripts/generate-app-icons.test.ts` を新規作成
+   （決定論・サイズ・色・Android セーフゾーンのテスト）→
+   `scripts/generate-app-icons.ts` を実装（Red → Green）。
+4. `scripts/tsconfig.scripts.json` の `include` へ新規ファイルを追加。
+5. `bun scripts/generate-app-icons.ts` を実行して `assets/icon.png` /
+   `assets/adaptive-icon.png` / `assets/favicon.png` / `assets/splash-icon.png` を
+   実際に上書きする。
+6. `app.json` の `android.adaptiveIcon.backgroundColor` を `#1d1d1f`、
+   `splash.backgroundColor` を `#ffffff` へ更新する。
+7. `src/app/default-agent-model-provider.test.ts` など既存の `app.json` 契約テストへの
+   影響を確認する（現状は `adaptiveIcon` / `splash` の値を直接アサートしていないため
+   追従不要と確認済み。念のため `bun test src` を通して回帰がないことを確認する）。
+8. `package.json` に `generate:app-icons` スクリプトを追加する（再現手順の一次情報を
+   コマンドとして残す）。
+9. code-reviewer レビュー → 指摘反映。
+10. commit（Conventional Commits）→ push → PR（Closes 本 Issue のフル URL。本文に
+    「ネイティブ反映には `bunx expo run:ios --device` の再実行が必要」と明記）→
+    CI（CodeRabbit rate-limit fail は無視可）→ squash merge。
+
+#### 検証手順
+
+- `bun test scripts/brand-mark-icon.test.ts scripts/generate-app-icons.test.ts`
+  （新規・既存とも green）。
+- `bun test src --coverage`（カバレッジ 100% 維持。`scripts/` は対象外のため
+  `scripts/` 側は `bun test scripts` で別途 green を確認する）。
+- `bun run typecheck`（`scripts/tsconfig.scripts.json` 追従を含む）。
+- `file assets/*.png` で 4 ファイルとも想定サイズ（1024/1024/48/512）の PNG である
+  ことを確認する。
+- `make before-commit` exit 0。
+
+#### 進捗ログ
+
+- 2026-07-22: Issue 91 本文（詳細設計）を確認し、既存の `brand-mark-icon.ts` /
+  `png-encoder.ts`（Issue 88）を読み、`renderBrandMarkIconRgba` が
+  `sizePx` のみを引数に取り Ink 背景 + 白マーク固定であることを確認した。
+  `@expo/prebuild-config` の `withIosIcons.js` を読み、iOS ビルド時に
+  `removeTransparency: true` で透過が自動除去されることを確認し、
+  RGBA PNG のまま `icon.png` に使っても安全と判断した。
+- 2026-07-22: TDD で `scripts/brand-mark-icon.test.ts` に `markScale` /
+  `colors` options のテスト（後方互換・バリデーション・縮小時のセンタリング・
+  配色反転）を先に追加して Red を確認した後、`renderBrandMarkIconRgba` /
+  `generateBrandMarkIconPng` を拡張して Green にした。`markScale=1` のときは
+  Issue 88 由来の非中心化変換をそのまま使う分岐を残し、既存呼び出し元との
+  バイト互換を数式的に保証した（浮動小数点の丸め順序差による 1 ULP 未満の
+  drift を避けるため）。
+- 2026-07-22: 同様に `scripts/generate-app-icons.test.ts` を先に書いて Red を
+  確認し、`scripts/generate-app-icons.ts`（`generateAppIconAssets` / 実ファイル
+  書き出し用の `writeAppIconAssets`）を実装して Green にした。`bun
+  scripts/generate-app-icons.ts` を実行して `assets/*.png` 4 ファイルを実際に
+  上書きし、再実行して SHA-256 が変わらないこと（決定論）を確認した。
+- 2026-07-22: `app.json` の `adaptiveIcon.backgroundColor` を `#1d1d1f`、
+  `splash.backgroundColor` を `#ffffff` へ更新。`src/app/default-agent-model-provider.test.ts`
+  はこれらの値を直接アサートしておらず、`bun test src --coverage` はカバレッジ
+  100% を維持したまま green だった。
+- 2026-07-22: `make before-commit` の `harness_test`（`bun test scripts/`）で
+  `scripts/nearby-transport-static-screening.test.ts` が
+  `package.json SHA-256 が Static Screening baseline と一致しません。` で fail
+  した。原因は `package.json` に `generate:app-icons` script を追加したことで
+  `docs/evidence/nearby-transport-static-screening.json` の
+  `baseline.packageJsonSha256`（供給網ドリフト検出用の固定 hash）と実ファイルが
+  乖離したため。`package.json` の内容を確定させた上で SHA-256 を再計算し、
+  同 JSON の `packageJsonSha256` を更新して green にした（`biome.json` 等の
+  invariant 設定ではなく、drift 検出用の evidence baseline を正しい値へ
+  更新する対応であり、harness の意図を緩めるものではない）。
+- 2026-07-22: `make before-commit` を通しで実行し exit 0 を確認した
+  （architecture harness、`bun test scripts/`、`bun test --coverage
+  scripts/source-release.test.ts`、`dup_check`、`lint_text`、`lint`、
+  `typecheck`、`bun test src --coverage`、`bun run build:web` の全ステップ）。
+- 2026-07-22: PR 102 の CI（`ci` job、GitHub Actions runner）で
+  `generateAppIconAssets > 再実行しても決定論的に同一バイト列を生成する` と
+  `writeAppIconAssets > repoRoot 配下の assets/ へ 4 ファイルを実際に書き出す`
+  の 2 件が `this test timed out after 5000ms` で fail した。ローカルでは
+  発生しなかったが、CI runner 側は 1024px アイコンのフルレンダリングが
+  約 3.2 秒かかり（ログで実測）、この 2 件だけ `generateAppIconAssets()` を
+  2 回呼ぶため合計約 6.4〜6.6 秒になり、bun test の既定 5000ms timeout を
+  超えていた。該当 2 件だけ `it(name, fn, 30000)` で timeout を延長し、
+  ローカル再実行 green・`make before-commit` exit 0 を再確認した。
+
+#### 振り返り
+
+- 問題: `package.json` に 1 行スクリプトを追加しただけで、`scripts/`
+  配下の別ファイル（`nearby-transport-static-screening.test.ts`）が
+  無関係に見える理由で fail した。
+- 根本原因: Issue 22（Nearby Transport の Static Screening）が
+  サプライチェーン drift 検出のために `package.json` の内容そのものを
+  SHA-256 で固定 baseline 化しており、`package.json` を編集する変更は
+  たとえ本 Issue の主目的（アプリアイコン）と無関係でも、この baseline
+  ファイルの追従が必須になるという依存関係が、Issue 91 の設計時点では
+  見えていなかった。
+- 予防策: `package.json` を編集する PR では `make before-commit` の
+  `harness_test` を早期に一度実行し、`docs/evidence/
+  nearby-transport-static-screening.json` の baseline 追従が必要かどうかを
+  設計段階のタスクリストに明示する。今後 `package.json` を変更する
+  Issue の Plan.md には「Static Screening baseline の SHA-256 追従」を
+  検証手順の既定項目として含める。
