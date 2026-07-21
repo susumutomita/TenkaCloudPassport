@@ -44,7 +44,9 @@
     "lint-staged": "lint-staged",
     "format": "bun biome format --write .",
     "format:check": "bun biome format .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "deploy": "bun run build && wrangler deploy",
+    "preview": "bun run build && wrangler dev"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.6",
@@ -82,6 +84,7 @@
     "textlint-rule-preset-ja-spacing": "^2.2.0",
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
     "textlint-rule-spellcheck-tech-word": "^5.0.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "wrangler": "^4.112.0"
   }
 }

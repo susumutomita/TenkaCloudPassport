@@ -183,3 +183,9 @@ secrets/
 
 # Source-only release candidate output
 release-output/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
