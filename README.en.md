@@ -50,6 +50,21 @@ scan time.
 one environment. They are not interchangeable. See the
 [Release Status and Device Matrix](./docs/releases/status.md) for evidence per combination.
 
+### Try it from your phone with no dev environment (Web version on GitHub Pages)
+
+If you have neither a Mac nor Expo Go handy, open the Web version we publish on GitHub Pages directly in
+your phone's browser.
+
+<https://susumutomita.github.io/TenkaCloudPassport/app/>
+
+- Data is stored in the browser's on-device storage. Switching browsers or devices does not carry your
+  card over.
+- The first load requires an online connection. Full offline support via a Service Worker is not
+  implemented yet (tracked as a follow-up).
+- On iOS Safari, tap the Share icon and choose "Add to Home Screen"; on Android Chrome, open the menu and
+  choose "Add to Home Screen" or "Install app". Either way you get an icon on your home screen that launches
+  the app directly. This is not App Store or Play Store distribution.
+
 ## Choose one entry path
 
 | Path | For whom | Prerequisites | First success | Current assurance |

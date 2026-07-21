@@ -21,6 +21,12 @@
     "source-release.test.ts",
     "nearby-transport-static-screening.ts",
     "nearby-transport-static-screening.test.ts",
-    "intro-card-viewer.test.ts"
+    "intro-card-viewer.test.ts",
+    "png-encoder.ts",
+    "png-encoder.test.ts",
+    "brand-mark-icon.ts",
+    "brand-mark-icon.test.ts",
+    "prepare-web-app-export.ts",
+    "prepare-web-app-export.test.ts"
   ]
 }
