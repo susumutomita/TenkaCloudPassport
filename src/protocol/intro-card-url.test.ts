@@ -133,7 +133,7 @@ describe('encodeIntroCardUrl', () => {
     expect(url.startsWith('TCPQ')).toBe(false);
   });
 
-  it('URL 全体が 1,024 byte を超える場合、項目別内訳を持つ CARD_TOO_LARGE を投げる', () => {
+  it('URL 全体が 1,367 byte を超える場合、項目別内訳を持つ CARD_TOO_LARGE を投げる', () => {
     const oversizedSelfIntro = 'a'.repeat(2000);
     const card: IntroCard = { name: 'A', selfIntro: oversizedSelfIntro };
 
@@ -159,10 +159,37 @@ describe('encodeIntroCardUrl', () => {
       FULL_CARD
     );
   });
+
+  it('名前・肩書・会社（日本語）＋長文自己紹介＋会社 URL 2 本＋メールの日本語フルカードでも throw しない（Issue 121）', () => {
+    // owner が「会社 URL を 2 つ入れるとサイズオーバーになる」と報告した構成の再現
+    // ケース（ADR-0032）。280 文字の日本語自己紹介＋肩書・会社名（日本語）＋会社 URL
+    // 2 本（各 ~25 文字）＋メールを合わせると 1,351 byte になり、旧 EC-M /
+    // QR_ENCODER_MAX_BYTES = 1,024 byte では超過して throw していたが、誤り訂正 L 化後の
+    // 1,367 byte 上限では余裕を持って収まる。
+    const selfIntro =
+      '弊社では分散システムと生成AIを組み合わせたプロダクト開発に取り組んでいます。'
+        .repeat(10)
+        .slice(0, 280);
+    const card: IntroCard = {
+      name: '田中太郎',
+      title: '最高技術責任者',
+      organization: '天下クラウド株式会社',
+      selfIntro,
+      links: ['https://tenkacloud.com', 'https://bull.example'],
+      email: 'taro@tenkacloud.com',
+    };
+
+    expect(selfIntro.length).toBe(280);
+    expect(introCardUrlByteLength(card)).toBeGreaterThan(1024);
+    expect(introCardUrlByteLength(card)).toBeLessThanOrEqual(
+      QR_ENCODER_MAX_BYTES
+    );
+    expect(() => encodeIntroCardUrl(card)).not.toThrow();
+  });
 });
 
 describe('introCardUrlByteLength', () => {
-  it('encodeIntroCardUrl と同じ byte 数を返す（1,024 byte 以内）', () => {
+  it('encodeIntroCardUrl と同じ byte 数を返す（1,367 byte 以内）', () => {
     const card: IntroCard = { name: '田中太郎', title: 'Engineer' };
 
     expect(introCardUrlByteLength(card)).toBe(
@@ -170,7 +197,7 @@ describe('introCardUrlByteLength', () => {
     );
   });
 
-  it('1,024 byte を超える draft でも例外を投げず実際の byte 数を返す', () => {
+  it('1,367 byte を超える draft でも例外を投げず実際の byte 数を返す', () => {
     const oversizedCard: IntroCard = {
       name: 'A',
       selfIntro: 'a'.repeat(2000),

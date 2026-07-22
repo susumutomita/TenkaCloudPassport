@@ -36,7 +36,7 @@ const INTRO_CARD_URL_PAYLOAD_VERSION = 1;
 // 実際に生成する payload は object -> array（links）の 2 段までしか深くならない。
 // 3 は攻撃者が作った深いネスト JSON を弾くための余裕を持たせた fail-closed 上限。
 const INTRO_CARD_URL_JSON_MAX_DEPTH = 3;
-// 個々の field 自体は QR_ENCODER_MAX_BYTES（1,024 byte）の全体予算でしか実質的に
+// 個々の field 自体は QR_ENCODER_MAX_BYTES（1,367 byte）の全体予算でしか実質的に
 // 制限されないため、ここでは「異常に巨大な単一 field」を弾く粗い上限に留める。
 const INTRO_CARD_URL_FIELD_MAX_LENGTH = 4096;
 
@@ -254,7 +254,7 @@ export function encodeIntroCardUrl(card: IntroCard): string {
 
 /**
  * 編集画面の「QR に収まるかの目安表示」用。`encodeIntroCardUrl` と異なり上限超過でも
- * 例外を投げず、入力中の draft がどれだけ 1,024 byte 予算に近いかをそのまま返す
+ * 例外を投げず、入力中の draft がどれだけ 1,367 byte 予算に近いかをそのまま返す
  * （`vcard.ts` の `vCardByteLength` と同じ流儀）。
  */
 export function introCardUrlByteLength(card: IntroCard): number {

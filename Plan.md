@@ -6359,3 +6359,91 @@ Issue の報告範囲（今回は iOS 限定）と矛盾しないかを都度突
 最終実装（iOS 限定購読・`Boolean(footer)`・キーボード表示中は footer を隠す）
 と逆の記述のまま残っていると指摘を受け、文書と実装の齟齬を検出したうえで
 文書・テスト名を実装へ合わせて更新した。
+
+### 自己紹介カード QR 容量拡張（誤り訂正 M → L 化、Issue 121） - 2026-07-22
+
+#### 目的
+
+owner が自己紹介カードの会社 URL を 2 つ入れるとサイズオーバーになる不具合
+（[Issue 121](https://github.com/susumutomita/TenkaCloudPassport/issues/121)）を、
+QR エンコーダの誤り訂正レベルを M から L へ切り替えて解消する。最密 QR の
+QR Version（モジュール数＝密度＝読み取りやすさ）は現状維持のまま、容量を
+約 30% 増やす。
+
+#### 制約
+
+- `RS_BLOCKS_L` は既存 `RS_BLOCKS_M` と同じ Version 数（26）ぶん、ISO/IEC 18004
+  の正準値を正確に転記する。format information（誤り訂正レベル指標込みの BCH）
+  も L 用に正しくする。
+- `QR_ENCODER_MAX_BYTES` は「旧 EC-M で 1,024 byte が選ぶ Version（26）」の EC-L
+  データ容量に再設定し、最密 QR の Version を不変に保つ。
+- round-trip 網羅テスト（Version 1〜最大）を最重要ガードとする。
+- ビューア（`site/`）は QR ではなく URL fragment を復号するだけのため変更不要
+  （触らない）。
+
+#### タスク
+
+1. ADR-0032 を書く（Decision・代替案・Consequences）。
+2. `src/qr/encoder.ts` を誤り訂正 L へ丸ごと切り替え（`RS_BLOCKS_L` 新設、
+   format info の EC level indicator 修正、`QR_ENCODER_MAX_BYTES` 再計算）。
+3. `src/qr/encoder.test.ts` に Version 1〜26 の round-trip 網羅テスト・代表
+   フルカードテスト・密度不変テストを追加し、旧 1,024 前提のテストを追従
+   させる。
+4. 消費者側（`vcard.ts` / `intro-card-url.ts` / 各 Screen /
+   それぞれの test）のコメント・テストタイトルに残る「1,024 byte」表記を
+   「1,367 byte」へ追従させる。
+
+#### 検証手順
+
+- `bun test src/qr/ src/protocol/ src/screens/ src/app/PassportApp.test.tsx`
+  が全件 pass すること。
+- `make before-commit` が exit 0 であること（カバレッジ 100% 維持）。
+- 本プロジェクトの devDependency ではない第三者 QR エンコーダ実装
+  （`toqr`、node_modules に transitive dependency として存在）を一時
+  スクリプトで実行し、Version 1〜26 全数で本実装の出力と bit 単位で一致
+  することを確認する（実装の独立検証）。
+
+#### 進捗ログ
+
+- 2026-07-22: `toqr`（devDependency ではない transitive dependency）を
+  一時スクリプトで実行し、既存の "HELLO WORLD" Version 1・EC-M の既知
+  matrix と bit 単位で一致することを確認して比較手法を検証したうえで、
+  RS_BLOCKS_L の値と `QR_ENCODER_MAX_BYTES = 1,367`（旧 EC-M・1,024 byte が
+  選ぶ Version 26 の EC-L 容量）を独立に導出・突合した。`src/qr/encoder.ts`
+  を実装し、`bchTypeInfo` に誤り訂正レベル指標を組み込む修正
+  （`ERROR_CORRECTION_LEVEL_INDICATOR_L`）を行った。実装完了後に同スクリプトで
+  Version 1〜26 全数が `toqr` の出力と bit 単位で一致することを確認した。
+  `src/qr/encoder.test.ts` に Version 1〜26 の round-trip 網羅テスト・代表
+  フルカードテスト（日本語 280 文字自己紹介＋会社 URL 2 本＋メール、1,351 byte、
+  Issue 121 の再現ケース）・密度不変テストを追加し、消費者側（`vcard.ts` /
+  `intro-card-url.ts` / 各 Screen / test）の「1,024 byte」表記を「1,367 byte」へ
+  追従させた。`bun test src/qr/ src/protocol/ src/screens/ src/app/PassportApp.test.tsx`
+  356 pass を確認した。code-reviewer サブエージェントのレビューでブロッカーなしを
+  確認し、`make before-commit`（100% カバレッジ、1,317 pass）を exit 0 で通した。
+
+#### 振り返り
+
+**問題**: round-trip 網羅テストの実装中、Version 23 だけ jsQR による decode が
+一貫して null になった。当初は RS_BLOCKS_L の転記ミスか format info の実装
+ミスを疑った。
+
+**根本原因調査**: `toqr` で独立生成した Version 23・EC-L の matrix も同じく
+jsQR で decode に失敗する一方、EC-M / EC-Q / EC-H では同じ Version 23 でも
+decode に成功することを確認し、内容（'a' の繰り返し・擬似乱数・日本語）を
+変えても結果が変わらないことも確認した。これにより本実装の RS_BLOCKS_L や
+format info の誤りではなく、Version 23 という Version 番号自体に紐づく問題だと
+絞り込めた。jsQR（npm `jsqr`）の bundle された Version テーブルを直接読むと、
+Version 23 の `alignmentPatternCenters` が `[6, 30, 54, 74, 102]` になっており、
+ISO/IEC 18004 の正しい値 `[6, 30, 54, 78, 102]`（本実装の
+`ALIGNMENT_PATTERN_POSITIONS[22]` および `toqr` の出力と一致）と 4 番目の座標
+だけが異なっていた。手元でこの値を `78` に書き換えたコピーで decode すると
+成功し、入力とも一致することを確認し、jsQR 自身のバグだと確定した。
+
+**予防策**: `encoder.test.ts` の round-trip 網羅テストでは Version 23 のみ
+`decoded).toBeNull()` を明示的にアサートし、jsQR が将来修正された場合に
+このアサート自体が失敗して気づけるようにした。ADR-0032 に発見の経緯と
+証拠（該当ファイル・座標値・確認手順）を記録し、`/follow-up add` で
+upstream 報告・追従のタスクを残した。「テストが落ちたら自分の実装を疑う」
+だけでなく、独立した第三者実装で同じ入力を再現し、失敗が実装非依存かどうか
+切り分ける手順を早い段階で踏むことで、無関係な自己実装の修正に時間を使わず
+根本原因（依存ライブラリ側のデータ transcription error）に到達できた。

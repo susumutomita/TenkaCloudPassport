@@ -107,7 +107,7 @@ export function encodeVCard(card: IntroCard): string {
 
 /**
  * 編集画面の「vCard byte 使用量の目安表示」用。`encodeVCard` と異なり上限超過でも
- * 例外を投げず、入力中の draft がどれだけ 1,024 byte 予算に近いかをそのまま返す
+ * 例外を投げず、入力中の draft がどれだけ 1,367 byte 予算に近いかをそのまま返す
  * （Issue 79 詳細設計）。
  */
 export function vCardByteLength(card: IntroCard): number {
