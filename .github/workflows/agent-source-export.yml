@@ -1,0 +1,25 @@
+name: Agent source export
+
+on:
+  push:
+    branches:
+      - agent/on-device-conversation-agent
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Upload repository source
+        uses: actions/upload-artifact@v4
+        with:
+          name: tenkacloud-passport-source
+          path: |
+            .
+            !.git/**
+          include-hidden-files: true
+          retention-days: 1
