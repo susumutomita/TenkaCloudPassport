@@ -6183,6 +6183,183 @@ Step 名・入力が現行 EAS CLI バージョンと完全に一致するかは
 follow-up（llama.rn 取得失敗時の代替経路）と合わせて、初回実ビルド後に得られる知見を
 別途記録する運用を推奨する。
 
+### 入力中にキーボードで固定フッターがせり上がり入力欄を覆うバグ修正（Issue 117） - 2026-07-22
+
+#### 目的
+
+Issue 117（owner の実機フィードバック、iOS）。自己紹介カード作成画面
+（`src/screens/IntroCardEditScreen.tsx`）で入力中にソフトキーボードが出ると、
+`AppScreen`（`src/components/AppScreen.tsx`）の footer（Issue 93 で追加、
+`KeyboardAvoidingView` 包み）がキーボードの上へせり上がり、入力欄・ライブ
+プレビューに重なって見えなくなる。Issue 本文の設計どおり「キーボード表示中は
+固定フッターを隠す」を実装する。
+
+#### 制約
+
+- Issue 90（return/done 送りのフォーカスチェーン）・Issue 92（NFKC 正規化・
+  エラー focus）・Issue 93（段階的開示・ライブプレビュー・sticky footer）の
+  マージ済み実装の契約を壊さない。
+- `rm` / `npx` 禁止、`git add` は明示ファイルのみ、ポート 8081 は kill しない
+  （owner の実機接続中の可能性）、`ios/`・`node_modules` に触らない。
+- カバレッジ 100% 維持、日本語 BDD、No Mock。
+
+#### 設計
+
+**対象範囲: footer を持つ画面全体へ適用し、opt-in prop は追加しない**
+
+Issue 117 時点で `AppScreen` の `footer` prop を使う画面は
+`IntroCardEditScreen` のみ（`grep -rl "footer=" src` で確認）。Issue 本文は
+「`IntroCardEditScreen` でのみ有効化」と「全 footer で妥当なら全体適用」の
+どちらも許容しているが、後者を採用する。理由: 固定フッターがキーボードの
+裏へ隠れて操作不能になる、という問題は footer の用途によらず常に間違った
+挙動であり、画面ごとに opt-in させる意味のある違いがない。新しい prop
+（例: `hideFooterOnKeyboard?: boolean`）を足すと、将来 footer を使う画面が
+増えるたびに「渡し忘れると同じバグを踏む」設定になり、`AppScreen` 側で
+既定オンにする方が安全側に倒れる。既存の footer 利用画面
+（`IntroCardEditScreen` のみ）は元々キーボード表示中に問題を抱えていた側
+なので「見た目を変えない」制約に抵触しない。footer を持たない他の全 Screen
+（15 画面）は `hasFooter` が false のままなので、Keyboard listener の登録も
+`content.paddingBottom` の加算も一切走らず、既存の見た目を変えない
+（`src/components/app-screen.test.ts` で固定）。
+
+**キーボード検知: iOS のみ `will` イベントを購読し、Android は購読しない**
+
+Issue 本文が明示する `keyboardWillShow`/`keyboardWillHide` は React Native
+公式ドキュメントの記載どおり iOS 専用イベントで、Android では
+`android:windowSoftInputMode` の既定設定下では発火しない
+（`keyboardDidShow`/`keyboardDidHide` のみ）。本 Issue の実機フィードバックは
+iOS 限定であり、Android に同じ「隠す」挙動を広げると、Issue 93 が確立した
+「キーボード表示中でも footer をタップできる」（`adjustResize` による footer
+の自然な再配置、`keyboardShouldPersistTaps="handled"`）という既存挙動を
+未報告・未検証のまま壊すおそれがある。そのため `useFooterHiddenForKeyboard`
+（`AppScreen.tsx`）は `Platform.OS === 'ios'` のときだけ
+`keyboardWillShow`/`keyboardWillHide` を購読し、Android では一切購読しない
+（Issue 93 の既定挙動のまま）。
+
+**却下した代替案（Issue 本文どおり）**
+
+1. footer を `position: absolute` で画面最下部に固定する: キーボードの裏に
+   隠れて結局「閉じないと押せない」ままで、本 Issue が解決したい体験を
+   解決しない。
+2. footer を `ScrollView` の内容末尾（`children` の後）へ戻す: Issue 93 が
+   確立した「プレビューと保存ボタンが同時に見える」作成フローが崩れる
+   （保存に到達するには一番下までスクロールし直す必要が生まれる）。
+
+**`hasFooter` を Keyboard listener の依存にする（`footer` 自体にしない）**
+
+`footer` は `IntroCardEditScreen` 側で毎 render 新しく組み立てられる JSX
+であり、参照が安定しない。`useEffect` の依存配列に `footer` を直接使うと、
+footer を持つ画面で 1 キー入力するたびに listener の解除・再登録が起きる
+（無駄な購読の張り直しであり、購読が外れている一瞬に発火したイベントを
+取りこぼすレースの可能性もある）。真偽値化した `hasFooter`
+（`Boolean(footer)`、既存の `{footer ? ... : null}` と同じ truthy 判定。
+`footer={false}` 等の falsy な値を「footer なし」として扱う）を依存にする
+ことで、footer の有無が変わらない限り購読は 1 度だけになる。
+
+**footer 表示中の contentContainer 下部パディング**
+
+Issue 本文の「フッターが表示されているときに最後の入力欄が隠れないよう、
+ScrollView の contentContainer に十分な下部パディングを確保する（フッター
+高さぶん）」を、footer の実測高さ（`onLayout` → `LayoutChangeEvent`）を
+`footerHeight` state に保持し、`BASE_CONTENT_BOTTOM_PADDING + footerHeight`
+を `contentContainerStyle` へ加算する形で実装した。キーボード表示中に
+footer を DOM から外している間も、直前に測定した `footerHeight` は state に
+残したままにする（keyboard show/hide のたびに padding 値を変えると、
+その都度スクロール位置の実効範囲が変わり、入力中に体感できるガタつきに
+なるため）。footer が再表示されたときに `onLayout` が再度発火して同じ値へ
+収束するので実害はない。
+
+**テスト方針: ソーステキスト契約（この repo にレンダリング基盤がないため）**
+
+`docs/design/2026-07-22-intro-card-creation-flow.md` が debounce タイマーの
+検証で採った方針と同じ理由（React Testing Library 相当のレンダリング基盤を
+持たない）で、`Keyboard.addListener` の実際の発火・`useState` の実際の
+遷移・`onLayout` の実測値は実行時検証できない。`src/components/app-screen.test.ts`
+を新設し、他の Screen / Component と同じ「ソーステキストにパターンが存在
+するか」の契約テストで固定した。iOS 実機での最終確認は owner の手動ゲート
+（PR に明記）。
+
+#### タスク
+
+1. `src/components/app-screen.test.ts` を新設し、Red を確認する（TDD）。
+2. `src/components/AppScreen.tsx` に `useFooterHiddenForKeyboard` フックと
+   footer の実測高さぶんの `contentContainerStyle` 加算を実装し、Green に
+   する。
+3. `bun test src --coverage`（100%）・`bun run typecheck`・
+   `bun biome check .`・staged harness・`make before-commit` を通す。
+4. code-reviewer サブエージェントのレビュー → 反映。
+5. commit → push → PR（Closes Issue 117 のフル URL）→ CI watch → squash
+   マージ。
+
+#### 検証手順
+
+- `bun test src/components/app-screen.test.ts` が green（TDD Red → Green を
+  確認済み）。
+- `bun test src --coverage` で全体 100.00%／100.00%（`AppScreen.tsx` は
+  この repo の方針どおりレンダリングされないためカバレッジ計測対象外、
+  ソース契約テストで担保）。
+- `bun run typecheck` で型エラーなし。
+- `make before-commit` exit 0（`architecture_harness` を含む全ゲート）。
+- `bun run build:web`（`expo export --platform web`）が成功することを
+  確認した（Web バンドルが `AppScreen.tsx` の新しい import・hook を含めて
+  エラーなくビルドできることの確認。ポート 8081 は owner の実機接続中の
+  可能性があるため使わず、devserver は起動しなかった。react-native-web の
+  `Keyboard` は will/did いずれのイベントも発火しないスタブのため、Web での
+  実地確認はそもそも本 Issue の挙動を再現できない）。
+- iOS 実機での最終確認は**未実施**（この環境では実機が使えないため）。
+  owner の手動ゲートとして PR に明記する。
+
+#### 進捗ログ
+
+- 2026-07-22: Issue 117 本文を正本として設計を固め、`src/components/app-screen.test.ts`
+  を新設して Red を確認した後、`AppScreen.tsx` に `useFooterHiddenForKeyboard`
+  フック・footer 実測高さの `onLayout` 計測・`contentContainerStyle` への
+  加算を実装し Green にした。`bun test src --coverage`（1289 pass、全体
+  100.00%／100.00%）・`bun run typecheck`・staged harness・`make before-commit`
+  （`architecture_harness`/`harness_test`/`dup_check`/`lint_text`/`lint`/
+  `typecheck`/`test:coverage`/`build:web`）が exit 0 であることを確認した。
+
+#### 振り返り
+
+**問題**: 初回実装は、Issue 本文が明示する `keyboardWillShow`/`keyboardWillHide`
+（iOS 専用イベント）を Android でも同じ「隠す」挙動にするため
+`keyboardDidShow`/`keyboardDidHide` へ機械的に読み替えて全 Platform 適用して
+いた。また `hasFooter` の判定を `footer !== undefined && footer !== null`
+としており、`footer={false}` 等の falsy な値でも「footer あり」と誤判定する
+経路が残っていた。
+
+**根本原因**: Issue 117 の実機フィードバックは iOS 限定（本文冒頭に明記）
+だったにもかかわらず、「footer で妥当なら全体適用してよい」という Issue の
+許容を「Platform も含めて全体適用してよい」と拡大解釈した。`AppScreenProps.footer`
+の既存コメント（Issue 93、本 PR で未変更）が「Android は
+`windowSoftInputMode` の既定挙動に委ねる」とすでに明言しており、Android の
+`adjustResize` は footer を自然にキーボードの上へ再配置するため、Issue 93 で
+追加した `keyboardShouldPersistTaps="handled"`（キーボード表示中でも footer を
+タップできる）が Android では今までどおり機能していたはずだった。そこへ
+「隠す」挙動を上書きすると、Android 側だけ未報告・未検証のまま
+「キーボード表示中は footer をタップできない」退行を持ち込むところだった。
+`hasFooter` の判定も、既存の `{footer ? ... : null}`（truthy 判定）から
+`!== undefined && !== null` へ変えた必然性がないまま緩めてしまっていた。
+
+**予防策**: code-reviewer サブエージェントのレビューで両方の指摘を受け、
+(1) `useFooterHiddenForKeyboard` の購読を `Platform.OS === 'ios'` 限定に
+戻し、Android は Issue 93 の既存挙動（コメントと実装を再度一致させる）に
+留めた。(2) `hasFooter` を `Boolean(footer)` に戻し、既存の truthy 判定と
+完全に揃えた。さらに、一見冗長に見える `hasFooter && !hideFooterForKeyboard`
+（`hideFooterForKeyboard` は `hasFooter` が false なら常に false を返すため
+畳み込めそうに見える）を残す理由をコード内コメントで明示し、将来「簡略化」
+した際に footer を持たない画面へ空のボーダー付きバーが出る退行を防いだ。
+「妥当なら全体適用してよい」という許容がある場合でも、既存のコメント・
+Issue の報告範囲（今回は iOS 限定）と矛盾しないかを都度突き合わせる、
+という確認をレビュー前に自分で行うべきだった。
+
+**追記（PR 120 Codex レビュー対応、2026-07-22）**: Codex レビューで、上の
+設計節・`AppScreenProps.footer` のコメント・
+`intro-card-accessibility.test.ts:400` のテスト名が、この振り返りで直した
+最終実装（iOS 限定購読・`Boolean(footer)`・キーボード表示中は footer を隠す）
+と逆の記述のまま残っていると指摘を受け、文書と実装の齟齬を検出したうえで
+文書・テスト名を実装へ合わせて更新した。
+
 ### [Issue 119 README をデモ動画先頭のわかりやすい構成へ刷新] - 2026-07-22
 
 #### 目的
