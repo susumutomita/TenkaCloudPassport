@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
+  type LayoutChangeEvent,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -12,6 +14,65 @@ import {
 import { colors, spacing } from '../ui/theme';
 import { monoFontFamily } from '../ui/typography';
 import BrandMark from './BrandMark';
+
+/**
+ * Issue 93 の `content.paddingBottom` 既定値。footer を持つ画面
+ * （Issue 117 時点では `IntroCardEditScreen` のみ）では、この基礎値に
+ * footer の実測高さを足し込み、フッター表示中でも最後の入力欄が隠れない
+ * だけの下部余白を確保する。
+ */
+const BASE_CONTENT_BOTTOM_PADDING = 56;
+
+/**
+ * Issue 117（owner 実機フィードバック、iOS）: 入力中にソフトキーボードが
+ * 出ると、`KeyboardAvoidingView` が footer をキーボードの上まで押し上げ、
+ * 入力欄・ライブプレビューへ重なって見えなくなる。`footer` を持つ画面
+ * だけ Keyboard の show/hide を購読し、キーボード表示中は footer を隠す
+ * （閉じる、または Issue 90 の return/done 送り・`keyboardDismissMode`
+ * で再表示される）。
+ *
+ * 却下した代替案: footer を `position: absolute` で画面最下部に固定する案は、
+ * 結局キーボードの裏に隠れて「閉じないと押せない」ままで問題を解決しない。
+ * footer を `ScrollView` の内容末尾（`children` の後）へ戻す案は、Issue 93 が
+ * 定めた「プレビューと保存ボタンが同時に見える」作成フローを崩すため
+ * 却下する（`Plan.md` の Issue 117 設計節）。
+ *
+ * `footer` は JSX として毎 render 新しい参照になるため、真偽値化した
+ * `hasFooter` を依存にする（`footer` 自体を依存にすると、footer を持つ
+ * 画面で入力のたびに listener の解除・再登録が起きてしまう）。
+ *
+ * iOS 限定（code-reviewer 指摘）: 本 Issue の実機フィードバックは iOS のみで、
+ * `AppScreenProps.footer` の既存コメントが述べるとおり Android は Expo 既定の
+ * `windowSoftInputMode: "adjustResize"` により、footer が
+ * `KeyboardAvoidingView` を介さずとも自然にキーボードの上へ再配置される
+ * （`keyboardShouldPersistTaps="handled"` によりキーボード表示中でも footer を
+ * タップできる、Issue 93 の既存挙動）。iOS 専用の
+ * `keyboardWillShow`/`keyboardWillHide` を Android 向けに
+ * `keyboardDidShow`/`keyboardDidHide` へ置き換えて同じ「隠す」挙動を全体適用
+ * すると、Android では未報告かつ未検証のまま「キーボード表示中は footer を
+ * タップできない」という退行を持ち込むことになる。そのため、この hook は
+ * `Platform.OS === 'ios'` のときだけ購読し、Android の挙動は Issue 93 の
+ * ままにする。
+ */
+function useFooterHiddenForKeyboard(hasFooter: boolean): boolean {
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    if (!hasFooter || Platform.OS !== 'ios') return;
+    const showSubscription = Keyboard.addListener('keyboardWillShow', () =>
+      setKeyboardVisible(true)
+    );
+    const hideSubscription = Keyboard.addListener('keyboardWillHide', () =>
+      setKeyboardVisible(false)
+    );
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [hasFooter]);
+
+  return hasFooter && keyboardVisible;
+}
 
 interface AppScreenProps {
   readonly eyebrow: string;
@@ -44,6 +105,18 @@ export default function AppScreen({
   keyboardDismissMode,
   footer,
 }: AppScreenProps) {
+  // code-reviewer 指摘: `footer !== undefined && footer !== null` だと
+  // `footer={false}` 等の falsy な値でも「footer あり」判定になり、
+  // 中身が空のボーダー付き footer バーが描画されてしまう。既存の
+  // `{footer ? <View>...} : null}`（Issue 93）と同じ truthy 判定に揃える。
+  const hasFooter = Boolean(footer);
+  const hideFooterForKeyboard = useFooterHiddenForKeyboard(hasFooter);
+  const [footerHeight, setFooterHeight] = useState(0);
+
+  function handleFooterLayout(event: LayoutChangeEvent): void {
+    setFooterHeight(event.nativeEvent.layout.height);
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -51,7 +124,12 @@ export default function AppScreen({
         style={styles.keyboardAvoiding}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            hasFooter
+              ? { paddingBottom: BASE_CONTENT_BOTTOM_PADDING + footerHeight }
+              : null,
+          ]}
           keyboardDismissMode={keyboardDismissMode}
           keyboardShouldPersistTaps="handled"
         >
@@ -66,7 +144,16 @@ export default function AppScreen({
           <Text style={styles.description}>{description}</Text>
           <View style={styles.body}>{children}</View>
         </ScrollView>
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
+        {/* `hasFooter &&` は一見 `hideFooterForKeyboard` に畳み込めそうだが
+            省略しない: `hideFooterForKeyboard` は footer が無い画面でも
+            常に `false`（`hasFooter && keyboardVisible` の結果）を返すため、
+            `hasFooter` を外すと footer を持たない画面にまで空の
+            `styles.footer`（border-top 付き）バーが描画されてしまう。 */}
+        {hasFooter && !hideFooterForKeyboard ? (
+          <View onLayout={handleFooterLayout} style={styles.footer}>
+            {footer}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -93,7 +180,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     maxWidth: 680,
     padding: spacing.lg,
-    paddingBottom: 56,
+    paddingBottom: BASE_CONTENT_BOTTOM_PADDING,
     width: '100%',
   },
   brandRow: {
