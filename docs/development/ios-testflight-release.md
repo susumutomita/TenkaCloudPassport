@@ -44,7 +44,14 @@ Expo アカウントを使って一度だけ行う。
    **Settings > Secrets and variables > Actions** に `EXPO_TOKEN` として登録する。
    このトークンを `eas.json` や workflow ファイルへ直書きしない。
 3. [App Store Connect](https://appstoreconnect.apple.com) でアプリ枠を作成する
-   （Bundle ID `cloud.tenka.passport`、初回のみ）。
+   （Bundle ID `cloud.tenka.passport`、初回のみ）。作成後、General > App Information（または
+   アプリのダッシュボード URL `https://appstoreconnect.apple.com/apps/<この数字>/`）に表示される
+   数値の App ID を控える。[`eas.json`](../../eas.json) の
+   `submit.production.ios.ascAppId` はプレースホルダ
+   `"REPLACE_WITH_APP_STORE_CONNECT_APP_ID"` のままにしてあるので、実際の数値へ書き換えて
+   commit・push する（`ascAppId` は App Store Connect 上の公開 ID であり、`appleId` や
+   API キーのような秘密情報ではないため repository に含めてよい）。この置き換えをしないと
+   `eas submit --non-interactive` が対象アプリを特定できず失敗する。
 4. ローカルで初回だけ、**`--non-interactive` を付けずに** 次を対話実行し、Apple の署名用
    認証情報（Distribution Certificate / Provisioning Profile）を EAS のサーバ側に預ける。
    `bun run build:ios:testflight`（`package.json` 参照）は CI 専用に `--non-interactive` を
@@ -70,8 +77,9 @@ Expo アカウントを使って一度だけ行う。
    `Set up your project to use App Store Connect API` の案内に従い Key ID / Issuer ID /
    `.p8` ファイルを入力する。アップロード後は `.p8` ファイル自体をローカルにも CI にも残さない
    （EAS のサーバ側にだけ保存される）。
-   [`eas.json`](../../eas.json) の `submit.production.ios` は `appleId` / `ascAppId` /
-   `appleTeamId` を書かず意図的に空オブジェクトのままにしてある。理由は
+   [`eas.json`](../../eas.json) の `submit.production.ios` は `appleId` / `appleTeamId` /
+   API キーのパスを書かず、非対話実行に必須の `ascAppId`（非秘密の数値 ID、上記手順 3 で
+   置き換え済みのはず）だけを持つ。理由は
    [ADR-0031](../adr/0031-eas-testflight-automated-release.md) を参照する。owner がローカルの
    `bun run submit:ios` で既存 Build を手動再提出したい場合も同じ資格情報を再利用できる。
 6. 以降はバージョンタグを push するだけで TestFlight に自動で上がる。TestFlight タブで
@@ -98,9 +106,12 @@ gh run watch <run-id>
 
 ビルド失敗時は EAS のダッシュボード（`https://expo.dev`）のビルドログで詳細を確認する。
 再実行したいときはタグを打ち直さず `workflow_dispatch` で同じワークフローを再実行できる。
+`workflow_dispatch` は指定した ref（未指定なら既定ブランチ）を checkout するため、
+**必ず `--ref` で対象タグを明示する**。省略すると、タグ push 後に `main` が進んでいた場合に
+意図しない commit を Build してしまう。
 
 ```bash
-gh workflow run ios-release.yml
+gh workflow run ios-release.yml --ref v0.1.0
 ```
 
 ## npm hook ではなく EAS Custom Build を使う理由
@@ -152,7 +163,9 @@ warning を出して以降のステップをすべて skip する。owner が上
 
 ## 禁止事項
 
-- `eas.json` に `appleId` / `ascAppId` / `appleTeamId` / API キーのパス等を直書きしない。
+- `eas.json` に `appleId` / `appleTeamId` / API キーのパス等を直書きしない。`ascAppId`
+  は App Store Connect 上で公開される数値 ID であり秘密情報ではないため対象外
+  （上記手順 3 参照）。
 - `EXPO_TOKEN` や Apple の認証情報を GitHub Actions の `run:` ログに出力しない。
 - ワークフローに Apple の秘密情報（証明書、Provisioning Profile、API キー）を持ち込まない。
   署名は EAS が管理する認証情報だけで完結させる。

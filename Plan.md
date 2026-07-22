@@ -6021,6 +6021,21 @@ push を起点に GitHub Actions が EAS Build から EAS Submit までを非対
 12. follow-up 1 件を記録する。EAS Build のクラウド環境で `llama.rn` xcframework 取得が
     失敗する場合の代替経路（Development Build のローカル Build を TestFlight にアップロード）。
 
+**訂正（2026-07-22、実装・レビューを経て以下が最終設計。原文は変更せず残す）**:
+
+- タスク 3: 最終的に `eas-build-post-install` も不採用と判明した（iOS では `pod install`
+  完了後に実行されるため）。実際に採用したのは EAS Custom Build（`.eas/build/*.yml`）で
+  `eas/prebuild` の直後・`pod install` の直前に `make setup-llama-native` を差し込む方式。
+  詳細は下記進捗ログと ADR-0031 Decision 3。
+- タスク 4: `eas.json` の submit profile はコメント方式ではなく strict JSON にした
+  （Biome の `.json` 厳格パースと衝突したため）。`ascAppId` は非秘密の数値 ID のため
+  プレースホルダとして commit している（`appleId` / `appleTeamId` / API キーのみ除外）。
+  詳細は下記進捗ログ。
+- タスク 6: `package.json` に `eas-build-post-install` は最終的に定義していない
+  （Custom Build へ移行したため npm lifecycle hook 自体を使わない）。
+- タスク 8: `ios-testflight-release.md` の該当節は「post-install hook 経由」ではなく
+  「EAS Custom Build 経由」で `make setup-llama-native` を実行する旨に書き換えている。
+
 #### 検証手順
 
 - `make before-commit` exit 0（`architecture_harness` / `harness_test` /
@@ -6104,7 +6119,66 @@ push を起点に GitHub Actions が EAS Build から EAS Submit までを非対
   development（simulator）プロファイルは Store 提出を伴わないため対象外とした。
   ADR-0031 Decision 3 と runbook にも追記し、`make before-commit` を再実行して exit 0 を
   確認した。
+- 2026-07-22: commit 直後に `.git/config` の `[user]` セクションが
+  `Release Test <release@example.test>`（このセッション開始前からの残留設定、原因不明）に
+  なっていたと判明し、1 コミットの author が репо の慣例（`bull <oyster880@gmail.com>`）と
+  異なる状態でできてしまった。`git commit --amend` は auto mode classifier に
+  ブロックされた（「amend より新規コミットを使う」という repo 方針を機械的に強制している
+  ものと判断した）ため、rebase・reset 等の履歴書き換えは行わず、ローカルの `user.name` /
+  `user.email` だけをこのセッション残り分について修正し、PR 本文に author 不一致の事実を
+  明記して owner の判断に委ねた。
+- 2026-07-22: PR 113 作成後、CI（`ci` / CodeQL / GitGuardian / Workers Builds）と CodeRabbit
+  レビューがすべて green で完了した。CodeRabbit から指摘 4 件を受けた。
+  1. `ios-release.yml` のタグ glob `v[0-9]+.[0-9]+.[0-9]+` が `v1.2.3` にマッチしないという
+     指摘は、GitHub 公式ドキュメントの `filter-pattern-cheat-sheet`（`v[12].[0-9]+.[0-9]+` を
+     semver マッチ例として明示）と一致する構文であり、誤指摘と判断して採用しなかった
+     （CodeRabbit 自身のツール実行ログが複数回 "Length of output: 209" で途切れており、
+     十分な裏取りができていない状態で結論を出したと見られる）。ただし
+     `workflow_dispatch` が明示 ref なしでは既定ブランチを checkout する点は正当な指摘のため、
+     runbook の再実行手順に `--ref <tag>` を必須で明記する形で対応した。
+  2. `submit.production.ios` が空で `eas submit --non-interactive` が対象アプリを解決できず
+     失敗するという指摘は、Expo 公式ドキュメント（`ascAppId` は非対話提出に必須、かつ
+     App Store Connect 上で公開される非秘密の数値 ID）で裏取りでき、正しい指摘と判断した。
+     `eas.json` にプレースホルダ `"REPLACE_WITH_APP_STORE_CONNECT_APP_ID"` を追加し、
+     owner の一度きり手作業（App Store Connect でアプリ枠作成後、実際の数値へ書き換えて
+     commit）として runbook・ADR・PR 本文に追記した。`appleId` / `appleTeamId` / API キーは
+     引き続き秘密情報として除外する。
+  3-4. Plan.md の 制約・タスク 3/4/6/8 が旧設計（JSON5 コメント、`eas-build-post-install`）の
+     ままで最終設計と食い違っているという指摘、および 振り返り が未記入という指摘は、
+     どちらも正しい。原文は削除せず「訂正」注記を追加し、本振り返りを追記して対応した。
 
 #### 振り返り
 
-（PR 作成・マージ後に追記）
+**問題**: Issue 108 本文が提案した実装方針（`eas-build-pre-install`/`eas-build-post-install`
+npm hook で `llama.rn` の Native artifact を取得する）は、iOS の EAS Build では
+`pod install` 完了後に `post-install` が実行されるという事実と噛み合わず、そのままでは
+`llama.rn` の `vendored_frameworks` が解決されない壊れた Build になるところだった。
+さらにその是正（EAS Custom Build への切り替え）自体も、EAS の既定 Step 構成に含まれる
+`eas/configure_ios_version` を含め忘れるという二次的な欠陥を生み、`appVersionSource: "remote"`
+が実際には適用されない状態になっていた。加えて `eas submit` の非対話実行に必須の
+`ascAppId` を、他の秘密情報（`appleId` / `appleTeamId` / API キー）と同列に「プレースホルダに
+すべき値」として扱ってしまい、空のまま出荷しかけた。
+
+**根本原因**: (1) Issue 本文の実装方針を一次情報（Expo 公式ドキュメントの hook 実行順序、
+CocoaPods の `vendored_frameworks` 解決タイミング）で検証せずに実装へ進めかけた。
+実際には Sonnet 自身の作業指示で「context7 で最新仕様を確認してから書く」と明記されており、
+最初の設計時点ではその確認が npm hook の存在有無に留まり、iOS 固有の実行順序までは
+検証していなかった。(2) Custom Build のような「既定の振る舞いを手動で組み直す」機能を使う際、
+既定 Step 構成の全体（`eas/configure_ios_version` を含む）を機能一覧と突き合わせず、
+問題になった 1 点（Native artifact 取得）だけを直した。(3) 「秘密情報は commit しない」という
+制約を対象を精査せず `appleId`/`ascAppId`/`appleTeamId` の 3 つに一律適用してしまい、
+`ascAppId` が実際には非秘密の識別子であり、かつ非対話実行に必須という性質の違いを
+見落とした。
+
+**予防策**: 外部サービスの CI 連携機能（EAS Build hook、Custom Build 等）を採用する際は、
+「いつ実行されるか」をプラットフォームごとに一次ドキュメントで確認し、既定の振る舞いを
+手動再構成する場合は既定 Step の全量（省略可能 Step も含め）を確認してから組む。
+「直書き禁止」系の制約は、対象値ごとに実際に秘密か・非対話実行に必須かを個別に検証してから
+適用する（一律のグルーピングを疑う）。2 回の code-reviewer レビューと 1 回の CodeRabbit
+レビューがこれらを段階的に検出できたことは、複数レビューパスの価値を裏付ける一方、
+実ビルドを一度も実行していない（owner の Apple 認証・課金を伴うため）ため、
+`eas/configure_ios_version` の既定入力が実際に意図通り解決されるか、Custom Build の
+Step 名・入力が現行 EAS CLI バージョンと完全に一致するかは、owner が初回ビルドを実行する
+までコードレビューと公式ドキュメント参照による裏取りの範囲でしか確認できていない。
+follow-up（llama.rn 取得失敗時の代替経路）と合わせて、初回実ビルド後に得られる知見を
+別途記録する運用を推奨する。
