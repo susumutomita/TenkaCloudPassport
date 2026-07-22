@@ -397,7 +397,7 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     ]);
   });
 
-  it('編集画面の Save / Backup / Settings ボタンは AppScreen の footer prop へ渡し、キーボード表示中も操作できる位置に固定する（Issue 93）', async () => {
+  it('編集画面の Save / Backup / Settings ボタンは AppScreen の footer prop へ渡し、キーボード非表示時に sticky footer の操作可能な位置に存在する（Issue 93、キーボード表示中の footer 非表示契約は Issue 117 の app-screen.test.ts で検証）', async () => {
     const text = await source('IntroCardEditScreen.tsx');
 
     expect(text).toContain('footer={');

@@ -68,6 +68,11 @@ function useFooterHiddenForKeyboard(hasFooter: boolean): boolean {
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
+      // Codex 指摘（low）: footer が truthy → falsy に変わる間にキーボードが
+      // 閉じずに終わると、次に truthy へ戻ったとき古い keyboardVisible が
+      // 残り得る。購読解除と同時に false へリセットし、次回 truthy 時は
+      // 必ず「キーボード非表示」から再開させる。
+      setKeyboardVisible(false);
     };
   }, [hasFooter]);
 
@@ -90,9 +95,13 @@ interface AppScreenProps {
    * Issue 93: 保存・生成ボタン等を `ScrollView` の外（画面下部）へ固定したい
    * 画面向けの optional prop。渡さない既存の全 Screen は今までどおり
    * `children` の末尾にボタンを並べるだけで、レイアウトは変わらない。
-   * `KeyboardAvoidingView` で包み、キーボード表示中も footer が隠れないように
-   * する（iOS は `padding` behavior、Android は `windowSoftInputMode` の既定
-   * 挙動に委ねる。RN の標準パターン）。
+   * `KeyboardAvoidingView` で包む（iOS は `padding` behavior、Android は
+   * `windowSoftInputMode` の既定挙動に委ねる。RN の標準パターン）。Issue 117
+   * 以降、iOS はキーボード表示中に footer をレンダーツリーから外して隠し
+   * （キーボードが閉じると再表示する）、Android は Issue 93 の既定挙動の
+   * まま footer がキーボードの上へ自然に再配置される（下の
+   * `useFooterHiddenForKeyboard` を参照）。footer 表示中の下部 padding は
+   * `hasFooter` の有無だけに依存し、キーボードの表示状態では変わらない。
    */
   readonly footer?: ReactNode;
 }

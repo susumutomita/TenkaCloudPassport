@@ -6222,13 +6222,19 @@ Issue 117 時点で `AppScreen` の `footer` prop を使う画面は
 `content.paddingBottom` の加算も一切走らず、既存の見た目を変えない
 （`src/components/app-screen.test.ts` で固定）。
 
-**キーボード検知: iOS は `will`、Android は `did` に出し分ける**
+**キーボード検知: iOS のみ `will` イベントを購読し、Android は購読しない**
 
 Issue 本文が明示する `keyboardWillShow`/`keyboardWillHide` は React Native
 公式ドキュメントの記載どおり iOS 専用イベントで、Android では
 `android:windowSoftInputMode` の既定設定下では発火しない
-（`keyboardDidShow`/`keyboardDidHide` のみ）。`Platform.OS === 'ios'` で
-イベント名を出し分ける（`useFooterHiddenForKeyboard`、`AppScreen.tsx`）。
+（`keyboardDidShow`/`keyboardDidHide` のみ）。本 Issue の実機フィードバックは
+iOS 限定であり、Android に同じ「隠す」挙動を広げると、Issue 93 が確立した
+「キーボード表示中でも footer をタップできる」（`adjustResize` による footer
+の自然な再配置、`keyboardShouldPersistTaps="handled"`）という既存挙動を
+未報告・未検証のまま壊すおそれがある。そのため `useFooterHiddenForKeyboard`
+（`AppScreen.tsx`）は `Platform.OS === 'ios'` のときだけ
+`keyboardWillShow`/`keyboardWillHide` を購読し、Android では一切購読しない
+（Issue 93 の既定挙動のまま）。
 
 **却下した代替案（Issue 本文どおり）**
 
@@ -6246,8 +6252,9 @@ Issue 本文が明示する `keyboardWillShow`/`keyboardWillHide` は React Nati
 footer を持つ画面で 1 キー入力するたびに listener の解除・再登録が起きる
 （無駄な購読の張り直しであり、購読が外れている一瞬に発火したイベントを
 取りこぼすレースの可能性もある）。真偽値化した `hasFooter`
-（`footer !== undefined && footer !== null`）を依存にすることで、footer の
-有無が変わらない限り購読は 1 度だけになる。
+（`Boolean(footer)`、既存の `{footer ? ... : null}` と同じ truthy 判定。
+`footer={false}` 等の falsy な値を「footer なし」として扱う）を依存にする
+ことで、footer の有無が変わらない限り購読は 1 度だけになる。
 
 **footer 表示中の contentContainer 下部パディング**
 
@@ -6345,3 +6352,10 @@ footer を DOM から外している間も、直前に測定した `footerHeight
 「妥当なら全体適用してよい」という許容がある場合でも、既存のコメント・
 Issue の報告範囲（今回は iOS 限定）と矛盾しないかを都度突き合わせる、
 という確認をレビュー前に自分で行うべきだった。
+
+**追記（PR 120 Codex レビュー対応、2026-07-22）**: Codex レビューで、上の
+設計節・`AppScreenProps.footer` のコメント・
+`intro-card-accessibility.test.ts:400` のテスト名が、この振り返りで直した
+最終実装（iOS 限定購読・`Boolean(footer)`・キーボード表示中は footer を隠す）
+と逆の記述のまま残っていると指摘を受け、文書と実装の齟齬を検出したうえで
+文書・テスト名を実装へ合わせて更新した。
