@@ -5864,3 +5864,95 @@ MIT から Apache License 2.0 へ変更する。法的判断を伴うため、Is
 #### 振り返り
 
 （PR 作成・マージ後に追記）
+
+### [Issue 107 LP を新デザインへ刷新] - 2026-07-22
+
+#### 目的
+
+owner が claude.ai/design で作成した新 LP デザイン（`TenkaCloud Passport Landing.dc.html`、
+注釈付き参照は scratchpad の `landing.dc.html`）を `site/index.html` / `site/en/index.html` に
+実装する。sticky nav・受け手ビュー hero（ブラウザ画面モック + QR フォン）・ロードマップの
+バッジ行・プライバシー 4 カードなど構成を刷新しつつ、外部リクエストゼロ・fail-closed 語彙・
+OGP/hreflang/favicon を維持する。
+
+#### 制約
+
+- Google Fonts 等の外部リクエストを追加しない。システムフォント（`--sans` / `--mono`）のみ。
+- 設計ツール固有要素（`x-dc` / `helmet` / `sc-if` / `data-dc` script / `style-hover` 属性）は
+  実装に持ち込まない（そもそも素の HTML/CSS で再構築するため発生しない）。
+- owner 変更 2 点を必ず反映する。
+  1. ヒーロー h1 は全部墨（`--ink`）。summit オレンジは矢印・番号・アイコン等のアクセントのみ。
+  2. 運営主体（合同会社 BULL）表記は追加しない・削除する。
+- 受け手ビューのアドレス `card.tenkacloud.com/u/tanaka` は装飾。実 viewer の `/c/#<fragment>`
+  方式や `src/` は変更しない。
+- 既存の `<title>` / meta description / favicon / OGP / hreflang / canonical は維持する。
+- `site/c/`（Web Export 成果物）・`src/`・`ios/`・`node_modules` は触らない。
+- `rm` / `npx` 禁止、`git add` は明示ファイルのみ。
+
+#### タスク
+
+1. Issue 107 本文とデザイン原本注釈を読み、現行 `site/index.html` / `site/en/index.html` の
+   トークン・meta を確認する（完了）。
+2. ブランチ `feat/lp-redesign-landing` を作成する（完了）。
+3. `site/index.html` を新デザイン構成で書き直す。sticky nav / hero（受け手ビュー + QR フォン）/
+   NOT 3 カード / How it works 4 ステップ / Roadmap バッジ行 / Privacy 4 カード（✓ アイコン）/
+   Status 表 / Try it ダークパネル / Footer 3 カラム + MRZ。
+4. `site/en/index.html` を同一構成・同一トークンで英訳する（README.en.md の語彙に合わせる）。
+5. ローカル配信（9000 番台）+ Playwright で ja/en のフルページスクリーンショットと
+   `browser_network_requests` による外部リクエストゼロを確認する。nav アンカー・EN/JA
+   相互リンクも確認する。
+6. `make before-commit` を通す。
+7. code-reviewer レビュー（外部リクエスト混入・fail-closed 逸脱・BULL 表記・日英同義・
+   OGP/hreflang 維持を重点確認）。
+8. commit → push → PR（Closes 本 Issue のフル URL）→ CI → squash merge →
+   `card.tenkacloud.com` の反映を curl で確認する。
+
+#### 検証手順
+
+- ローカルサーバ（例: `python3 -m http.server 9001 --directory site`）+ Playwright MCP で
+  ja/en のスクリーンショットを撮り、レイアウト崩れがないことを確認する。
+- `browser_network_requests` で `site/index.html` と `site/en/index.html` 読み込み時の
+  リクエストが自ホスト（ローカルサーバ）のみであることを確認する。
+- `grep -n "BULL"` で site 配下に運営主体表記が残っていないことを確認する。
+- `grep -n "fonts.googleapis\|fonts.gstatic"` で外部フォント読み込みがないことを確認する。
+- `make before-commit` exit 0。
+
+#### 進捗ログ
+
+- 2026-07-22: `site/index.html` / `site/en/index.html` を新デザインで書き直した。
+  sticky nav（backdrop blur）・hero（受け手ブラウザモック + QR フォン、見出し全部墨、
+  BULL 表記なしの小注記）・使い方 4 ステップ・プライバシー 4 カード（✓ アイコン）・
+  手元で動かすを実装した。
+- 2026-07-22: Playwright ローカル配信で確認中、hero h1 が 3 行に折り返す・QR フォンが
+  recipient-mock のボタン列を覆い隠す 2 点の見た目崩れを見つけ、h1 の font-size clamp
+  とグリッド比率、qr-phone のサイズ・オーバーラップ量を調整して解消した。
+- 2026-07-22: owner フィードバックにより構成変更。Roadmap セクション・Current status
+  （fail-closed 状態表）セクション・「これは、何ではないか」セクションの 3 つを削除し、
+  nav（ロードマップリンク削除）・footer Product 列（ロードマップリンク削除）を追随させた。
+  最終構成は nav → hero → 使い方 → プライバシー → 手元で動かす → footer の 6 ブロックに
+  確定。fail-closed の姿勢は「手元で動かす」節に実機検証 Not run の注記を軽く残す形で維持した。
+  未使用になった CSS（.not-grid・ol.roadmap 系・table.status 系）も削除した。
+- 2026-07-22: ローカルサーバ（`python3 -m http.server 9001 --directory site`）+
+  Playwright MCP で ja/en のフルページスクリーンショットを確認した。
+  `browser_network_requests` で ja/en とも読み込みリクエストが自ホストの HTML 1 件のみで
+  あることを確認した（外部リクエストゼロ）。モバイル幅（390px）で `scrollWidth ===
+  clientWidth` を確認し横スクロールが出ないことを確認した。nav アンカー（#how / #privacy /
+  #run）と EN/JA 相互リンク（`en/`・`../`）が 200 で解決することを確認した。
+  `grep -n "BULL"` と `grep -n "roadmap\|status\|NOT /"` で該当なしを確認した。
+- 2026-07-22: `make before-commit` の `lint` ステップで Biome
+  `lint/a11y/noSvgWithoutTitle` が privacy カードの ✓ アイコン SVG 8 件（ja/en 各 4 件）
+  で発生した。`aria-hidden="true"` が親 `<span>` にしか付いておらず `<svg>` 自体に
+  付いていなかったのが原因。`<svg>` 要素に直接 `aria-hidden="true"` を追加して解消し、
+  `make before-commit` exit 0 を確認した（`noDescendingSpecificity` 警告は main に
+  既存のもので、今回の変更で件数はむしろ減少した）。
+- 2026-07-22: スクリーンショット PNG が誤って repo ルートに保存されたため、`rm` を使わず
+  scratchpad へ `mv` して作業ツリーをクリーンに戻した。
+- 2026-07-22: code-reviewer サブエージェントによるレビューを実施した。ブロッカーは
+  なし。指摘 1 件（削除した状態表バッジ由来の未使用 CSS カスタムプロパティ
+  `--success-text` / `--warning-text` / `--blocked-text` が `:root` に残っていた）を
+  同 PR で修正し、`src/ui/theme.ts` との対応コメントも実態に合わせて更新した。
+  修正後に `make before-commit` exit 0 を再確認した。
+
+#### 振り返り
+
+（PR 作成・マージ後に追記）
