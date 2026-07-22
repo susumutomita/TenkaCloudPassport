@@ -6497,3 +6497,81 @@ README に組み直す（Product Hunt 準備）。Contributor / Native 開発者
   修正後、`bun textlint README.md` / `README.en.md`、
   `bun test scripts/oss-alpha-release-docs.test.ts`（9 pass）、
   `make before-commit`（exit 0）を再実行してすべて green を確認した。
+
+### [Issue 119 README PR の Codex レビュー指摘解消] - 2026-07-22
+
+#### 目的
+
+PR https://github.com/susumutomita/TenkaCloudPassport/pull/122 （README.md /
+README.en.md 刷新、Issue 119）に対する Codex レビュー指摘（High 2 件・Medium 1 件・
+Low 1 件）を解消する。あわせて、先に PR 120（Issue 117）が main へマージされたことで
+生じた Plan.md のマージ衝突を解消する。
+
+#### 制約
+
+- 対象は README.md / README.en.md / Plan.md のみ。src/、site/ は変更しない。
+- doc-style（文末「。」・日英間半角スペース・絵文字と太字の併用回避）を守り、
+  `bun textlint README.md` / `README.en.md` を通す。
+- `make before-commit` を exit 0 まで通す（カバレッジ 100% 維持、
+  `scripts/oss-alpha-release-docs.test.ts` の 2,800 字ウィンドウ契約を壊さない）。
+- git add は明示ファイル（README.md / README.en.md / Plan.md）のみ。
+
+#### タスク
+
+1. Plan.md の衝突（PR 120 の振り返り追記と本 PR の README 刷新エントリを両方が
+   追記したことによる衝突）を、両方の内容を残す形で解消する。
+2. High 1: 「データが出るのは手動 JSON エクスポートだけ」という誤記を、QR の URL
+   フラグメントに自己紹介データを載せて相手に渡す実装（ADR-0027、
+   docs/privacy/data-inventory.md）に合わせて ja/en とも書き直す。
+3. High 2: 連絡先追加が「どの端末でも可能」と読める記述に、iOS/Safari のみ確認済み・
+   Android は `.vcf` を保存してから開く 1 手間が必要で未検証・SNS アプリ内ブラウザでは
+   `.vcf` の保存自体が失敗しうる、という注意書きを ja/en に追加する
+   （site/c/index.html の Blob + `.vcf` ダウンロード実装が根拠）。
+4. Medium: README.en.md を README.md と同義・同構成へ揃える。Expo Go 手順を
+   `make install_ci` + `bun run start` から `make start`（自動依存インストール・
+   `--go` の説明を含む）へ揃え、distribution-tier 段落（Pilot 配布 Tier と Scale Gate）
+   と Lounge データ保持境界の 1 文を en に補い、「### Architecture」と
+   「### 正本と運用文書」を ja と同じく別見出しに分割する
+   （follow-up 01KY53BB2A9M2EBYF1DGK4T3XV を解消）。
+5. Low: 英語リンクテキスト直後に日本語助詞が続く箇所（`)を`・`)が` 等、9 箇所）に
+   半角スペースを挿入する。
+6. `bun textlint README.md` / `README.en.md`、`make before-commit` を実行して
+   exit 0 を確認する。
+
+#### 検証手順
+
+- `bun textlint README.md` と `bun textlint README.en.md` がいずれもエラー 0 で終わる。
+- `bun test scripts/oss-alpha-release-docs.test.ts` が 9 件 pass する
+  （2,800 字ウィンドウ契約を壊していないことの確認）。
+- `make before-commit` が exit 0 になる。
+- README.md と README.en.md の見出し構成が 1:1 で一致することを目視確認する。
+
+#### 進捗ログ
+
+- 2026-07-22: 隔離 worktree で Plan.md の衝突（HEAD 側の Issue 119 エントリと
+  origin/main 側の Issue 117 エントリ）を、両方を保持する形で解消し merge commit を
+  作成した（この worktree に node_modules が未インストールで jscpd が無く
+  pre-commit hook が一度失敗、`make install` で解消して再commit した）。
+- 2026-07-22: High 1 / High 2 / Medium / Low の指摘を ja/en 双方に反映した。Medium の
+  Architecture 分割で新設した英文中の "session" という語が `spellcheck-tech-word`
+  （`session => セッション`）ルールに引っかかり textlint が落ちたため、
+  "the host ending the Lounge" に言い換えて回避した（同ルールは
+  docs/research/consent-script.en.md 等の既存ファイルでも同様に落ちる、
+  リポジトリ既知の英文誤検知であることを確認した上での回避であり、ルール自体は
+  変更していない）。
+- 2026-07-22: `bun textlint README.md` / `README.en.md`（各 0 エラー）、
+  `bun test scripts/oss-alpha-release-docs.test.ts`（9 pass）、`make before-commit`
+  （exit 0）をすべて確認した。
+
+#### 振り返り
+
+**問題**: なし。指摘の内容が具体的で、参照先の ADR・実装ファイルとも整合していたため
+大きな手戻りは発生しなかった。
+
+**根本原因**: 該当なし。
+
+**予防策**: `spellcheck-tech-word` ルールが英語ファイルに対しても「英単語 → カタカナ」
+提案を出す（"session" 等）という repo 既知の誤検知があるため、英語ドキュメントの
+新規追加文で textlint が落ちた場合は、まず該当語が英語として不自然かどうかではなく、
+このルール由来の false positive でないかを疑い、同義語への言い換えで回避できないかを
+検討してから対処する。

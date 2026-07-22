@@ -20,8 +20,13 @@ your Intro Card page, and adding you to contacts stays optional.
 - Once saved, it shows a real QR code (a URL to your Intro Card page) that a standard camera can scan.
   Scanning it opens the page in the other person's browser; adding you to contacts is an optional action they
   choose inside that page.
-- No server and no account are required. The only way data leaves the device is a manual JSON export you
-  perform yourself.
+- Viewing the card itself works the same on iOS and Android. Adding to contacts has been verified only on
+  iPhone/Safari. On Android, it requires one extra step—save the `.vcf` file, then open it—and remains
+  unverified. In in-app browsers for SNS apps such as LINE, X, and Instagram, saving the `.vcf` file may fail
+  entirely, so adding the contact may not work.
+- No account is required, and no server stores the card. To share it, you display a QR code whose URL
+  fragment contains the Intro Card data, and the recipient scans it. The fragment is not sent to the server.
+  Manual JSON backup is a separate owner-initiated export path.
 - The existing Pet / Lounge / Bridge code and tests are kept but removed from the default screens. They are
   expected to return in roadmap Step 4 (a concept for on-device agents finding a connection). See the Roadmap
   section on the landing page for details.
@@ -117,13 +122,15 @@ as `Not run`.
 #### 3. Expo Go
 
 ```bash
-make install_ci
-bun run start
+make start
 ```
 
-Scan Metro's QR from Expo Go on the same network and confirm that the first screen appears. Expo Go cannot add arbitrary
-custom native code, so Local LLM and real Nearby Transport are outside this path. If connectivity cannot be recovered,
-keep this path as `Not run` and return to Web.
+Install Expo Go on your phone, connect it to the same network as your Mac, and scan the QR code shown in
+the terminal with Expo Go. `make start` installs dependencies first if they are missing, then overrides
+expo-dev-client's default to start the dev server in Expo Go mode (`--go`). Expo Go cannot add arbitrary
+custom native code, so Local LLM and real Nearby Transport are outside this path. If you cannot connect,
+check the network prerequisites, and if that does not resolve it, keep this path as `Not run` and return to
+Web.
 
 #### 4. Native development build
 
@@ -133,6 +140,10 @@ the release matrix.
 
 Read [iOS TestFlight Automated Release](./docs/development/ios-testflight-release.md) for the tag-push-to-TestFlight
 pipeline (EAS Build + EAS Submit via GitHub Actions).
+
+Distribution follows the [Pilot Distribution Tiers and Scale Gate](./docs/design/distribution-tiers.md): Tier A
+for Web / Expo Go, Tier B for a small number of physical devices, and Tier C for continuous distribution to
+non-developers. Do not present Local LLM or Nearby Transport as working in Tier A.
 
 ### Reproduce a draft source candidate
 
@@ -152,12 +163,20 @@ checksums. The output path must not exist yet; symlinks and existing candidates 
 distribute partial output or a checksum mismatch. Quarantine it and retry with another uncreated path. See the
 [Source Release Runbook](./docs/development/source-release.md).
 
-### Architecture and canonical documents
+### Architecture
 
-[Architecture Overview](./docs/architecture/overview.md) provides both a diagram and an equivalent text description.
-The pure TypeScript Domain does not import React Native, Storage, Transport, or model runtimes. The App layer calls
-Ports, and platform adapters implement external capabilities. Web and Expo Go use the Rules Provider. Local LLM and
-real Nearby Transport are not supported capabilities on the default branch.
+[Architecture Overview](./docs/architecture/overview.md) provides both a diagram and an equivalent text
+description of the dependency direction across Domain, Agent Runtime, Rules / Local LLM, Storage, QR, and
+Nearby Transport. The current highlights are:
+
+- The pure TypeScript Domain does not import React Native, Storage, Transport, or model runtimes.
+- The App layer calls Ports, and platform adapters implement external capabilities.
+- Web and Expo Go use the Rules Provider.
+- Local LLM and real Nearby Transport are not supported capabilities on the default branch.
+- Lounge-derived data is never persisted; it is discarded at the earliest of leaving, the host ending the
+  Lounge, or the 20-minute timeout.
+
+### Canonical documents
 
 - [Concept](./CONCEPT.md) / [Product Contract](./docs/product/product-contract.md) / [Glossary](./docs/product/glossary.md)
 - [Privacy Data Inventory](./docs/privacy/data-inventory.md) / [Retention](./docs/privacy/retention-policy.md)
