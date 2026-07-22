@@ -1,0 +1,39 @@
+# EAS Custom Build config for the "development" iOS build profile (Simulator only, no signing).
+#
+# なぜ EAS の既定ステップ (npm hooks: eas-build-pre-install / eas-build-post-install) ではなく
+# Custom Build を使うか:
+# `llama.rn` の Podspec (node_modules/llama.rn/llama-rn.podspec) は
+# `s.vendored_frameworks = "ios/rnllama.xcframework"` を指定するが、CocoaPods は
+# `pod install` の時点でこの File が存在しないと参照を解決できない (存在しない glob は
+# 空扱いになり、later の link 時に undefined symbol になる)。EAS Build の
+# `eas-build-post-install` npm hook は iOS では `pod install` の**後**に実行されるため
+# 手遅れであり、`eas-build-pre-install` は `npm install` の**前**に実行されるため
+# `node_modules/llama.rn` 自体がまだ存在せず失敗する (scripts/setup-llama-native.sh は
+# node_modules/llama.rn/install/download-native-artifacts.js に依存する)。
+# どちらの npm hook も `npm install` 完了後・`pod install` 実行前という必要な window に
+# 一致しないため、Custom Build の Step 順序で明示的にその window へ差し込む。
+# 詳細は docs/development/ios-testflight-release.md と
+# docs/adr/0031-eas-testflight-automated-release.md を参照する。
+build:
+  name: iOS Simulator build (development) with llama.rn native artifacts
+  steps:
+    - eas/checkout
+
+    - eas/install_node_modules
+
+    - eas/prebuild
+
+    - run:
+        name: Fetch llama.rn native artifacts (before pod install)
+        command: make setup-llama-native
+
+    - run:
+        name: Install pods
+        working_directory: ./ios
+        command: pod install
+
+    - eas/generate_gymfile_from_template
+
+    - eas/run_fastlane
+
+    - eas/find_and_upload_build_artifacts

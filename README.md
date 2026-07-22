@@ -113,6 +113,9 @@ OS 別の前提、生成 File、署名、復旧は
 [Native Development Build 手順](./docs/development/native-builds.md)を参照してください。現在の Release Matrix では
 iOS / Android 実機、Local LLM、Nearby Transport は `Not run` または `Blocked` です。
 
+バージョンタグ push から TestFlight までの自動リリースは
+[iOS TestFlight 自動リリース手順](./docs/development/ios-testflight-release.md)を参照してください。
+
 配布は [Pilot 配布 Tier と Scale Gate](./docs/design/distribution-tiers.md) に従い、Web / Expo Go の
 Tier A、少数実機の Tier B、非開発者へ継続配布する Tier C を区別します。Tier A で Local LLM や
 Nearby Transport が動くとは表示しません。

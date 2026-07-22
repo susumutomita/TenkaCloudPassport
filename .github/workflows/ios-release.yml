@@ -1,0 +1,80 @@
+name: ios-release
+
+# タグ push (v<major>.<minor>.<patch>) を起点に EAS Build → EAS Submit を非対話で実行し、
+# TestFlight まで自動で届ける。実際のビルドは GitHub Actions のランナーではなく EAS の
+# クラウドビルド環境で完結する。このワークフローの役割は「ビルドを起動するだけ」であり、
+# プロジェクト依存関係 (bun install) はランナー側では行わない
+# (eas-cli は app.json を静的に読むだけで、node_modules を必要としない)。
+# llama.rn の Native artifact 取得は EAS クラウドビルド側の Custom Build config
+# (.eas/build/ios-simulator-build.yml, .eas/build/ios-device-build.yml) の
+# `make setup-llama-native` ステップで、`pod install` の直前に行う (npm hooks の
+# eas-build-pre-install / eas-build-post-install はどちらも window が合わない。理由は
+# 上記 2 つの yml ファイル内コメントと docs/adr/0031-eas-testflight-automated-release.md を
+# 参照する)。GitHub Actions ランナー上で取得しても、EAS はソースを別途アップロードして
+# クラウド側で完結してビルドするため、ランナー側の node_modules や生成物はビルドに渡らない。
+# 詳細は docs/development/ios-testflight-release.md を参照する。
+#
+# Supply Chain Security:
+# - Actions は full SHA へピン (ci.yml から流用)
+# - Safe Chain を eas-cli の global install 前に通す
+# - permissions は contents: read のみ (GITHUB_TOKEN を使う操作がないため)
+# - EXPO_TOKEN Secret が未設定なら fail ではなく明示 skip する
+#   (Secrets 投入前に owner の他の push で CI が赤くならないようにするため)
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        id: check-secrets
+        env:
+          EXPO_TOKEN_SET: ${{ secrets.EXPO_TOKEN != '' }}
+        run: |
+          echo "expo_token_present=$EXPO_TOKEN_SET" >> "$GITHUB_OUTPUT"
+          if [ "$EXPO_TOKEN_SET" != "true" ]; then
+            echo "::warning::EXPO_TOKEN secret is not set. Skipping EAS Build + Submit. Complete the one-time setup in docs/development/ios-testflight-release.md, then re-run this workflow (workflow_dispatch) or push the tag again."
+          fi
+
+      - name: Check out the code
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+
+      - name: Setup Node.js
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        # actions/setup-node v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22.13.1"
+
+      # Supply Chain Security: eas-cli の global install も safe-chain 経由にする (ci.yml と同じ理由)
+      - name: Setup safe-chain
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        run: |
+          bun add -g --ignore-scripts @aikidosec/safe-chain@1.5.3
+          safe-chain setup-ci
+
+      - name: Trigger EAS Build and submit to TestFlight
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "true"
+        run: bun run build:ios:testflight

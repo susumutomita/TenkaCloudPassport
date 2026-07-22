@@ -114,6 +114,10 @@ install をやり直します。これは個人所有端末の検証境界であ
 signing、Personal Team の上限を越える端末共有、Personal Team で使えない entitlement や service を採用する
 時点です。個人端末へのローカル Build はこの有料登録を完了条件にしない。
 
+有料 Apple Developer Program 有効化後の TestFlight 配布は、タグ push を起点に EAS Build から
+EAS Submit まで自動実行する経路を用意している。手順は
+[iOS TestFlight 自動リリース手順](./ios-testflight-release.md) を参照する。
+
 ## Android Development Build
 
 ### 前提

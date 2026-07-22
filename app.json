@@ -14,7 +14,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "cloud.tenka.passport"
+      "bundleIdentifier": "cloud.tenka.passport",
+      "buildNumber": "1"
     },
     "android": {
       "versionCode": 1,
