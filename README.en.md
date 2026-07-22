@@ -114,6 +114,9 @@ Read [Native Development Builds](./docs/development/native-builds.md) for platfo
 signing, and recovery. iOS / Android devices, Local LLM, and Nearby Transport are currently `Not run` or `Blocked` in
 the release matrix.
 
+Read [iOS TestFlight Automated Release](./docs/development/ios-testflight-release.md) for the tag-push-to-TestFlight
+pipeline (EAS Build + EAS Submit via GitHub Actions).
+
 ## Reproduce a draft source candidate
 
 This validates a source-only candidate, not a public release. Replace `<candidate-commit>` with the exact 40-character

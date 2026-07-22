@@ -29,6 +29,8 @@
     "web": "expo start --web",
     "build": "bun run build:web",
     "build:web": "expo export --platform web --output-dir dist",
+    "build:ios:testflight": "bun add -g --ignore-scripts eas-cli@21.0.2 && eas build --platform ios --profile production --non-interactive --auto-submit",
+    "submit:ios": "bun add -g --ignore-scripts eas-cli@21.0.2 && eas submit --platform ios --profile production --non-interactive",
     "test": "bun test",
     "test:coverage": "bun test src --coverage",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.scripts.json",

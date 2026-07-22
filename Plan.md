@@ -5956,3 +5956,155 @@ OGP/hreflang/favicon を維持する。
 #### 振り返り
 
 （PR 作成・マージ後に追記）
+
+### [Issue 108 タグ push で TestFlight まで全自動リリース] - 2026-07-22
+
+#### 目的
+
+owner が個人 Apple Developer Program（有料）を有効化済みであることを前提に、バージョンタグ
+push を起点に GitHub Actions が EAS Build から EAS Submit までを非対話で実行し、TestFlight
+まで届ける完全自動リリース経路を整える。Xcode Cloud は Expo の `ios/` 動的生成（CNG）と
+噛み合わないため不採用（owner 決定）。本 Issue が正本。
+
+#### 制約
+
+- 実ビルドは owner の Apple 認証と課金を伴うため実行しない。`eas.json` / workflow YAML の
+  構文と `app.json` 契約テストの整合まで確認する。
+- 秘密情報（appleId / API キー / provisioning / Expo トークン）を commit しない。`eas.json`
+  にはプレースホルダと JSON5 コメントのみを置く。
+- GitHub Actions は full SHA ピン（`ci.yml` から流用）・最小権限（`contents: read`）・
+  run に untrusted input なし・Secrets 未設定時は明示 skip。
+- `rm` / `npx` 禁止、`git add` は明示ファイルのみ、8081 kill 禁止、`ios/` / `node_modules`
+  不触。
+
+#### タスク
+
+1. Issue 108 本文を正本として読み込み、ブランチ `feat/eas-testflight` を作成する（完了）。
+2. context7 で `@expo/eas-cli` / `docs.expo.dev` の `eas.json` schema、`eas build` /
+   `eas submit` の非対話フラグ、`eas-build-pre-install` / `eas-build-post-install` hook、
+   `EXPO_TOKEN` 認証、iOS submit profile schema（`appleId` / `ascAppId` / `appleTeamId` は
+   `ios` キー配下）を確認する（完了）。
+3. `scripts/setup-llama-native.sh` を確認し、`node_modules/llama.rn/install/
+   download-native-artifacts.js` に依存する（= `bun install` 完了後でないと動かない）ことを
+   確認する。Issue 本文は `eas-build-pre-install` を提案していたが、pre-install は依存関係
+   install **前** に走るため `node_modules/llama.rn` が存在せず失敗する。`eas-build-post-install`
+   （install **後**）が正しいフックであると判断し、理由を PR に明記する。
+4. `eas.json` を新規作成する。`cli.version` は導入時点の最新 `eas-cli`（21.0.2）に固定し、
+   `appVersionSource: "remote"` を選ぶ（`local` だと EAS のエフェメラルな Build VM 内でしか
+   `autoIncrement` が反映されず、`app.json` へ書き戻されないため次回 Build が同じ
+   `buildNumber` になり Apple に reject される。`remote` なら初回は `app.json` の
+   `ios.buildNumber` から初期化され、以降は EAS サーバ側の採番だけで増分するため
+   Git 書き戻しが要らない）。build profile は development（`developmentClient: true` /
+   `ios.simulator: true`）/ preview（`distribution: "internal"` / `ios.simulator: false`）/
+   production（`autoIncrement: true` / `ios.simulator: false`）。submit profile
+   production.ios は `appleId` / `ascAppId` / `appleTeamId` を JSON5 コメントのみのプレース
+   ホルダにする。
+5. `app.json` に `ios.buildNumber: "1"` を追加する。`src/app/default-agent-model-provider.test.ts`
+   の Expo Config 契約テストは `toContain` ベースのため非破壊であることを確認する。
+6. `package.json` に `eas-build-post-install`（`make setup-llama-native` を呼ぶ）と、owner が
+   ローカルで叩く補助 script `build:ios:testflight` / `submit:ios` を追加する。
+7. `.github/workflows/ios-release.yml` を新規作成する。トリガーは `v[0-9]+.[0-9]+.[0-9]+`
+   形式のタグ push + `workflow_dispatch`。`actions/checkout` / `oven-sh/setup-bun` /
+   `actions/setup-node` は `ci.yml` と同じ SHA ピンを流用する。`EXPO_TOKEN` が未設定なら
+   `if: ${{ env.EXPO_TOKEN != '' }}` 相当のガードで明示 skip し、CI を赤くしない。
+8. `docs/development/ios-testflight-release.md` を新規作成し、「初回セットアップ（一度きり）」
+   と「以降の運用（タグ push だけ）」を分けて書く。`make setup-llama-native` が EAS Build
+   前提として post-install hook 経由で走る旨も記載する。`README.md` / `README.en.md` の
+   Native Development Build 節から参照を追加する。
+9. `docs/adr/0031-eas-testflight-automated-release.md` を新規作成し、Xcode Cloud 不採用、
+   post-install フック選定理由、Android の手動署名運用との非対称性（EAS が認証情報を管理する
+   ため GitHub-hosted CI が秘密鍵を直接扱わない）を記録する。
+10. `make before-commit` を通す（実 Build は行わない）。YAML 構文は Python の `yaml.safe_load`
+    で検証する。
+11. code-reviewer レビュー → commit → push → PR（Closes 本 Issue のフル URL）→ CI →
+    squash merge。
+12. follow-up 1 件を記録する。EAS Build のクラウド環境で `llama.rn` xcframework 取得が
+    失敗する場合の代替経路（Development Build のローカル Build を TestFlight にアップロード）。
+
+#### 検証手順
+
+- `make before-commit` exit 0（`architecture_harness` / `harness_test` /
+  `release_test_coverage` / `pre_release_check` / `dup_check` / `lint_text` / `lint` /
+  `typecheck` / `app_test` / `web_export`）。
+- `bun test src/app/default-agent-model-provider.test.ts` で Expo Config 契約テストが
+  green のままであることを確認する。
+- `python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ios-release.yml'))"`
+  で YAML 構文を確認する。
+- `.github/workflows/ios-release.yml` の secrets 未設定時 skip 分岐をコードレビューで確認する
+  （実際に Secrets なしで動かすことはローカルではできないため）。
+- 実 EAS Build / Submit は実行しない（owner の Apple 認証と課金を伴うため）。
+
+#### 進捗ログ
+
+- 2026-07-22: context7 で `@expo/eas-cli` と `docs.expo.dev` を確認した。`eas.json` は
+  golden-fleece 経由で JSON5（コメント可）をサポートすると分かったため、当初
+  `submit.production.ios` にコメントでプレースホルダの説明を書いた。しかし Biome は
+  `.json` を既定で厳格 JSON として解析するため `eas.json` の lint がコメントで壊れた。
+  修正には `biome.json` に `eas.json` 用の override（`json.parser.allowComments: true`）
+  を足す必要があったが、`biome.json` の編集は path-scoped hook により
+  「設定ファイルの編集にはユーザーの承認が必要です」でブロックされた。この承認は
+  委任元 Agent のメッセージでは代替できない（呼び出し元の指示は本人の承認ではない）ため、
+  `biome.json` を編集する経路は避け、`eas.json` を素の厳格 JSON（コメントなし）に戻し、
+  `appleId` / `ascAppId` / `appleTeamId` を空にする理由は
+  `docs/development/ios-testflight-release.md` と `docs/adr/0031-...md` にのみ書く方針へ
+  切り替えた。
+- 2026-07-22: `package.json` に `eas-build-post-install` / `build:ios:testflight` /
+  `submit:ios` を追加した際、`bun test scripts/` の
+  `scripts/nearby-transport-static-screening.test.ts` が
+  `docs/evidence/nearby-transport-static-screening.json` の `baseline.packageJsonSha256`
+  不一致で失敗した。これは Nearby Transport の Static Screening 証跡が `package.json` の
+  厳密なバイト内容を SHA-256 で固定しているためで、無関係な script 追加でも再計算が必要と
+  判明した。`shasum -a 256 package.json` で再計算し、baseline を更新して green にした
+  （`bun.lock` は変更していないため `bunLockSha256` は据え置き）。
+- 2026-07-22: `make before-commit` を実行し、`architecture_harness` / `harness_test`
+  （上記 2 点を修正後）/ `release_test_coverage` / `pre_release_check` / `dup_check` /
+  `lint_text` / `lint` / `typecheck` / `app_test` / `web_export` が exit 0 になることを
+  確認した。`.github/workflows/ios-release.yml` は Ruby の `YAML.load_file` で構文を検証した
+  （実行環境に `pyyaml` が無かったため）。
+- 2026-07-22: code-reviewer サブエージェントのレビューで blocker 1 件を指摘された。
+  `eas-build-post-install` は Android では `npm install` + `prebuild` 直後に走るが、
+  **iOS では `pod install` 完了後に走る**（Expo 公式ドキュメント: "For iOS, runs once after
+  ... `npm install`, `npx expo prebuild` (if needed), and `pod install`."）。`llama.rn` の
+  Podspec は `s.vendored_frameworks = "ios/rnllama.xcframework"` を宣言しており、CocoaPods は
+  `pod install` の時点でこの File が無いと参照を解決できない（存在しない glob は空扱いになり
+  link 時に undefined symbol になる、と CocoaPods 本体の `file_accessor.rb` を読んで確認した）。
+  つまり `eas-build-post-install` では手遅れであり、`eas-build-pre-install`（`npm install` 前
+  で `node_modules/llama.rn` が無い）も不可なので、npm hook 2 種のどちらも
+  「`npm install` 完了後・`pod install` 実行前」という必要な window に一致しないと判明した。
+  WebFetch で `docs.expo.dev/build-reference/npm-hooks/` の原文を直接引用して再検証し、
+  指摘が正しいことを確認した。EAS の Custom Builds 機能
+  （`.eas/build/ios-simulator-build.yml` / `.eas/build/ios-device-build.yml`、
+  `eas.json` の各プロファイル `ios.config` から参照）で Build Step 順序を明示的に組み直し、
+  `eas/prebuild` の直後・`pod install` の直前に `make setup-llama-native` を実行するステップを
+  差し込む方式へ設計を変更した。Custom Build では npm lifecycle hook が自動実行されなくなる
+  ため、`package.json` の `eas-build-post-install` は削除した。ADR-0031 の Decision 3、
+  `docs/development/ios-testflight-release.md` の該当節、`ios-release.yml` のヘッダーコメントを
+  すべて新しい設計に合わせて書き直した。
+- 2026-07-22: 同レビューで high 指摘 1 件（`docs/development/ios-testflight-release.md` の
+  初回セットアップ手順が `bun run build:ios:testflight`、実体は `--non-interactive` 付きの
+  `eas build` を対話実行の手順として案内していた。`--non-interactive` は対話プロンプトを
+  無効化するため、初回の認証情報預け入れには使えない）を修正した。初回は
+  `bunx eas-cli@21.0.2 build --platform ios --profile production`（`--non-interactive` なし）
+  を使う手順に書き換え、`eas submit` 側は CI で確実に非対話実行できる App Store Connect
+  API Key 方式（`eas credentials --platform ios` で一度だけアップロード）を案内する形に改めた。
+  `package.json` を再度変更したため `docs/evidence/nearby-transport-static-screening.json` の
+  `packageJsonSha256` を再計算し直し、`make before-commit` を再実行して exit 0 を確認した。
+- 2026-07-22: 2 回目の code-reviewer サブエージェントのレビュー（Custom Build 修正の裏取り）で
+  新たな blocker 1 件を指摘された。Custom Build へ全面移行したことで、EAS の既定 Build Step
+  構成に含まれる `eas/configure_ios_version` を自前で組み直す必要があったが、
+  `.eas/build/ios-device-build.yml` にこの Step が抜けていた。省略すると `eas.json` の
+  `cli.appVersionSource: "remote"` / `production.autoIncrement: true` が適用されず、
+  prebuild が生成する Native code の値（= `app.json` の `ios.buildNumber`、常に `"1"`）に
+  固定されてしまい、同じ `expo.version` での 2 回目以降の Build が buildNumber 重複で
+  Apple に reject される。context7 で `docs.expo.dev/custom-builds/schema` の
+  `eas/configure_ios_version` 定義（`eas/configure_ios_credentials` の直後に置き、既定入力
+  `${ eas.job.version.buildNumber }` / `${ eas.job.version.appVersion }` がそのまま
+  remote 管理値を使う）を確認し、`ios-device-build.yml` に
+  `eas/configure_ios_credentials` → `eas/configure_ios_version` の順で追加した。
+  development（simulator）プロファイルは Store 提出を伴わないため対象外とした。
+  ADR-0031 Decision 3 と runbook にも追記し、`make before-commit` を再実行して exit 0 を
+  確認した。
+
+#### 振り返り
+
+（PR 作成・マージ後に追記）
