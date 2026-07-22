@@ -6359,3 +6359,219 @@ Issue の報告範囲（今回は iOS 限定）と矛盾しないかを都度突
 最終実装（iOS 限定購読・`Boolean(footer)`・キーボード表示中は footer を隠す）
 と逆の記述のまま残っていると指摘を受け、文書と実装の齟齬を検出したうえで
 文書・テスト名を実装へ合わせて更新した。
+
+### [Issue 119 README をデモ動画先頭のわかりやすい構成へ刷新] - 2026-07-22
+
+#### 目的
+
+owner フィードバック: README が分かりづらい。デモ動画（YouTube Short、video ID
+`KgMwSKu05a4`）ができたので、それを先頭に据えて「何ができるか」を一目で分かる
+README に組み直す（Product Hunt 準備）。Contributor / Native 開発者向けの内容
+（現在の Release 状態、入口を選ぶ、Draft Source Candidate 再現、Architecture、
+開発規律）は削除せず、初見のユーザーが最初に読む部分より後ろへ移す。
+
+#### 制約
+
+- 対象は `README.md` / `README.en.md` のみ。`src/`・`site/` は変更しない。
+- fail-closed の姿勢を維持する。未検証能力を「動く」と書かない。ただし実機の
+  標準カメラ読み取りは owner が実機確認済みなので、その事実は誇張しない範囲で
+  正直に反映してよい（Repository の自動検証環境では引き続き `Not run`）。
+- 軸は現行（無料で渡せる自己紹介 / card.tenkacloud.com）を維持する。ライセンス
+  は Apache-2.0。
+- doc-style（文末「。」・日英間半角スペース・絵文字と太字の併用回避）を守り、
+  `bun textlint README.md` を通す。
+- 日英で同義・同構成を保つ。
+- git add は `README.md` / `README.en.md` / `Plan.md` の明示ファイルのみ。
+
+#### タスク
+
+1. 現行 README.md / README.en.md の構成と docs/releases/status.md を読み、既存
+   の文言・リンク・表を洗い出す。
+2. Issue 119 の指定順（タイトル → 説明 → デモ動画 → 何ができるか → 今すぐ試す
+   → Contributor 向け）で README.md を書き直す。デモ動画はサムネイルリンク
+   `[![デモ動画](https://img.youtube.com/vi/KgMwSKu05a4/hqdefault.jpg)](https://youtube.com/shorts/KgMwSKu05a4)`
+   形式にする。今すぐ試すは (a) Web 版 `https://card.tenkacloud.com/app/` を開くだけ、
+   (b) 開発者向け `make install` → `make dev`（`make start` は Expo Go 向けと明記）。
+3. 既存の「現在の Release 状態」「入口を選ぶ」「Draft Source Candidate を再現する」
+   「Architecture」「正本と運用文書」「開発規律」を `## Contributor 向け情報`
+   配下へ移動する（内容は削除しない）。
+4. README.en.md を同じ構成・同義で英訳する。
+5. `bun textlint README.md`、`make before-commit` を実行し exit 0 を確認する。
+6. code-reviewer サブエージェントでレビューし、指摘を反映する。
+
+#### 検証手順
+
+- `bun textlint README.md` がエラー 0 で終わることを確認する。
+- `make before-commit` が exit 0 になることを確認する。
+- README.md と README.en.md の見出し構成・リンク先が一致することを目視確認する。
+- 既存の Release 状態表・入口を選ぶ手順・Draft Source Candidate 再現手順が
+  文言ごと残っていることを確認する（削除ではなく移動のみ）。
+
+#### 進捗ログ
+
+- 2026-07-22: Issue 119 本文と現行 README.md / README.en.md / docs/releases/status.md
+  を確認した。`make dev` が `expo start`（Development Build 既定）、`make start` が
+  `expo start --go`（Expo Go 固定）であることを Makefile / package.json で確認した。
+  Plan.md へ本計画を追記した。
+- 2026-07-22: README.md / README.en.md を Issue 119 の指定順（タイトル → 説明 →
+  デモ動画 → 何ができるか → 今すぐ試す → `## Contributor 向け情報` / `## For
+  contributors`）へ全面刷新した。既存の Release 状態表・入口を選ぶ・Draft Source
+  Candidate 再現・Architecture・正本と運用文書・開発規律は削除せず Contributor
+  節配下（見出しレベルを 1 段下げ）へ移動した。
+- 2026-07-22: `bun textlint README.md` で 3 件のエラー（`ja-technical-writing/
+  no-mix-dearu-desumasu`）を検出した。新規追加した「今すぐ試す (b) 開発者向け」の
+  3 文だけが本文中で「である」調になっており、文書全体の多数派（ですます調 27 件）
+  と混在していた（既存の箇条書き内の「である」は ListMixedChecker が別集計する
+  ため対象外と判明）。3 文をですます調へ修正し、エラー 0 を確認した。
+- 2026-07-22: `make before-commit` を実行したところ、この worktree に
+  `node_modules` が未インストールで `jscpd` バイナリが無く、`harness_test` の
+  jscpd 実行系テスト 6 件が `jscpd exited with status unknown` で落ちた。
+  `make install` で依存関係をインストールして解消した。
+- 2026-07-22: 依存関係インストール後の再実行で
+  `scripts/oss-alpha-release-docs.test.ts`（Issue 29 の既存契約テスト）が
+  1 件失敗した。原因は 2 つ。(1) README.en.md 冒頭段落の行折り返しが
+  `without a\nbusiness card.` となっており、テストが期待する連続文字列
+  `an introduction without a business` が改行で分断されていた。(2) 英語版は
+  日本語版より文字数が多く、Contributor 節へ移動した「Public OSS Alpha /
+  `Blocked`」の記述が windowSize（2,800 文字）の外に出てしまっていた。
+  invariant（Issue 29: 冒頭で Product 境界と Public Release 停止を自己完結して
+  説明する契約）はテストではなくコード側を直す方針に従い、行折り返しを修正した
+  うえで、「今すぐ試す (b) 開発者向け」節に「本 Repository の Public OSS Alpha は
+  現在 `Blocked` です」という 1 文を ja/en 両方に追加し、実機検証済みの事実と
+  合わせて windowSize 内へ収めた。python での index 計算で ja/en とも該当文字列が
+  2,800 文字以内に収まることを確認し、`bun test scripts/
+  oss-alpha-release-docs.test.ts` の全 9 件が pass することを確認した。
+- 2026-07-22: `make before-commit` が exit 0 になることを確認した（harness_test
+  361 pass、typecheck 成功、coverage 100%、`bun run lint` は既存ファイル
+  `scripts/android-release-identity.ts` 等に対する pre-existing な info/warning
+  のみで README とは無関係、`dup_check` は baseline 以下）。
+
+#### 振り返り
+
+**問題**: Issue 119 は「Contributor 向け内容を下部へ移動する」という単純な
+リライトに見えたが、実際には Issue 29 由来の既存契約テスト（README 冒頭
+2,800 文字以内で Public OSS Alpha の Blocked 状態を自己完結して説明する）を
+壊しかけた。見出し移動だけを見て中身の文字位置への影響を見落とすところだった。
+
+**根本原因**: README の構成変更を「何を書くか」だけで設計し、「その内容が
+どの文字位置に来るか」を検証する既存テストの存在を実装前に確認しなかった。
+`scripts/oss-alpha-release-docs.test.ts` は README 本体からは辿れない場所に
+あり、grep 等で能動的に探さない限り気づけない。また、日本語と英語で
+1 文字あたりの情報密度が違うため、日本語で window 内に収まっても英語版は
+収まらないことがある（テスト自身のコメントが同じ教訓を過去に記録していた）。
+
+**予防策**: README のような「他のテストから内容契約を課されているファイル」を
+大きく構成変更する前に、`grep -rn "README" scripts/*.test.ts` のように
+対象ファイル名でテストコードを横断検索し、既存契約（文字数窓、必須語彙、
+日英同時条件）を洗い出してから編集する。日英 2 言語ドキュメントの文字数窓
+契約は、英語版の方が同じ内容でも長くなる前提で、日本語側だけでなく英語側の
+文字位置も都度計算して確認する。
+
+#### 進捗ログ（追記）
+
+- 2026-07-22: code-reviewer サブエージェントのレビューで指摘 3 件を受け、
+  すべて反映した。
+  1. [high] 「(b) 開発者向け」の `make dev` は Expo Go 非互換
+     （`package.json` の `dev` は `expo start`、素の Development Build
+     前提）であり、事前に Development Build を端末へ入れていないと
+     「今すぐ試す」の名に反して詰まる、という指摘。コマンド自体は Issue 119
+     本文の指定どおり残しつつ、
+     [Native Development Build 手順](./docs/development/native-builds.md)
+     への導線と、準備なしなら `make start`（Expo Go）を使う一文を追記した。
+  2. [medium] 「owner が実機で確認済み」という記述が `docs/releases/status.md`
+     の構造化された `Verified` 概念と混同されうる、という指摘。README 側に
+     「Release Matrix が求める機種・OS Version 等の記録は伴わないため
+     `Verified` ではなく引き続き `Not run` の扱い」と明記し、非公式確認と
+     Matrix の `Verified` を明確に区別した（`docs/releases/status.md` 自体は
+     本 Issue のスコープ外のため変更しない）。
+  3. [medium] 「Public OSS Alpha は `Blocked`」の一文が「(b) 開発者向け」
+     節の末尾に唐突に挿入されており、`scripts/oss-alpha-release-docs.test.ts`
+     の windowSize（2,800 文字）契約に合わせるための後付けに見える、という
+     指摘。英語版はこの窓に対して余裕が少なく（約 2,381/2,800 文字目）、
+     将来の軽微な加筆で再び壊れる脆さも残っていた。「何ができるか」節の
+     末尾（既存の Pet/Lounge/Bridge の可視性境界を語るのと同じ文脈）へ
+     移設し、文脈上自然な位置に置いた。移設後は `Public OSS Alpha` の出現
+     位置が ja: 782 文字目、en: 1,458 文字目まで前進し、余裕を大きく確保した。
+  4-5. [low] は pre-existing（本 PR 起因ではない見出し粒度の日英非対称）と
+     軽微な重複表現の指摘で、scope 外または任意の手直しと判断し見送った。
+  修正後、`bun textlint README.md` / `README.en.md`、
+  `bun test scripts/oss-alpha-release-docs.test.ts`（9 pass）、
+  `make before-commit`（exit 0）を再実行してすべて green を確認した。
+
+### [Issue 119 README PR の Codex レビュー指摘解消] - 2026-07-22
+
+#### 目的
+
+PR https://github.com/susumutomita/TenkaCloudPassport/pull/122 （README.md /
+README.en.md 刷新、Issue 119）に対する Codex レビュー指摘（High 2 件・Medium 1 件・
+Low 1 件）を解消する。あわせて、先に PR 120（Issue 117）が main へマージされたことで
+生じた Plan.md のマージ衝突を解消する。
+
+#### 制約
+
+- 対象は README.md / README.en.md / Plan.md のみ。src/、site/ は変更しない。
+- doc-style（文末「。」・日英間半角スペース・絵文字と太字の併用回避）を守り、
+  `bun textlint README.md` / `README.en.md` を通す。
+- `make before-commit` を exit 0 まで通す（カバレッジ 100% 維持、
+  `scripts/oss-alpha-release-docs.test.ts` の 2,800 字ウィンドウ契約を壊さない）。
+- git add は明示ファイル（README.md / README.en.md / Plan.md）のみ。
+
+#### タスク
+
+1. Plan.md の衝突（PR 120 の振り返り追記と本 PR の README 刷新エントリを両方が
+   追記したことによる衝突）を、両方の内容を残す形で解消する。
+2. High 1: 「データが出るのは手動 JSON エクスポートだけ」という誤記を、QR の URL
+   フラグメントに自己紹介データを載せて相手に渡す実装（ADR-0027、
+   docs/privacy/data-inventory.md）に合わせて ja/en とも書き直す。
+3. High 2: 連絡先追加が「どの端末でも可能」と読める記述に、iOS/Safari のみ確認済み・
+   Android は `.vcf` を保存してから開く 1 手間が必要で未検証・SNS アプリ内ブラウザでは
+   `.vcf` の保存自体が失敗しうる、という注意書きを ja/en に追加する
+   （site/c/index.html の Blob + `.vcf` ダウンロード実装が根拠）。
+4. Medium: README.en.md を README.md と同義・同構成へ揃える。Expo Go 手順を
+   `make install_ci` + `bun run start` から `make start`（自動依存インストール・
+   `--go` の説明を含む）へ揃え、distribution-tier 段落（Pilot 配布 Tier と Scale Gate）
+   と Lounge データ保持境界の 1 文を en に補い、「### Architecture」と
+   「### 正本と運用文書」を ja と同じく別見出しに分割する
+   （follow-up 01KY53BB2A9M2EBYF1DGK4T3XV を解消）。
+5. Low: 英語リンクテキスト直後に日本語助詞が続く箇所（`)を`・`)が` 等、9 箇所）に
+   半角スペースを挿入する。
+6. `bun textlint README.md` / `README.en.md`、`make before-commit` を実行して
+   exit 0 を確認する。
+
+#### 検証手順
+
+- `bun textlint README.md` と `bun textlint README.en.md` がいずれもエラー 0 で終わる。
+- `bun test scripts/oss-alpha-release-docs.test.ts` が 9 件 pass する
+  （2,800 字ウィンドウ契約を壊していないことの確認）。
+- `make before-commit` が exit 0 になる。
+- README.md と README.en.md の見出し構成が 1:1 で一致することを目視確認する。
+
+#### 進捗ログ
+
+- 2026-07-22: 隔離 worktree で Plan.md の衝突（HEAD 側の Issue 119 エントリと
+  origin/main 側の Issue 117 エントリ）を、両方を保持する形で解消し merge commit を
+  作成した（この worktree に node_modules が未インストールで jscpd が無く
+  pre-commit hook が一度失敗、`make install` で解消して再commit した）。
+- 2026-07-22: High 1 / High 2 / Medium / Low の指摘を ja/en 双方に反映した。Medium の
+  Architecture 分割で新設した英文中の "session" という語が `spellcheck-tech-word`
+  （`session => セッション`）ルールに引っかかり textlint が落ちたため、
+  "the host ending the Lounge" に言い換えて回避した（同ルールは
+  docs/research/consent-script.en.md 等の既存ファイルでも同様に落ちる、
+  リポジトリ既知の英文誤検知であることを確認した上での回避であり、ルール自体は
+  変更していない）。
+- 2026-07-22: `bun textlint README.md` / `README.en.md`（各 0 エラー）、
+  `bun test scripts/oss-alpha-release-docs.test.ts`（9 pass）、`make before-commit`
+  （exit 0）をすべて確認した。
+
+#### 振り返り
+
+**問題**: なし。指摘の内容が具体的で、参照先の ADR・実装ファイルとも整合していたため
+大きな手戻りは発生しなかった。
+
+**根本原因**: 該当なし。
+
+**予防策**: `spellcheck-tech-word` ルールが英語ファイルに対しても「英単語 → カタカナ」
+提案を出す（"session" 等）という repo 既知の誤検知があるため、英語ドキュメントの
+新規追加文で textlint が落ちた場合は、まず該当語が英語として不自然かどうかではなく、
+このルール由来の false positive でないかを疑い、同義語への言い換えで回避できないかを
+検討してから対処する。
