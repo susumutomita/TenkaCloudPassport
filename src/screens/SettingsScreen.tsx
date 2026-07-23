@@ -238,6 +238,138 @@ function LocalModelCandidateCard({
   );
 }
 
+interface OnDeviceAiSectionProps {
+  readonly modelManagement: LocalModelManagementView;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}
+
+/** ダウンロード中の進捗表示 + 中止導線だけを切り出した子 Component。 */
+function OnDeviceAiDownloadingCard({
+  modelManagement,
+  source,
+  t,
+}: {
+  readonly modelManagement: LocalModelManagementView;
+  readonly source: NonNullable<LocalModelManagementView['trustedModelSource']>;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}) {
+  const progress = modelManagement.onDeviceAiDownloadProgress;
+  const percent =
+    source.sizeBytes > 0
+      ? Math.min(
+          100,
+          Math.round(((progress?.bytesWritten ?? 0) / source.sizeBytes) * 100)
+        )
+      : 0;
+  return (
+    <>
+      <Text accessibilityLiveRegion="polite" style={styles.body}>
+        {t.onDeviceAiDownloadStatus(
+          readableBytes(progress?.bytesWritten ?? 0),
+          readableBytes(source.sizeBytes),
+          percent
+        )}
+      </Text>
+      <ActionButton
+        label={t.onDeviceAiDownloadCancelButton}
+        onPress={modelManagement.cancelOnDeviceAiDownload}
+        variant="danger"
+      />
+    </>
+  );
+}
+
+/**
+ * Follow-up F-FDRGS4: Document Picker を知らない通常ユーザー向けの、
+ * Qwen2.5-1.5B 信頼済みダウンロードの単一導線。状態（未取得 / 同意待ち /
+ * ダウンロード中 / 仕上げ処理中 / 取得済み）は新しい state を持たず、既存
+ * Manifest から導出した `onDeviceAiStatus` と、Hook 側の単一 tag
+ * `onDeviceAiFlow`（code-reviewer 指摘・simplify: 「同意待ち」「ダウンロード中」を
+ * 独立した 2 boolean にすると二重否定の分岐が必要になっていた）だけで出し分ける。
+ * caution/blocked の詳細は下の `LocalModelCard` がそのまま表示する。
+ */
+function OnDeviceAiSection({ modelManagement, t }: OnDeviceAiSectionProps) {
+  const source = modelManagement.trustedModelSource;
+  if (!source) return null;
+  const { onDeviceAiFlow, onDeviceAiStatus } = modelManagement;
+
+  return (
+    <View style={styles.modelCard}>
+      <Text style={styles.modelTitle}>{t.onDeviceAiSectionTitle}</Text>
+      {onDeviceAiFlow === 'downloading' ? (
+        <OnDeviceAiDownloadingCard
+          modelManagement={modelManagement}
+          source={source}
+          t={t}
+        />
+      ) : null}
+      {onDeviceAiFlow === 'finalizing' ? (
+        <Text accessibilityLiveRegion="polite" style={styles.body}>
+          {t.onDeviceAiFinalizingStatus}
+        </Text>
+      ) : null}
+      {onDeviceAiFlow === 'consent-pending' ? (
+        <>
+          <Text style={styles.modelTitle}>{t.onDeviceAiConsentTitle}</Text>
+          <Text style={styles.body}>
+            {t.onDeviceAiConsentBody(
+              source.displayName,
+              readableBytes(source.sizeBytes),
+              source.license
+            )}
+          </Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.onDeviceAiConsentStartButton}
+            onPress={modelManagement.confirmEnableOnDeviceAiConsent}
+          />
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.onDeviceAiConsentCancelButton}
+            onPress={modelManagement.cancelEnableOnDeviceAiConsent}
+            variant="secondary"
+          />
+        </>
+      ) : null}
+      {onDeviceAiFlow === 'idle' && onDeviceAiStatus === 'not-acquired' ? (
+        <>
+          <Text style={styles.body}>
+            {t.onDeviceAiDescription(
+              source.displayName,
+              readableBytes(source.sizeBytes)
+            )}
+          </Text>
+          <ActionButton
+            accessibilityHint={t.onDeviceAiEnableButtonHint}
+            disabled={
+              modelManagement.busy || modelManagement.candidateSelectionBlocked
+            }
+            label={t.onDeviceAiEnableButton}
+            onPress={modelManagement.requestEnableOnDeviceAi}
+          />
+        </>
+      ) : null}
+      {onDeviceAiFlow === 'idle' &&
+      onDeviceAiStatus &&
+      onDeviceAiStatus !== 'not-acquired' ? (
+        <>
+          <Text style={styles.body}>
+            {onDeviceAiStatus === 'active'
+              ? t.onDeviceAiActiveStatus
+              : t.onDeviceAiImportedNotActiveStatus}
+          </Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.onDeviceAiRemoveButton}
+            onPress={modelManagement.removeOnDeviceAiModel}
+            variant="danger"
+          />
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 interface ModelManagementSectionProps {
   readonly modelManagement: LocalModelManagementView;
   readonly t: (typeof MESSAGES)[Locale]['settings'];
@@ -268,6 +400,7 @@ function ModelManagementSection({
           {t.modelError(modelManagement.errorCode)}
         </Text>
       ) : null}
+      <OnDeviceAiSection modelManagement={modelManagement} t={t} />
       <ActionButton
         accessibilityHint={t.selectModelHint}
         disabled={

@@ -394,6 +394,34 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
     }
   });
 
+  it('Follow-up F-FDRGS4（code-reviewer 指摘、2 回目のレビューで発覚したテスト欠落を埋める）: オンデバイス AI の同意確認も、他の Model mutation と同じく実行直前に hasActiveProviderRun を再確認し、実行中なら確認待ちへ委譲する', async () => {
+    const text = await source();
+    const consentStart = text.indexOf('const confirmEnableOnDeviceAiConsent');
+    const consentEnd = text.indexOf('const cancelOnDeviceAiDownload');
+    const consentBody = text.slice(consentStart, consentEnd);
+
+    // 同意カードを開いた時点（`requestEnableOnDeviceAi`）だけでなく、
+    // 実行直前にも再確認する（altitude 指摘: カードを開いたまま Lounge が
+    // 開始された race を防ぐ）。`setOnDeviceAiFlow('idle')` が両分岐に
+    // 現れ `indexOf` ベースの `expectInOrder` では順序を一意に判定できない
+    // ため、制御フロー全体を 1 つの厳密一致で固定する。
+    expect(consentBody).toContain(
+      "if (!management || !mutationLeases) return;\n    if (hasActiveProviderRun) {\n      setOnDeviceAiFlow('idle');\n      setPendingProviderOperation({ kind: 'enable-on-device-ai' });\n      return;\n    }\n    setOnDeviceAiFlow('idle');\n    performEnableOnDeviceAi();"
+    );
+    // stale closure を防ぐため、再確認に使う `hasActiveProviderRun` を
+    // useCallback の dependency 配列に含める。
+    expect(consentBody).toContain('hasActiveProviderRun,\n    management,');
+
+    const confirmation = text.slice(
+      text.indexOf('const confirmProviderOperation')
+    );
+    expectInOrder(confirmation, [
+      "if (pending.kind === 'enable-on-device-ai') {",
+      'performEnableOnDeviceAi();',
+    ]);
+    expect(confirmation).toContain('performEnableOnDeviceAi,');
+  });
+
   it('実行中 Provider に影響する全 Model mutation は確認待ちにし、teardown 後の process lease 内だけで実行する', async () => {
     const text = await source();
     const confirmation = text.slice(

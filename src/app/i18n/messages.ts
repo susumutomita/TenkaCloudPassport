@@ -304,6 +304,41 @@ export interface AppMessages {
     readonly modelSectionTitle: string;
     readonly modelDescription: string;
     readonly modelBusy: string;
+    /**
+     * Follow-up F-FDRGS4: Document Picker を知らない通常ユーザー向けの
+     * 「オンデバイス AI を有効化」導線。Qwen2.5-1.5B の信頼済みダウンロードを
+     * 起動し、既存 GGUF import/activate へ合流する。
+     */
+    readonly onDeviceAiSectionTitle: string;
+    readonly onDeviceAiDescription: (
+      displayName: string,
+      size: string
+    ) => string;
+    readonly onDeviceAiEnableButton: string;
+    readonly onDeviceAiEnableButtonHint: string;
+    readonly onDeviceAiConsentTitle: string;
+    readonly onDeviceAiConsentBody: (
+      displayName: string,
+      size: string,
+      license: string
+    ) => string;
+    readonly onDeviceAiConsentStartButton: string;
+    readonly onDeviceAiConsentCancelButton: string;
+    readonly onDeviceAiDownloadStatus: (
+      downloaded: string,
+      total: string,
+      percent: number
+    ) => string;
+    readonly onDeviceAiDownloadCancelButton: string;
+    /**
+     * code-reviewer 指摘（Cancel の実効性）: ダウンロード完了後の import・
+     * activate は中止できないため、その区間専用の文言を用意し Cancel 導線は
+     * 出さない。
+     */
+    readonly onDeviceAiFinalizingStatus: string;
+    readonly onDeviceAiActiveStatus: string;
+    readonly onDeviceAiImportedNotActiveStatus: string;
+    readonly onDeviceAiRemoveButton: string;
     readonly selectModelButton: string;
     readonly selectModelHint: string;
     readonly candidateSummary: (name: string, size: string) => string;
@@ -965,6 +1000,27 @@ const ja: AppMessages = {
     modelDescription:
       'Development Build だけで利用できます。GGUF は選択後に Size を確認し、確定した場合だけアプリ専用領域へ Copy します。',
     modelBusy: 'Local Model の端末内処理を実行中です。',
+    onDeviceAiSectionTitle: 'オンデバイス AI（Qwen）',
+    onDeviceAiDescription: (displayName, size) =>
+      `${displayName}（${size}）を端末内へ取得すると、会話 Agent が Rules ではなく Local LLM を使うようになります。内容はこの端末だけで処理し、サーバーへは送信しません。`,
+    onDeviceAiEnableButton: 'オンデバイス AI を有効化',
+    onDeviceAiEnableButtonHint:
+      '明示同意の確認画面を開きます。この時点ではまだダウンロードを開始しません。',
+    onDeviceAiConsentTitle: 'ダウンロード前に確認してください。',
+    onDeviceAiConsentBody: (displayName, size, license) =>
+      `${displayName} を約 ${size} ダウンロードします。ライセンスは ${license} です。Wi-Fi 接続時の実行を推奨します。ダウンロード後の推論はすべて端末内だけで行い、内容をサーバーへ送信することはありません。`,
+    onDeviceAiConsentStartButton: '同意してダウンロードを開始する',
+    onDeviceAiConsentCancelButton: 'やめる',
+    onDeviceAiDownloadStatus: (downloaded, total, percent) =>
+      `ダウンロード中: ${downloaded} / ${total}（${percent}%）`,
+    onDeviceAiDownloadCancelButton: 'ダウンロードを中止する',
+    onDeviceAiFinalizingStatus:
+      'ダウンロード完了。端末内で仕上げの処理をしています（この処理は中止できません）。',
+    onDeviceAiActiveStatus:
+      '有効です。会話 Agent はこの Model を使用しています。',
+    onDeviceAiImportedNotActiveStatus:
+      '取得済みですが、まだ使用していません。下の一覧で状態を確認してください。',
+    onDeviceAiRemoveButton: 'オンデバイス AI を無効化して削除する',
     selectModelButton: 'GGUF File を選択',
     selectModelHint:
       'OS の Document Picker を開きます。選択しただけではアプリ専用領域へ Copy しません。',
@@ -1016,10 +1072,24 @@ const ja: AppMessages = {
       outcome
     ) =>
       `内容を保存しない計測 ${count} 件。直近: Import ${importMs ?? '-'} ms、Load ${loadMs ?? '-'} ms、First Token ${firstTokenMs ?? '-'} ms、完了 ${completionMs ?? '-'} ms、Peak Memory ${peakMemory}、Thermal ${thermalBefore} → ${thermalAfter}、Battery ${batteryDeltaPermille ?? '-'} permille、結果 ${outcome}。`,
-    modelError: (code) =>
-      code === 'NATIVE_CONTEXT_UNAVAILABLE'
-        ? 'Native Context の解放を確認できません。Model File は変更していません。App を完全に終了して再起動してください。'
-        : `Local Model の処理を完了できませんでした（${code}）。File URI や推論内容は記録していません。`,
+    modelError: (code) => {
+      if (code === 'NATIVE_CONTEXT_UNAVAILABLE') {
+        return 'Native Context の解放を確認できません。Model File は変更していません。App を完全に終了して再起動してください。';
+      }
+      if (code === 'INSUFFICIENT_STORAGE') {
+        return 'この端末の空き容量が不足しています。空き容量を確保してからもう一度お試しください。現在の設定は変更していません。';
+      }
+      if (code === 'DOWNLOAD_FAILED') {
+        return 'ダウンロードに失敗しました。通信状況を確認してもう一度お試しください。現在の設定は変更していません。';
+      }
+      if (code === 'DOWNLOAD_CANCELLED') {
+        return 'ダウンロードを中止しました。現在の設定は変更していません。';
+      }
+      if (code === 'INTEGRITY_MISMATCH') {
+        return 'ダウンロードした内容の検証に失敗しました。もう一度お試しください。現在の設定は変更していません。';
+      }
+      return `Local Model の処理を完了できませんでした（${code}）。File URI や推論内容は記録していません。`;
+    },
     diagnosticsButton: '診断と端末内 Data',
     diagnosticsButtonHint:
       'Network 送信なしの診断 Preview と、分離された削除操作を開きます。',
@@ -1693,6 +1763,27 @@ const en: AppMessages = {
     modelDescription:
       'Available only in a Development Build. After selection, the app shows the GGUF size and copies it into private storage only after confirmation.',
     modelBusy: 'Processing the local model on this device.',
+    onDeviceAiSectionTitle: 'On-device AI (Qwen)',
+    onDeviceAiDescription: (displayName, size) =>
+      `Fetching ${displayName} (${size}) on-device switches the conversation agent from Rules to the local LLM. Everything runs on this device only and nothing is sent to a server.`,
+    onDeviceAiEnableButton: 'Enable on-device AI',
+    onDeviceAiEnableButtonHint:
+      'Opens the explicit-consent screen. The download does not start yet.',
+    onDeviceAiConsentTitle: 'Please review before downloading.',
+    onDeviceAiConsentBody: (displayName, size, license) =>
+      `This downloads ${displayName}, about ${size}. License: ${license}. We recommend doing this over Wi-Fi. All inference afterward runs on this device only; nothing is sent to a server.`,
+    onDeviceAiConsentStartButton: 'I agree, start the download',
+    onDeviceAiConsentCancelButton: 'Cancel',
+    onDeviceAiDownloadStatus: (downloaded, total, percent) =>
+      `Downloading: ${downloaded} / ${total} (${percent}%)`,
+    onDeviceAiDownloadCancelButton: 'Cancel the download',
+    onDeviceAiFinalizingStatus:
+      'Download complete. Finishing setup on this device (this step cannot be cancelled).',
+    onDeviceAiActiveStatus:
+      'Enabled. The conversation agent is using this model.',
+    onDeviceAiImportedNotActiveStatus:
+      'Already fetched, but not in use yet. Check the status in the list below.',
+    onDeviceAiRemoveButton: 'Disable on-device AI and delete it',
     selectModelButton: 'Choose a GGUF file',
     selectModelHint:
       'Opens the OS document picker. Selection alone does not copy the file into app-private storage.',
@@ -1746,10 +1837,24 @@ const en: AppMessages = {
       outcome
     ) =>
       `${count} content-free measurements. Latest: import ${importMs ?? '-'} ms, load ${loadMs ?? '-'} ms, first token ${firstTokenMs ?? '-'} ms, completion ${completionMs ?? '-'} ms, peak memory ${peakMemory}, thermal ${thermalBefore} → ${thermalAfter}, battery ${batteryDeltaPermille ?? '-'} permille, outcome ${outcome}.`,
-    modelError: (code) =>
-      code === 'NATIVE_CONTEXT_UNAVAILABLE'
-        ? 'Native context teardown could not be confirmed. No model file was changed. Fully quit and restart the app.'
-        : `The local model operation could not finish (${code}). No file URI or inference content was recorded.`,
+    modelError: (code) => {
+      if (code === 'NATIVE_CONTEXT_UNAVAILABLE') {
+        return 'Native context teardown could not be confirmed. No model file was changed. Fully quit and restart the app.';
+      }
+      if (code === 'INSUFFICIENT_STORAGE') {
+        return 'This device does not have enough free storage. Free up space and try again. Your current setting has not changed.';
+      }
+      if (code === 'DOWNLOAD_FAILED') {
+        return 'The download failed. Check your connection and try again. Your current setting has not changed.';
+      }
+      if (code === 'DOWNLOAD_CANCELLED') {
+        return 'The download was cancelled. Your current setting has not changed.';
+      }
+      if (code === 'INTEGRITY_MISMATCH') {
+        return 'The downloaded content failed verification. Please try again. Your current setting has not changed.';
+      }
+      return `The local model operation could not finish (${code}). No file URI or inference content was recorded.`;
+    },
     diagnosticsButton: 'Diagnostics and local data',
     diagnosticsButtonHint:
       'Opens an on-device diagnostic Preview and separate deletion actions.',

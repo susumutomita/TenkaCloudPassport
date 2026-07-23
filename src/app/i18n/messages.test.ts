@@ -178,4 +178,21 @@ describe('Message Catalog（src/app/i18n/messages.ts）', () => {
     expect(MESSAGES.ja.outcome.noSignalLabel).toBe('no-signal');
     expect(MESSAGES.en.outcome.noSignalLabel).toBe('no-signal');
   });
+
+  it('Follow-up F-FDRGS4: settings.modelError は信頼済みダウンロードの失敗コードごとに Rules 継続を案内し、未知コードは既存の汎用文言へ fallback する', () => {
+    for (const locale of LOCALES) {
+      const { modelError } = MESSAGES[locale].settings;
+      const messages = {
+        nativeContextUnavailable: modelError('NATIVE_CONTEXT_UNAVAILABLE'),
+        insufficientStorage: modelError('INSUFFICIENT_STORAGE'),
+        downloadFailed: modelError('DOWNLOAD_FAILED'),
+        downloadCancelled: modelError('DOWNLOAD_CANCELLED'),
+        integrityMismatch: modelError('INTEGRITY_MISMATCH'),
+        unknown: modelError('MANIFEST_READ_FAILED'),
+      };
+      const distinctMessages = new Set(Object.values(messages));
+      expect(distinctMessages.size).toBe(Object.values(messages).length);
+      expect(messages.unknown).toContain('MANIFEST_READ_FAILED');
+    }
+  });
 });

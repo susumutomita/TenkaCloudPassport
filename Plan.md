@@ -7997,3 +7997,198 @@ subagent、8-10 confidence の脆弱性のみ報告）を並列実行した。
 
 修正後、`bun test`（1921 pass、100% coverage）・`bun run typecheck`・
 `make before-commit`（exit 0、web export 成功）を再確認した。
+
+### [Follow-up F-FDRGS4 オンデバイス AI 有効化 UI 配線] - 2026-07-23
+
+#### 目的
+
+PR #132（Issue 104）で実装済みの Qwen2.5-1.5B 信頼済みダウンロード基盤
+（`trusted-model-catalog.ts` / `trusted-model-download.ts` /
+`expo-trusted-model-download.native.ts`）を Settings 画面から起動できるようにし、
+通常ユーザーが Document Picker 経由の手動 GGUF import を知らなくても
+オンデバイス LLM（Rules ではなく Local LLM）を有効化できる状態にする。
+follow-up F-FDRGS4（`.claude/state/follow-ups.jsonl`）を解消する。
+
+#### 制約
+
+- 新しい Provider Contract・新しい Prompt/Output Schema は作らない
+ （`docs/design/2026-07-23-on-device-conversation-agent.md` の既定路線を維持）。
+- Bonsai-27B は有効化しない（既定 off のまま）。production entitlement は付けない。
+- 既存 `LocalModelLifecycle`（import/activate/delete、Resource Risk Gate）・
+  `useLocalModelManagement` の import/activate/caution/blocked 契約を複製しない。
+  信頼済みダウンロードは「`ModelImportCandidate` を作って既存経路へ渡す」だけの
+  新しい入手経路として追加する。
+- No Mock。テストは実際の Port 契約に対する手書き Fake（`trusted-model-download.test.ts`
+  と同じ流儀）を使う。
+
+#### 調査で確定した設計判断
+
+1. **Provider 切替は既存配線を再利用し、新規配線を作らない**: `useLocalModelManagement`
+   は manifest の `activeModelSha256` が指す Model から `management.createProvider` で
+   Local Provider を組み立て、無ければ Rules へ fallback する（`configureProvider`、
+   変更なし）。したがって「取得済みなら会話 Agent が Local を使う」は、信頼済み
+   ダウンロードの結果を既存 `importCandidate` → `activate` へそのまま渡すだけで
+   自動的に満たされる。新しい Provider 選択ロジックは作らない。
+2. **全データ削除は既に Model を含む**: `local-data-control.ts` の `deleteAll` /
+   `removeModel` は `LocalModelStoragePort.remove()` 経由で
+   `LocalModelLifecycle.purgeManagedStore()` を呼び、入手経路（Document Picker /
+   信頼済みダウンロード）を問わず全 Model File を削除する。新しい削除経路は不要と
+   確認した。
+3. **新しい純関数モジュールを追加する（代替案 2 つを比較）**:
+   - 案 A（不採用）: `use-local-model-management.ts`（Hook）へ直接ロジックを書く。
+     この Repo に React render harness が無く Hook 本体は実行テストできないため、
+     新しい分岐（consent/進捗/失敗）が未テストのまま残る。
+   - 案 B（不採用）: 既存 `local-model-management-controller.ts` へ追記する。
+     既存ファイルの責務（import/activate/caution の直接操作）と、今回追加する
+     「ダウンロード -> import -> activate の合成 + 状態導出」という一段高い責務が
+     混在し、`model-lifecycle.ts` / `trusted-model-download.ts` のように
+     関心事ごとにファイルを分ける既存方針から外れる。
+   - 案 C（採用）: 新規 `src/app/trusted-model-enablement-controller.ts` に
+     「download -> import -> activate の合成関数」「Manifest からの状態導出」
+     「Error の型分類」を純関数として切り出す。Hook はこの関数を呼ぶだけの薄い
+     glue にし、実行テストは新規ファイルへ 100% 揃える。
+4. **Device gate は既存 Resource Risk Gate をそのまま再利用**: 信頼済み
+   ダウンロード後の `activate` 呼び出しは既存 `assessActivation`/`activate` を経由する
+   ため、`supported`/`caution`/`blocked` の判定・確認 UI は新規実装なしでそのまま
+   効く。Qwen1.5B 専用の Gate は追加しない。
+
+#### タスク
+
+1. `docs/design/2026-07-23-on-device-conversation-agent.md` の Known follow-ups を
+   本 PR で解消する旨に更新する。
+2. `src/app/trusted-model-enablement-controller.ts`（新規）を TDD で実装する。
+   `enableOnDeviceAi`（download -> import -> activate 合成）・
+   `onDeviceAiStatusFromManifest`（not-acquired/active/imported-not-active 判定）・
+   `mapOnDeviceAiErrorCode`（`TrustedModelAcquisitionError`/`ModelLifecycleError` の
+   分類）を実装する。
+3. `LocalModelManagementPort` に `trustedModelAcquisition` と `trustedModelSource` を
+   追加し、`default-local-model-management.native.ts` で
+   `createExpoTrustedModelDownloadPort()` と `QWEN2_5_1_5B_INSTRUCT_Q4_K_M` を配線する。
+4. `use-local-model-management.ts` に consent pending / 進捗 / 中止の state と
+   action を追加する（薄い glue、Hook 本体は既存方針どおり直接テストしない）。
+5. `SettingsScreen.tsx` に「オンデバイス AI を有効化」セクションを追加する
+   （未取得 / 同意待ち / ダウンロード中（進捗）/ 取得済み / 削除）。
+   `settings-accessibility.test.ts` へ静的ソース検査のテストを追加する
+   （この Repo の既存 Screen 検証パターンを踏襲）。
+6. `app/i18n/messages.ts` に ja/en の同意文・状態・エラー文言を追加する
+   （doc-style: 文末「。」、日英間半角スペース、絵文字と太字の併用回避）。
+7. 品質ゲート一式（`make before-commit`、`/review` 相当の code-reviewer、
+   `/security-review`、`/simplify`）を通す。
+
+#### 検証手順
+
+- `enableOnDeviceAi` の正常系（download -> import -> activate 成功）・
+  consent 拒否・容量不足・ダウンロード失敗・cancel・SHA 不一致・caution 確認待ち・
+  blocked（活性化されず Rules のまま）・import 側の重複 Model を手書き Fake Port で
+  実行テストする。
+- `onDeviceAiStatusFromManifest` の 3 状態を manifest fixture で固定する。
+- `make before-commit` exit 0、`bun test`（カバレッジ 100%）を確認する。
+
+#### 進捗ログ
+
+- 2026-07-23: 調査完了。既存 Provider 切替配線・全データ削除経路が Qwen1.5B の
+  信頼済みダウンロードにもそのまま効くことを確認し、新規実装を
+  「download -> import -> activate の合成」に絞り込んだ。実装着手。
+- 2026-07-23: `trusted-model-enablement-controller.ts`・Hook 配線・Settings UI・
+  i18n を実装し、`make before-commit`（1534 pass、カバレッジ 100%）を確認した。
+  code-reviewer・security-review・`/simplify`（reuse/simplification/efficiency/
+  altitude の 4 観点並列）を実行し、指摘を反映した（詳細は次節）。反映後に
+  `make before-commit`（1535 pass、カバレッジ 100%）を再確認した。
+- 2026-07-23: 反映内容を検証する 2 回目の code-reviewer を実行し、
+  (a) `hasActiveProviderRun` 再チェックの修正に実行テストが 1 件も無い
+ （Hook 本体は直接実行テストできないため、既存の他 mutation と同じ
+  ソーステキスト検査が必要だった）、(b) `onBeforeActivation`（旧
+  `onDownloaded`）の発火位置がダウンロード完了直後のままで、実際には
+  signal を尊重して中断できる import 区間まで Cancel を隠していた、の
+  2 件を追加で検出した。両方を修正し（テスト追加、コールバック発火位置を
+  import 成功後・activate 開始前へ移動）、`make before-commit`
+ （1536 pass、カバレッジ 100%）を再確認した。
+
+#### 振り返り
+
+- **問題（major、code-reviewer 指摘）**: 信頼済みダウンロードが `Paths.cache`
+  相当の一時領域に File を置いたまま `importCandidate`（Copy であり Move では
+  ない）へ渡していたため、import 成功後も一時 File を消しておらず、
+  「有効化」を 1 回成功させるたびに約 1.1 GB の Model が private storage と
+  一時領域の 2 か所に残り続けるストレージリークになっていた。
+  - **根本原因**: `acquireTrustedModel`（PR #132、既存）は失敗時だけ
+    `deleteQuietly` で一時 File を消す契約になっており、成功時の掃除は
+    「呼び出し側の責務」という暗黙の前提だった。本 PR で初めてその
+    呼び出し側（`enableOnDeviceAi`）を書いたときに、この暗黙の契約を
+    見落とした。
+  - **予防策**: `deleteQuietly` を `trusted-model-download.ts` から export し、
+    `enableOnDeviceAi` が import・activate の成否を問わず `finally` で必ず
+    呼ぶよう修正した。テストに一時 File 削除の assertion を成功系・失敗系
+    それぞれへ追加した。今後この Port を使う呼び出し側を増やす場合は、
+    「一時領域の所有者は呼び出し側」という契約を関数の doc comment に
+    明記して引き継ぐ。
+- **問題（major、code-reviewer/altitude 指摘、両方で独立に検出）**:
+  同意カードを開いた時点（`requestEnableOnDeviceAi`）でしか
+  `hasActiveProviderRun` を確認しておらず、カードを開いたまま Lounge が
+  開始された場合に「同意してダウンロードを開始する」を押すと、他の全 Model
+  mutation（`confirmImport`・`activate`・`unload`・`deleteModel`）が守る
+  「実行中なら `pendingProviderOperation` へ確認待ちにする」既存の安全機構を
+  バイパスし、無確認で `waitForNativeTeardown()`（会話 Agent の強制中断）を
+  呼んでしまっていた。
+  - **根本原因**: 新しい mutation を書くときに、既存 4 操作が共有する
+    「実行直前の再確認」という契約を、既存コードのコピーからではなく
+    ゼロから書いたために見落とした。
+  - **予防策**: `PendingProviderOperation` に `'enable-on-device-ai'` を追加し、
+    `confirmEnableOnDeviceAiConsent` を他の 4 操作と同じ形（実行直前に
+    再確認 -> 確認待ちへ委譲 or 即実行）へ揃えた。新しい Model mutation を
+    追加するときは、既存の類似 mutation を関数単位でコピーしてから差分を
+    書く（ゼロから書き直さない）方針を徹底する。
+- **問題（medium、code-reviewer 指摘）**: 失敗時のエラー文言が「会話 Agent は
+  Rules のまま変わりません」と断定していたが、実際に保証されるのは
+  `activeModelSha256` が変更されないことだけで、ユーザーが既に別の Local
+  Model を使っていた場合は誤った説明になっていた。ja/en とも「現在の設定は
+  変更していません」という中立的な表現へ修正した。
+- **問題（medium、code-reviewer 指摘）**: ダウンロード中の Cancel ボタンが、
+  import・activate（`AbortSignal` を受け取らない区間）の間も表示され続け、
+  押しても効かない無音区間があった。`enableOnDeviceAi` に `onDownloaded`
+  コールバックを追加し、ダウンロード完了後は `onDeviceAiFlow` を
+  `'finalizing'` へ遷移させて Cancel 導線自体を出さない設計に直した。
+- **問題（efficiency 指摘、対応済み）**: `onDeviceAiStatus` の Manifest 走査が
+  無関係な render でも毎回実行され、Native の Download 進捗 callback も
+  間引きなしで直接 `setState` していた。前者は `useMemo`、後者は %
+  バケットが変わったときだけ更新する throttle で対応した。
+- **問題（simplify 指摘、対応済み）**: 「同意待ち」「ダウンロード中」を独立
+  した 2 boolean で持つと `SettingsScreen.tsx` 側で二重否定の分岐が必要に
+  なっていた。単一の `onDeviceAiFlow` tag へ統合し、既存 `LocalModelCard` が
+  単一 flag で分岐する流儀に揃えた。
+- **問題（high、2 回目の code-reviewer 指摘）**: `hasActiveProviderRun`
+  再チェックの修正（前述）を反映した際、この Repo に React render harness が
+  無いため直接実行テストできない Hook 本体に対して、既存の他 mutation が
+  持つソーステキスト検査パターン（`readSourceFile` + `expectInOrder`/
+  `toContain`）を新しい分岐にも足すのを一度忘れていた。
+  - **根本原因**: 「Hook 本体は直接実行テストしない」という既存方針を、
+    「テストを足さなくてよい」と誤読した。実際には「実行はできないが、
+    ソーステキスト検査でならテストできる」が正しい方針であり、既存の
+    4 mutation 分は全てこの方式でテストされていた。
+  - **予防策**: 新しい Hook mutation を追加するときは、既存の類似
+    mutation のテストも同じ PR でコピーして書き換える（実装だけコピーし
+    テストは後回しにしない）。
+- **問題（medium、2 回目の code-reviewer 指摘）**: Cancel 導線を隠す
+  `onBeforeActivation`（旧 `onDownloaded`）を、ダウンロード完了直後（import
+  開始前）に呼んでいたため、実際には `AbortSignal` を尊重して中断できる
+  `importLocalModelCandidate` の実行区間まで Cancel を隠してしまっていた。
+  - **根本原因**: 「Cancel が効かない区間を隠す」という要件を、
+    「ダウンロードが終わったら隠す」という表面的なタイミングで実装し、
+    どの関数が実際に signal を尊重するかを個別に確認していなかった。
+  - **予防策**: コールバックの発火位置は `importLocalModelCandidate` 成功後・
+    `performLocalModelActivation` 開始前へ移動した。今後同種の「中断可能性に
+    応じて UI を変える」実装をするときは、各段階が実際に `signal` を
+    受け取るかどうかを型定義（`Pick<LocalModelLifecycle, ...>` の各関数の
+    シグネチャ）で確認してから境界を決める。
+- **見送った指摘（判断理由を記録）**: (1) `enableOnDeviceAi` が
+  `importLocalModelCandidate`・`performLocalModelActivation` それぞれの末尾で
+  `refresh()` を呼ぶため 2 回連続で呼ばれる点は、両関数とも既存の
+  `local-model-management-controller.ts` の他の呼び出し元と共有する契約で
+  あり、ここだけ最適化すると他の呼び出し元との整合が崩れるため見送った。
+  (2) `LocalModelManagementPort.trustedModelSource` を Capability（関数）へ
+  畳み込む案は、`pickCandidate`/`createProvider` も含め Port 自体が現状
+  Native 単一実装しか持たないため、素の data field のままでも Port の既存
+  性質と矛盾しないと判断し見送った。(3) `OnDeviceAiSection` の削除ボタンと
+  既存 `LocalModelCard` の削除ボタンが `imported-not-active` 状態で重複する
+  UX 上の冗長さは、機能的には壊れておらず本 PR の scope（有効化導線の追加）
+  を超えるため follow-up へ列挙した（`01KY7KHNSF4ZP7EZZ0MWDJJHJ6`）。

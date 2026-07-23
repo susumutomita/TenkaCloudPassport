@@ -4,6 +4,7 @@ import {
   createExpoModelFileStore,
   pickGgufImportCandidate,
 } from '../local-agent/expo-model-file-store.native';
+import { createExpoTrustedModelDownloadPort } from '../local-agent/expo-trusted-model-download.native';
 import {
   createLlamaCompletionPort,
   type LocalModelExecutionLeasePort,
@@ -16,6 +17,7 @@ import {
   ModelLifecycleError,
 } from '../local-agent/model-lifecycle';
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
+import { QWEN2_5_1_5B_INSTRUCT_Q4_K_M } from '../local-agent/trusted-model-catalog';
 import type { DefaultLocalModelManagementComposition } from './default-local-model-management-contract';
 import { createLocalModelLifecycleStorageAdapter } from './local-model-lifecycle-storage-adapter';
 import type { LocalModelManagementPort } from './local-model-management-port';
@@ -54,6 +56,11 @@ function createNativeManagement(
           recorder
         )
       );
+    },
+    trustedModelSource: QWEN2_5_1_5B_INSTRUCT_Q4_K_M,
+    trustedModelAcquisition: {
+      downloadPort: createExpoTrustedModelDownloadPort(),
+      capacity: { availableDiskSpaceBytes: fileStore.availableDiskSpaceBytes },
     },
   };
   return {

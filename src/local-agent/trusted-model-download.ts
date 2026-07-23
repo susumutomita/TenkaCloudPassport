@@ -110,7 +110,14 @@ export function deriveFileName(source: TrustedModelSource): string {
   return candidate.length > 0 ? candidate : `${source.id}.gguf`;
 }
 
-async function deleteQuietly(
+/**
+ * code-reviewer 指摘（major、follow-up F-FDRGS4）: 呼び出し側
+ *（`trusted-model-enablement-controller.ts`）が import 成功後も一時領域の
+ * File を消し忘れると、private storage（copy 先）と `Paths.cache`（download 先）
+ * の 2 か所に同じ Model が残り続け、容量を恒久的に二重消費する。ここで export し、
+ * 呼び出し側が import・activate の成否を問わず同じ規約で掃除できるようにする。
+ */
+export async function deleteQuietly(
   downloadPort: TrustedModelDownloadPort,
   uri: string
 ): Promise<void> {
