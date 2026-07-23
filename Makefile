@@ -1,3 +1,23 @@
+# 引数なしで `make` を叩いたときに `install` が動いてしまうと、なぜ install が
+# 走ったのか分かりにくい (Issue 112)。既定 target を help 表示にし、`make start` /
+# `make dev` / `make stop` の使い分けを毎回確認できるようにする。
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help:
+	@echo "TenkaCloud Passport の主要 make target。"
+	@echo ""
+	@echo "開発サーバー起動:"
+	@echo "  make start    Expo Go 向け (--go)。個人端末に Development Build を入れていない場合はこちら。"
+	@echo "  make dev      Development Build (dev-client) 向け。expo run:ios/android で端末に入れた版と繋ぐ場合はこちら。"
+	@echo "  make stop     8081 で待ち受ける Expo/Metro だけを安全に停止する (該当プロセスがなければ何もしない)。"
+	@echo "  make restart  stop してから dev で再起動する。"
+	@echo ""
+	@echo "品質ゲート:"
+	@echo "  make before-commit  architecture_harness / harness_test / dup_check / lint_text / lint 等を一括実行する。"
+	@echo ""
+	@echo "target 全量は AGENTS.md の「コマンド一覧」を参照する。"
+
 .PHONY: install
 # --ignore-scripts: Mini Shai-Hulud 2nd (Flatt Security, 2026-05-12) を含む
 # lifecycle script 系サプライチェイン攻撃を一段目で封じるフラグ。
@@ -132,15 +152,63 @@ dead_code:
 .PHONY: before-commit
 before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export
 
+# Development Build (dev-client) 向け。`expo run:ios` / `expo run:android` で
+# 個人端末や Simulator に入れた Development Build と繋ぐときはこちら。Expo Go では
+# 繋がらない (dev-client 版と Expo Go 版は別 Build)。
 .PHONY: dev
 dev:
 	bun run dev
 
 # スマホ (Expo Go) 向けのワンコマンド起動。expo-dev-client が入っているため素の
 # `expo start` は Development Build モードになり、Expo Go の QR 読取では起動できない。
-# `--go` で Expo Go モードに固定する。
+# `--go` で Expo Go モードに固定する。Development Build と繋ぐ場合は `make dev` を使う。
 .PHONY: start
 start:
 	@[ -d node_modules ] || $(MAKE) install
 	@echo "スマホに Expo Go を入れ、Mac と同じ Network (Wi-Fi) につないでから、下に出る QR を読み取ってください。"
 	bunx expo start --go
+
+# Metro/Expo (既定 8081) を停止する。ポート 8081 の PID を無差別に kill すると、
+# 実機接続など他用途で 8081 を使っているプロセスまで巻き添えにしうるため、PID ごとに
+# コマンドラインを確認し、Expo/Metro 由来と識別できたものだけを kill する
+# (2 段階の safety net、Issue 112)。該当プロセスがなくてもエラーにしない。
+.PHONY: stop
+stop:
+	@pids="$$(lsof -ti tcp:8081 2>/dev/null)"; \
+	if [ -z "$$pids" ]; then \
+		echo "ポート 8081 で待ち受けている開発サーバーは見つかりませんでした。"; \
+		exit 0; \
+	fi; \
+	identified=0; \
+	stopped=0; \
+	for pid in $$pids; do \
+		cmd="$$(ps -p "$$pid" -o command= 2>/dev/null)"; \
+		lower="$$(printf '%s' "$$cmd" | tr '[:upper:]' '[:lower:]')"; \
+		case "$$lower" in \
+			*expo*|*metro*) \
+				identified=1; \
+				if kill "$$pid" 2>/dev/null; then \
+					echo "停止しました: PID $$pid ($$cmd)"; \
+					stopped=1; \
+				else \
+					echo "停止に失敗しました: PID $$pid ($$cmd) — 権限等を確認してください"; \
+				fi;; \
+			*) \
+				echo "スキップしました: PID $$pid は Expo/Metro と識別できないため停止しません ($$cmd)";; \
+		esac; \
+	done; \
+	if [ "$$stopped" = "1" ]; then \
+		echo "開発サーバーを停止しました。"; \
+	elif [ "$$identified" = "1" ]; then \
+		echo "Expo/Metro のプロセスは見つかりましたが、停止に失敗したものがあります。上記メッセージを確認してください。"; \
+		exit 1; \
+	else \
+		echo "Expo/Metro と識別できるプロセスが見つからなかったため、何も停止しませんでした。"; \
+	fi
+
+# stop してから dev-client 向けに再起動する。Expo Go で再起動したい場合は
+# `make stop` の後に `make start` を個別に叩く。
+.PHONY: restart
+restart:
+	$(MAKE) stop
+	$(MAKE) dev

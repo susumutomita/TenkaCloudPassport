@@ -60,9 +60,15 @@ make install
 make dev
 ```
 
-`make dev` targets a Development Build. If you have not set one up on a device or simulator yet, read
-[Native Development Builds](./docs/development/native-builds.md) first. If you just want to try it with no
-setup, run `make start` after `make install` to launch it in Expo Go instead.
+`make dev` targets a Development Build (dev-client). If you have not set one up on a device or simulator yet,
+read [Native Development Builds](./docs/development/native-builds.md) first. If you just want to try it with
+no setup, run `make start` after `make install` to launch it in Expo Go (`--go`) instead. `make start` and
+`make dev` target different builds and do not connect to each other.
+
+If Metro/Expo becomes a zombie and the port stays occupied, `make stop` stops only the matching
+Expo/Metro process (it does not kill unrelated processes on 8081). Run `make restart` to stop it and
+relaunch with `make dev`. See `make help` (running bare `make` shows the same output) for the full target
+list.
 
 The owner has verified on a physical device that scanning this QR with a standard camera opens the Intro Card
 page in a browser. This does not carry the device family, OS version, and other evidence the release matrix

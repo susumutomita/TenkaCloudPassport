@@ -59,10 +59,16 @@ make install
 make dev
 ```
 
-`make dev` は Development Build 向けです。Native の Development Build をまだ端末や
+`make dev` は Development Build（dev-client）向けです。Native の Development Build をまだ端末や
 Simulator に入れていない場合は、先に
 [Native Development Build 手順](./docs/development/native-builds.md) を参照してください。
-準備なしで試す場合は、`make install` の後に `make start` を使うと Expo Go で起動します。
+準備なしで試す場合は、`make install` の後に `make start` を使うと Expo Go（`--go`）で起動します。
+`make start` と `make dev` は別の Build 向けで、互いに繋がりません。
+
+Metro/Expo が Zombie 化してポートが解放されない場合は `make stop` で該当プロセスだけを
+安全に停止できます（8081 上の無関係なプロセスまでは kill しません）。停止してから
+`make dev` で再起動したい場合は `make restart` も使えます。target 一覧は `make help`
+（引数なしの `make` でも同じ内容）で確認できます。
 
 実機の標準カメラで QR を読み取り、ブラウザで自己紹介ページが開くことは owner が実機で
 確認済みです。ただし Release Matrix が求める機種・OS Version 等の記録は伴わないため、
