@@ -8254,3 +8254,78 @@ plugin）を node_modules から解決する必要があるにもかかわらず
 - **予防策**: EAS Build を非対話・auto-submit で呼ぶワークフローを新設・
   変更するときは、「実ビルドの実行場所」と「config 評価の実行場所」を
   別の質問として切り分けて確認する。
+
+### ios-release: safe-chain の minimum package age 誤検知を回避 (Install dependencies を safe-chain より前へ) - 2026-07-24
+
+#### 目的
+
+PR #136 で追加した `Install dependencies`（`bun install --ignore-scripts`）
+ステップが、その前段の `Setup safe-chain` の shim に intercept され、
+**minimum package age** チェックで新しい Expo パッチ版
+（expo-dev-client@57.0.9, expo@57.0.8, @expo/metro-runtime@57.0.7 等 21 件）
+を 403 でブロックして ios-release ワークフローが失敗した障害（2 度目）を
+修正する。エラーは以下:
+
+```
+Safe-chain: blocked 21 direct package download request(s) due to minimum package age
+Safe-chain: Exiting without installing packages blocked by the direct download minimum package age check.
+```
+
+ブロックされた版は Issue 133（`1bea953 chore: align Expo dependencies to
+expected SDK 57 patch versions`）で整合したばかりの正当な Expo パッチ版
+であり、safe-chain の age ゲートは誤検知である。
+
+#### 制約
+
+- safe-chain を無効化しない。ワークフロー冒頭コメントの設計意図
+  「safe-chain は eas-cli の global install を守るために通す」に沿って
+  scope を戻すのみ。
+- Actions の full SHA ピン、`permissions: contents: read` は維持する。
+- 各ステップの
+  `if: steps.check-secrets.outputs.expo_token_present == 'true'` ガードは
+  維持する。
+- `rm`/`npx` 禁止（`bunx`/`nlx`）。ios/、node_modules は不触。
+
+#### タスク
+
+1. `.github/workflows/ios-release.yml` で `Install dependencies`
+   （`bun install --ignore-scripts`）ステップを `Setup safe-chain` より
+   **前**（`Setup Node.js` の直後）へ移動する。これによりアプリ依存は
+   bun.lock で integrity 固定済みのまま native bun でインストールされ、
+   safe-chain の age ゲート対象から外れる。safe-chain はその後の
+   `eas build` ステップ内の `bun add -g eas-cli`（新規 global install）を
+   引き続き保護する。
+2. 冒頭コメント（Supply Chain Security 節）に、アプリ依存は safe-chain
+   前に install する（lockfile 固定のため age ゲート不要）、safe-chain は
+   eas-cli の global install 保護に scope を絞る旨を追記する。
+3. `make before-commit` を通す。
+
+#### 検証手順
+
+- ステップ順序が checkout → Setup Bun → Setup Node.js →
+  **Install dependencies** → Setup safe-chain → Trigger EAS Build に
+  なっていることを目視確認する。
+- `make before-commit`（architecture-harness、harness_test、dup_check、
+  lint_text、lint）が exit 0 になることを確認する。
+
+#### 進捗ログ
+
+- `Install dependencies` ステップを `Setup safe-chain` より前へ移動。
+- 冒頭コメントに safe-chain の scope（eas-cli 保護限定）を明記。
+- `make before-commit` 実行。
+
+#### 振り返り
+
+- **問題**: PR #136 で `Install dependencies` を `Setup safe-chain` の
+  **後**に置いてしまい、safe-chain の shim がアプリ依存の直接ダウンロード
+  も intercept する構成になっていた。
+- **根本原因**: 「safe-chain は eas-cli の global install を守る」という
+  設計意図に対し、実装（ステップ順序）がそれより広い scope（すべての
+  bun install）を safe-chain の管理下に置いてしまっていた。意図と実装の
+  ステップ順序が一致しているかを確認していなかった。
+- **予防策**: safe-chain のような shim 型ツールをセットアップするワーク
+  フローでは、「shim がどの範囲のコマンドを intercept するか」を
+  ステップ順序で明示的にコメントし、scope を意図的に絞った直後に該当
+  コマンド（eas-cli install）を置く。lockfile で integrity 固定済みの
+  install は shim の手前に置き、age ゲートのような誤検知しうるチェックの
+  対象から外す。

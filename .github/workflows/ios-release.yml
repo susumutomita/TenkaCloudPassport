@@ -19,7 +19,11 @@ name: ios-release
 #
 # Supply Chain Security:
 # - Actions は full SHA へピン (ci.yml から流用)
-# - Safe Chain を eas-cli の global install 前に通す
+# - アプリ依存 (node_modules) は safe-chain のセットアップより前に native bun install する。
+#   bun.lock で integrity 固定済み・本流 ci.yml でも検証済みのため、safe-chain の
+#   minimum package age ゲート対象にする必要がない (対象にすると SDK パッチ整合直後の
+#   正当な新パッチ版が誤検知でブロックされる。過去 2 回の実障害を参照)。
+# - Safe Chain は eas-cli の global install (新規パッケージ取得) の直前に通し、その保護に scope を絞る
 # - permissions は contents: read のみ (GITHUB_TOKEN を使う操作がないため)
 # - EXPO_TOKEN Secret が未設定なら fail ではなく明示 skip する
 #   (Secrets 投入前に owner の他の push で CI が赤くならないようにするため)
@@ -68,19 +72,25 @@ jobs:
         with:
           node-version: "22.13.1"
 
-      # Supply Chain Security: eas-cli の global install も safe-chain 経由にする (ci.yml と同じ理由)
+      # eas-cli が app.json の config plugins (llama.rn 等) を解決するために node_modules が要る。
+      # lifecycle script は不要 (native artifact 取得は EAS クラウド側の Custom Build で行う)。
+      # 既存 bun.lock を使い新規解決は増やさない (make install と同じコマンド)。
+      # safe-chain のセットアップより前に native bun で install する: bun.lock で
+      # integrity 固定済み・ci.yml で検証済みのため safe-chain の minimum package age
+      # ゲート対象にする必要がなく、対象にすると SDK パッチ整合直後の正当な新パッチ版が
+      # 誤検知でブロックされる (実障害 2 回で確認済み)。
+      - name: Install dependencies
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        run: bun install --ignore-scripts
+
+      # Supply Chain Security: eas-cli の global install (新規パッケージ取得) を safe-chain 経由にする。
+      # アプリ依存は上のステップで safe-chain を通さずに install 済みのため、ここでの
+      # scope は eas-cli の新規 global install の保護に限定される。
       - name: Setup safe-chain
         if: steps.check-secrets.outputs.expo_token_present == 'true'
         run: |
           bun add -g --ignore-scripts @aikidosec/safe-chain@1.5.3
           safe-chain setup-ci
-
-      # eas-cli が app.json の config plugins (llama.rn 等) を解決するために node_modules が要る。
-      # lifecycle script は不要 (native artifact 取得は EAS クラウド側の Custom Build で行う)。
-      # 既存 bun.lock を使い新規解決は増やさない (make install と同じコマンド)。
-      - name: Install dependencies
-        if: steps.check-secrets.outputs.expo_token_present == 'true'
-        run: bun install --ignore-scripts
 
       - name: Trigger EAS Build and submit to TestFlight
         if: steps.check-secrets.outputs.expo_token_present == 'true'
