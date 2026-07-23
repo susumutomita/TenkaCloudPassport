@@ -2,16 +2,19 @@ name: ios-release
 
 # タグ push (v<major>.<minor>.<patch>) を起点に EAS Build → EAS Submit を非対話で実行し、
 # TestFlight まで自動で届ける。実際のビルドは GitHub Actions のランナーではなく EAS の
-# クラウドビルド環境で完結する。このワークフローの役割は「ビルドを起動するだけ」であり、
-# プロジェクト依存関係 (bun install) はランナー側では行わない
-# (eas-cli は app.json を静的に読むだけで、node_modules を必要としない)。
+# クラウドビルド環境で完結する。このワークフローの役割は「ビルドを起動するだけ」だが、
+# `eas build --non-interactive --auto-submit` はランナー上で app.json の config を評価する
+# 際に `plugins`（llama.rn を含む Expo config plugin）を node_modules から解決する必要が
+# あるため、ランナー側でも `bun install --ignore-scripts` による依存インストールが要る
+# (lifecycle script は不要。native artifact 取得はクラウド側で行うため)。
 # llama.rn の Native artifact 取得は EAS クラウドビルド側の Custom Build config
 # (.eas/build/ios-simulator-build.yml, .eas/build/ios-device-build.yml) の
 # `make setup-llama-native` ステップで、`pod install` の直前に行う (npm hooks の
 # eas-build-pre-install / eas-build-post-install はどちらも window が合わない。理由は
 # 上記 2 つの yml ファイル内コメントと docs/adr/0031-eas-testflight-automated-release.md を
-# 参照する)。GitHub Actions ランナー上で取得しても、EAS はソースを別途アップロードして
-# クラウド側で完結してビルドするため、ランナー側の node_modules や生成物はビルドに渡らない。
+# 参照する)。GitHub Actions ランナー上でインストールした node_modules は config plugin の
+# 解決にのみ使われ、EAS はソースを別途アップロードしてクラウド側で完結してビルドするため、
+# ランナー側の node_modules や生成物そのものはビルド成果物には渡らない。
 # 詳細は docs/development/ios-testflight-release.md を参照する。
 #
 # Supply Chain Security:
@@ -72,9 +75,17 @@ jobs:
           bun add -g --ignore-scripts @aikidosec/safe-chain@1.5.3
           safe-chain setup-ci
 
+      # eas-cli が app.json の config plugins (llama.rn 等) を解決するために node_modules が要る。
+      # lifecycle script は不要 (native artifact 取得は EAS クラウド側の Custom Build で行う)。
+      # 既存 bun.lock を使い新規解決は増やさない (make install と同じコマンド)。
+      - name: Install dependencies
+        if: steps.check-secrets.outputs.expo_token_present == 'true'
+        run: bun install --ignore-scripts
+
       - name: Trigger EAS Build and submit to TestFlight
         if: steps.check-secrets.outputs.expo_token_present == 'true'
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: "true"
+          EAS_BUILD_NO_EXPO_GO_WARNING: "true"
         run: bun run build:ios:testflight
