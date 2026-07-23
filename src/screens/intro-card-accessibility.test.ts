@@ -69,9 +69,20 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     const text = await source('IntroCardScreen.tsx');
 
     expect(text).toContain(
-      'encodeQr(encodeIntroCardUrlBestEffort(card, quizProgressHex))'
+      'const result = encodeIntroCardUrlBestEffort(card, quizProgressHex);'
     );
+    expect(text).toContain('encodedQr: encodeQr(result.url)');
     expect(text).not.toContain('encodeVCard');
+  });
+
+  it('表示画面は quizProgressIncluded が false（意味のある quizProgressHex が省略された）のときだけ非ブロッキング通知を出す（Issue 130 minor）', async () => {
+    const text = await source('IntroCardScreen.tsx');
+
+    expect(text).toContain(
+      "quizProgressHex !== undefined &&\n      quizProgressHex !== '0' &&\n      !result.quizProgressIncluded;"
+    );
+    expect(text).toContain('{quizProgressOmitted ? (');
+    expect(text).toContain('t.quizProgressOmittedNotice');
   });
 
   it('表示画面は QR を Accessibility Label 付きの View で包む', async () => {
@@ -103,14 +114,36 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
   });
 
-  it('表示画面・編集画面のどちらも AppScreen へ言語切替（locale / onChangeLocale）を渡し、Settings と Backup への導線は持たない（Issue 118）', async () => {
+  it('表示画面・編集画面のどちらも AppScreen へ言語切替（locale / onChangeLocale）を渡し、Backup への導線は持たない（Issue 118）', async () => {
     for (const fileName of ['IntroCardScreen.tsx', 'IntroCardEditScreen.tsx']) {
       const text = await source(fileName);
 
       expect(text).toContain('onChangeLocale={onChangeLocale}');
-      expect(text).not.toContain('onPress={onOpenSettings}');
       expect(text).not.toContain('onPress={onOpenBackup}');
     }
+  });
+
+  it('表示画面・編集画面のどちらも控えめな Settings リンクを持ち、クイズ・診断への唯一の入口を forward する（Issue 130: #127 が外した導線の復活）', async () => {
+    for (const fileName of ['IntroCardScreen.tsx', 'IntroCardEditScreen.tsx']) {
+      const text = await source(fileName);
+
+      expect(text).toContain('onPress={onOpenSettings}');
+      expect(text).toContain('accessibilityLabel={t.settingsButton}');
+      expect(text).toContain('accessibilityHint={t.settingsButtonHint}');
+      expect(text).toContain("from '../ui/touch-target'");
+      expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
+    }
+  });
+
+  it('表示画面の Settings リンクは編集ボタンより後、削除リンクより前に置く（主導線を編集に集中させたまま、控えめな入口として挟む）', async () => {
+    const text = await source('IntroCardScreen.tsx');
+    const editButtonAt = text.indexOf('label={t.editButton}');
+    const settingsLinkAt = text.indexOf('onPress={onOpenSettings}');
+    const deleteLinkAt = text.indexOf('onPress={onDelete}');
+
+    expect(editButtonAt).toBeGreaterThan(-1);
+    expect(settingsLinkAt).toBeGreaterThan(editButtonAt);
+    expect(deleteLinkAt).toBeGreaterThan(settingsLinkAt);
   });
 
   it('編集画面は encodeVCard・RealQrView に依存しない（QR 生成は表示画面の責務）', async () => {

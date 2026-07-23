@@ -93,6 +93,12 @@ export interface IntroCardEditScreenProps {
   readonly onRemoveOtherLink: (index: number) => void;
   readonly onSave: () => void;
   readonly onChangeLocale: (locale: Locale) => void;
+  /**
+   * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を復活させる。
+   * カード保存前（初回起動時等）もクイズ・診断・モデル管理へ到達できるよう、
+   * `IntroCardScreen` と同じ導線をここにも持つ（`IntroCardScreen.tsx` 参照）。
+   */
+  readonly onOpenSettings: () => void;
 }
 
 function Notice({
@@ -271,6 +277,7 @@ export default function IntroCardEditScreen({
   onRemoveOtherLink,
   onSave,
   onChangeLocale,
+  onOpenSettings,
 }: IntroCardEditScreenProps) {
   const t = MESSAGES[locale].introCard;
   const overBudget = cardUrlByteUsage > QR_ENCODER_MAX_BYTES;
@@ -720,6 +727,19 @@ export default function IntroCardEditScreen({
           ? t.byteUsageOverBudget(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)
           : t.byteUsageLabel(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)}
       </Text>
+      {/* Issue 130（Codex 指摘 blocker）: カード保存前（初回起動時等）でも
+          クイズ・診断へ到達できるよう、フォーム内容の末尾に控えめな Settings
+          リンクを置く（保存ボタン＝ footer とは別の位置にし、footer は
+          Save 専用のまま保つ、Issue 118 の footer 契約を崩さない）。 */}
+      <Pressable
+        accessibilityHint={t.settingsButtonHint}
+        accessibilityLabel={t.settingsButton}
+        accessibilityRole="button"
+        onPress={onOpenSettings}
+        style={styles.settingsLink}
+      >
+        <Text style={styles.settingsLinkText}>{t.settingsButton}</Text>
+      </Pressable>
     </AppScreen>
   );
 }
@@ -783,6 +803,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 20,
+  },
+  settingsLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.md,
+  },
+  settingsLinkText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   linkField: {
     gap: spacing.xs,

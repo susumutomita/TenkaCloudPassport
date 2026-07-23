@@ -152,6 +152,37 @@ describe('encodeIntroCardUrl', () => {
     }
   });
 
+  it('quizProgressHex に自分自身の decode 側が拒否する不正値（空文字・16 進以外・桁数超過）を渡すと、埋め込む前に INVALID_SHARE_URL で拒否する（Issue 130 minor: 自己矛盾した URL を作れないようにする）', () => {
+    const card: IntroCard = { name: '田中太郎' };
+    const invalidHexValues = [
+      '',
+      'zz',
+      '-1',
+      'f'.repeat(QUIZ_PROGRESS_HEX_MAX_LENGTH + 1),
+    ];
+
+    for (const invalidHex of invalidHexValues) {
+      const error = captureError(() => encodeIntroCardUrl(card, invalidHex));
+      expect(error).toBeInstanceOf(IntroCardError);
+      if (error instanceof IntroCardError) {
+        expect(error.code).toBe('INVALID_SHARE_URL');
+      }
+    }
+  });
+
+  it('quizProgressHex が不正なとき encodeIntroCardUrlBestEffort も CARD_TOO_LARGE ではなく同じ INVALID_SHARE_URL を投げ、カード本体だけの URL へフォールバックしない', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    const error = captureError(() =>
+      encodeIntroCardUrlBestEffort(card, 'not-hex')
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('INVALID_SHARE_URL');
+    }
+  });
+
   it('jsQR で実際に読み取れる QR を生成し、読み取った URL の fragment を decode すると元のカードに戻る', () => {
     const url = encodeIntroCardUrl(FULL_CARD);
 
@@ -298,7 +329,7 @@ describe('decodeIntroCardUrlFragment', () => {
 });
 
 /**
- * Issue 110 / ADR-0034: クイズ進捗ビットマスク（`q`）を既存の payload
+ * Issue 110 / ADR-0035: クイズ進捗ビットマスク（`q`）を既存の payload
  * `{v,n,t,o,s,l,e,p}` へ任意キーとして相乗りさせる契約。
  */
 describe('クイズ進捗ビットマスク（q）の QR 相乗り', () => {
@@ -400,17 +431,18 @@ describe('introCardUrlByteLength（quizProgressHex 込み）', () => {
 });
 
 describe('encodeIntroCardUrlBestEffort', () => {
-  it('quizProgressHex を含めても上限に収まる場合はそのまま q を含める', () => {
+  it('quizProgressHex を含めても上限に収まる場合はそのまま q を含め、quizProgressIncluded は true を返す', () => {
     const card: IntroCard = { name: '田中太郎' };
 
-    const url = encodeIntroCardUrlBestEffort(card, 'ffff');
+    const result = encodeIntroCardUrlBestEffort(card, 'ffff');
 
-    expect(decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(url))).toBe(
-      'ffff'
-    );
+    expect(
+      decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(result.url))
+    ).toBe('ffff');
+    expect(result.quizProgressIncluded).toBe(true);
   });
 
-  it('quizProgressHex を含めると上限を超える場合は q を黙って省略し、カード本体は表示できる（Issue 121 の 1,351 byte フルカード相当）', () => {
+  it('quizProgressHex を含めると上限を超える場合は q を黙って省略し、カード本体は表示できる。quizProgressIncluded は false を返す（Issue 121 の 1,351 byte フルカード相当）', () => {
     const selfIntro =
       '弊社では分散システムと生成AIを組み合わせたプロダクト開発に取り組んでいます。'
         .repeat(10)
@@ -430,12 +462,15 @@ describe('encodeIntroCardUrlBestEffort', () => {
       IntroCardError
     );
 
-    const url = encodeIntroCardUrlBestEffort(nearMaxCard, oversizedHex);
+    const result = encodeIntroCardUrlBestEffort(nearMaxCard, oversizedHex);
 
-    expect(decodeIntroCardUrlFragment(fragmentOf(url))).toEqual(nearMaxCard);
+    expect(decodeIntroCardUrlFragment(fragmentOf(result.url))).toEqual(
+      nearMaxCard
+    );
     expect(
-      decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(url))
+      decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(result.url))
     ).toBeUndefined();
+    expect(result.quizProgressIncluded).toBe(false);
   });
 
   it('quizProgressHex を渡さない場合、カード本体自体の上限超過はフォールバックせずそのまま CARD_TOO_LARGE を投げる', () => {
@@ -462,5 +497,16 @@ describe('encodeIntroCardUrlBestEffort', () => {
     if (error instanceof IntroCardError) {
       expect(error.code).toBe('CARD_TOO_LARGE');
     }
+  });
+
+  it('quizProgressHex が undefined・"0"（全問未合格）のときは省略ではないため quizProgressIncluded は true のままにする（Issue 130 minor）', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    const withoutHex = encodeIntroCardUrlBestEffort(card);
+    const withZeroHex = encodeIntroCardUrlBestEffort(card, '0');
+
+    expect(withoutHex.quizProgressIncluded).toBe(true);
+    expect(withZeroHex.quizProgressIncluded).toBe(true);
+    expect(withoutHex.url).toBe(withZeroHex.url);
   });
 });

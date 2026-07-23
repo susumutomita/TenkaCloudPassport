@@ -78,6 +78,16 @@ describe('クラウド基礎クイズ（Issue 110）の Accessibility 契約', (
     ]);
   });
 
+  it('回答結果 View は accessibilityLiveRegion="polite" を持ち、画面遷移を伴わない結果表示をスクリーンリーダーへ明示的にアナウンスする（Issue 130 minor）', async () => {
+    const text = await source('QuizScreen.tsx');
+    const start = text.indexOf('{outcome ? (');
+    const end = text.indexOf(') : (', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain('accessibilityLiveRegion="polite"');
+    expect(body).toContain('accessibilityRole="summary"');
+  });
+
   it('回答するボタンは選択肢未選択のあいだ disabled になる', async () => {
     const text = await source('QuizScreen.tsx');
 

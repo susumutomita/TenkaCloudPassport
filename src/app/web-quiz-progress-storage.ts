@@ -6,6 +6,7 @@ import {
   parseStoredQuizProgress,
   QuizProgressStorageError,
   type QuizProgressStoragePort,
+  type QuizProgressStorageUsage,
   serializeQuizProgress,
   unavailableQuizProgressStorageError,
 } from './quiz-progress-storage';
@@ -40,6 +41,35 @@ export class WebQuizProgressStorageAdapter implements QuizProgressStoragePort {
       throw new QuizProgressStorageError(
         'WRITE_FAILED',
         '端末内 Storage へクイズ進捗を保存できませんでした。',
+        error
+      );
+    }
+  }
+
+  async inspect(): Promise<QuizProgressStorageUsage> {
+    if (!this.storage) throw unavailableQuizProgressStorageError();
+    try {
+      const raw = this.storage.getItem(QUIZ_PROGRESS_STORAGE_KEY);
+      return raw === null
+        ? { count: 0, bytes: 0 }
+        : { count: 1, bytes: new TextEncoder().encode(raw).byteLength };
+    } catch (error: unknown) {
+      throw new QuizProgressStorageError(
+        'READ_FAILED',
+        '端末内 Storage の使用量を確認できませんでした。',
+        error
+      );
+    }
+  }
+
+  async remove(): Promise<void> {
+    if (!this.storage) throw unavailableQuizProgressStorageError();
+    try {
+      this.storage.removeItem(QUIZ_PROGRESS_STORAGE_KEY);
+    } catch (error: unknown) {
+      throw new QuizProgressStorageError(
+        'DELETE_FAILED',
+        '端末内 Storage からクイズ進捗を削除できませんでした。',
         error
       );
     }

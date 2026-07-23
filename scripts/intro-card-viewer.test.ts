@@ -11,6 +11,10 @@ import {
 } from '../src/domain/intro-card';
 import { QUIZ_QUESTION_COUNT } from '../src/domain/quiz-catalog';
 import { QUIZ_PROGRESS_HEX_MAX_LENGTH } from '../src/domain/quiz-progress-code';
+import {
+  OPTIONAL_PAYLOAD_KEYS,
+  REQUIRED_PAYLOAD_KEYS,
+} from '../src/protocol/intro-card-url';
 
 /**
  * Issue 84: `site/c/index.html` は完全静的・外部リクエストゼロの自己紹介ページ
@@ -213,18 +217,20 @@ describe('自己紹介ページビューワー（site/c/index.html、Issue 84）
 });
 
 /**
- * Issue 110 / ADR-0034: クイズ進捗ビットマスク（`q`）のスタンプ表示契約。
+ * Issue 110 / ADR-0035: クイズ進捗ビットマスク（`q`）のスタンプ表示契約。
  * `src/domain/quiz-catalog.ts` / `src/domain/quiz-progress-code.ts` /
  * `src/protocol/intro-card-url.ts` の allowlist・定数と、このビューアの複製が
  * ドリフトしていないことを固定する。
  */
-describe('クイズ進捗スタンプ（q、Issue 110 / ADR-0034）の表示契約', () => {
-  it('KNOWN_PAYLOAD_KEYS に q を含む（intro-card-url.ts の allowlist 二重更新）', async () => {
+describe('クイズ進捗スタンプ（q、Issue 110 / ADR-0035）の表示契約', () => {
+  it('KNOWN_PAYLOAD_KEYS が intro-card-url.ts の正本（REQUIRED/OPTIONAL_PAYLOAD_KEYS）と厳密に一致する（Issue 130 major: hardcode 文字列同士の比較ではなく正本と比較する）', async () => {
     const text = await readViewerSource();
+    const expectedKeys = [...REQUIRED_PAYLOAD_KEYS, ...OPTIONAL_PAYLOAD_KEYS];
+    const expectedLiteral = `const KNOWN_PAYLOAD_KEYS = [${expectedKeys
+      .map((key) => `'${key}'`)
+      .join(', ')}];`;
 
-    expect(text).toContain(
-      "const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q'];"
-    );
+    expect(text).toContain(expectedLiteral);
   });
 
   it('QUIZ_QUESTION_COUNT・QUIZ_PROGRESS_HEX_MAX_LENGTH が domain の定数と同じ値を複製している（drift 検出）', async () => {

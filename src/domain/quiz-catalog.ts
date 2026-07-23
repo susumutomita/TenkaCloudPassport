@@ -2,7 +2,7 @@
  * Issue 110: クラウド基礎クイズの版管理済み同梱カタログ。`src/domain/clue-catalog.ts` と同じ
  * 「`Record` を `as const` でキー付けし `keyof typeof` から ID の型を導出する」流儀を踏襲する。
  * TenkaCloudChallenge 等の外部サービスへの通信・依存は持たない（設計文書
- * `docs/design/2026-07-23-cloud-basics-quiz.md` の「A: 同梱のみ」を採用、ADR-0034）。
+ * `docs/design/2026-07-23-cloud-basics-quiz.md` の「A: 同梱のみ」を採用、ADR-0035）。
  *
  * `bitIndex` は 0 起点・append-only の不変条件を持つ。既存設問の `bitIndex` を変更・再利用
  * すると、進捗を載せた過去の QR（`src/protocol/intro-card-url.ts` の `q`）の意味がずれてしまう
@@ -92,8 +92,8 @@ export const QUIZ_CATALOG = {
         en: 'It can only reach the internet through a NAT gateway',
       },
       {
-        ja: 'インターネットゲートウェイへの経路を持つルートテーブルに関連付けられている',
-        en: 'It is associated with a route table that has a route to an internet gateway',
+        ja: 'インターネットゲートウェイ（IGW）への route（IPv4 は 0.0.0.0/0、IPv6 は ::/0）を持つルートテーブルに関連付けられている',
+        en: 'It is associated with a route table that has a route to an internet gateway (0.0.0.0/0 for IPv4, ::/0 for IPv6)',
       },
       {
         ja: 'セキュリティグループが存在しない',
@@ -106,8 +106,8 @@ export const QUIZ_CATALOG = {
     ],
     correctIndex: 1,
     explanation: {
-      ja: 'パブリックサブネットとは、0.0.0.0/0 宛のトラフィックをインターネットゲートウェイ（IGW）へ向けるルートを持つサブネットのことを指す。',
-      en: 'A public subnet is a subnet associated with a route table that routes 0.0.0.0/0 traffic to an internet gateway (IGW).',
+      ja: 'パブリックサブネットとは、インターネットゲートウェイ（IGW）へ向けたデフォルトルート（IPv4 は 0.0.0.0/0、IPv6 は ::/0）を持つルートテーブルに関連付けられたサブネットのことを指す。',
+      en: 'A public subnet is a subnet associated with a route table that has a default route to an internet gateway (IGW): 0.0.0.0/0 for IPv4 traffic, or ::/0 for IPv6 traffic.',
     },
   },
   's3-consistency': {
@@ -123,8 +123,8 @@ export const QUIZ_CATALOG = {
         en: 'Updates are only eventually consistent, so stale data may be returned for a while',
       },
       {
-        ja: 'PUT/DELETE を含むすべての操作について強い整合性（strong consistency）を持つ',
-        en: 'All operations, including PUT/DELETE, provide strong read-after-write consistency',
+        ja: 'PUT/DELETE と、それに続く GET/LIST、および ACL・タグ・メタデータの操作について強い整合性（strong consistency）を持つ',
+        en: 'PUT/DELETE, the GET/LIST operations that follow them, and operations on object ACLs, tags, and metadata provide strong read-after-write consistency',
       },
       {
         ja: '整合性はリージョンごとに設定できる',
@@ -137,8 +137,8 @@ export const QUIZ_CATALOG = {
     ],
     correctIndex: 1,
     explanation: {
-      ja: 'S3 は 2020 年 12 月以降、新規・上書き・削除を含むすべての操作について強い整合性を追加費用なしで提供する。',
-      en: 'Since December 2020, S3 provides strong read-after-write consistency automatically for all operations (new objects, overwrites, and deletes) at no extra cost.',
+      ja: 'S3 は 2020 年 12 月以降、新規オブジェクトの作成・上書き・削除と、それに続く GET/LIST に加え、ACL・タグ・メタデータの変更操作についても、追加費用なしで強い整合性を提供する。',
+      en: 'Since December 2020, S3 automatically provides strong read-after-write consistency, at no extra cost, for new object writes, overwrites, and deletes plus the GET/LIST operations that follow them, and for operations that change object ACLs, tags, and metadata.',
     },
   },
   'lambda-basics': {
@@ -371,8 +371,8 @@ export const QUIZ_CATALOG = {
         en: 'Use the root user for everyday tasks and avoid creating IAM users',
       },
       {
-        ja: 'ルートユーザーには MFA を設定し、日常業務には使わず IAM ユーザーやロールを利用する',
-        en: 'Enable MFA on the root user, avoid using it for daily work, and use IAM users or roles instead',
+        ja: 'ルートユーザーには MFA を設定し、日常業務には使わない。IAM Identity Center（フェデレーション）や IAM ロール（一時的な認証情報）を優先し、長期的な認証情報を持つ IAM ユーザーはそれらが使えない例外的な用途に限る',
+        en: 'Enable MFA on the root user and avoid using it for daily work. Prefer IAM Identity Center (federation) or IAM roles (temporary credentials), and reserve IAM users with long-term credentials for exceptional cases where those are not feasible',
       },
       {
         ja: 'ルートユーザーのアクセスキーを常時発行してアプリケーションに埋め込む',
@@ -385,8 +385,8 @@ export const QUIZ_CATALOG = {
     ],
     correctIndex: 1,
     explanation: {
-      ja: 'ルートユーザーには MFA を設定した上で日常業務には使わず、代わりに権限を絞った IAM ユーザーやロールを使うことが AWS の標準的なベストプラクティスである。',
-      en: 'AWS best practice is to enable MFA on the root user, avoid using it for routine tasks, and rely on scoped-down IAM users or roles instead.',
+      ja: 'ルートユーザーには MFA を設定した上で日常業務には使わない。AWS の現在のベストプラクティスは、複数アカウントを AWS Organizations で管理する場合は IAM Identity Center のフェデレーションユーザーを、単一アカウントでは一時的な認証情報を発行する IAM ロールを優先することを推奨する。長期的な認証情報（パスワード・アクセスキー）を持つ IAM ユーザーは、それらの手段が使えない例外的な用途に限定する。',
+      en: 'Enable MFA on the root user and avoid using it for routine tasks. Current AWS guidance recommends preferring IAM Identity Center federated users (for multi-account setups managed with AWS Organizations) or IAM roles that issue temporary credentials (for a single account), and reserving IAM users with long-term credentials for exceptional cases where those options are not feasible.',
     },
   },
   'vpc-basics': {
@@ -433,8 +433,8 @@ export const QUIZ_CATALOG = {
         en: 'S3 Standard',
       },
       {
-        ja: 'S3 Intelligent-Tiering',
-        en: 'S3 Intelligent-Tiering',
+        ja: 'S3 One Zone-IA',
+        en: 'S3 One Zone-IA',
       },
       {
         ja: 'S3 Glacier Flexible Retrieval',
@@ -447,16 +447,16 @@ export const QUIZ_CATALOG = {
     ],
     correctIndex: 2,
     explanation: {
-      ja: 'S3 Glacier Flexible Retrieval はアーカイブ向けのストレージクラスで、取り出しオプションに応じて数分（迅速）から数時間（標準・大容量）の待ち時間が生じる。S3 Standard / Standard-IA はミリ秒単位で即時アクセスできる。',
-      en: 'S3 Glacier Flexible Retrieval is built for archival data, with retrieval times ranging from minutes (Expedited) to hours (Standard/Bulk) depending on the option chosen. S3 Standard and Standard-IA both offer millisecond, immediate access.',
+      ja: 'S3 Glacier Flexible Retrieval はアーカイブ向けのストレージクラスで、Expedited（迅速、通常 1〜5 分）・Standard（標準、通常 3〜5 時間）・Bulk（大容量、通常 5〜12 時間）の取得オプションに応じた待ち時間が生じる。S3 Standard・Standard-IA・One Zone-IA はいずれもミリ秒単位で即時アクセスできる（S3 Intelligent-Tiering も既定の階層は同様にミリ秒アクセスだが、任意で有効化する Archive Access 階層だけは Glacier Flexible Retrieval と同じ取得時間になるため、本設問の選択肢からは除外している）。',
+      en: 'S3 Glacier Flexible Retrieval is built for archival data, with retrieval times that depend on the option chosen: Expedited (typically 1-5 minutes), Standard (typically 3-5 hours), or Bulk (typically 5-12 hours). S3 Standard, Standard-IA, and One Zone-IA all offer millisecond, immediate access. (S3 Intelligent-Tiering’s default tiers are also millisecond-access; only its optional Archive Access tier shares Glacier Flexible Retrieval’s retrieval times, which is why it is excluded from this question’s choices.)',
     },
   },
   'fargate-basics': {
     bitIndex: 13,
     category: 'compute',
     prompt: {
-      ja: 'Amazon ECS/EKS の Fargate 起動タイプの特徴として正しいものはどれか。',
-      en: 'Which statement correctly describes the Fargate launch type for ECS/EKS?',
+      ja: 'Amazon ECS または EKS で Fargate を使う場合の特徴として正しいものはどれか。',
+      en: 'Which statement correctly describes using Fargate with ECS or EKS?',
     },
     choices: [
       {
@@ -464,8 +464,8 @@ export const QUIZ_CATALOG = {
         en: 'You must provision and manage the underlying EC2 instances yourself',
       },
       {
-        ja: 'サーバーやクラスタのインスタンスを管理せずにコンテナを実行できるサーバーレスのコンピューティングエンジンである',
-        en: 'A serverless compute engine that runs containers without managing servers or cluster instances',
+        ja: '基盤となる EC2 インスタンス（サーバー、ワーカーノード）をプロビジョニング・管理せずにコンテナを実行できるサーバーレスのコンピューティングエンジンである（ECS では起動タイプの 1 つ、EKS では cluster と Fargate profile を組み合わせて利用する）',
+        en: 'A serverless compute engine that runs containers without provisioning or managing the underlying EC2 instances (servers, worker nodes); ECS offers it as one of its launch types, while EKS uses it together with a cluster and a Fargate profile',
       },
       {
         ja: 'Lambda 関数のみを実行するためのランタイムである',
@@ -478,8 +478,8 @@ export const QUIZ_CATALOG = {
     ],
     correctIndex: 1,
     explanation: {
-      ja: 'Fargate は、コンテナを動かすための EC2 インスタンスやクラスタを自分で管理する必要がないサーバーレスのコンピューティングエンジンで、ECS でも EKS でも使える。',
-      en: 'Fargate is a serverless compute engine for containers: you never provision or manage the underlying EC2 instances or clusters, and it works with both ECS and EKS.',
+      ja: 'Fargate は、コンテナを動かすための基盤 EC2 インスタンス（サーバー、ワーカーノード）を自分でプロビジョニング・管理する必要がないサーバーレスのコンピューティングエンジンである。ECS では EC2 と並ぶ起動タイプの 1 つとして、EKS では cluster と Fargate profile を組み合わせて利用する（Fargate が無くすのはノード管理であり、EKS の cluster 自体の管理が不要になるわけではない）。',
+      en: 'Fargate is a serverless compute engine for containers: you never provision or manage the underlying EC2 instances (servers, worker nodes). ECS offers it as one of its two launch types (EC2 and Fargate), while EKS uses it together with a cluster and a Fargate profile (Fargate removes node management, not the EKS cluster itself).',
     },
   },
   'cloudwatch-alarm': {

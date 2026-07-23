@@ -6884,7 +6884,7 @@ TenkaCloud ブランドの文脈づけと勉強会での会話のフックを作
 
 #### タスク
 
-1. 設計文書（`docs/design/2026-07-23-cloud-basics-quiz.md`）と ADR-0034 を先に書く。
+1. 設計文書（`docs/design/2026-07-23-cloud-basics-quiz.md`）と ADR-0035 を先に書く。
 2. Domain: `quiz-catalog.ts`（16 問、5 カテゴリ、bitIndex 不変条件）、`quiz-progress.ts`（採点・進捗の
    純関数）、`quiz-progress-code.ts`（ビットマスク codec、BigInt）。
 3. Storage: `quiz-progress-storage.ts` Port + Web/Native adapter + factory（`intro-card-storage.ts`
@@ -6910,7 +6910,7 @@ TenkaCloud ブランドの文脈づけと勉強会での会話のフックを作
 
 - 2026-07-23: Issue 110 を読み、既存の `clue-catalog.ts` / `intro-card-storage.ts` /
   `intro-card-url.ts` / `site/c/index.html` / `PassportApp.tsx` / `messages.ts` の設計流儀を調査した。
-  設計文書と ADR-0034 を作成した。
+  設計文書と ADR-0035 を作成した。
 - 2026-07-23: Domain（`quiz-catalog.ts` 16 問・`quiz-progress.ts`・`quiz-progress-code.ts`
   ビットマスク codec）、Storage（`quiz-progress-storage.ts` + Web/Native adapter + factory）、
   Protocol（`intro-card-url.ts` へ `q` を追加、`encodeIntroCardUrlBestEffort` で QR byte 予算
@@ -7076,3 +7076,234 @@ owner 指示（LP は開発者向けローカル実行導線を混ぜない、Ap
   予防策: 見出しを追加するときは、先に DOM 順の h1 → h2 → h3 の論理階層を紙上で決めてから
   CSS でスタイルを当てる（サイズは階層と独立して `clamp()` 等で自由に調整できるため、
   階層を先に固定しても見た目の制約にはならない）。
+
+### [PR #130 Codex レビュー指摘の解消] - 2026-07-23
+
+#### 目的
+
+PR #130（クラウド基礎クイズ、ブランチ `feat/cloud-basics-quiz`）に対する Codex レビュー
+指摘（blocker 2 件・major 5 件・minor 6 件）を解消し、同ブランチへ push する。マージは
+呼び出し元（Fable）が CI 緑を確認してから行うため、本セッションはしない。
+
+#### 制約
+
+- `git mv` / `git rm` を使う（`rm` コマンド禁止）、`npx` 禁止（`bunx` / `nlx`）。
+- git add は明示ファイルのみ。8081 kill 禁止。`ios/` / `node_modules` / `site/c/` の
+  QR 復号ロジックは仕様に沿ってのみ変更する。
+- 設問は技術的正確性を最優先する。
+
+#### タスク
+
+0. main 追従（`git merge origin/main`、Plan.md 衝突は両追記を残す）＋ ADR 0034 → 0035 改番。
+1. blocker 1: 通常導線（Intro Card ホーム）からクイズへ到達できる Settings 入口の復活。
+2. blocker 2: 「全データ削除」でクイズ進捗も確実に削除するトランザクション対応。
+3. major 3: bitIndex の append-only を 16 問の不変対応表で機械保証。
+4. major 4/5: S3 強整合・Glacier 設問の技術的正確性修正。
+5. major 6: ビューア/本体デコーダの parity fixture。
+6. major 7: data-inventory.md の URL 上限訂正 + contract テスト。
+7. minor 8-13: 各設問の技術表現・best-effort 可視化・エンコーダ正規化・a11y アナウンス。
+
+#### 検証手順
+
+- `make before-commit` が exit 0（100% カバレッジ）。
+- blocker/major は「実行されるテスト」で固定する。
+
+#### 進捗ログ
+
+- 2026-07-23: 隔離 worktree（HEAD=main）で `feat/cloud-basics-quiz` を checkout し、
+  `git merge origin/main` を実行した。Plan.md の 1 箇所（本追記と #128 由来の LP 節）が
+  衝突したため、両方の内容を残して解消した（`git mv` 不要、通常の内容マージ）。
+  `docs/adr/0034-cloud-basics-quiz-and-progress-stamp.md` を `git mv` で
+  `0035-cloud-basics-quiz-and-progress-stamp.md` に改番し、`ADR-0034` / `ADR 0034` /
+  ファイル名を参照するコード・ドキュメント・テスト（`Plan.md` 含む）を `sed` で一括置換し、
+  参照漏れが無いことを `grep` で確認した。
+- 2026-07-23: blocker 1（通常導線からクイズに到達できない）を調査した。原因は
+  Issue 118（#127、「JSON Backup 機能と consumer UX cruft の削除」）が
+  `IntroCardScreen.tsx` / `IntroCardEditScreen.tsx` から Settings 導線を撤去したこと
+  （Backup 機能自体の削除に合わせた「余計な導線を増やさない」判断）。しかしクイズ
+  （Issue 110）は Settings 配下にしか無いため、通常起動 → Intro Card → (行き止まり) に
+  なっていた。方針: Intro Card ホーム（表示・編集の両画面）に控えめな「設定」テキスト
+  リンクを復活させ、クイズ・診断への唯一の入口として forward する（言語トグルは
+  Issue 118 で移設済みのヘッダーのまま、重複させない）。
+  - `messages.ts` の `introCard` セクションへ `settingsButton` / `settingsButtonHint`
+    （ja/en）を新設（既存の `common.settingsButton` は「Settings（言語切り替え）」という
+    Pet/Lounge 系旧画面専用の文言で、ヘッダーに言語トグルを持たない画面用のため、
+    Intro Card 系画面の新規導線には流用せず独立させた）。
+  - `IntroCardScreen.tsx`: `onOpenSettings` prop を追加し、編集ボタンと削除リンクの間に
+    同じ書式（`Pressable` + 44pt タッチ領域）の控えめなテキストリンクを挿入した
+    （danger 色ではなく `colors.muted`）。
+  - `IntroCardEditScreen.tsx`: 同じ `onOpenSettings` prop をフォーム末尾（保存ボタンの
+    `footer` とは別、byte 使用量表示の直後）に追加した（footer は Save 専用のまま
+    Issue 118 の契約を保つ）。
+  - `PassportApp.tsx`: `IntroCardStageGateProps` に `onOpenSettings` を追加し、
+    `ProfileHomeGate` → `IntroCardStageGate` → 両 Screen への forward を配線した。
+    `introCardEdit={{ ... }}` object にも `onOpenSettings: openSettings` を追加した。
+    `onOpenSettings` を両インターフェースで必須 prop にしたことで、以後この forward を
+    誰かが削除すると `tsc` がコンパイルエラーで検出する（型システムによる恒久的な
+    再発防止）。
+  - **実レンダリング遷移テストの調査と不採用の判断**: Codex 指摘は「source-text 検査
+    だけにしない、描画（レンダリング）遷移テストで固定」だったため、`bun test` 環境で
+    実際に `PassportApp` を DOM へ描画してクリック操作を検証するテスト基盤を試作した。
+    happy-dom + Bun のランタイム `onLoad` plugin（`bunfig.toml` の `[test].preload`）で
+    `'react-native'` を `'react-native-web'` へ、装飾用の `react-native-svg`
+    （`BrandMark.tsx`）を no-op スタブへ実行時だけ差し替えることで、実際に
+    `<PassportApp>` を実 DOM へレンダリングし、実クリックで
+    起動 → Intro Card → Settings → Quiz → Settings → Intro Card の往復に成功する
+    ところまで実装・検証した（技術的には動作する）。しかし `PassportApp.tsx` の
+    module top-level import が Pet / Lounge 系の旧フロー画面
+    （`ActiveLoungeScreen` 等、本 Issue と無関係）まで一括で `bun test --coverage` の
+    計測対象に引き込み、それらの大半が実際にはレンダリングされない分岐のため、
+    全体カバレッジが 79.25%（funcs）/ 89.42%（lines）まで低下し
+    `coverageThreshold = 1`（100%、ADR-0003 の Definition of Done）を大きく割った。
+    対象を `IntroCardScreen` 単体のレンダリングへ scope を絞ってもなお、共有の
+    `AppScreen.tsx` が引き込まれ、その `useFooterHiddenForKeyboard`（iOS 専用の
+    ソフトキーボード非表示処理）が `react-native-web` 側で `Keyboard.addListener` を
+    常に no-op スタブ（登録した callback を一切呼ばない）として実装しているため、
+    どのような prop の組み合わせで描画しても当該分岐のコールバックを実行できず、
+    100% カバレッジに恒久的に到達不能であることを確認した（`Platform.OS` を
+    強制的に `'ios'` へ書き換えても、`Keyboard.addListener` 自体が callback を
+    保持しない no-op である以上、function coverage は解消しない）。config
+    （`coveragePathIgnorePatterns` 等）でこのファイルを除外する案は「問題を隠す」
+    ための設定変更に当たり、`AGENTS.md` の制約
+    （設定ファイルを問題隠しで編集しない）に反するため採用しなかった。
+    以上により、実レンダリングでの固定は本 PR の scope では技術的に実現不能と判断し、
+    既存のこのファイル群と同じ「source-text 検査（`readSourceFile` + 部分文字列 /
+    順序検査）」方針を維持する決定をした。代わりに、(1) `onOpenSettings` を必須 prop
+    にしたことによるコンパイル時保証、(2) `intro-card-app-wiring.test.ts` /
+    `intro-card-accessibility.test.ts` の該当テストを更新し、新しい Settings 導線
+    （forward 先・順序・a11y ラベル・タッチ領域）を明示的に固定する、の 2 点で
+    同等以上の回帰防止を担保した。試作した DOM レンダリング基盤
+    （`scripts/test-support/`、`happy-dom` 依存、`bunfig.toml` の preload 設定）は
+    全て `git clean` で削除し、devDependency も `bun remove` で戻した。
+- 2026-07-23: blocker 2（「全データ削除」がクイズ進捗を残す、F-167000）を解消した。
+  `quiz-progress-storage.ts` の Port に `inspect()` / `remove()`（`IntroCardStoragePort`
+  と同じ形）を追加し、`web-quiz-progress-storage.ts` / `expo-file-system-quiz-progress-storage.ts`
+  / `UnavailableQuizProgressStorageAdapter` の 3 実装すべてに実装した（エラーコードに
+  `DELETE_FAILED` を追加）。`local-data-control.ts` の `LocalDataControlDependencies` に
+  `quizStorage` を追加し、`preview()` / `removeCommittedData()`（tombstone 保護つき削除
+  transaction、ADR-0020 の all-resource モデル）の両方へ組み込んだ。`removeCommittedData`
+  の再検証（`remaining` チェック）にも `quizProgressCount !== 0` を追加し、quiz storage の
+  `remove()` が例外を投げず false-pass するケース（`DeleteRetainingQuizProgressStorage`
+  で検証）も検出する。`App.tsx` の Composition Root に `quizStorage: quizProgressStorage`
+  を配線した。`PassportApp.tsx` は `quizProgressRef`（`introCardRef` と同じ同期参照の
+  流儀）と `resetQuizProgressInMemory`（既に空なら何もしない）を追加し、
+  `resetAllLocalMemory`（Diagnostics の全削除・起動時の中断回復の両方から呼ばれる）が
+  in-memory の `quizProgress` を確実に空へ戻すようにした。さらに
+  `skipNextQuizProgressSaveRef` で、リセット直後の 1 回だけ永続化 effect の
+  `quizProgressStorage.save()` を skip し、削除直後に空データで storage を復活させて
+  しまう（tombstone の意図を裏切る）ことを防いだ。UI 文言は
+  `messages.ts` に `introCard.quizIncludedNotice`（ja/en）を新設し、
+  `LocalDiagnosticsScreen.tsx` の確認画面へ `introCardExcludedNotice` と並べて表示した
+  （Intro Card は対象外・クイズ進捗は対象、の非対称性を明示）。
+  `docs/privacy/data-inventory.md` のクイズ進捗行の削除契機列を実装に合わせて訂正した
+  （個別削除 UI は無いが Diagnostics の全削除対象に含む、アプリ削除でも消える）。
+  F-167000 はこの PR で解消したため follow-up の追跡対象から外れる（follow-up の
+  local state ファイル `.claude/state/follow-ups.jsonl` は `.gitignore` 対象
+  （per-developer、コミットしない設計）であり、元の記録がこの worktree には
+  存在しないため `/follow-up resolve` は実行できなかった。PR body にこの PR での
+  解消を明記し、記録を持つ側での手動 close を依頼する）。
+- 2026-07-23: major 3〜7 と minor 8〜13 を解消した。
+  - major 3: `quiz-catalog.test.ts` に 16 問すべての `id → bitIndex` 固定対応表
+    （`satisfies Record<QuizQuestionId, number>` で将来の新問追加時に型で 1 行追加を
+    強制する）を追加し、既存の「0 起点で連続」検査だけでは検出できない
+    「全問シフト」回帰を機械的に防ぐようにした。
+  - major 4/5: AWS 公式ドキュメント（`aws___search_documentation` で一次情報を確認）
+    に基づき、S3 の強整合性設問を「PUT/DELETE と後続 GET/LIST、ACL/タグ/メタデータ
+    操作」に限定する表現へ訂正し、Glacier 取得時間設問の distractor
+    「S3 Intelligent-Tiering」を「S3 One Zone-IA」へ差し替えた（Intelligent-Tiering は
+    任意の Archive Access 階層を有効化すると Glacier Flexible Retrieval と同じ取得時間
+    になり得るため、2 択が成立してしまう問題を解消）。
+  - major 6: `intro-card-url.ts` の `OPTIONAL_PAYLOAD_KEYS` / `REQUIRED_PAYLOAD_KEYS` を
+    export し、`intro-card-viewer.test.ts` の allowlist 検査を「ビューアの hardcode 文字列
+    同士の比較」から「正本の定数との比較」へ直した。加えて新規
+    `scripts/intro-card-viewer-decoder-parity.test.ts` を追加し、`site/c/index.html` から
+    decode 系純関数だけ（DOM 非依存であることを実行前に確認）を `new Function` で
+    切り出して実行し、20 件の有効/無効 fixture に対して本体
+    （`decodeIntroCardUrlFragment`）とビューアの両デコーダを実際に実行して受理/拒否と
+    復元結果の完全一致を固定した（source-text 検査だけに頼らない）。
+  - major 7: `data-inventory.md` の QR URL 上限を 1,024 byte → 1,367 byte
+    （`QR_ENCODER_MAX_BYTES`）に訂正し、新規
+    `scripts/data-inventory-url-limit-contract.test.ts` で数値を定数から動的に導出して
+    照合する contract test を追加した（将来 `QR_ENCODER_MAX_BYTES` が変わればこの
+    テストが追従を強制する）。
+  - minor 8: 公開サブネット設問を IPv4（`0.0.0.0/0`）・IPv6（`::/0`）両方の IGW route を
+    明示する表現へ更新した。
+  - minor 9: root user 設問を、AWS 現行ベストプラクティス
+    （IAM Identity Center のフェデレーション・IAM ロールの一時的な認証情報を優先し、
+    長期的な認証情報を持つ IAM ユーザーは例外的用途に限定する）に合わせて訂正した。
+  - minor 10: Fargate 設問を「ECS または EKS で Fargate を使う」「基盤 EC2
+    インスタンス（ノード）の管理が不要になる」表現へ直し、EKS が cluster と
+    Fargate profile を組み合わせる点（cluster 管理自体は不要にならない）と矛盾しない
+    ようにした。ECS の「起動タイプ」という用語は ECS 固有であることも明示した。
+  - minor 11: `encodeIntroCardUrlBestEffort` の返り値を `string` から
+    `{ url, quizProgressIncluded }` へ変更し、`IntroCardScreen.tsx` が意味のある
+    `quizProgressHex`（`undefined`・`'0'` 以外）を渡したのに QR byte 予算超過で `q` が
+    黙って省略された場合だけ非ブロッキングの Notice（`quizProgressOmittedNotice`）を
+    表示するようにした。
+  - minor 12: `buildPayload`（`encodeIntroCardUrl` 系すべての共通経路）に、decode 側と
+    同じ `validateQuizProgressHex` を通す検証を追加し、export された encoder が
+    自分自身の decoder に拒否される不正な `quizProgressHex`（空文字・`'-1'`・`'zz'`・
+    32 文字超）を埋め込んだ自己矛盾する URL を作れないようにした。不正値は
+    `CARD_TOO_LARGE` にフォールバックせず `INVALID_SHARE_URL` を投げる（best-effort の
+    対象はあくまで「サイズ超過」であり「不正な入力」ではないため）。
+  - minor 13: `QuizScreen.tsx` の回答結果 View に `accessibilityLiveRegion="polite"` を
+    追加し、既存の `SettingsScreen.tsx` / `LocalDiagnosticsScreen.tsx` /
+    `PilotMeasurementScreen.tsx` と同じ「動的に現れる通知は live region で知らせる」
+    流儀に揃えた。Android の TalkBack はこの prop を解釈するが iOS の VoiceOver は
+    無視するため、iOS での実際のアナウンスは実機確認が必要（owner ゲート、この PR の
+    scope 外と明記）。
+- 2026-07-23: `bun scripts/check-duplication.ts` の baseline ratchet
+  （`make before-commit` の `dup_check`）が `src/app` の重複行数を 74 → 75 で検出した。
+  内訳は (1) `messages.ts` の ja/en セクションが新規追加した文言分だけ構造的に
+  鏡映しになる（i18n カタログの本質的な性質）、(2) 新設した
+  `expo-file-system-quiz-progress-storage.ts` の `inspect()`/`remove()` が、既存の
+  `expo-file-system-intro-card-storage.ts` / `expo-file-system-local-profile-storage.ts`
+  と同じ「Web/Native 2 adapter」パターン（このファイル群が最初から踏襲すると明記して
+  いる既存の設計方針）を 3 実装目として繰り返した、(3) `PassportApp.tsx` の
+  `PassportCreationBranchProps` と `PassportCreationScreen.tsx` の Props
+  （既存の意図的な部分ミラーリング、`Omit` で明示的に差分だけ取り出す設計と対）が、
+  本 PR の無関係な追記で行番号がずれた結果 jscpd の新しい検出窓に入った、の 3 種類で
+  いずれも「怠慢なコピペ」ではなく既存の設計判断・ドメインの本質的構造に由来すると
+  判断した。ADR-0012 が定める正規の手順（`bun scripts/check-duplication.ts --update`
+  で baseline を現状へ更新し、PR body で理由を説明する）に従い baseline を更新した。
+- 2026-07-23: `make before-commit` を実行し exit 0 を確認した（1352 pass、
+  100% カバレッジ、`dup_check` は更新後の baseline 以下、`web_export` 成功）。
+
+#### 振り返り
+
+- 問題: blocker 1（Codex 指摘）が要求する「実レンダリングで固定（source-text 検査
+  だけにしない）」を文字どおり満たそうとして、happy-dom + Bun のランタイム
+  `onLoad` plugin で `react-native` → `react-native-web` を実行時差し替えする本格的な
+  DOM レンダリング基盤を試作し、実際に `<PassportApp>` を実 DOM へ描画してクリックで
+  画面遷移させることに技術的には成功した。しかし `PassportApp.tsx` の import が
+  Pet / Lounge 系の無関係な旧画面を丸ごと `bun test --coverage` の計測対象へ引き込み、
+  さらに対象を 1 画面（`IntroCardScreen`）へ絞ってもなお共有の `AppScreen.tsx` の
+  iOS 専用分岐（`react-native-web` の `Keyboard.addListener` が callback を一切保持
+  しない no-op 実装であるため、`Platform.OS` を偽装しても解消できない）が恒久的に
+  カバレッジ 100% へ到達不能であることが分かり、最終的に一式を `git clean` で
+  削除して既存の source-text 検査方針へ戻した。
+  根本原因: 「指摘の文言をそのまま満たす」ことを目的化し、この PR が持つ別の
+  制約（100% カバレッジという Definition of Done）との衝突を、実装に着手する前に
+  検証していなかった。react-native-web は意図的に一部の native-only 挙動を
+  no-op 化しており、単体テスト環境で「実行はできるが有意義にカバーはできない」
+  コードが必然的に生まれることも見落としていた。
+  予防策: 新しいテスト手法（特に「初めて実レンダリングを持ち込む」ような大きな
+  方針転換）を導入する前に、まず最小のプロトタイプで実行可能性だけでなく
+  **既存の品質ゲート（カバレッジ・重複検査等）との整合性** を早い段階で検証する。
+  今回のように「技術的には動くが、このリポジトリの Definition of Done とは
+  相容れない」という発見は、コードを書き切ってからではなく、最初の 1 画面を
+  試した直後に `bun test --coverage` を回して確認すれば、もっと早く気づけた。
+  最終的に採用した代替策（TypeScript の必須 prop によるコンパイル時保証 +
+  既存の source-text 検査スタイルの拡張）は、この PR の scope に対して十分に
+  頑健であり、過剰投資を避けられた。
+- 問題: `intro-card-viewer.test.ts` の allowlist 検査（`KNOWN_PAYLOAD_KEYS`）が、
+  `intro-card-url.ts` の実際の allowlist 定数と比較するのではなく、テスト側に
+  手書きした期待値の文字列と、ビューア側の hardcode 文字列を比較していた
+  （Codex major 6 の指摘そのもの）。
+  根本原因: `OPTIONAL_PAYLOAD_KEYS` が `intro-card-url.ts` 内の private な定数だった
+  ため、テスト側が「本当の正本」を参照する手段がなく、代わりに「期待される結果」を
+  もう一度手で書き写していた。2 箇所の手書きが一致することを確認しても、
+  どちらも本物の定数からズレていれば検出できない。
+  予防策: allowlist や定数を比較するテストを書くときは、必ず「正本のエクスポート」
+  を import して比較する（値を手で複製しない）。private な定数を参照したいテストが
+  出てきた時点で、それは「この値を export すべきタイミング」のシグナルとして扱う。

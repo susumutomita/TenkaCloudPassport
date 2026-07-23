@@ -21,7 +21,7 @@ export interface IntroCardScreenProps {
    */
   readonly deleteError: string | null;
   /**
-   * Issue 110 / ADR-0034: クイズ進捗ビットマスク（16 進文字列）。省略・`'0'`
+   * Issue 110 / ADR-0035: クイズ進捗ビットマスク（16 進文字列）。省略・`'0'`
    * （全問未合格）なら QR に `q` を含めない（既存 QR と完全に同じ byte 数、後方互換）。
    */
   readonly quizProgressHex?: string;
@@ -29,6 +29,12 @@ export interface IntroCardScreenProps {
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
+  /**
+   * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を復活させる。
+   * クイズ（Issue 110）・診断（Diagnostics）・モデル管理は Settings 配下にしか
+   * ないため、この導線が無いと通常フローから到達できなくなっていた。
+   */
+  readonly onOpenSettings: () => void;
 }
 
 /**
@@ -51,12 +57,24 @@ export default function IntroCardScreen({
   onChangeLocale,
   onEdit,
   onDelete,
+  onOpenSettings,
 }: IntroCardScreenProps) {
   const t = MESSAGES[locale].introCard;
-  const encodedQr = useMemo(
-    () => encodeQr(encodeIntroCardUrlBestEffort(card, quizProgressHex)),
-    [card, quizProgressHex]
-  );
+  /**
+   * Issue 130（Codex 指摘 minor）: `encodeIntroCardUrlBestEffort` が返す
+   * `quizProgressIncluded` から、意味のある `quizProgressHex`（`undefined`・`'0'`
+   * 以外）を渡したのに QR byte 予算超過で `q` が黙って省略されたかどうかを判定する。
+   * 省略時はカード本体の表示自体は失敗させず、非ブロッキングの Notice だけで
+   * 利用者へ可視化する（サイレントな省略のまま気づかれないことを防ぐ）。
+   */
+  const { encodedQr, quizProgressOmitted } = useMemo(() => {
+    const result = encodeIntroCardUrlBestEffort(card, quizProgressHex);
+    const omitted =
+      quizProgressHex !== undefined &&
+      quizProgressHex !== '0' &&
+      !result.quizProgressIncluded;
+    return { encodedQr: encodeQr(result.url), quizProgressOmitted: omitted };
+  }, [card, quizProgressHex]);
 
   return (
     <AppScreen
@@ -78,6 +96,14 @@ export default function IntroCardScreen({
         <RealQrView matrix={encodedQr.matrix} />
       </View>
       <Text style={styles.qrExplanation}>{t.qrExplanation}</Text>
+      {quizProgressOmitted ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={styles.quizProgressOmittedNotice}
+        >
+          {t.quizProgressOmittedNotice}
+        </Text>
+      ) : null}
       <IntroCardPreview
         email={card.email}
         links={card.links}
@@ -92,6 +118,20 @@ export default function IntroCardScreen({
         label={t.editButton}
         onPress={onEdit}
       />
+      {/* Issue 130（Codex 指摘 blocker）: #127 が「余計な導線を増やさない」意図で
+          外した Settings 導線を、クイズ・診断への唯一の入口として復活させる。
+          編集ボタンより目立たせず、削除より上（削除は最も控えめな位置を保つ、
+          直下コメント参照）に置く控えめなテキストリンクにする。タップ領域は
+          削除リンクと同じく WCAG 2.5.5 相当の 44pt を維持する。 */}
+      <Pressable
+        accessibilityHint={t.settingsButtonHint}
+        accessibilityLabel={t.settingsButton}
+        accessibilityRole="button"
+        onPress={onOpenSettings}
+        style={styles.settingsLink}
+      >
+        <Text style={styles.settingsLinkText}>{t.settingsButton}</Text>
+      </Pressable>
       {/* Issue 118（owner 実機フィードバック）: 「見せるカード（QR 表示画面）の
           下に削除があるのが分かりにくい」。破壊的操作である削除を、編集と並ぶ
           目立つボタンから、編集の下にある控えめな下線付きテキストリンクへ
@@ -137,6 +177,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
+  },
+  quizProgressOmittedNotice: {
+    color: colors.muted,
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  settingsLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.md,
+  },
+  settingsLinkText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   deleteLink: {
     alignItems: 'center',

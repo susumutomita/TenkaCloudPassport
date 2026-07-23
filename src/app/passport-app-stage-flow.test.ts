@@ -676,7 +676,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     });
   });
 
-  describe('Issue 110 / ADR-0034: クラウド基礎クイズは Settings 経由の 1 経路だけを持つ', () => {
+  describe('Issue 110 / ADR-0035: クラウド基礎クイズは Settings 経由の 1 経路だけを持つ', () => {
     it('UTILITY_STAGES は quiz を settings / diagnostics / pilot-measurement と同じ集合に含める', async () => {
       const text = await source();
       const start = text.indexOf(
@@ -741,10 +741,51 @@ describe('PassportApp の Stage 遷移契約', () => {
     it('quizProgress の永続化は専用の useEffect が担い、quizProgressHydrated が true になるまで何もしない（起動時読込との競合防止）', async () => {
       const text = await source();
       const start = text.indexOf(
-        'if (!quizProgressHydrated) return;\n    quizProgressStorage.save(quizProgress).catch(() => undefined);'
+        'if (!quizProgressHydrated) return;\n    if (skipNextQuizProgressSaveRef.current) {'
       );
 
       expect(start).toBeGreaterThan(-1);
+    });
+
+    it('quizProgress の永続化 effect は skipNextQuizProgressSaveRef が立っている間だけ 1 回 save を skip し、flag を消費する（Issue 130: 全データ削除直後に空データで復活させない）', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        '  useEffect(() => {\n    if (!quizProgressHydrated) return;'
+      );
+      const end = text.indexOf(
+        '}, [quizProgress, quizProgressHydrated, quizProgressStorage]);',
+        start
+      );
+      const body = text.slice(start, end);
+
+      expectInOrder(body, [
+        'if (!quizProgressHydrated) return;',
+        'if (skipNextQuizProgressSaveRef.current) {',
+        'skipNextQuizProgressSaveRef.current = false;',
+        'quizProgressStorage.save(quizProgress).catch(() => undefined);',
+      ]);
+    });
+
+    it('resetAllLocalMemory は resetQuizProgressInMemory を呼び、全データ削除後の in-memory 進捗を空へ戻す（Issue 130 blocker）', async () => {
+      const text = await source();
+      const body = functionBody(text, 'resetAllLocalMemory');
+
+      expect(body).toContain('resetQuizProgressInMemory();');
+    });
+
+    it('resetQuizProgressInMemory は既に空なら何もせず、空でないときだけ skip flag を立てて EMPTY_QUIZ_PROGRESS へ戻す（永続化 effect を無駄に armed のまま残さない）', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        'const resetQuizProgressInMemory = useCallback((): void => {'
+      );
+      const end = text.indexOf('\n  }, []);', start);
+      const body = text.slice(start, end);
+
+      expectInOrder(body, [
+        'if (quizProgressRef.current.size === 0) return;',
+        'skipNextQuizProgressSaveRef.current = true;',
+        'setQuizProgress(EMPTY_QUIZ_PROGRESS);',
+      ]);
     });
 
     it('起動時 effect はクイズ進捗の水和完了も、Profile Recovery の結果分岐より前に立てる', async () => {

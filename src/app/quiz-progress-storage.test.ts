@@ -9,6 +9,7 @@ import {
   EMPTY_QUIZ_PROGRESS,
   withQuizQuestionCleared,
 } from '../domain/quiz-progress';
+import type { ProfileDocument } from './expo-file-system-local-profile-storage';
 import { ExpoFileSystemQuizProgressStorageAdapter } from './expo-file-system-quiz-progress-storage';
 import {
   parseStoredQuizProgress,
@@ -19,6 +20,7 @@ import {
 } from './quiz-progress-storage';
 import {
   BunProfileDocument,
+  DeleteFailingWebStorage,
   FileBackedWebStorage,
   temporaryDirectory as newTemporaryDirectory,
   removeTemporaryDirectory,
@@ -29,6 +31,34 @@ import {
   QUIZ_PROGRESS_STORAGE_KEY,
   WebQuizProgressStorageAdapter,
 } from './web-quiz-progress-storage';
+
+/**
+ * Issue 130（Codex 指摘 blocker）: Native の使用量確認・削除失敗を検証するための
+ * 実装（`local-profile-storage.test.ts` の `InspectionFailingProfileDocument` と
+ * 同じ役割）。`exists` は常に `true`（File が存在する体で `size`/`text`/`delete` の
+ * 失敗経路だけを踏ませる）。
+ */
+class InspectionFailingQuizProgressDocument implements ProfileDocument {
+  get exists(): boolean {
+    return true;
+  }
+
+  get size(): number {
+    throw new Error('size permission denied');
+  }
+
+  text(): Promise<string> {
+    return Promise.reject(new Error('read permission denied'));
+  }
+
+  write(_content: string): Promise<void> {
+    return Promise.reject(new Error('write permission denied'));
+  }
+
+  delete(): Promise<void> {
+    return Promise.reject(new Error('delete permission denied'));
+  }
+}
 
 const temporaryRoots: string[] = [];
 
@@ -69,11 +99,22 @@ async function expectStorageError(
 
 async function saveAndRestore(storage: QuizProgressStoragePort): Promise<void> {
   expect(await storage.load()).toEqual(EMPTY_QUIZ_PROGRESS);
+  expect(await storage.inspect()).toEqual({ count: 0, bytes: 0 });
   const progress = progressOf('lambda-basics', 'xray-basics');
 
   await storage.save(progress);
 
   expect(await storage.load()).toEqual(progress);
+  const usage = await storage.inspect();
+  expect(usage.count).toBe(1);
+  expect(usage.bytes).toBeGreaterThan(0);
+
+  // Issue 130（Codex 指摘 blocker）: `remove` は idempotent（2 回呼んでもエラーに
+  // ならない、`local-data-control.ts` の削除 transaction が再試行しても安全）。
+  await storage.remove();
+  await storage.remove();
+  expect(await storage.load()).toEqual(EMPTY_QUIZ_PROGRESS);
+  expect(await storage.inspect()).toEqual({ count: 0, bytes: 0 });
 }
 
 describe('Quiz Progress Storage adapter', () => {
@@ -190,6 +231,21 @@ describe('Quiz Progress Storage adapter', () => {
     );
   });
 
+  it('Storage 媒体がない場合は使用量確認と削除も UNAVAILABLE にする（Issue 130）', async () => {
+    const webStorage = new WebQuizProgressStorageAdapter(null);
+    const nativeStorage = new ExpoFileSystemQuizProgressStorageAdapter(null);
+    const unavailable = new UnavailableQuizProgressStorageAdapter(
+      new Error('OS の保存領域を開けません。')
+    );
+
+    await expectStorageError(() => webStorage.inspect(), 'UNAVAILABLE');
+    await expectStorageError(() => webStorage.remove(), 'UNAVAILABLE');
+    await expectStorageError(() => nativeStorage.inspect(), 'UNAVAILABLE');
+    await expectStorageError(() => nativeStorage.remove(), 'UNAVAILABLE');
+    await expectStorageError(() => unavailable.inspect(), 'UNAVAILABLE');
+    await expectStorageError(() => unavailable.remove(), 'UNAVAILABLE');
+  });
+
   it('実ファイルの読込失敗と書込失敗を区別して返す', async () => {
     const webRoot = temporaryDirectory();
     const failure = new Error('write failure');
@@ -214,6 +270,39 @@ describe('Quiz Progress Storage adapter', () => {
         ).save(EMPTY_QUIZ_PROGRESS),
       'WRITE_FAILED'
     );
+  });
+
+  it('Web の使用量確認失敗と削除失敗を型付き Error にする（Issue 130）', async () => {
+    const readFailure = new Error('read permission denied');
+    const deleteFailure = new Error('delete permission denied');
+
+    await expectStorageError(
+      () =>
+        new WebQuizProgressStorageAdapter(
+          new DeleteFailingWebStorage(temporaryDirectory(), readFailure, 'get')
+        ).inspect(),
+      'READ_FAILED'
+    );
+    await expectStorageError(
+      () =>
+        new WebQuizProgressStorageAdapter(
+          new DeleteFailingWebStorage(
+            temporaryDirectory(),
+            deleteFailure,
+            'remove'
+          )
+        ).remove(),
+      'DELETE_FAILED'
+    );
+  });
+
+  it('Native の使用量確認失敗と削除失敗を型付き Error にする（Issue 130）', async () => {
+    const storage = new ExpoFileSystemQuizProgressStorageAdapter(
+      new InspectionFailingQuizProgressDocument()
+    );
+
+    await expectStorageError(() => storage.inspect(), 'READ_FAILED');
+    await expectStorageError(() => storage.remove(), 'DELETE_FAILED');
   });
 
   it('serializeQuizProgress は catalogVersion を添え、id を昇順ソートして直列化する（保存内容の安定性）', () => {

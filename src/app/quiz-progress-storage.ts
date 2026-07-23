@@ -9,16 +9,27 @@ import type { QuizProgress } from '../domain/quiz-progress';
  * Issue 110: `src/app/intro-card-storage.ts`（Port + Web/Native 2 adapter + factory の
  * 4 ファイル構成）を踏襲する。クイズには下書き概念（`loadDraft`/`saveDraft`）が不要なため
  * 持たない（設計文書 `docs/design/2026-07-23-cloud-basics-quiz.md` 4 節）。
+ * Issue 130（Codex 指摘 blocker）: `inspect`/`remove` を追加し、`IntroCardStoragePort` /
+ * `LocalProfileStoragePort` と同じ形にする。`local-data-control.ts` の tombstone
+ * 保護つき削除トランザクション（`deleteAll`）へこの Storage を含めるために必須。
  */
 export interface QuizProgressStoragePort {
   load(): Promise<QuizProgress>;
   save(progress: QuizProgress): Promise<void>;
+  inspect(): Promise<QuizProgressStorageUsage>;
+  remove(): Promise<void>;
+}
+
+export interface QuizProgressStorageUsage {
+  readonly count: 0 | 1;
+  readonly bytes: number;
 }
 
 export type QuizProgressStorageErrorCode =
   | 'UNAVAILABLE'
   | 'READ_FAILED'
   | 'WRITE_FAILED'
+  | 'DELETE_FAILED'
   | 'INVALID_DATA';
 
 export class QuizProgressStorageError extends Error {
@@ -119,6 +130,14 @@ export class UnavailableQuizProgressStorageAdapter
   }
 
   save(_progress: QuizProgress): Promise<void> {
+    return this.rejectUnavailable();
+  }
+
+  inspect(): Promise<QuizProgressStorageUsage> {
+    return this.rejectUnavailable();
+  }
+
+  remove(): Promise<void> {
     return this.rejectUnavailable();
   }
 }

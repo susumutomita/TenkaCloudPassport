@@ -180,7 +180,7 @@ interface PassportAppProps {
   readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly introCardStorage: IntroCardStoragePort;
-  /** Issue 110 / ADR-0034: クラウド基礎クイズのクリア済み進捗を保存する。 */
+  /** Issue 110 / ADR-0035: クラウド基礎クイズのクリア済み進捗を保存する。 */
   readonly quizProgressStorage: QuizProgressStoragePort;
   readonly backupSharePort: BackupSharePort;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
@@ -202,7 +202,7 @@ type SetupStage =
   | 'diagnostics'
   | 'pilot-measurement'
   // Issue 110: クラウド基礎クイズ。Settings 経由の 1 経路だけを持つ（diagnostics /
-  // pilot-measurement と同じ導線設計、ADR-0034）。
+  // pilot-measurement と同じ導線設計、ADR-0035）。
   | 'quiz'
   // Issue 79: 自己紹介カードピボット Step 1 のメインフロー。Pet / Lounge / Encounter 系
   // stage は導線から外れ、既定の着地点はこの 2 つになる。
@@ -330,7 +330,7 @@ interface ProfileHomeGateProps {
   readonly introCardEdit: IntroCardEditBranchProps;
   readonly onEditIntroCard: () => void;
   readonly onDeleteIntroCard: () => void;
-  /** Issue 110 / ADR-0034: 詳細は `IntroCardStageGate` を参照。 */
+  /** Issue 110 / ADR-0035: 詳細は `IntroCardStageGate` を参照。 */
   readonly quizProgressHex: string | undefined;
 }
 
@@ -370,6 +370,7 @@ function ProfileHomeGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDeleteIntroCard}
         onEdit={onEditIntroCard}
+        onOpenSettings={onOpenSettings}
         quizProgressHex={quizProgressHex}
         stage={stage}
       />
@@ -502,7 +503,7 @@ interface UtilityStageGateProps {
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onCloseSettings: () => void;
   /**
-   * Issue 110 / ADR-0034: クラウド基礎クイズの進捗・採点・導線。`diagnostics` /
+   * Issue 110 / ADR-0035: クラウド基礎クイズの進捗・採点・導線。`diagnostics` /
    * `pilot-measurement` と同じく Settings 経由の 1 経路だけを持つ（設計文書
    * `docs/design/2026-07-23-cloud-basics-quiz.md` 7 節）。
    */
@@ -597,12 +598,18 @@ type IntroCardEditBranchProps = Omit<
 interface IntroCardStageGateProps {
   readonly stage: SetupStage;
   readonly introCard: IntroCard | null;
-  /** Issue 110 / ADR-0034: 表示画面の QR に相乗りさせるクイズ進捗ビットマスク。 */
+  /** Issue 110 / ADR-0035: 表示画面の QR に相乗りさせるクイズ進捗ビットマスク。 */
   readonly quizProgressHex: string | undefined;
   readonly locale: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
+  /**
+   * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を、クイズ・
+   * 診断への唯一の入口として復活させる。表示・編集どちらの画面も同じ
+   * 導線を持つ（`IntroCardScreen` / `IntroCardEditScreen` 参照）。
+   */
+  readonly onOpenSettings: () => void;
   readonly edit: IntroCardEditBranchProps;
 }
 
@@ -614,6 +621,7 @@ function IntroCardStageGate({
   onChangeLocale,
   onEdit,
   onDelete,
+  onOpenSettings,
   edit,
 }: IntroCardStageGateProps) {
   if (stage === 'intro-card' && introCard) {
@@ -627,6 +635,7 @@ function IntroCardStageGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDelete}
         onEdit={onEdit}
+        onOpenSettings={onOpenSettings}
         {...(quizProgressHex === undefined ? {} : { quizProgressHex })}
       />
     );
@@ -655,6 +664,7 @@ function IntroCardStageGate({
       onChangePhone={edit.onChangePhone}
       onChangeSelfIntro={edit.onChangeSelfIntro}
       onChangeTitle={edit.onChangeTitle}
+      onOpenSettings={edit.onOpenSettings}
       onRemoveOtherLink={edit.onRemoveOtherLink}
       onSave={edit.onSave}
       organization={edit.organization}
@@ -706,15 +716,25 @@ export default function PassportApp({
   // （`applyStartupRecoveryResult` / `resetAllLocalMemory` の stage 決定がこれに依存する）。
   const [introCard, setIntroCard] = useState<IntroCard | null>(null);
   const introCardRef = useRef<IntroCard | null>(null);
-  // Issue 110 / ADR-0034: クリア済み設問 id の集合だけを保持する。「全データ削除」
-  // (Diagnostics) は Intro Card 同様この Storage を対象にしない
-  // （設計文書 10 節、follow-up として記録済み）。
+  // Issue 110 / ADR-0035: クリア済み設問 id の集合だけを保持する。Issue 130
+  // （Codex 指摘 blocker）: 「全データ削除」(Diagnostics) は quiz storage も
+  // tombstone 保護つき削除 transaction（`local-data-control.ts`）の対象に
+  // 含めるため、in-memory 側もここで確実に空へ戻す（`resetAllLocalMemory` 参照）。
   const [quizProgress, setQuizProgress] =
     useState<QuizProgress>(EMPTY_QUIZ_PROGRESS);
   // code-reviewer 指摘: 起動時の読込が終わる前に永続化 effect が走ると、
   // まだ読み込んでいない保存済み進捗を空の初期値で上書きしてしまう
   // （`introCardDraftHydrated` と同じレース条件、上記コメント参照）。
   const [quizProgressHydrated, setQuizProgressHydrated] = useState(false);
+  // Issue 130: `resetAllLocalMemory` の中で同期的に読める最新値
+  // （`introCardRef` と同じ流儀）。「今すでに空かどうか」を見て、削除トランザクション
+  // 由来のリセットで無駄に永続化 effect を armed のまま残さないようにするため。
+  const quizProgressRef = useRef<QuizProgress>(quizProgress);
+  quizProgressRef.current = quizProgress;
+  // Issue 130: 「全データ削除」直後の in-memory リセットが、削除直後の
+  // 永続化 effect で quiz storage を空データとして復活させてしまわないための
+  // 1 回限りのガード（`resetAllLocalMemory` が立て、直後の effect 実行が消費する）。
+  const skipNextQuizProgressSaveRef = useRef(false);
   const [introCardDraftName, setIntroCardDraftName] = useState('');
   const [introCardDraftTitle, setIntroCardDraftTitle] = useState('');
   const [introCardDraftOrganization, setIntroCardDraftOrganization] =
@@ -1072,11 +1092,27 @@ export default function PassportApp({
     });
   }, []);
 
+  /**
+   * Issue 130（Codex 指摘 blocker）: `deleteAll()`（tombstone 保護つき削除
+   * transaction）が quiz storage も実際に削除した直後に呼ばれる。in-memory の
+   * `quizProgress` を空へ戻さないと、画面と自己紹介カード QR（`quizProgressHex`）が
+   * 削除前の状態を表示し続けてしまう。既に空（`quizProgressRef.current.size === 0`）
+   * なら `setQuizProgress` 自体が同じ参照（`EMPTY_QUIZ_PROGRESS`）で bail-out し、
+   * 永続化 effect が一度も再実行されないため、`skipNextQuizProgressSaveRef` を
+   * 「消費されないまま armed」で残さないよう、実際に変化がある場合だけ立てる。
+   */
+  const resetQuizProgressInMemory = useCallback((): void => {
+    if (quizProgressRef.current.size === 0) return;
+    skipNextQuizProgressSaveRef.current = true;
+    setQuizProgress(EMPTY_QUIZ_PROGRESS);
+  }, []);
+
   const resetAllLocalMemory = useCallback(
     (recoveryRequired: boolean): void => {
       forgetLoungeForDiagnostics();
       localModels.invalidateAfterExternalPurge();
       resetPassportInMemory();
+      resetQuizProgressInMemory();
       pilotMeasurementFlow.reset();
       if (!recoveryRequired) {
         setRestoring(false);
@@ -1089,6 +1125,7 @@ export default function PassportApp({
       localModels.invalidateAfterExternalPurge,
       pilotMeasurementFlow.reset,
       resetPassportInMemory,
+      resetQuizProgressInMemory,
     ]
   );
 
@@ -1183,7 +1220,7 @@ export default function PassportApp({
   const openDiagnostics = useCallback((): void => setStage('diagnostics'), []);
   const openQuiz = useCallback((): void => setStage('quiz'), []);
   /**
-   * Issue 110 / ADR-0034: 正解した設問だけを進捗集合へ追加する（不正解・解答履歴は
+   * Issue 110 / ADR-0035: 正解した設問だけを進捗集合へ追加する（不正解・解答履歴は
    * 保持しない）。永続化は state 変化を検知する別の `useEffect`（下書き保存と同じ
    * `*Hydrated` フラグ付きの流儀）に委ね、この updater 自体は副作用を持たない
    * （code-reviewer 指摘: React の `setState` 関数型 updater の中で外部 I/O を
@@ -1192,7 +1229,7 @@ export default function PassportApp({
   const handleQuizQuestionCorrect = useCallback((id: QuizQuestionId): void => {
     setQuizProgress((current) => withQuizQuestionCleared(current, id));
   }, []);
-  // Issue 110 / ADR-0034: 自己紹介カード QR に相乗りさせる進捗ビットマスク。全問未合格
+  // Issue 110 / ADR-0035: 自己紹介カード QR に相乗りさせる進捗ビットマスク。全問未合格
   // （'0'）なら `encodeIntroCardUrlBestEffort` 側が `q` を省略するため、ここでは
   // 単純に encode するだけでよい。
   const quizProgressHex = useMemo(
@@ -1296,15 +1333,23 @@ export default function PassportApp({
   }, [introCardDraftFieldsSnapshot, introCardDraftHydrated, introCardStorage]);
 
   /**
-   * Issue 110 / ADR-0034: `quizProgress` が変わるたびに Storage へ反映する
+   * Issue 110 / ADR-0035: `quizProgress` が変わるたびに Storage へ反映する
    * （`handleQuizQuestionCorrect` 自体は state 更新だけに専念させ、副作用はここへ
    * 分離する）。`quizProgressHydrated` が `true` になるまでは何もしない（起動時の
    * `quizProgressStorage.load()` と競合して、読み込む前の初期値で上書きしてしまう
    * レースを防ぐ、上記 `introCardDraftHydrated` と同じ流儀）。保存は fire-and-forget
    * にし、失敗しても採点結果の表示を妨げない（設計文書 4 節）。
+   * Issue 130（Codex 指摘 blocker）: 「全データ削除」直後（`resetQuizProgressInMemory`）
+   * が立てた `skipNextQuizProgressSaveRef` が true のときは、この 1 回だけ保存を
+   * skip する（削除済みの quiz storage へ空データを書き戻し、削除を無かったことに
+   * しないため）。
    */
   useEffect(() => {
     if (!quizProgressHydrated) return;
+    if (skipNextQuizProgressSaveRef.current) {
+      skipNextQuizProgressSaveRef.current = false;
+      return;
+    }
     quizProgressStorage.save(quizProgress).catch(() => undefined);
   }, [quizProgress, quizProgressHydrated, quizProgressStorage]);
 
@@ -2370,6 +2415,7 @@ export default function PassportApp({
         onChangePhone: setIntroCardDraftPhone,
         onChangeSelfIntro: setIntroCardDraftSelfIntro,
         onChangeTitle: setIntroCardDraftTitle,
+        onOpenSettings: openSettings,
         onRemoveOtherLink: (index) =>
           setIntroCardDraftOtherLinks((current) =>
             removeOtherLink(current, index)

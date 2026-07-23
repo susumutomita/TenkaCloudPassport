@@ -34,6 +34,7 @@ const localDataControl = createLocalDataControl({
     localModelComposition?.modelStorage ?? new NoLocalModelStorageAdapter(),
   modelContexts: localDataLeases,
   deletionJournal: localDeletionJournal,
+  quizStorage: quizProgressStorage,
 });
 
 export default function App() {

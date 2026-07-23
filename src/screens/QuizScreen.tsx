@@ -119,7 +119,20 @@ interface QuestionDetailProps {
   readonly onBackToList: () => void;
 }
 
-/** クイズの出題画面。選択 → 採点 → 正誤 + 解説の表示までを担う。 */
+/**
+ * クイズの出題画面。選択 → 採点 → 正誤 + 解説の表示までを担う。
+ *
+ * Issue 130（Codex 指摘 minor）: 「提出」ボタンが正誤結果の View に置き換わるだけで、
+ * 画面遷移（stage 変化）を伴わないため、明示的なアナウンス機構が無いとスクリーン
+ * リーダー利用者が結果に気づけない。`accessibilityLiveRegion="polite"` を結果 View
+ * に付け、既存の `SettingsScreen.tsx` / `LocalDiagnosticsScreen.tsx` /
+ * `PilotMeasurementScreen.tsx` と同じ「動的に現れる通知は live region で知らせる」
+ * 流儀に揃える（新しい機構 `AccessibilityInfo.announceForAccessibility` は導入せず、
+ * 既存パターンの一貫性を優先した）。Android の TalkBack は `accessibilityLiveRegion`
+ * を解釈するが、iOS の VoiceOver は同 prop を無視するため、iOS で実際にアナウンス
+ * されるかどうかは実機（VoiceOver）での確認が必要（owner ゲート、この Issue の
+ * scope 外）。
+ */
 function QuestionDetail({
   question,
   locale,
@@ -179,7 +192,11 @@ function QuestionDetail({
         })}
       </View>
       {outcome ? (
-        <View accessibilityRole="summary" style={styles.result}>
+        <View
+          accessibilityLiveRegion="polite"
+          accessibilityRole="summary"
+          style={styles.result}
+        >
           <Text style={styles.resultTitle}>
             {outcome.correct ? t.correctTitle : t.incorrectTitle}
           </Text>

@@ -1,7 +1,7 @@
 {
   "scripts": 30,
-  "src/app": 74,
-  "src/components": 92,
+  "src/app": 75,
+  "src/components": 73,
   "src/domain": 22,
-  "src/screens": 450
+  "src/screens": 380
 }

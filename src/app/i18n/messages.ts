@@ -413,6 +413,12 @@ export interface AppMessages {
      * すぐ下に明示する。
      */
     readonly introCardExcludedNotice: string;
+    /**
+     * Issue 130（Codex 指摘 blocker）: クイズ進捗（Issue 110）は Intro Card と異なり
+     * 対象に含まれることを明示する（F-167000: 進捗が「全データ削除」後も残り続けた
+     * 不整合の解消）。Intro Card 除外の開示と対になる、対象一覧のすぐ下に置く。
+     */
+    readonly quizIncludedNotice: string;
     readonly confirmDeleteAllButton: string;
     readonly cancelDeleteAllButton: string;
     readonly backButton: string;
@@ -569,10 +575,23 @@ export interface AppMessages {
     readonly cardDescription: string;
     readonly qrAccessibilityLabel: string;
     readonly qrExplanation: string;
+    /**
+     * Issue 130（Codex 指摘 minor）: QR byte 予算超過でクイズ進捗ビットマスク（`q`）が
+     * best-effort で黙って省略された場合だけ表示する非ブロッキング通知。カード本体の
+     * 表示自体は妨げない。
+     */
+    readonly quizProgressOmittedNotice: string;
     readonly editButton: string;
     readonly editButtonHint: string;
     readonly deleteButton: string;
     readonly deleteButtonHint: string;
+    /**
+     * Issue 130: #127 が Intro Card 画面から外した Settings 導線を、控えめな
+     * リンクとして復活させる（クイズ・診断への唯一の入口）。言語切替はヘッダーの
+     * ままなので、ここでは言及しない（Issue 118 と重複させない）。
+     */
+    readonly settingsButton: string;
+    readonly settingsButtonHint: string;
   };
   /**
    * Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）の UI chrome。設問・選択肢・解説
@@ -1002,6 +1021,8 @@ const ja: AppMessages = {
       `${count} 件、${bytes} bytes を削除します。中断時は次回起動で再開します。`,
     introCardExcludedNotice:
       '自己紹介カードはこの対象に含まれません。削除するにはカード画面の「カードを削除する」を使ってください。',
+    quizIncludedNotice:
+      'クラウド基礎クイズの進捗（クリア済み設問の記録）もこの対象に含まれます。',
     confirmDeleteAllButton: '確認して全削除を実行',
     cancelDeleteAllButton: '全削除をやめる',
     backButton: 'Settings へ戻る',
@@ -1236,11 +1257,16 @@ const ja: AppMessages = {
     qrAccessibilityLabel: '自己紹介カードの QR コード',
     qrExplanation:
       '相手はカメラで読むとブラウザで自己紹介が開きます。連絡先への追加はページ内で相手が選べます。',
+    quizProgressOmittedNotice:
+      'カード内容が多いため、クイズ進捗のスタンプは今回の QR に含まれていません。',
     editButton: '編集する',
     editButtonHint: '自己紹介カードの内容を編集します。',
     deleteButton: 'カードを削除する',
     deleteButtonHint:
       '端末内の自己紹介カードを削除します。この操作は取り消せません。',
+    settingsButton: '設定',
+    settingsButtonHint:
+      'クイズ・診断など、自己紹介カード以外の設定を開きます。',
   },
   quiz: {
     eyebrow: 'Cloud Basics Quiz',
@@ -1673,6 +1699,8 @@ const en: AppMessages = {
       `Delete ${count} item(s), ${bytes} bytes. An interrupted deletion resumes at next launch.`,
     introCardExcludedNotice:
       'Your Intro Card is not included in this action. To delete it, use "Delete card" on the card screen.',
+    quizIncludedNotice:
+      'Your cloud basics quiz progress (which questions you have cleared) is included in this action.',
     confirmDeleteAllButton: 'Confirm and delete all',
     cancelDeleteAllButton: 'Cancel full deletion',
     backButton: 'Back to Settings',
@@ -1899,11 +1927,16 @@ const en: AppMessages = {
     qrAccessibilityLabel: 'Intro Card QR code',
     qrExplanation:
       'Scanning with their camera opens your intro in their browser. Adding your contact is a choice they make on that page.',
+    quizProgressOmittedNotice:
+      'Your card content is long, so the quiz progress stamp is not included in this QR code.',
     editButton: 'Edit',
     editButtonHint: 'Edit the contents of your Intro Card.',
     deleteButton: 'Delete card',
     deleteButtonHint:
       'Deletes the Intro Card on this device. This cannot be undone.',
+    settingsButton: 'Settings',
+    settingsButtonHint:
+      'Opens quiz, diagnostics, and other settings beyond your Intro Card.',
   },
   quiz: {
     eyebrow: 'Cloud Basics Quiz',
