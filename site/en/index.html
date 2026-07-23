@@ -189,21 +189,6 @@
   .privacy-grid h3 { font-size: 16px; margin-bottom: 6px; letter-spacing: -0.01em; }
   .privacy-grid p { font-size: 14px; color: var(--muted); }
 
-  .run-panel {
-    position: relative; background: var(--ink); border-radius: 16px;
-    padding: 26px 28px; margin-top: 24px; overflow: hidden;
-  }
-  .run-panel::before {
-    content: ""; position: absolute; inset: -40% -20% auto auto; width: 260px; height: 260px;
-    background: radial-gradient(circle, rgba(255, 106, 50, 0.35), transparent 70%);
-    pointer-events: none;
-  }
-  pre.run {
-    position: relative; color: #e9e9ec;
-    font-family: var(--mono); font-size: 14px; line-height: 2;
-    overflow-x: auto;
-  }
-  pre.run .c { color: #86868b; }
   .run-note { margin-top: 16px; font-size: 14px; color: var(--muted); }
   .run-note code { font-family: var(--mono); font-size: 13px; }
 
@@ -428,19 +413,9 @@
 <section id="run">
   <div class="wrap">
     <p class="sec-label">Try it</p>
-    <h2>Run it yourself.</h2>
-    <div class="run-panel">
-      <pre class="run"><code>git clone https://github.com/susumutomita/TenkaCloudPassport.git
-cd TenkaCloudPassport
-make install
-make start   <span class="c"># scan the QR from Expo Go on your phone</span></code></pre>
-    </div>
+    <h2>Try it right in your browser.</h2>
     <p class="run-note">
-      Install Expo Go on your phone, connect it to the same network as your Mac, then scan the QR
-      code shown in the terminal. To try it in a browser instead, run <code>bun run web</code>.
-    </p>
-    <p class="run-note">
-      No dev environment handy? Open the
+      Want to try it right now on your phone? Open the
       <a href="https://card.tenkacloud.com/app/" target="_blank" rel="noopener noreferrer">Web version</a>
       directly in your phone's browser. Data is stored in the browser's on-device storage, so switching
       browsers or devices does not carry your card over, and the first load requires an online connection.
@@ -469,7 +444,8 @@ make start   <span class="c"># scan the QR from Expo Go on your phone</span></co
       <h4>Product</h4>
       <ul>
         <li><a href="#how">How it works</a></li>
-        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="#privacy">Privacy overview</a></li>
+        <li><a href="privacy/">Privacy Policy</a></li>
       </ul>
     </div>
     <div class="footer-col">
