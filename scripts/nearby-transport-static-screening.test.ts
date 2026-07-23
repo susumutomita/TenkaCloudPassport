@@ -339,7 +339,7 @@ describe('Nearby Transport Phase A manifest 境界', () => {
     expect(() =>
       verifyNearbyTransportRepositoryBaseline(
         screening,
-        packageSource.replace('~57.0.7', '~58.0.0'),
+        packageSource.replace('~57.0.8', '~58.0.0'),
         lockSource
       )
     ).toThrow('package.json');
@@ -347,7 +347,7 @@ describe('Nearby Transport Phase A manifest 境界', () => {
       verifyNearbyTransportRepositoryBaseline(
         screening,
         packageSource,
-        lockSource.replace('expo@57.0.7', 'expo@58.0.0')
+        lockSource.replace('expo@57.0.8', 'expo@58.0.0')
       )
     ).toThrow('bun.lock');
   });
