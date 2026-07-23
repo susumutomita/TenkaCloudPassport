@@ -67,7 +67,12 @@ public final class TenkaDeviceResourceTelemetryModule: Module {
         )
       }
     }
-    guard result == KERN_SUCCESS, count >= TASK_VM_INFO_REV1_COUNT else {
+    // `TASK_VM_INFO_REV1_COUNT` は `sizeof` を含む C マクロのため Swift へは
+    // import されず参照できない（EAS の iOS ビルドで
+    // "cannot find 'TASK_VM_INFO_REV1_COUNT' in scope" になる）。`phys_footprint`
+    // は iOS 13 以降の `TASK_VM_INFO` に常に含まれ、本アプリの deployment target は
+    // それを十分上回るため、`KERN_SUCCESS` の成否のみで判定する。
+    guard result == KERN_SUCCESS else {
       return nil
     }
     return Int64(info.phys_footprint)
