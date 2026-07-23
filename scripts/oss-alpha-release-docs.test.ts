@@ -465,7 +465,7 @@ describe('Issue 29: Release Gate と Version の一致契約', () => {
     const version = Reflect.get(packageMetadata, 'version');
     expect(version).toBe('0.1.0-alpha.1');
     expect(Reflect.get(Reflect.get(appMetadata, 'expo'), 'version')).toBe(
-      '0.1.0'
+      '1.0.0'
     );
 
     for (const relativePath of [

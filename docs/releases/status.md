@@ -4,7 +4,7 @@
 - Evidence source snapshot: `eaa6382cd380c31400cd1e879625ccbcc628c0ba`
 - Candidate commit: `Not fixed`（tag 作成時に 40 桁 SHA へ固定する）
 - Candidate version: `0.1.0-alpha.1`
-- Native user-facing version: `0.1.0`（Source-only Candidate に Native Binary は含めない）
+- Native user-facing version: `1.0.0`（Source-only Candidate に Native Binary は含めない。`app.json` の `expo.version` と同期する）
 - Public OSS Alpha: `Blocked`
 - `oss-alpha-draft` Environment protection: `Not run`（Repository 設定の Required Reviewer 証拠なし）
 - `v*` Tag immutability ruleset: `Not run`（active な更新 / 削除禁止と bypass なしの証拠なし）
