@@ -189,21 +189,6 @@
   .privacy-grid h3 { font-size: 16px; margin-bottom: 6px; letter-spacing: -0.01em; }
   .privacy-grid p { font-size: 14px; color: var(--muted); }
 
-  .run-panel {
-    position: relative; background: var(--ink); border-radius: 16px;
-    padding: 26px 28px; margin-top: 24px; overflow: hidden;
-  }
-  .run-panel::before {
-    content: ""; position: absolute; inset: -40% -20% auto auto; width: 260px; height: 260px;
-    background: radial-gradient(circle, rgba(255, 106, 50, 0.35), transparent 70%);
-    pointer-events: none;
-  }
-  pre.run {
-    position: relative; color: #e9e9ec;
-    font-family: var(--mono); font-size: 14px; line-height: 2;
-    overflow-x: auto;
-  }
-  pre.run .c { color: #86868b; }
   .run-note { margin-top: 16px; font-size: 14px; color: var(--muted); }
   .run-note code { font-family: var(--mono); font-size: 13px; }
 
@@ -252,7 +237,7 @@
     <nav class="nav-links" aria-label="セクション内リンク">
       <a href="#how">使い方</a>
       <a href="#privacy">プライバシー</a>
-      <a href="#run">動かす</a>
+      <a href="#run">試す</a>
     </nav>
     <div class="nav-right">
       <a class="pill" href="en/" hreflang="en" lang="en">EN</a>
@@ -427,19 +412,9 @@
 <section id="run">
   <div class="wrap">
     <p class="sec-label">Try it</p>
-    <h2>手元で動かす。</h2>
-    <div class="run-panel">
-      <pre class="run"><code>git clone https://github.com/susumutomita/TenkaCloudPassport.git
-cd TenkaCloudPassport
-make install
-make start   <span class="c"># スマホの Expo Go で QR を読む</span></code></pre>
-    </div>
+    <h2>ブラウザでそのまま試せます。</h2>
     <p class="run-note">
-      スマホに Expo Go を install し、Mac と同じ Network につないでから、Terminal に表示される
-      QR を読み取ってください。Browser で試す場合は <code>bun run web</code> です。
-    </p>
-    <p class="run-note">
-      開発環境なしでスマホから試したい場合は、
+      スマホから今すぐ試したい場合は、
       <a href="https://card.tenkacloud.com/app/" target="_blank" rel="noopener noreferrer">Web 版</a>
       を Browser で直接開いてください。データは端末内ストレージに保存するため、Browser や
       端末を変えるとカードは共有されません。初回表示にはオンライン接続が必要です。iOS Safari
@@ -468,7 +443,8 @@ make start   <span class="c"># スマホの Expo Go で QR を読む</span></cod
       <h4>Product</h4>
       <ul>
         <li><a href="#how">使い方</a></li>
-        <li><a href="#privacy">プライバシー</a></li>
+        <li><a href="#privacy">プライバシー概要</a></li>
+        <li><a href="privacy/">プライバシーポリシー</a></li>
       </ul>
     </div>
     <div class="footer-col">

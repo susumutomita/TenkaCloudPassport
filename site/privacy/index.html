@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>プライバシーポリシー — TenkaCloud Passport</title>
+<meta name="description" content="TenkaCloud Passport のプライバシーポリシー。アカウント不要・サーバー送信ゼロ・データは端末内保存のみ。トラッキングは行いません。" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<link rel="canonical" href="https://card.tenkacloud.com/privacy/" />
+<link rel="alternate" hreflang="ja" href="https://card.tenkacloud.com/privacy/" />
+<link rel="alternate" hreflang="en" href="https://card.tenkacloud.com/en/privacy/" />
+<link rel="alternate" hreflang="x-default" href="https://card.tenkacloud.com/privacy/" />
+<meta property="og:title" content="プライバシーポリシー — TenkaCloud Passport" />
+<meta property="og:description" content="アカウント不要・サーバー送信ゼロ・データは端末内保存のみ。トラッキングは行いません。" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://card.tenkacloud.com/privacy/" />
+<meta property="og:image" content="https://card.tenkacloud.com/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="プライバシーポリシー — TenkaCloud Passport" />
+<meta name="twitter:description" content="アカウント不要・サーバー送信ゼロ・データは端末内保存のみ。トラッキングは行いません。" />
+<meta name="twitter:image" content="https://card.tenkacloud.com/og.png" />
+<style>
+  /* 外部リクエストゼロ (フォント含む)。テレメトリなしを掲げるページ自身も何も送らない。 */
+  /* ブランドトークン (ink / muted / border / summit) は src/ui/theme.ts、site/index.html と同値を保つ。 */
+  :root {
+    --canvas: #e7e8ec;
+    --canvas-high: #f5f6f8;
+    --card: #ffffff;
+    --surface: #f5f5f7;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --muted-light: #86868b;
+    --border: #d2d2d7;
+    --border-subtle: #e8e8ed;
+    --summit: #ff6a32;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: radial-gradient(1200px 520px at 50% -160px, var(--canvas-high), var(--canvas) 76%);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.9;
+    font-size: 16px;
+  }
+  ::selection { background: rgba(255, 106, 50, 0.22); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* nav */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(247, 247, 249, 0.82);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(16, 17, 20, 0.07);
+  }
+  .nav-inner {
+    max-width: 1080px; margin: 0 auto; padding: 0 24px; height: 60px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  a.nav-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; text-decoration: none; color: inherit; }
+  .nav-brand svg { display: block; flex: none; }
+  .nav-brand .co { color: var(--muted-light); font-weight: 400; }
+  .nav-right { display: flex; align-items: center; gap: 10px; }
+  .nav-right a.pill {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 16px;
+    background: var(--card); transition: background 0.2s;
+  }
+  .nav-right a.pill:hover, .nav-right a.pill:focus-visible { background: var(--surface); }
+
+  /* document body */
+  .doc { max-width: 720px; margin: 0 auto; padding: 64px 24px 96px; }
+  .sec-label {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em;
+    color: var(--muted-light); text-transform: uppercase; margin-bottom: 18px;
+  }
+  h1 {
+    font-weight: 800; font-size: clamp(28px, 3.6vw, 40px);
+    line-height: 1.3; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 22px;
+  }
+  .doc p.lede { color: #424245; font-size: 16px; max-width: 42em; }
+  .doc-meta { margin-top: 18px; font-family: var(--mono); font-size: 12px; color: var(--muted-light); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 36px; }
+  .summary-grid .card { display: flex; gap: 14px; align-items: flex-start; border: 1px solid var(--border-subtle); border-radius: 14px; padding: 18px; background: var(--card); }
+  .summary-grid .check {
+    flex: none; width: 28px; height: 28px; border-radius: 8px;
+    background: rgba(255, 106, 50, 0.12); color: var(--summit);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .summary-grid .check svg { width: 14px; height: 14px; }
+  .summary-grid h2 { font-size: 14.5px; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .summary-grid p { font-size: 13.5px; color: var(--muted); }
+
+  article section { margin-top: 44px; }
+  article h3 { font-weight: 800; font-size: clamp(19px, 2.4vw, 22px); letter-spacing: -0.01em; margin-bottom: 12px; color: var(--ink); }
+  article p { color: #424245; font-size: 15px; max-width: 42em; }
+  article p + p { margin-top: 10px; }
+  article a { color: var(--ink); }
+  article code { font-family: var(--mono); font-size: 13.5px; background: var(--surface); padding: 2px 6px; border-radius: 4px; }
+
+  /* footer */
+  footer { background: var(--surface); margin-top: 40px; border-top: 1px solid var(--border-subtle); }
+  .footer-bottom {
+    max-width: 1080px; margin: 0 auto; padding: 28px 24px;
+    font-size: 13px; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between;
+  }
+  .footer-bottom a { color: var(--ink); }
+
+  @media (max-width: 780px) {
+    .doc { padding: 40px 20px 64px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="../">
+      <svg viewBox="0 0 120 120" width="24" height="24" aria-hidden="true"><rect x="26" y="24" width="68" height="12" rx="6" fill="#1d1d1f"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="#1d1d1f" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span>TenkaCloud <span class="co">Passport</span></span>
+    </a>
+    <div class="nav-right">
+      <a class="pill" href="../en/privacy/" hreflang="en" lang="en">EN</a>
+      <a class="pill" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub →</a>
+    </div>
+  </div>
+</header>
+
+<main class="doc">
+  <p class="sec-label">Legal</p>
+  <h1>プライバシーポリシー</h1>
+  <p class="lede">
+    TenkaCloud Passport は、対面イベント向けの無料の自己紹介カードアプリです。提供者は個人開発者の
+    Susumu Tomita です。このページでは、アプリがどのようなデータを、どこに、どう扱うか
+    （あるいは扱わないか）をまとめて説明します。
+  </p>
+  <p class="doc-meta">最終更新日: [owner が公開時に記入する日付]</p>
+
+  <div class="summary-grid">
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>アカウント不要</h2>
+        <p>登録もログインもありません。</p>
+      </div>
+    </div>
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>サーバー送信ゼロ</h2>
+        <p>カードのデータを保存するサーバーはありません。</p>
+      </div>
+    </div>
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>端末内保存のみ</h2>
+        <p>下書きは、削除するまで端末内にだけ残ります。</p>
+      </div>
+    </div>
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>トラッキングなし</h2>
+        <p>アナリティクス・行動追跡・第三者提供は行いません。</p>
+      </div>
+    </div>
+  </div>
+
+  <article>
+    <section>
+      <h3>アカウントと収集する情報</h3>
+      <p>
+        TenkaCloud Passport の利用にアカウント登録やログインは不要です。氏名・肩書き・所属・
+        自己紹介・リンクといった自己紹介カードの入力内容は、あなたが明示的に保存するまで
+        どこにも送信されません。
+      </p>
+    </section>
+
+    <section>
+      <h3>データの保存場所</h3>
+      <p>
+        保存した自己紹介カードの下書きは、あなたの端末内にだけ保存されます。書き出しや
+        自動バックアップの機能は持たないため、削除するまで端末の外に出ることはありません。
+        アプリを削除する、または端末内のデータを消去すると、カードの内容も失われます。
+      </p>
+    </section>
+
+    <section>
+      <h3>共有の仕組み</h3>
+      <p>
+        自己紹介カードを共有する QR コードには、カードの内容が URL のフラグメント
+        （<code>#</code> 以降の部分）の中にだけ埋め込まれています。相手が QR コードを読み取ると、
+        その場でブラウザがフラグメントの内容を表示するだけで、内容がどこかのサーバーへ
+        送信されることはありません。
+      </p>
+    </section>
+
+    <section>
+      <h3>アナリティクス・トラッキング</h3>
+      <p>
+        利用状況の計測、行動のトラッキング、広告配信、第三者へのデータ提供は一切行っていません。
+        テレメトリを送信する仕組み自体を持たない設計です。
+      </p>
+    </section>
+
+    <section>
+      <h3>連絡先への追加</h3>
+      <p>
+        相手が自己紹介ページ内の「連絡先に追加」を選ぶと、相手のブラウザ内で vCard
+        （<code>.vcf</code>）ファイルが生成されます。この処理は相手の端末内で完結し、
+        サーバーを介しません。対応状況（確認済みの端末・ブラウザ）は
+        <a href="../#how">ホームページの「使い方」</a> を参照してください。
+      </p>
+    </section>
+
+    <section>
+      <h3>お問い合わせ</h3>
+      <p>
+        ご質問やご指摘は、GitHub リポジトリの
+        <a href="https://github.com/susumutomita/TenkaCloudPassport/issues">Issues</a>
+        までお寄せください。専用の問い合わせ窓口を用意した場合は、本ページを更新して差し替えます。
+      </p>
+    </section>
+  </article>
+</main>
+
+<footer>
+  <div class="footer-bottom">
+    <span>TenkaCloud Passport — <a href="../">ホームに戻る</a> ・ <a href="https://github.com/susumutomita/TenkaCloudPassport">GitHub</a></span>
+    <span>Apache-2.0 License</span>
+  </div>
+</footer>
+</body>
+</html>
