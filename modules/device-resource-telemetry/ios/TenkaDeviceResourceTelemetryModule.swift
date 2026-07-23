@@ -31,6 +31,12 @@ public final class TenkaDeviceResourceTelemetryModule: Module {
           footprint: footprint,
           physicalMemoryBytes: physical
         ),
+        // Issue 104 PR #132（Codex 指摘 major）: この値は `os_proc_available_memory()`
+        // （Process 単位の実測 Ceiling）由来であり、Android の `system-wide-available`
+        // （端末全体の空き容量、Process 専用の割当上限ではない）とは信頼度が異なる。
+        // TS 側（`local-model-manifest.ts` の `evaluateModelResourceRisk`）がこの
+        // provenance を見て Android 値だけを保守的に割り引く。
+        "processMemoryLimitProvenance": "os-process-ceiling",
         "processMemoryBytes": footprint,
         "thermalState": self.thermalState(),
         "batteryLevelPermille": batteryLevel < 0

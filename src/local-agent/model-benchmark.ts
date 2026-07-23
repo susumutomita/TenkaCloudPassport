@@ -76,6 +76,7 @@ function unavailableSnapshot(): DeviceResourceSnapshot {
   return {
     physicalMemoryBytes: null,
     processMemoryLimitBytes: null,
+    processMemoryLimitProvenance: 'unavailable',
     processMemoryBytes: null,
     thermalState: 'unknown',
     batteryLevelPermille: null,

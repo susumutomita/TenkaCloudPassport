@@ -497,12 +497,68 @@ describe('会話テーマ ID（m）の QR 相乗り（Issue 104 / ADR-0036）', 
     }
   });
 
+  it('m の要素が重複している場合、createIntroCard 由来の INVALID_THEME_IDS をそのまま伝える', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: 'Eve', m: ['open-source', 'open-source'] })
+    );
+
+    const error = captureError(() => decodeIntroCardUrlFragment(fragment));
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('INVALID_THEME_IDS');
+    }
+  });
+
   it('decodeIntroCardUrlFragmentQuizProgressHex 経由でも m の不正値を fail-closed で拒否する（q だけでなく m も all-or-nothing 契約に従う）', () => {
     const fragment = toBase64Url(JSON.stringify({ v: 1, n: 'Eve', m: [] }));
 
     expectInvalidShareUrl(
       captureError(() => decodeIntroCardUrlFragmentQuizProgressHex(fragment))
     );
+  });
+
+  it('major（Issue 104 PR #132、Codex 指摘: q-only decoder の parity 欠落）: decodeIntroCardUrlFragmentQuizProgressHex 単独でも、m がカタログに実在しない ID なら INVALID_THEME_IDS を投げる（full decoder を経由しなくても同じ基準で拒否する）', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: 'Eve', m: ['not-a-real-clue-id'] })
+    );
+
+    const error = captureError(() =>
+      decodeIntroCardUrlFragmentQuizProgressHex(fragment)
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('INVALID_THEME_IDS');
+    }
+  });
+
+  it('major（Issue 104 PR #132、Codex 指摘: q-only decoder の parity 欠落）: decodeIntroCardUrlFragmentQuizProgressHex 単独でも、m の要素が重複していれば INVALID_THEME_IDS を投げる', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: 'Eve', m: ['open-source', 'open-source'] })
+    );
+
+    const error = captureError(() =>
+      decodeIntroCardUrlFragmentQuizProgressHex(fragment)
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('INVALID_THEME_IDS');
+    }
+  });
+
+  it('major（Issue 104 PR #132、Codex 指摘: encoder/decoder 自己矛盾）: createIntroCard を経由しない手組みの themeIds: [] は m キーを省略した URL になり、自身の decode で復元できる', () => {
+    const cardWithEmptyThemeIds: IntroCard = { name: '田中太郎', themeIds: [] };
+
+    const url = encodeIntroCardUrl(cardWithEmptyThemeIds);
+
+    expect(fragmentOf(url)).toBe(
+      toBase64Url(JSON.stringify({ v: 1, n: '田中太郎' }))
+    );
+    expect(decodeIntroCardUrlFragment(fragmentOf(url))).toEqual({
+      name: '田中太郎',
+    });
   });
 
   it('jsQR で実際に読み取れる QR に themeIds を含めても、読み取った URL から card を復元できる', () => {

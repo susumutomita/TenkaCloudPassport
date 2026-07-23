@@ -7875,3 +7875,125 @@ lint）が exit 0。カバレッジ 100%（Rules パスはテストで固定、N
 
 修正後、`bun run typecheck`・`bun test`（1871 pass）・`make before-commit`
 （exit 0、100% coverage 全ファイル、web export 成功）を再確認した。
+
+### PR #132 Codex レビュー対応（2 度目）- 2026-07-23
+
+PR #132（Issue 104、`feat/on-device-conversation-agent-step-a`）に対する Codex の
+2 度目のレビュー指摘（blocker 2 件・major 6 件）をすべて反映した。マージは
+呼び出し元（Fable）が別途 CI 確認の上で行う前提のため、本セッションは修正の
+push までとした。
+
+0. **main 追従**: `git merge origin/main`（#133 の expo:check ドリフト解消を
+   取り込み、衝突無し）。
+1. **blocker（Settings 遷移が session 破棄と forget() を迂回）**:
+   `PassportApp.tsx` の Settings footer（`onOpenSettings`）が `openSettings`
+   （stage 変更のみ）を直接呼んでおり、`onBack`（`conversationAgentFlow.close`）
+   と異なる離脱経路になっていた。両方を同じ `conversationAgentFlow.close` へ
+   統一し、離脱経路を 1 本化した。
+2. **blocker（production entitlement 復元は署名を壊す）**: `app.json` の
+   `entitlementsProfile` を `["preview", "production"]` から `["preview"]` へ
+   戻した。PR #116（`cf08728e`）の実障害（Provisioning Profile 不一致による
+   署名失敗）の記述を `docs/design/llama-provider-development-build.md` で
+   「Beta App Review で問題」という推測から事実へ訂正し、preview でも Apple
+   Developer Portal の capability 有効化・Provisioning Profile 再生成が owner
+   ゲートである旨を明記した。
+3. **major（m の consumer 間 fail-closed parity）**: `src/domain/intro-card.ts`
+   の件数・重複・カタログ実在検査を `resolveCatalogThemeIds` として export し、
+   q-only decoder（`intro-card-url.ts` の `strictPayloadRecord`）・viewer
+   （`site/c/index.html`）の両方から同じ関数を使うようにした。encoder は空
+   `themeIds` を `m` 省略へ正規化した。未知 ID・重複 ID の fixture を
+   parity テスト・単体テストへ追加した。
+4. **major（カード未作成時の no-op UI）**: `SettingsScreen.tsx` の会話エージェント
+   入口を `hasIntroCard` で disabled にし、`ConversationAgentScreen.tsx` は
+   未作成時に intake 導線を隠して「戻る」CTA だけを表示するようにした。
+5. **major（セッション跨ぎの stale scan race）**:
+   `use-conversation-agent-flow.ts` の状態機械を
+   `conversation-agent-flow-controller.ts`（`local-model-management-controller.ts`
+   と同じ DI 可能な純関数の流儀）へ切り出し、`open`/`close`/`onReset`/
+   `onRemovePeer` のたびに世代を進める `ConversationAgentGenerationGuard` を
+   導入した。`resolveScannedPeer` が scan 開始時の世代と完了時の世代を比較し、
+   stale な完了を静かに破棄する。`onStart` の Provider 実行も同じ流儀の
+   `resolveConversationAgentRun` へ切り出した。
+6. **major（iOS/Android memory-limit セマンティクス不整合）**:
+   `ProcessMemoryLimitProvenance`（`os-process-ceiling` /
+   `system-wide-available` / `unavailable`）を型として導入し、Native（iOS
+   Swift・Android Kotlin）から provenance を渡すようにした。
+   `evaluateModelResourceRisk` は `system-wide-available`（Android の
+   `availMem` 由来、この App 専用の割当上限ではない）を 50% 割り引いてから
+   使い、iOS の `os-process-ceiling` と同じ信頼度で扱わない。
+7. **major（hook 状態機械のカバレッジ不足）**: 上記 5 の controller 切り出しと
+   同時に、`performConversationAgentCleanup`（forget() の呼び出し集約）を
+   実行テストで固定した。この repo に React render harness が無いため、
+   hook 本体ではなく切り出した純関数を直接実行してテストする。
+8. **major（モデル入手経路が consumer-ready でない）**: Qwen2.5-1.5B-Instruct
+   （Q4_K_M、Apache-2.0）の URL・SHA-256・サイズを Hugging Face の一次情報
+   （Git LFS ポインタ・`resolve/main` の HTTP ヘッダー、`x-linked-size` /
+   `x-linked-etag` で確認済み）で確定し、`trusted-model-catalog.ts` へ設定
+   として切り出した。`trusted-model-download.ts` に明示同意・容量確認・
+   ダウンロード・期待 SHA-256 照合の純粋な orchestration を実装し（手書き
+   Fake Port で 100% coverage）、`expo-trusted-model-download.native.ts` で
+   `expo-file-system` の `DownloadTask`（iOS background セッション・pause/
+   resume を Native が提供）を使う実装を追加した。検証済みの候補は Issue 18
+   の既存 `LocalModelLifecycle.importCandidate` へそのまま渡し、private copy
+   以降を複製しない。Settings 画面からの同意 UI・進捗表示・実機検証は本 PR の
+   scope に収まらないと判断し、follow-up へ列挙した（詳細は PR body 参照）。
+
+#### 検証
+
+`bun test`（1918 pass、100% coverage）・`bun run typecheck`・`make before-commit`
+（exit 0、web export 成功）・変更した design doc 2 件への `bunx textlint` を確認した。
+
+#### `/review`・`/security-review`・`/simplify` の反映
+
+`code-reviewer` subagent（隔離コンテキスト、read-only）と security-review（隔離
+subagent、8-10 confidence の脆弱性のみ報告）を並列実行した。
+
+- security-review: 該当なし（`trusted-model-download.ts` の URL はカタログ
+  固定でユーザー入力が届かない、SHA-256 照合は整合性検証であり定数時間比較は
+  不要、viewer は textContent のみ、Native module は固定 literal のみ書き込む
+  ことを確認済み）。
+- code-reviewer 指摘（major）: `acquireTrustedModel` が `startDownload` の
+  reject を捕まえておらず、Native adapter の genuine な転送失敗（回線切断等）
+  が型付き `TrustedModelAcquisitionError` にならず素通りしていた。try/catch を
+  追加し、abort 済みなら `DOWNLOAD_CANCELLED`、それ以外は `DOWNLOAD_FAILED` へ
+  分類するよう修正し、reject 経路のテストを追加した。
+- code-reviewer 指摘（minor）: 自己紹介カード未作成時、新しい CTA ボタンと
+  既存の汎用「戻る」ボタンが同じ `onBack` で重複表示されていた。汎用ボタンを
+  `hasSelfIntroCard` のときだけ表示するよう修正した。
+- code-reviewer 指摘（minor）: `llama-provider-development-build.md` に
+  textlint 自動修正が誤って挿入した文中の句点があった。除去し、行の折返し
+  位置も調整して再発を防いだ。
+- code-reviewer 指摘（nit）: `IntroCardError` のクラスコメントが
+  `decodeIntroCardUrlFragmentQuizProgressHex` 経由でも `INVALID_THEME_IDS` を
+  投げうる事実を反映していなかった。1 行追記した。
+- `/simplify`（4 観点並列: reuse・simplification・efficiency・altitude）で
+  以下を適用した。
+  - `deriveFileName`（`trusted-model-download.ts`）と `cacheDestinationFile`
+    （`expo-trusted-model-download.native.ts`）が同じロジックを別実装で
+    複製し、fallback 挙動まで食い違っていた。前者へ一本化した。
+  - `trusted-model-download.ts` の空き容量 reserve 定数が
+    `model-lifecycle.ts` の `REQUIRED_FREE_SPACE_BYTES` と同じ値をリテラルで
+    複製していた。後者を export し前者から import するよう修正した。
+  - `ConversationAgentGenerationGuard`（bump/current の専用 interface +
+    factory）が、同じファイル内の `runKeyRef`（plain `useRef`）と機能的に
+    重複していた。専用 interface を廃し、`runKeyRef` と同じ「plain な
+    `useRef<number>` をそのまま渡す」流儀へ統一した。
+  - `ModelResourceRiskInput` の組み立てが `model-lifecycle.ts` 内 3 か所に
+    分散し、今回の `processMemoryLimitProvenance` 追加で 3 か所同時に手を
+    入れる必要があった。`resourceRiskInputFrom` へ集約した。
+  - 適用しなかった指摘（判断理由を記録）: (1) `resolveCatalogThemeIds` が
+    full decode path で 2 回走る点は efficiency 観点で「3 要素配列・
+    O(1) lookup のため最適化不要」と判定されたため据え置いた。(2)
+    `ConversationAgentScreen.tsx` のネストした三項演算子の平坦化は読みやすさ
+    の nit でありリスクに見合わないため見送った。(3)
+    `expo-model-file-store.native.ts` の `fileInfo`/`deleteIfPresent`/
+    chunked SHA-256 read パターンを export して新しい native adapter と共有
+    する案は、実機テストできない既存の安定コードへ手を入れる範囲が本 PR の
+    スコープを超えるため見送った。(4) altitude 指摘の
+    `createProviderResultApplicationGate` との統合、および q-only decoder の
+    全 field 構造的検証は、cross-cutting なリファクタリングでありテスト設計
+    を伴う別 PR が必要と判断し、follow-up へ列挙した
+    （`01KY7G1Z9JPFG3T7B4CH7PT5NZ`・`01KY7G1ZGDDFNPM35Q3MTZZJK4`）。
+
+修正後、`bun test`（1921 pass、100% coverage）・`bun run typecheck`・
+`make before-commit`（exit 0、web export 成功）を再確認した。

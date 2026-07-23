@@ -89,6 +89,10 @@ export type IntroCardField =
  * `INVALID_SHARE_URL`（Issue 84）は同じ理由で `src/protocol/intro-card-url.ts` の
  * `decodeIntroCardUrlFragment` が、QR フラグメントを Intro Card として復元できない
  * 場合（base64url 不正・JSON 不正・version 不一致・スキーマ不一致）に投げる。
+ * Issue 104 PR #132: `decodeIntroCardUrlFragmentQuizProgressHex`（`q` だけを
+ * 取り出す q-only decoder）も同じ `strictPayloadRecord` を経由するため、`m`
+ * （会話テーマ）がカタログ未登録・重複の場合は `resolveCatalogThemeIds` 由来の
+ * `INVALID_THEME_IDS` をそのまま投げる（`INVALID_SHARE_URL` へ丸めない）。
  */
 export class IntroCardError extends Error {
   readonly code: IntroCardErrorCode;
@@ -326,19 +330,19 @@ function validatedPhone(value: string | undefined): string | undefined {
 }
 
 /**
- * Issue 104: 会話テーマ ID は自由記述ではなく版管理済みカタログからの選択式の
- * ため、`normalizeOptional`（trim・正規化）は適用しない。`undefined` または
- * 空配列は「テーマ未設定」として `undefined` へ正規化し（他の optional array
- * である `links` と同じ契約）、それ以外は全件がカタログに実在し、重複が無く、
- * `INTRO_CARD_MAX_THEMES` 件以内であることを fail-closed で検証する。
- * URL デコード（`m` key）・Storage 読み戻しのどちらから来た値も、無効な値を
- * 静かに間引かず全体を拒否する（`links` の「不正な 1 件だけ弾く」とは異なり、
- * カタログ ID は呼び出し側のバグ・改ざんの兆候として扱う）。
+ * Issue 104 PR #132（Codex 指摘 major）: `m`（会話テーマ ID）の件数・カタログ
+ * 実在・重複検査を 1 か所へ共通化し、full decoder（本関数経由の
+ * `createIntroCard`）・q-only decoder（`src/protocol/intro-card-url.ts` の
+ * `strictPayloadRecord`）・viewer（`site/c/index.html`）の全経路が同じ基準を
+ * 使う（`scripts/intro-card-viewer-decoder-parity.test.ts` が三者の実行結果を
+ * 突き合わせる）。呼び出し側は配列形状（文字列配列であること）を先に検証済みで
+ * ある前提とし、ここでは件数・重複・カタログ実在だけを fail-closed で検証する。
+ * 無効な値を静かに間引かず（`links` の「不正な 1 件だけ弾く」とは異なり）、
+ * 呼び出し側のバグ・改ざんの兆候として全体を拒否する。
  */
-function validatedThemeIds(
-  values: readonly string[] | undefined
-): readonly ClueId[] | undefined {
-  if (values === undefined || values.length === 0) return undefined;
+export function resolveCatalogThemeIds(
+  values: readonly string[]
+): readonly ClueId[] {
   if (values.length > INTRO_CARD_MAX_THEMES) {
     throw new IntroCardError(
       'INVALID_THEME_IDS',
@@ -362,6 +366,20 @@ function validatedThemeIds(
     themeIds.push(value);
   }
   return themeIds;
+}
+
+/**
+ * Issue 104: 会話テーマ ID は自由記述ではなく版管理済みカタログからの選択式の
+ * ため、`normalizeOptional`（trim・正規化）は適用しない。`undefined` または
+ * 空配列は「テーマ未設定」として `undefined` へ正規化する（他の optional array
+ * である `links` と同じ契約）。それ以外は `resolveCatalogThemeIds` の共通検査
+ * （件数・重複・カタログ実在）を通す。
+ */
+function validatedThemeIds(
+  values: readonly string[] | undefined
+): readonly ClueId[] | undefined {
+  if (values === undefined || values.length === 0) return undefined;
+  return resolveCatalogThemeIds(values);
 }
 
 export function createIntroCard(input: CreateIntroCardInput): IntroCard {

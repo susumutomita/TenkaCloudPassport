@@ -30,6 +30,7 @@ const CANDIDATE: ModelImportCandidate = {
 const SUPPORTED_SNAPSHOT: DeviceResourceSnapshot = {
   physicalMemoryBytes: 2_000_000_000,
   processMemoryLimitBytes: 2_000_000_000,
+  processMemoryLimitProvenance: 'os-process-ceiling',
   processMemoryBytes: 100_000_000,
   thermalState: 'nominal',
   batteryLevelPermille: 800,

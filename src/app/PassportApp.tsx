@@ -608,6 +608,12 @@ interface UtilityStageGateProps {
    */
   readonly onOpenConversationAgent: () => void;
   readonly conversationAgent: ConversationAgentBranchProps;
+  /**
+   * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 会話エージェントの Settings
+   * 入口を disabled にするための判定。Pet Profile の `hasProfile` とは別の値
+   * （自己紹介カード、`introCard !== null`）。
+   */
+  readonly hasIntroCard: boolean;
 }
 
 function UtilityStageGate({
@@ -626,6 +632,7 @@ function UtilityStageGate({
   onCloseQuiz,
   onOpenConversationAgent,
   conversationAgent,
+  hasIntroCard,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
     return (
@@ -665,6 +672,7 @@ function UtilityStageGate({
   if (stage === 'settings') {
     return (
       <SettingsScreen
+        hasIntroCard={hasIntroCard}
         locale={locale}
         modelManagement={modelManagement}
         onBack={onCloseSettings}
@@ -2400,7 +2408,16 @@ export default function PassportApp({
           hasSelfIntroCard: conversationAgentFlow.hasSelfIntroCard,
           onBack: conversationAgentFlow.close,
           onChangePasteInput: conversationAgentFlow.onChangePasteInput,
-          onOpenSettings: openSettings,
+          // Codex 指摘（blocker、Issue 104 PR #132）: Settings footer が
+          // `openSettings`（stage 変更のみ）を呼んでいたため、受信済み相手カード・
+          // 貼り付け中の URL・実行結果が hook state に残ったまま Settings 経由で
+          // 離脱でき、`providerRunner` の Native Lane 占有も解放されなかった。
+          // `onBack` と同じ `conversationAgentFlow.close`（session clear +
+          // forget() を含む単一 cleanup）に統一し、どちらのボタンから離脱しても
+          // 同じ後始末を経由する（`docs/design/2026-07-23-on-device-conversation-agent.md`
+          // 「セッション終了（画面遷移・アプリ終了・明示的な「終了する」操作）で
+          // 即時 clear する」契約どおり）。
+          onOpenSettings: conversationAgentFlow.close,
           onRemovePeer: conversationAgentFlow.onRemovePeer,
           onReset: conversationAgentFlow.onReset,
           onScanPeer: conversationAgentFlow.onScanPeer,
@@ -2412,6 +2429,7 @@ export default function PassportApp({
           result: conversationAgentFlow.result,
         }}
         diagnosticsFlow={diagnosticsFlow}
+        hasIntroCard={introCard !== null}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}

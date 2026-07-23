@@ -29,6 +29,11 @@ import {
   decodeConversationAgentPeerCard,
   INITIAL_CONVERSATION_AGENT_RESULT,
 } from './conversation-agent-flow';
+import {
+  performConversationAgentCleanup,
+  resolveConversationAgentRun,
+  resolveScannedPeer,
+} from './conversation-agent-flow-controller';
 import type { Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import type { QrScannerPort } from './qr-scanner-port';
@@ -89,6 +94,15 @@ export function useConversationAgentFlow({
   // Provider 呼出しは非同期のため、セッションが破棄・やり直された後に届く
   // 遅延完了が古い結果を上書きしないための世代キー。
   const runKeyRef = useRef<string | null>(null);
+  // major（Issue 104 PR #132、stale scan race）: `onScanPeer` の Promise は
+  // 非同期のため、待機中に `close`/`onReset` → 再 `open` されると、旧 scan の
+  // 完了が新しい session の空 peer slot へ紛れ込みうる。`open`/`close`/
+  // `onReset`/`onRemovePeer` のたびに世代を進め、scan 開始時に捕まえた世代と
+  // 突き合わせて stale な完了を破棄する（`conversation-agent-flow-controller.ts`
+  // の `resolveScannedPeer` が実行テスト付きでこの判定を持つ）。`/simplify`
+  // 指摘（reuse/simplification）: 専用の interface・factory 関数を作らず、
+  // 上の `runKeyRef` と同じ「plain な `useRef`」の流儀に揃える。
+  const scanGenerationRef = useRef(0);
 
   /**
    * code-reviewer 指摘（major）: `runKeyRef` を `null` へ戻すだけでは
@@ -96,12 +110,18 @@ export function useConversationAgentFlow({
    * 止まらない。Pet Interaction 側（`PassportApp.tsx` の `cancelActiveProvider`）
    * と同じく、状態をリセットする全経路（`open` / `close` / `onReset` /
    * `onRemovePeer`）で必ず `providerRunner.forget(...)` を呼び、実行中なら
-   * Cancel、確定済みなら Ledger 上のエントリを破棄する。
+   * Cancel、確定済みなら Ledger 上のエントリを破棄する。blocker（PR #132）:
+   * この呼び忘れ regression を構造的に防ぐため、実際の forget() 呼び出し順序は
+   * `conversation-agent-flow-controller.ts` の `performConversationAgentCleanup`
+   * （実行テスト付き）へ一本化する。
    */
   const forgetActiveRun = useCallback((): void => {
     const activeEncounterKey = runKeyRef.current;
     runKeyRef.current = null;
-    if (activeEncounterKey) providerRunner.forget(activeEncounterKey);
+    performConversationAgentCleanup({
+      activeEncounterKey,
+      forget: providerRunner.forget,
+    });
   }, [providerRunner]);
 
   const resetTransientState = useCallback((): void => {
@@ -113,6 +133,7 @@ export function useConversationAgentFlow({
 
   const open = useCallback(
     (introCard: IntroCard | null): void => {
+      scanGenerationRef.current += 1;
       setSession(
         introCard
           ? createConversationSession({
@@ -128,6 +149,7 @@ export function useConversationAgentFlow({
   );
 
   const close = useCallback((): void => {
+    scanGenerationRef.current += 1;
     setSession(null);
     resetTransientState();
     onNavigateToSettings();
@@ -187,28 +209,22 @@ export function useConversationAgentFlow({
    * （`qr-scanner-port.ts` の architect guidance と同じ原則）。
    */
   const onScanPeer = useCallback((): void => {
-    void qrScannerPort.scan().then(
-      (raw) => {
-        try {
-          addPeer(decodeConversationAgentPeerCard(raw));
-        } catch (error: unknown) {
-          setErrorMessage(
-            readableError(
-              error,
-              MESSAGES[locale].conversationAgent.runErrorMessage
-            )
-          );
-        }
-      },
-      (error: unknown) => {
+    const generationAtStart = scanGenerationRef.current;
+    void resolveScannedPeer({
+      scanGenerationRef,
+      generationAtStart,
+      scan: () => qrScannerPort.scan(),
+      decode: decodeConversationAgentPeerCard,
+      addPeer,
+      onError: (error) => {
         setErrorMessage(
           readableError(
             error,
             MESSAGES[locale].conversationAgent.runErrorMessage
           )
         );
-      }
-    );
+      },
+    });
   }, [addPeer, locale, qrScannerPort]);
 
   /** 設計文書「審査官が単独で試せる審査戦略」: QR・URL 往復を経ないテスト専用の内部経路。 */
@@ -218,6 +234,7 @@ export function useConversationAgentFlow({
 
   const onRemovePeer = useCallback(
     (participantId: ParticipantId): void => {
+      scanGenerationRef.current += 1;
       setSession((current) =>
         current
           ? removeConversationSessionPeer(current, participantId)
@@ -230,6 +247,7 @@ export function useConversationAgentFlow({
   );
 
   const onReset = useCallback((): void => {
+    scanGenerationRef.current += 1;
     setSession((current) =>
       current ? clearConversationSessionPeers(current) : current
     );
@@ -270,35 +288,35 @@ export function useConversationAgentFlow({
       .join('|')}`;
     runKeyRef.current = encounterKey;
     setResult({ kind: 'running' });
-    void providerRunner
-      .run({
-        state: INITIAL_PROVIDER_RUNTIME_STATE,
-        encounterKey,
-        provider,
-        input,
-      })
-      .then(
-        (runResult) => {
-          if (runKeyRef.current !== encounterKey) return;
-          const decision = runResult.outcome.decision;
-          setResult(
-            decision.kind === 'bridge'
-              ? {
-                  kind: 'bridge',
-                  reason: decision.reason,
-                  opener: decision.opener,
-                }
-              : { kind: 'no-signal' }
-          );
-        },
-        () => {
-          if (runKeyRef.current !== encounterKey) return;
-          setResult({
-            kind: 'error',
-            message: MESSAGES[locale].conversationAgent.runErrorMessage,
-          });
-        }
-      );
+    void resolveConversationAgentRun({
+      activeRunKeyRef: runKeyRef,
+      encounterKey,
+      run: () =>
+        providerRunner.run({
+          state: INITIAL_PROVIDER_RUNTIME_STATE,
+          encounterKey,
+          provider,
+          input,
+        }),
+      onSuccess: (runResult) => {
+        const decision = runResult.outcome.decision;
+        setResult(
+          decision.kind === 'bridge'
+            ? {
+                kind: 'bridge',
+                reason: decision.reason,
+                opener: decision.opener,
+              }
+            : { kind: 'no-signal' }
+        );
+      },
+      onError: () => {
+        setResult({
+          kind: 'error',
+          message: MESSAGES[locale].conversationAgent.runErrorMessage,
+        });
+      },
+    });
   }, [locale, provider, providerRunner, result.kind, session]);
 
   return {

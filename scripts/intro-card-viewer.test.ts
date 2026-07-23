@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
+import { CLUE_IDS } from '../src/domain/clue-catalog';
 import {
   INTRO_CARD_LINK_MAX_LENGTH,
   INTRO_CARD_MAX_LINKS,
+  INTRO_CARD_MAX_THEMES,
   INTRO_CARD_NAME_MAX_LENGTH,
   INTRO_CARD_ORGANIZATION_MAX_LENGTH,
   INTRO_CARD_PHONE_MAX_LENGTH,
@@ -231,6 +233,33 @@ describe('クイズ進捗スタンプ（q、Issue 110 / ADR-0035）の表示契�
       .join(', ')}];`;
 
     expect(text).toContain(expectedLiteral);
+  });
+
+  it('major（Issue 104 PR #132、Codex 指摘）: KNOWN_CLUE_IDS が clue-catalog.ts の CLUE_IDS と同じ値・順序を複製している（drift 検出）', async () => {
+    const text = await readViewerSource();
+    const expectedLiteral = `const KNOWN_CLUE_IDS = [\n${CLUE_IDS.map(
+      (id) => `    '${id}',\n`
+    ).join('')}  ];`;
+
+    expect(text).toContain(expectedLiteral);
+  });
+
+  it('major（Issue 104 PR #132、Codex 指摘）: validatedThemeIds は重複・カタログ未登録の ID を rejectField で fail-closed に拒否する', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function validatedThemeIds(value) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain('new Set(value).size !== value.length');
+    expect(body).toContain('!KNOWN_CLUE_IDS.includes(item)');
+  });
+
+  it('major（Issue 104 PR #132、Codex 指摘）: THEME_IDS_MAX_LENGTH が INTRO_CARD_MAX_THEMES と同じ値を複製している（drift 検出）', async () => {
+    const text = await readViewerSource();
+
+    expect(text).toContain(
+      `const THEME_IDS_MAX_LENGTH = ${INTRO_CARD_MAX_THEMES};`
+    );
   });
 
   it('QUIZ_QUESTION_COUNT・QUIZ_PROGRESS_HEX_MAX_LENGTH が domain の定数と同じ値を複製している（drift 検出）', async () => {

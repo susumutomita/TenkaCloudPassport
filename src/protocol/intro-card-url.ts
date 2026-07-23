@@ -4,6 +4,7 @@ import {
   INTRO_CARD_MAX_THEMES,
   type IntroCard,
   IntroCardError,
+  resolveCatalogThemeIds,
 } from '../domain/intro-card';
 import { QUIZ_PROGRESS_HEX_MAX_LENGTH } from '../domain/quiz-progress-code';
 import { QR_ENCODER_MAX_BYTES } from '../qr/encoder';
@@ -242,10 +243,16 @@ function strictPayloadRecord(parsed: unknown): {
   // `q` の妥当性はここで確定させる（結果は呼び出し側が使うかどうかを選べる）。不正なら
   // 他のフィールドと同じ fail-closed 契約でここで throw する。
   validateQuizProgressHex(record.q, `${path}.q`);
-  // Issue 104: `m`（会話テーマ）も `decodeIntroCardUrlFragmentQuizProgressHex`
-  // 経由（`decodePayload` を経ない）の呼び出しで見落とされないよう、ここで
-  // 形状だけ確定させる（all-or-nothing 契約、`q` と同じ理由）。
-  optionalThemeIdsField(record.m, `${path}.m`);
+  // Issue 104 PR #132（Codex 指摘 major）: `m`（会話テーマ）も
+  // `decodeIntroCardUrlFragmentQuizProgressHex` 経由（`decodePayload` を経ない
+  // q-only decoder）の呼び出しで見落とされないよう、ここで形状に加えて
+  // 件数・カタログ実在・重複まで確定させる（all-or-nothing 契約、`q` と同じ
+  // 理由）。full decoder（`decodePayload` → `createIntroCard`）は独立に同じ
+  // `resolveCatalogThemeIds` を再度通すため、二重にはなるが同じ関数・同じ
+  // 値であり drift しない（q-only decoder が full decoder と異なる基準に
+  // なることを構造的に防ぐための意図的な重複）。
+  const themeIds = optionalThemeIdsField(record.m, `${path}.m`);
+  if (themeIds !== undefined) resolveCatalogThemeIds(themeIds);
   return record;
 }
 
@@ -364,7 +371,14 @@ function buildPayload(
     validatedQuizProgressHex === '0'
       ? {}
       : { q: validatedQuizProgressHex }),
-    ...(card.themeIds === undefined ? {} : { m: card.themeIds }),
+    // Issue 104 PR #132（Codex 指摘 major）: `createIntroCard` を経由しない
+    // 手組みの `IntroCard`（`themeIds: []`）を渡された場合、`m: []` を出力すると
+    // 自身の decoder（配列の最小要素数 1 を要求）がその出力を拒否する自己矛盾
+    // した URL になる。空配列も `undefined` と同じく `m` 省略へ正規化する
+    // （decoder・`createIntroCard` の「空配列は未設定」という既存契約と揃える）。
+    ...(card.themeIds === undefined || card.themeIds.length === 0
+      ? {}
+      : { m: card.themeIds }),
   };
 }
 

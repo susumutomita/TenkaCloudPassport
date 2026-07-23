@@ -1,3 +1,4 @@
+import type { ProcessMemoryLimitProvenance } from './local-model-manifest';
 import type { DeviceResourceSnapshot } from './model-lifecycle';
 
 const THERMAL_STATES = new Set([
@@ -8,9 +9,22 @@ const THERMAL_STATES = new Set([
   'critical',
 ]);
 
+/**
+ * major（Issue 104 PR #132、Codex 指摘）: iOS（`os-process-ceiling`）と Android
+ * （`system-wide-available`）で `processMemoryLimitBytes` の意味が異なるため、
+ * Native からこの provenance を渡してもらい、`evaluateModelResourceRisk` が
+ * 信頼度に応じた扱いをできるようにする。
+ */
+const PROCESS_MEMORY_LIMIT_PROVENANCES = new Set([
+  'os-process-ceiling',
+  'system-wide-available',
+  'unavailable',
+]);
+
 type ResourceSnapshotRecord = Record<string, unknown> & {
   readonly physicalMemoryBytes?: unknown;
   readonly processMemoryLimitBytes?: unknown;
+  readonly processMemoryLimitProvenance?: unknown;
   readonly processMemoryBytes?: unknown;
   readonly thermalState?: unknown;
   readonly batteryLevelPermille?: unknown;
@@ -44,10 +58,23 @@ function unavailableSnapshot(): DeviceResourceSnapshot {
   return {
     physicalMemoryBytes: null,
     processMemoryLimitBytes: null,
+    processMemoryLimitProvenance: 'unavailable',
     processMemoryBytes: null,
     thermalState: 'unknown',
     batteryLevelPermille: null,
   };
+}
+
+function resolvedProcessMemoryLimitProvenance(
+  value: unknown
+): ProcessMemoryLimitProvenance {
+  if (
+    typeof value === 'string' &&
+    PROCESS_MEMORY_LIMIT_PROVENANCES.has(value)
+  ) {
+    return value as ProcessMemoryLimitProvenance;
+  }
+  return 'unavailable';
 }
 
 /** Native dictionary を exact key / bounded number で fail closed に投影する。 */
@@ -61,6 +88,7 @@ export function parseDeviceResourceSnapshot(
     'physicalMemoryBytes',
     'processMemoryBytes',
     'processMemoryLimitBytes',
+    'processMemoryLimitProvenance',
     'thermalState',
   ];
   if (
@@ -70,11 +98,22 @@ export function parseDeviceResourceSnapshot(
     return unavailableSnapshot();
   }
   const thermalState = value.thermalState;
+  // fail-closed（Issue 104 PR #132、Codex 指摘）: `evaluateModelResourceRisk`
+  // が要求する「provenance が `unavailable` のときは値も必ず `null`」という
+  // 整合性を、Native からの入力の時点で保証する。provenance を先に解決し、
+  // `unavailable` に丸まった場合は数値側も強制的に `null` にする（自己矛盾した
+  // Native 値を通さない）。
+  const processMemoryLimitProvenance = resolvedProcessMemoryLimitProvenance(
+    value.processMemoryLimitProvenance
+  );
+  const processMemoryLimitBytes =
+    processMemoryLimitProvenance === 'unavailable'
+      ? null
+      : nullablePositiveInteger(value.processMemoryLimitBytes);
   return {
     physicalMemoryBytes: nullablePositiveInteger(value.physicalMemoryBytes),
-    processMemoryLimitBytes: nullablePositiveInteger(
-      value.processMemoryLimitBytes
-    ),
+    processMemoryLimitBytes,
+    processMemoryLimitProvenance,
     processMemoryBytes: nullablePositiveInteger(value.processMemoryBytes),
     thermalState:
       typeof thermalState === 'string' && THERMAL_STATES.has(thermalState)

@@ -97,4 +97,29 @@ describe('端末内会話エージェント画面の Accessibility 契約', () =
 
     expect(text).toContain('disabled={pasteInput.trim().length === 0}');
   });
+
+  it('major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は scan/paste/sample の取り込み導線を隠し、戻る CTA だけを表示する', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      'hasSelfIntroCard ? (',
+      'peer ? (',
+      '<IntakeSection',
+      'accessibilityHint={t.selfCardMissingCtaButtonHint}',
+      'label={t.selfCardMissingCtaButton}',
+      'onPress={onBack}',
+    ]);
+  });
+
+  it('code-reviewer 指摘（minor、Issue 104 PR #132）: 汎用の戻るボタンは hasSelfIntroCard のときだけ表示し、CTA と同じ操作が重複表示されない', async () => {
+    const text = await source();
+    const ctaIndex = text.indexOf('label={t.selfCardMissingCtaButton}');
+    const genericBackButtonGuardIndex = text.indexOf(
+      'hasSelfIntroCard ? (\n        // code-reviewer 指摘（minor、Issue 104 PR #132）'
+    );
+
+    expect(ctaIndex).toBeGreaterThan(-1);
+    expect(genericBackButtonGuardIndex).toBeGreaterThan(ctaIndex);
+    expect(text).toContain('label={t.backButton}');
+  });
 });

@@ -6,6 +6,8 @@ import {
   LocalModelLifecycleError,
   type LocalModelManifest,
   type ModelResourceRisk,
+  type ModelResourceRiskInput,
+  type ProcessMemoryLimitProvenance,
   parseLocalModelManifest,
   projectGgufMetadata,
   serializeLocalModelManifest,
@@ -135,6 +137,13 @@ export interface LocalModelInspector {
 export interface DeviceResourceSnapshot {
   readonly physicalMemoryBytes: number | null;
   readonly processMemoryLimitBytes: number | null;
+  /**
+   * major（Issue 104 PR #132、Codex 指摘）: `processMemoryLimitBytes` の意味は
+   * OS ごとに異なる（iOS は Process 単位の実測 Ceiling、Android は端末全体の
+   * 空き容量）。詳細は `local-model-manifest.ts` の
+   * `ProcessMemoryLimitProvenance` を参照。
+   */
+  readonly processMemoryLimitProvenance: ProcessMemoryLimitProvenance;
   readonly processMemoryBytes: number | null;
   readonly thermalState: ThermalState;
   readonly batteryLevelPermille: number | null;
@@ -189,7 +198,12 @@ export interface LocalModelLifecycleDependencies {
   readonly clock?: ModelLifecycleClock;
 }
 
-const REQUIRED_FREE_SPACE_BYTES = 64 * 1024 * 1024;
+/**
+ * `/simplify` 指摘（reuse）: `trusted-model-download.ts` の空き容量確認も同じ
+ * 64 MiB reserve を使うため、export して値の drift を防ぐ（以前は
+ * コメントで「値を揃える」と書きつつ literal を複製していた）。
+ */
+export const REQUIRED_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 const MAX_FILE_NAME_BYTES = 128;
 const MAX_MODELS = 8;
 const MAX_REPORTS_PER_MODEL = 20;
@@ -214,6 +228,7 @@ const DEFAULT_CLOCK: ModelLifecycleClock = {
 const UNAVAILABLE_RESOURCE_SNAPSHOT: DeviceResourceSnapshot = {
   physicalMemoryBytes: null,
   processMemoryLimitBytes: null,
+  processMemoryLimitProvenance: 'unavailable',
   processMemoryBytes: null,
   thermalState: 'unknown',
   batteryLevelPermille: null,
@@ -404,17 +419,35 @@ async function assertModelIntegrity(
   }
 }
 
+/**
+ * `/simplify` 指摘（simplification）: `DeviceResourceSnapshot` から
+ * `ModelResourceRiskInput` を組み立てる箇所が 3 か所（`riskFor`・
+ * `verifyActiveModelAtLoad`・`assess`）に分散し、この PR で
+ * `processMemoryLimitProvenance` を 3 か所同時に足す必要があった。1 か所へ
+ * まとめ、次にフィールドが増えてもここだけ直せばよくする。
+ */
+function resourceRiskInputFrom(
+  snapshot: DeviceResourceSnapshot,
+  modelSizeBytes: number,
+  nCtx: number
+): ModelResourceRiskInput {
+  return {
+    modelSizeBytes,
+    nCtx,
+    physicalMemoryBytes: snapshot.physicalMemoryBytes,
+    processMemoryLimitBytes: snapshot.processMemoryLimitBytes,
+    processMemoryLimitProvenance: snapshot.processMemoryLimitProvenance,
+    thermalState: snapshot.thermalState,
+  };
+}
+
 function riskFor(
   modelSizeBytes: number,
   snapshot: DeviceResourceSnapshot
 ): ModelResourceRisk {
-  return evaluateModelResourceRisk({
-    modelSizeBytes,
-    nCtx: DEFAULT_CONFIGURATION.nCtx,
-    physicalMemoryBytes: snapshot.physicalMemoryBytes,
-    processMemoryLimitBytes: snapshot.processMemoryLimitBytes,
-    thermalState: snapshot.thermalState,
-  });
+  return evaluateModelResourceRisk(
+    resourceRiskInputFrom(snapshot, modelSizeBytes, DEFAULT_CONFIGURATION.nCtx)
+  );
 }
 
 function confirmationKey(
@@ -762,13 +795,9 @@ async function verifyActiveModelAtLoad(
     digestMatches = false;
   }
   const snapshot = await resourceSnapshot(telemetry);
-  const currentRisk = evaluateModelResourceRisk({
-    modelSizeBytes: active.sizeBytes,
-    nCtx: active.configuration.nCtx,
-    physicalMemoryBytes: snapshot.physicalMemoryBytes,
-    processMemoryLimitBytes: snapshot.processMemoryLimitBytes,
-    thermalState: snapshot.thermalState,
-  });
+  const currentRisk = evaluateModelResourceRisk(
+    resourceRiskInputFrom(snapshot, active.sizeBytes, active.configuration.nCtx)
+  );
   const withCurrentRisk = withUpdatedModelRisk(
     loaded,
     active.sha256,
@@ -913,13 +942,9 @@ export function createLocalModelLifecycle(
     const model = findModel(current, sha256);
     await assertModelIntegrity(fileStore, model);
     const snapshot = await resourceSnapshot(telemetry);
-    const risk = evaluateModelResourceRisk({
-      modelSizeBytes: model.sizeBytes,
-      nCtx: model.configuration.nCtx,
-      physicalMemoryBytes: snapshot.physicalMemoryBytes,
-      processMemoryLimitBytes: snapshot.processMemoryLimitBytes,
-      thermalState: snapshot.thermalState,
-    });
+    const risk = evaluateModelResourceRisk(
+      resourceRiskInputFrom(snapshot, model.sizeBytes, model.configuration.nCtx)
+    );
     const next = withUpdatedModelRisk(current, sha256, risk);
     await writeManifest(fileStore, next);
     manifest = next;

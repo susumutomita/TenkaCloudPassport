@@ -369,6 +369,11 @@ export interface AppMessages {
     /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く導線。 */
     readonly conversationAgentButton: string;
     readonly conversationAgentButtonHint: string;
+    /**
+     * major（Issue 104 PR #132、Codex 指摘）: 自己紹介カード未作成時は入口を
+     * disabled にし、理由を案内する（無効な導線を有効に見せない）。
+     */
+    readonly conversationAgentButtonDisabledHint: string;
     readonly backButton: string;
   };
   readonly pilotMeasurement: {
@@ -655,6 +660,12 @@ export interface AppMessages {
     readonly title: string;
     readonly description: string;
     readonly selfCardMissingNotice: string;
+    /**
+     * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は
+     * scan/paste/sample の取り込み導線を隠し、代わりにこの CTA だけを表示する。
+     */
+    readonly selfCardMissingCtaButton: string;
+    readonly selfCardMissingCtaButtonHint: string;
     readonly peerSectionTitle: string;
     readonly noPeerNotice: string;
     readonly scanButton: string;
@@ -1021,6 +1032,8 @@ const ja: AppMessages = {
     conversationAgentButton: '端末内会話エージェントを試す',
     conversationAgentButtonHint:
       '相手の自己紹介カードから、会話のきっかけを端末内だけで見つけます。',
+    conversationAgentButtonDisabledHint:
+      '先に自己紹介カードを作成すると開けます。',
     backButton: '戻る',
   },
   pilotMeasurement: {
@@ -1363,6 +1376,9 @@ const ja: AppMessages = {
       '相手の自己紹介ページ URL を取り込むと、確認済みの会話テーマから共通点と最初の質問を端末内だけで探します。相手の情報は端末のメモリにだけ保持し、終了すると消えます。',
     selfCardMissingNotice:
       '自己紹介カードをまだ作成していません。先に自己紹介カードを作成してください。',
+    selfCardMissingCtaButton: '戻って自己紹介カードを作成する',
+    selfCardMissingCtaButtonHint:
+      '設定画面へ戻ります。自己紹介カードを作成すると、この機能を使えます。',
     peerSectionTitle: '相手のカード',
     noPeerNotice:
       'まだ相手のカードを受信していません。QR を再スキャンするか、URL を貼り付けてください。',
@@ -1746,6 +1762,8 @@ const en: AppMessages = {
     conversationAgentButton: 'Try the on-device conversation agent',
     conversationAgentButtonHint:
       "Finds a conversation opener from someone's intro card, entirely on this device.",
+    conversationAgentButtonDisabledHint:
+      'Create an intro card first to unlock this.',
     backButton: 'Back',
   },
   pilotMeasurement: {
@@ -2080,6 +2098,9 @@ const en: AppMessages = {
       'Bring in someone’s intro card URL, and this finds a shared topic and opening question from confirmed conversation topics, entirely on this device. The other person’s card only lives in memory and disappears when you finish.',
     selfCardMissingNotice:
       'You have not created an intro card yet. Please create one first.',
+    selfCardMissingCtaButton: 'Go back to create an intro card',
+    selfCardMissingCtaButtonHint:
+      'Returns to Settings. Creating an intro card unlocks this feature.',
     peerSectionTitle: 'Their card',
     noPeerNotice:
       'You have not received their card yet. Re-scan the QR code or paste the URL.',

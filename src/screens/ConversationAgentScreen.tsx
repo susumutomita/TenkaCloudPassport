@@ -180,47 +180,70 @@ export default function ConversationAgentScreen({
           <Text style={styles.noticeText}>{t.selfCardMissingNotice}</Text>
         </View>
       )}
-      {peer ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t.peerSectionTitle}</Text>
-          <View style={styles.peerRow}>
-            <Text style={styles.label}>{t.peerLabel(peer.name)}</Text>
-            <Pressable
-              accessibilityHint={t.removePeerButtonHint}
-              accessibilityLabel={t.removePeerButtonLabel(peer.name)}
-              accessibilityRole="button"
-              onPress={() => onRemovePeer(peer.participantId)}
-              style={styles.removeButton}
-            >
-              <Text style={styles.removeButtonGlyph}>×</Text>
-            </Pressable>
+      {hasSelfIntroCard ? (
+        peer ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t.peerSectionTitle}</Text>
+            <View style={styles.peerRow}>
+              <Text style={styles.label}>{t.peerLabel(peer.name)}</Text>
+              <Pressable
+                accessibilityHint={t.removePeerButtonHint}
+                accessibilityLabel={t.removePeerButtonLabel(peer.name)}
+                accessibilityRole="button"
+                onPress={() => onRemovePeer(peer.participantId)}
+                style={styles.removeButton}
+              >
+                <Text style={styles.removeButtonGlyph}>×</Text>
+              </Pressable>
+            </View>
+            <ActionButton
+              accessibilityHint={t.startButtonHint}
+              disabled={result.kind === 'running'}
+              label={t.startButton}
+              onPress={onStart}
+            />
+            <ActionButton
+              accessibilityHint={t.resetButtonHint}
+              label={t.resetButton}
+              onPress={onReset}
+              variant="secondary"
+            />
+            <ResultSection result={result} t={t} />
           </View>
-          <ActionButton
-            accessibilityHint={t.startButtonHint}
-            disabled={result.kind === 'running'}
-            label={t.startButton}
-            onPress={onStart}
+        ) : (
+          <IntakeSection
+            errorMessage={errorMessage}
+            onChangePasteInput={onChangePasteInput}
+            onScanPeer={onScanPeer}
+            onSubmitPasteInput={onSubmitPasteInput}
+            onUseSampleCard={onUseSampleCard}
+            pasteInput={pasteInput}
+            t={t}
           />
-          <ActionButton
-            accessibilityHint={t.resetButtonHint}
-            label={t.resetButton}
-            onPress={onReset}
-            variant="secondary"
-          />
-          <ResultSection result={result} t={t} />
-        </View>
+        )
       ) : (
-        <IntakeSection
-          errorMessage={errorMessage}
-          onChangePasteInput={onChangePasteInput}
-          onScanPeer={onScanPeer}
-          onSubmitPasteInput={onSubmitPasteInput}
-          onUseSampleCard={onUseSampleCard}
-          pasteInput={pasteInput}
-          t={t}
+        // major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成
+        // （`hasSelfIntroCard === false`）のときは session が無く、scan/paste/
+        // sample はすべて hook 側で no-op になる。無効な取り込み導線を有効に
+        // 見せず、戻って作成する CTA だけを表示する。
+        <ActionButton
+          accessibilityHint={t.selfCardMissingCtaButtonHint}
+          label={t.selfCardMissingCtaButton}
+          onPress={onBack}
+          variant="secondary"
         />
       )}
-      <ActionButton label={t.backButton} onPress={onBack} variant="secondary" />
+      {hasSelfIntroCard ? (
+        // code-reviewer 指摘（minor、Issue 104 PR #132）: 自己紹介カード未作成
+        // 時は上記の CTA（`t.selfCardMissingCtaButton`）が既に同じ `onBack` を
+        // 呼ぶ戻る導線を提供している。ここでも常に表示すると同じ操作の
+        // ボタンが 2 つ並んでしまうため、CTA と排他にする。
+        <ActionButton
+          label={t.backButton}
+          onPress={onBack}
+          variant="secondary"
+        />
+      ) : null}
       <SettingsLinkFooter
         hint={t.settingsButtonHint}
         label={t.settingsButton}

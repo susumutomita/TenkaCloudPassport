@@ -268,6 +268,24 @@ function buildFixtures(): readonly Fixture[] {
       expectValid: false,
     },
     {
+      name: 'major（Issue 104 PR #132、Codex 指摘）: m の要素がカタログに実在しない ID',
+      fragment: fragmentFromPayload({
+        v: 1,
+        n: 'Eve',
+        m: ['not-a-real-clue-id'],
+      }),
+      expectValid: false,
+    },
+    {
+      name: 'major（Issue 104 PR #132、Codex 指摘）: m の要素が重複している',
+      fragment: fragmentFromPayload({
+        v: 1,
+        n: 'Eve',
+        m: ['open-source', 'open-source'],
+      }),
+      expectValid: false,
+    },
+    {
       name: '空文字の fragment',
       fragment: '',
       expectValid: false,

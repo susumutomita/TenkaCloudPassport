@@ -63,6 +63,7 @@ class SequenceTelemetry implements DeviceResourceTelemetry {
       value ?? {
         physicalMemoryBytes: null,
         processMemoryLimitBytes: null,
+        processMemoryLimitProvenance: 'unavailable',
         processMemoryBytes: null,
         thermalState: 'unknown',
         batteryLevelPermille: null,
@@ -79,6 +80,7 @@ function snapshot(
   return {
     physicalMemoryBytes: 2_000_000_000,
     processMemoryLimitBytes: 2_000_000_000,
+    processMemoryLimitProvenance: 'os-process-ceiling',
     processMemoryBytes,
     thermalState,
     batteryLevelPermille,

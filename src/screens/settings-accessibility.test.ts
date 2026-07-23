@@ -152,4 +152,15 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
       'label={t.backButton}',
     ]);
   });
+
+  it('major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は会話エージェントの入口を disabled にし、理由を案内する', async () => {
+    const text = await source();
+
+    expect(text).toContain(
+      'disabled={(modelManagement?.busy ?? false) || !hasIntroCard}'
+    );
+    expect(text).toContain(
+      'hasIntroCard\n            ? t.conversationAgentButtonHint\n            : t.conversationAgentButtonDisabledHint'
+    );
+  });
 });

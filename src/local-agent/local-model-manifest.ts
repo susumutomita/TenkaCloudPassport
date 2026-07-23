@@ -44,11 +44,32 @@ export interface ModelResourceRisk {
   readonly reasons: readonly ModelResourceRiskReason[];
 }
 
+/**
+ * major（Issue 104 PR #132、Codex 指摘）: `processMemoryLimitBytes` は OS ごとに
+ * 意味が異なる。
+ * - `os-process-ceiling`（iOS）: `phys_footprint + os_proc_available_memory()`。
+ *   この Process が OOM Kill されるまでに到達しうる、Process 単位の実測 Ceiling。
+ * - `system-wide-available`（Android）: `availMem + PSS`。`availMem`
+ *   （`ActivityManager.MemoryInfo.availMem`）は端末全体の空き容量であり、この
+ *   App 専用の割当上限ではない（他 App の状態次第で変動する。Android には
+ *   iOS の `os_proc_available_memory()` に相当する Process 単位の公開 API が
+ *   無い）。
+ * - `unavailable`: 実測できなかった（`processMemoryLimitBytes` は必ず `null`）。
+ * 同じ `processMemoryLimitBytes` を同じ信頼度で扱うと、Android で大型 Model を
+ * 過度に `supported` 判定しうる。`evaluateModelResourceRisk` はこの型を見て
+ * `system-wide-available` を保守的に割り引く。
+ */
+export type ProcessMemoryLimitProvenance =
+  | 'os-process-ceiling'
+  | 'system-wide-available'
+  | 'unavailable';
+
 export interface ModelResourceRiskInput {
   readonly modelSizeBytes: number;
   readonly nCtx: number;
   readonly physicalMemoryBytes: number | null;
   readonly processMemoryLimitBytes: number | null;
+  readonly processMemoryLimitProvenance: ProcessMemoryLimitProvenance;
   readonly thermalState: ThermalState;
 }
 
@@ -270,6 +291,36 @@ function observedMemory(values: readonly (number | null)[]): number | null {
   return available.length > 0 ? Math.min(...available) : null;
 }
 
+function isProcessMemoryLimitProvenance(
+  value: unknown
+): value is ProcessMemoryLimitProvenance {
+  return (
+    value === 'os-process-ceiling' ||
+    value === 'system-wide-available' ||
+    value === 'unavailable'
+  );
+}
+
+/**
+ * major（Issue 104 PR #132、Codex 指摘）: Android の `system-wide-available`
+ * （`availMem` 由来）は Process 専用の割当上限ではなく、他 App の状態次第で
+ * 変動する。iOS の `os-process-ceiling`（`os_proc_available_memory()`、Process
+ * 単位の実測 Ceiling）と同じ信頼度で扱わず、保守的に半分だけを「実効値」として
+ * 使う（大型 Model を安易に `supported` 判定しない）。実機の Peak Memory 証跡が
+ * 揃うまでの暫定係数であり、緩和には ADR が必要（`docs/adr/0014-...` の
+ * Compatibility Matrix 手続きに従う）。
+ */
+const SYSTEM_WIDE_AVAILABLE_HAIRCUT = 0.5;
+
+function conservativeProcessMemoryLimitBytes(
+  processMemoryLimitBytes: number | null,
+  provenance: ProcessMemoryLimitProvenance
+): number | null {
+  if (processMemoryLimitBytes === null) return null;
+  if (provenance !== 'system-wide-available') return processMemoryLimitBytes;
+  return Math.floor(processMemoryLimitBytes * SYSTEM_WIDE_AVAILABLE_HAIRCUT);
+}
+
 function resourceInputIsValid(input: ModelResourceRiskInput): boolean {
   const validMemory = (value: number | null): boolean =>
     value === null || positiveSafeInteger(value);
@@ -280,6 +331,12 @@ function resourceInputIsValid(input: ModelResourceRiskInput): boolean {
     input.nCtx <= 32_768 &&
     validMemory(input.physicalMemoryBytes) &&
     validMemory(input.processMemoryLimitBytes) &&
+    isProcessMemoryLimitProvenance(input.processMemoryLimitProvenance) &&
+    // `unavailable` は「実測できなかった」ことの表明であり、この場合だけ
+    // `processMemoryLimitBytes` は必ず `null` でなければならない（provenance と
+    // 実測値が矛盾する入力を fail-closed で拒否する）。
+    (input.processMemoryLimitProvenance !== 'unavailable' ||
+      input.processMemoryLimitBytes === null) &&
     isThermalState(input.thermalState)
   );
 }
@@ -299,7 +356,10 @@ export function evaluateModelResourceRisk(
     input.nCtx * CONTEXT_RESERVE_BYTES_PER_TOKEN;
   const effectiveMemoryBytes = observedMemory([
     input.physicalMemoryBytes,
-    input.processMemoryLimitBytes,
+    conservativeProcessMemoryLimitBytes(
+      input.processMemoryLimitBytes,
+      input.processMemoryLimitProvenance
+    ),
   ]);
   const reasons: ModelResourceRiskReason[] = [];
   let level: ModelResourceRiskLevel = 'blocked';
