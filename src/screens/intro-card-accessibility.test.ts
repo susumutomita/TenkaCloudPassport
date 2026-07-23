@@ -123,16 +123,21 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     }
   });
 
-  it('表示画面・編集画面のどちらも控えめな Settings リンクを持ち、クイズ・診断への唯一の入口を forward する（Issue 130: #127 が外した導線の復活）', async () => {
+  it('表示画面・編集画面のどちらも控えめな Settings リンク（共有 SettingsLinkFooter component）を持ち、クイズ・診断・端末内会話エージェントへの唯一の入口を forward する（Issue 130: #127 が外した導線の復活。Issue 104: jscpd 重複検出の指摘で共有 component へ切り出した）', async () => {
     for (const fileName of ['IntroCardScreen.tsx', 'IntroCardEditScreen.tsx']) {
       const text = await source(fileName);
 
+      expect(text).toContain("from '../components/SettingsLinkFooter'");
       expect(text).toContain('onPress={onOpenSettings}');
-      expect(text).toContain('accessibilityLabel={t.settingsButton}');
-      expect(text).toContain('accessibilityHint={t.settingsButtonHint}');
-      expect(text).toContain("from '../ui/touch-target'");
-      expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
+      expect(text).toContain('label={t.settingsButton}');
+      expect(text).toContain('hint={t.settingsButtonHint}');
     }
+    const footer = await source('../components/SettingsLinkFooter.tsx');
+    expect(footer).toContain('accessibilityLabel={label}');
+    expect(footer).toContain('accessibilityHint={hint}');
+    expect(footer).toContain('accessibilityRole="button"');
+    expect(footer).toContain("from '../ui/touch-target'");
+    expect(footer).toContain('minHeight: MIN_TOUCH_TARGET');
   });
 
   it('表示画面の Settings リンクは編集ボタンより後、削除リンクより前に置く（主導線を編集に集中させたまま、控えめな入口として挟む）', async () => {

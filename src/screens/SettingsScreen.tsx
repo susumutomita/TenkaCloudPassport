@@ -23,6 +23,14 @@ interface SettingsScreenProps {
   readonly onOpenPilotMeasurement: () => void;
   /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く。 */
   readonly onOpenQuiz: () => void;
+  /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く。 */
+  readonly onOpenConversationAgent: () => void;
+  /**
+   * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カードが未作成の
+   * ときは会話エージェントの入口を disabled にし、理由を案内する
+   * （session が作れず intake 導線が no-op になる画面を開かせない）。
+   */
+  readonly hasIntroCard: boolean;
   readonly onBack: () => void;
   readonly modelManagement?: LocalModelManagementView;
 }
@@ -348,6 +356,8 @@ export default function SettingsScreen({
   onOpenDiagnostics,
   onOpenPilotMeasurement,
   onOpenQuiz,
+  onOpenConversationAgent,
+  hasIntroCard,
   onBack,
   modelManagement,
 }: SettingsScreenProps) {
@@ -394,6 +404,17 @@ export default function SettingsScreen({
         disabled={modelManagement?.busy ?? false}
         label={t.quizButton}
         onPress={onOpenQuiz}
+        variant="secondary"
+      />
+      <ActionButton
+        accessibilityHint={
+          hasIntroCard
+            ? t.conversationAgentButtonHint
+            : t.conversationAgentButtonDisabledHint
+        }
+        disabled={(modelManagement?.busy ?? false) || !hasIntroCard}
+        label={t.conversationAgentButton}
+        onPress={onOpenConversationAgent}
         variant="secondary"
       />
       <ActionButton

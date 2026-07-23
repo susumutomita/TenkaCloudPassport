@@ -1,8 +1,10 @@
 import {
   createIntroCard,
   INTRO_CARD_MAX_LINKS,
+  INTRO_CARD_MAX_THEMES,
   type IntroCard,
   IntroCardError,
+  resolveCatalogThemeIds,
 } from '../domain/intro-card';
 import { QUIZ_PROGRESS_HEX_MAX_LENGTH } from '../domain/quiz-progress-code';
 import { QR_ENCODER_MAX_BYTES } from '../qr/encoder';
@@ -55,6 +57,13 @@ interface IntroCardUrlPayload {
    * 保つため、`undefined` または全問未合格（'0'）なら省略する（`buildPayload` 参照）。
    */
   readonly q?: string;
+  /**
+   * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマ ID
+   * （`IntroCard.themeIds`、最大 `INTRO_CARD_MAX_THEMES` 件）。`themeIds` が
+   * `undefined` または空のカードは、この key 自体を省略する（`buildPayload`
+   * 参照）。既存 QR との byte 一致（回帰テスト）は、この省略によって保たれる。
+   */
+  readonly m?: readonly string[];
 }
 
 /**
@@ -74,6 +83,7 @@ export const OPTIONAL_PAYLOAD_KEYS = [
   'e',
   'p',
   'q',
+  'm',
 ] as const;
 
 const QUIZ_PROGRESS_HEX_PATTERN = /^[0-9a-f]+$/i;
@@ -183,6 +193,22 @@ function optionalLinksField(
 }
 
 /**
+ * Issue 104: `m` の形状（配列・件数・要素が文字列であること）だけをここで検証する。
+ * 「カタログに実在する ID か」「重複が無いか」は `createIntroCard` の
+ * `validatedThemeIds` に一本化する（`optionalLinksField` が URL 形式検証を
+ * `createIntroCard` に委ねるのと同じ役割分担）。
+ */
+function optionalThemeIdsField(
+  value: unknown,
+  path: string
+): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  return arrayValue(value, path, 1, INTRO_CARD_MAX_THEMES).map((item, index) =>
+    stringValue(item, `${path}[${index}]`, INTRO_CARD_URL_FIELD_MAX_LENGTH)
+  );
+}
+
+/**
  * デコードした payload を `createIntroCard` へ通すことで、`IntroCard` の妥当性
  * ルール（文字数上限・URL 形式・メール形式など）を domain 側 1 か所だけに保つ
  * （`src/domain/intro-card.ts` の `withIntroCardOptionalFields` と同じ、
@@ -204,6 +230,7 @@ function strictPayloadRecord(parsed: unknown): {
   readonly e?: unknown;
   readonly p?: unknown;
   readonly q?: unknown;
+  readonly m?: unknown;
 } {
   const path = '$.introCardUrlPayload';
   const record = strictRecord(
@@ -216,6 +243,16 @@ function strictPayloadRecord(parsed: unknown): {
   // `q` の妥当性はここで確定させる（結果は呼び出し側が使うかどうかを選べる）。不正なら
   // 他のフィールドと同じ fail-closed 契約でここで throw する。
   validateQuizProgressHex(record.q, `${path}.q`);
+  // Issue 104 PR #132（Codex 指摘 major）: `m`（会話テーマ）も
+  // `decodeIntroCardUrlFragmentQuizProgressHex` 経由（`decodePayload` を経ない
+  // q-only decoder）の呼び出しで見落とされないよう、ここで形状に加えて
+  // 件数・カタログ実在・重複まで確定させる（all-or-nothing 契約、`q` と同じ
+  // 理由）。full decoder（`decodePayload` → `createIntroCard`）は独立に同じ
+  // `resolveCatalogThemeIds` を再度通すため、二重にはなるが同じ関数・同じ
+  // 値であり drift しない（q-only decoder が full decoder と異なる基準に
+  // なることを構造的に防ぐための意図的な重複）。
+  const themeIds = optionalThemeIdsField(record.m, `${path}.m`);
+  if (themeIds !== undefined) resolveCatalogThemeIds(themeIds);
   return record;
 }
 
@@ -240,6 +277,7 @@ function decodePayload(
   const links = optionalLinksField(record.l, `${path}.l`);
   const email = optionalStringField(record.e, `${path}.e`);
   const phone = optionalStringField(record.p, `${path}.p`);
+  const themeIds = optionalThemeIdsField(record.m, `${path}.m`);
 
   return createIntroCard({
     name,
@@ -249,6 +287,7 @@ function decodePayload(
     ...(links === undefined ? {} : { links }),
     ...(email === undefined ? {} : { email }),
     ...(phone === undefined ? {} : { phone }),
+    ...(themeIds === undefined ? {} : { themeIds }),
   });
 }
 
@@ -332,6 +371,14 @@ function buildPayload(
     validatedQuizProgressHex === '0'
       ? {}
       : { q: validatedQuizProgressHex }),
+    // Issue 104 PR #132（Codex 指摘 major）: `createIntroCard` を経由しない
+    // 手組みの `IntroCard`（`themeIds: []`）を渡された場合、`m: []` を出力すると
+    // 自身の decoder（配列の最小要素数 1 を要求）がその出力を拒否する自己矛盾
+    // した URL になる。空配列も `undefined` と同じく `m` 省略へ正規化する
+    // （decoder・`createIntroCard` の「空配列は未設定」という既存契約と揃える）。
+    ...(card.themeIds === undefined || card.themeIds.length === 0
+      ? {}
+      : { m: card.themeIds }),
   };
 }
 
@@ -377,6 +424,7 @@ function urlTooLargeError(
       'q',
       quizProgressHex === '0' ? undefined : quizProgressHex
     ),
+    fieldBreakdownEntry('m', card.themeIds),
   ]
     .filter((entry): entry is string => entry !== null)
     .join(', ');

@@ -5,6 +5,7 @@ import {
   type ImportedLocalModel,
   type LocalModelBenchmarkReport,
   LocalModelLifecycleError,
+  type ModelResourceRiskInput,
   parseLocalModelManifest,
   projectGgufMetadata,
   serializeLocalModelManifest,
@@ -129,6 +130,7 @@ describe('Model Size と Device Memory の Resource Risk', () => {
         nCtx: 2_048,
         physicalMemoryBytes: effectiveMemoryBytes,
         processMemoryLimitBytes: effectiveMemoryBytes,
+        processMemoryLimitProvenance: 'os-process-ceiling',
         thermalState: 'nominal',
       }).level
     ).toBe('supported');
@@ -138,6 +140,7 @@ describe('Model Size と Device Memory の Resource Risk', () => {
         nCtx: 2_048,
         physicalMemoryBytes: effectiveMemoryBytes,
         processMemoryLimitBytes: effectiveMemoryBytes,
+        processMemoryLimitProvenance: 'os-process-ceiling',
         thermalState: 'nominal',
       }).level
     ).toBe('caution');
@@ -147,6 +150,7 @@ describe('Model Size と Device Memory の Resource Risk', () => {
         nCtx: 2_048,
         physicalMemoryBytes: effectiveMemoryBytes,
         processMemoryLimitBytes: effectiveMemoryBytes,
+        processMemoryLimitProvenance: 'os-process-ceiling',
         thermalState: 'nominal',
       }).level
     ).toBe('caution');
@@ -156,6 +160,7 @@ describe('Model Size と Device Memory の Resource Risk', () => {
         nCtx: 2_048,
         physicalMemoryBytes: effectiveMemoryBytes,
         processMemoryLimitBytes: effectiveMemoryBytes,
+        processMemoryLimitProvenance: 'os-process-ceiling',
         thermalState: 'nominal',
       }).level
     ).toBe('blocked');
@@ -167,6 +172,7 @@ describe('Model Size と Device Memory の Resource Risk', () => {
       nCtx: 2_048,
       physicalMemoryBytes: 8_000_000_000,
       processMemoryLimitBytes: 2_000_000_000,
+      processMemoryLimitProvenance: 'os-process-ceiling',
       thermalState: 'nominal',
     });
     const unknown = evaluateModelResourceRisk({
@@ -174,6 +180,7 @@ describe('Model Size と Device Memory の Resource Risk', () => {
       nCtx: 2_048,
       physicalMemoryBytes: null,
       processMemoryLimitBytes: null,
+      processMemoryLimitProvenance: 'unavailable',
       thermalState: 'unknown',
     });
 
@@ -190,11 +197,91 @@ describe('Model Size と Device Memory の Resource Risk', () => {
         nCtx: 2_048,
         physicalMemoryBytes: 16_000_000_000,
         processMemoryLimitBytes: 16_000_000_000,
+        processMemoryLimitProvenance: 'os-process-ceiling',
         thermalState,
       });
       expect(risk.level).toBe('blocked');
       expect(risk.reasons).toContain('thermal-pressure');
     }
+  });
+
+  /**
+   * major（Issue 104 PR #132、Codex 指摘）: Android の `availMem` は端末全体の
+   * 空き容量であり、この App 専用の割当上限ではない。iOS の
+   * `os-process-ceiling`（Process 単位の実測 Ceiling）と同じ信頼度で使うと、
+   * 他 App が Idle なだけで大型 Model を過度に `supported` 判定しうる。
+   */
+  describe('processMemoryLimitProvenance（iOS/Android の意味の違いを型で区別、Issue 104 PR #132）', () => {
+    it('同じ processMemoryLimitBytes でも system-wide-available は os-process-ceiling より保守的な（小さい）effectiveMemoryBytes になる', () => {
+      const iosLike = evaluateModelResourceRisk({
+        modelSizeBytes: 1_000_000_000,
+        nCtx: 2_048,
+        physicalMemoryBytes: 16_000_000_000,
+        processMemoryLimitBytes: 4_000_000_000,
+        processMemoryLimitProvenance: 'os-process-ceiling',
+        thermalState: 'nominal',
+      });
+      const androidLike = evaluateModelResourceRisk({
+        modelSizeBytes: 1_000_000_000,
+        nCtx: 2_048,
+        physicalMemoryBytes: 16_000_000_000,
+        processMemoryLimitBytes: 4_000_000_000,
+        processMemoryLimitProvenance: 'system-wide-available',
+        thermalState: 'nominal',
+      });
+
+      expect(iosLike.effectiveMemoryBytes).toBe(4_000_000_000);
+      expect(androidLike.effectiveMemoryBytes).toBe(2_000_000_000);
+      expect(androidLike.ratioPermille ?? 0).toBeGreaterThan(
+        iosLike.ratioPermille ?? 0
+      );
+    });
+
+    it('system-wide-available の割引後の値が physicalMemoryBytes より大きくならない（総メモリを超えて Ceiling を偽装しない）', () => {
+      const risk = evaluateModelResourceRisk({
+        modelSizeBytes: 1_000_000_000,
+        nCtx: 2_048,
+        physicalMemoryBytes: 1_500_000_000,
+        processMemoryLimitBytes: 8_000_000_000,
+        processMemoryLimitProvenance: 'system-wide-available',
+        thermalState: 'nominal',
+      });
+
+      expect(risk.effectiveMemoryBytes).toBe(1_500_000_000);
+    });
+
+    it('processMemoryLimitProvenance が unavailable なのに processMemoryLimitBytes が非 null の矛盾した入力を INVALID_RESOURCE_INPUT として拒否する', () => {
+      expect(() =>
+        evaluateModelResourceRisk({
+          modelSizeBytes: 1_000_000_000,
+          nCtx: 2_048,
+          physicalMemoryBytes: 8_000_000_000,
+          processMemoryLimitBytes: 4_000_000_000,
+          processMemoryLimitProvenance: 'unavailable',
+          thermalState: 'nominal',
+        })
+      ).toThrow(LocalModelLifecycleError);
+    });
+
+    it('未知の processMemoryLimitProvenance 値は INVALID_RESOURCE_INPUT として拒否する', () => {
+      // `ProcessMemoryLimitProvenance` は 3 リテラルの union のため、型エスケープ
+      // （`as unknown as` 等）無しに不正な値を作るには `JSON.parse` の `any` を経由する
+      // （このリポジトリの `INVARIANT_NO_TYPE_ESCAPE_HATCH` に従う）。
+      const malformedInput: ModelResourceRiskInput = JSON.parse(
+        JSON.stringify({
+          modelSizeBytes: 1_000_000_000,
+          nCtx: 2_048,
+          physicalMemoryBytes: 8_000_000_000,
+          processMemoryLimitBytes: null,
+          processMemoryLimitProvenance: 'made-up',
+          thermalState: 'nominal',
+        })
+      );
+
+      expect(() => evaluateModelResourceRisk(malformedInput)).toThrow(
+        LocalModelLifecycleError
+      );
+    });
   });
 });
 

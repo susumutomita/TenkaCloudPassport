@@ -13,8 +13,12 @@ import type { IntroCardNotice } from '../app/intro-card-notice';
 import { isEmptyIntroCardDraft } from '../app/intro-card-storage';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
+import ClueSelector from '../components/ClueSelector';
+import SettingsLinkFooter from '../components/SettingsLinkFooter';
+import type { ClueId } from '../domain/clue-catalog';
 import {
   INTRO_CARD_MAX_LINKS,
+  INTRO_CARD_MAX_THEMES,
   INTRO_CARD_NAME_MAX_LENGTH,
   INTRO_CARD_ORGANIZATION_MAX_LENGTH,
   INTRO_CARD_SELF_INTRO_MAX_LENGTH,
@@ -69,6 +73,12 @@ export interface IntroCardEditScreenProps {
   readonly linkLinkedin: string;
   readonly linkPortfolio: string;
   readonly otherLinks: readonly string[];
+  /**
+   * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマ
+   * （`clue-catalog.ts` 再利用、最大 `INTRO_CARD_MAX_THEMES` 件）。
+   * `ClueSelector`（`PassportCreationScreen` と同じ component）で選ぶ。
+   */
+  readonly themeIds: readonly ClueId[];
   readonly notice: IntroCardNotice;
   /**
    * Issue 92: 保存失敗の原因になった 1 欄（`PassportApp.tsx` が保存時点の
@@ -91,6 +101,7 @@ export interface IntroCardEditScreenProps {
   readonly onChangeOtherLink: (index: number, value: string) => void;
   readonly onAddOtherLink: () => void;
   readonly onRemoveOtherLink: (index: number) => void;
+  readonly onToggleThemeId: (id: ClueId) => void;
   readonly onSave: () => void;
   readonly onChangeLocale: (locale: Locale) => void;
   /**
@@ -257,6 +268,7 @@ export default function IntroCardEditScreen({
   linkLinkedin,
   linkPortfolio,
   otherLinks,
+  themeIds,
   notice,
   errorFieldKey,
   saving,
@@ -275,6 +287,7 @@ export default function IntroCardEditScreen({
   onChangeOtherLink,
   onAddOtherLink,
   onRemoveOtherLink,
+  onToggleThemeId,
   onSave,
   onChangeLocale,
   onOpenSettings,
@@ -720,6 +733,19 @@ export default function IntroCardEditScreen({
               {t.linksCounter(linkCount, INTRO_CARD_MAX_LINKS)}
             </Text>
           </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>{t.themeIdsLabel}</Text>
+            <Text style={styles.limit}>{t.themeIdsHint}</Text>
+            <ClueSelector
+              locale={locale}
+              maximum={INTRO_CARD_MAX_THEMES}
+              onToggle={onToggleThemeId}
+              selectedIds={themeIds}
+            />
+            <Text style={styles.limit}>
+              {t.themeIdsCounter(themeIds.length, INTRO_CARD_MAX_THEMES)}
+            </Text>
+          </View>
         </>
       ) : null}
       <Text style={overBudget ? styles.dangerCaption : styles.limit}>
@@ -731,15 +757,11 @@ export default function IntroCardEditScreen({
           クイズ・診断へ到達できるよう、フォーム内容の末尾に控えめな Settings
           リンクを置く（保存ボタン＝ footer とは別の位置にし、footer は
           Save 専用のまま保つ、Issue 118 の footer 契約を崩さない）。 */}
-      <Pressable
-        accessibilityHint={t.settingsButtonHint}
-        accessibilityLabel={t.settingsButton}
-        accessibilityRole="button"
+      <SettingsLinkFooter
+        hint={t.settingsButtonHint}
+        label={t.settingsButton}
         onPress={onOpenSettings}
-        style={styles.settingsLink}
-      >
-        <Text style={styles.settingsLinkText}>{t.settingsButton}</Text>
-      </Pressable>
+      />
     </AppScreen>
   );
 }
@@ -803,20 +825,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 20,
-  },
-  settingsLink: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-    minWidth: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.md,
-  },
-  settingsLinkText: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
   },
   linkField: {
     gap: spacing.xs,

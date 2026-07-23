@@ -43,7 +43,7 @@
         "llama.rn",
         {
           "enableEntitlements": true,
-          "entitlementsProfile": ["development"],
+          "entitlementsProfile": ["preview"],
           "forceCxx20": true,
           "enableOpenCLAndHexagon": true
         }

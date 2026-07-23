@@ -296,6 +296,10 @@ describe('llama.rn LocalModelCompletionPort', () => {
         model: CONFIGURATION.modelPath,
         n_ctx: CONFIGURATION.nCtx,
         n_gpu_layers: CONFIGURATION.nGpuLayers,
+        n_parallel: 1,
+        use_mmap: true,
+        use_mlock: false,
+        no_extra_bufts: true,
       },
     ]);
     expect(context.parameters?.messages).toHaveLength(2);

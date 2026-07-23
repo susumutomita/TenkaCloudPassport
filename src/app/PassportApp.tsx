@@ -15,7 +15,11 @@ import {
 } from '../domain/agent-model-provider';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
-import { createIntroCard, type IntroCard } from '../domain/intro-card';
+import {
+  createIntroCard,
+  INTRO_CARD_MAX_THEMES,
+  type IntroCard,
+} from '../domain/intro-card';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
 import type { LoungeInvite } from '../domain/lounge-invite';
 import {
@@ -66,6 +70,9 @@ import {
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
+import ConversationAgentScreen, {
+  type ConversationAgentScreenProps,
+} from '../screens/ConversationAgentScreen';
 import ConversationSelfReportScreen from '../screens/ConversationSelfReportScreen';
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
@@ -169,6 +176,7 @@ import {
   recoverLocalStateAtStartup,
   type StartupLocalRecoveryResult,
 } from './startup-local-recovery';
+import { useConversationAgentFlow } from './use-conversation-agent-flow';
 import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
@@ -214,6 +222,9 @@ type SetupStage =
   // Issue 110: クラウド基礎クイズ。Settings 経由の 1 経路だけを持つ（diagnostics /
   // pilot-measurement と同じ導線設計、ADR-0035）。
   | 'quiz'
+  // Issue 104 / ADR-0036: 端末内会話エージェント（Step A）。quiz と同じく Settings
+  // 経由の 1 経路だけを持つ、控えめな入口にする。
+  | 'conversation-agent'
   // Issue 79: 自己紹介カードピボット Step 1 のメインフロー。Pet / Lounge / Encounter 系
   // stage は導線から外れ、既定の着地点はこの 2 つになる。
   | 'intro-card'
@@ -558,7 +569,19 @@ const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
   'diagnostics',
   'pilot-measurement',
   'quiz',
+  'conversation-agent',
 ]);
+
+/**
+ * Issue 104 / ADR-0036: `IntroCardEditBranchProps` と同じく、
+ * `ConversationAgentScreenProps` から `locale`/`onChangeLocale` の 2 つだけを
+ * `UtilityStageGate` 側の引数として別に渡す（`Omit` で screen 側の型から直接導出し、
+ * 型の drift を防ぐ）。
+ */
+type ConversationAgentBranchProps = Omit<
+  ConversationAgentScreenProps,
+  'locale' | 'onChangeLocale'
+>;
 
 interface UtilityStageGateProps {
   readonly stage: SetupStage;
@@ -579,6 +602,18 @@ interface UtilityStageGateProps {
   readonly onAnswerQuizQuestionCorrect: (id: QuizQuestionId) => void;
   readonly onOpenQuiz: () => void;
   readonly onCloseQuiz: () => void;
+  /**
+   * Issue 104 / ADR-0036: 端末内会話エージェント。quiz と同じく Settings 経由の
+   * 1 経路だけを持つ控えめな入口にする。
+   */
+  readonly onOpenConversationAgent: () => void;
+  readonly conversationAgent: ConversationAgentBranchProps;
+  /**
+   * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 会話エージェントの Settings
+   * 入口を disabled にするための判定。Pet Profile の `hasProfile` とは別の値
+   * （自己紹介カード、`introCard !== null`）。
+   */
+  readonly hasIntroCard: boolean;
 }
 
 function UtilityStageGate({
@@ -595,6 +630,9 @@ function UtilityStageGate({
   onAnswerQuizQuestionCorrect,
   onOpenQuiz,
   onCloseQuiz,
+  onOpenConversationAgent,
+  conversationAgent,
+  hasIntroCard,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
     return (
@@ -622,13 +660,24 @@ function UtilityStageGate({
       />
     );
   }
+  if (stage === 'conversation-agent') {
+    return (
+      <ConversationAgentScreen
+        {...conversationAgent}
+        locale={locale}
+        onChangeLocale={onChangeLocale}
+      />
+    );
+  }
   if (stage === 'settings') {
     return (
       <SettingsScreen
+        hasIntroCard={hasIntroCard}
         locale={locale}
         modelManagement={modelManagement}
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
+        onOpenConversationAgent={onOpenConversationAgent}
         onOpenDiagnostics={diagnosticsFlow.open}
         onOpenPilotMeasurement={pilotMeasurementFlow.open}
         onOpenQuiz={onOpenQuiz}
@@ -735,11 +784,13 @@ function IntroCardStageGate({
       onOpenSettings={edit.onOpenSettings}
       onRemoveOtherLink={edit.onRemoveOtherLink}
       onSave={edit.onSave}
+      onToggleThemeId={edit.onToggleThemeId}
       organization={edit.organization}
       otherLinks={edit.otherLinks}
       phone={edit.phone}
       saving={edit.saving}
       selfIntro={edit.selfIntro}
+      themeIds={edit.themeIds}
       title={edit.title}
       cardUrlByteUsage={edit.cardUrlByteUsage}
     />
@@ -872,6 +923,16 @@ export default function PassportApp({
     useState('');
   const [introCardDraftOtherLinks, setIntroCardDraftOtherLinks] = useState<
     readonly string[]
+  >([]);
+  // Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマ（最大
+  // `INTRO_CARD_MAX_THEMES` 件）。`ClueSelector`（カタログからの選択式）で選ぶため、
+  // 他の draft state と異なりテキスト欄ではなく、`IntroCardDraftFields`
+  // （下書き永続化、Issue 93）の対象にもしない。保存済みカードから
+  // `loadIntroCardDraftFrom` が都度水和し、保存・削除で確定 state を更新する
+  // （Profile Creation の `ownerSelection`/`toggleClueId` と同じ「draft 永続化
+  // しない選択式 state」の流儀）。
+  const [introCardDraftThemeIds, setIntroCardDraftThemeIds] = useState<
+    readonly ClueId[]
   >([]);
   const [introCardSaving, setIntroCardSaving] = useState(false);
   const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>(() =>
@@ -1116,6 +1177,16 @@ export default function PassportApp({
     sharePort: backupSharePort,
     onOpen: () => setStage('pilot-measurement'),
     onClose: () => setStage('settings'),
+  });
+  // Issue 104 / ADR-0036: 端末内会話エージェント。`providerRunner`・
+  // `localModels.provider` は Pet Interaction と同じ共有 instance をそのまま渡す。
+  const conversationAgentFlow = useConversationAgentFlow({
+    locale,
+    qrScannerPort,
+    providerRunner,
+    provider: localModels.provider,
+    onNavigateToConversationAgent: () => setStage('conversation-agent'),
+    onNavigateToSettings: () => setStage('settings'),
   });
   const recordPilotOutcome = useCallback(
     (
@@ -1698,6 +1769,7 @@ export default function PassportApp({
       links: buildIntroCardLinks(introCardLinksDraftShape()),
       email: introCardDraftEmail,
       phone: introCardDraftPhone,
+      themeIds: introCardDraftThemeIds,
     };
   }
 
@@ -1719,6 +1791,7 @@ export default function PassportApp({
       linkPortfolio: classifiedLinks.portfolio,
       otherLinks: classifiedLinks.otherLinks,
     });
+    setIntroCardDraftThemeIds(card.themeIds ?? []);
   }
 
   function openIntroCardEdit(): void {
@@ -1783,6 +1856,7 @@ export default function PassportApp({
       introCardRef.current = null;
       setIntroCard(null);
       applyIntroCardDraftFields(EMPTY_INTRO_CARD_DRAFT_FIELDS);
+      setIntroCardDraftThemeIds([]);
       setIntroCardNotice({
         kind: 'empty',
         message: MESSAGES[locale].introCard.initialNotice,
@@ -2329,7 +2403,33 @@ export default function PassportApp({
   if (UTILITY_STAGES.has(stage)) {
     return (
       <UtilityStageGate
+        conversationAgent={{
+          errorMessage: conversationAgentFlow.errorMessage,
+          hasSelfIntroCard: conversationAgentFlow.hasSelfIntroCard,
+          onBack: conversationAgentFlow.close,
+          onChangePasteInput: conversationAgentFlow.onChangePasteInput,
+          // Codex 指摘（blocker、Issue 104 PR #132）: Settings footer が
+          // `openSettings`（stage 変更のみ）を呼んでいたため、受信済み相手カード・
+          // 貼り付け中の URL・実行結果が hook state に残ったまま Settings 経由で
+          // 離脱でき、`providerRunner` の Native Lane 占有も解放されなかった。
+          // `onBack` と同じ `conversationAgentFlow.close`（session clear +
+          // forget() を含む単一 cleanup）に統一し、どちらのボタンから離脱しても
+          // 同じ後始末を経由する（`docs/design/2026-07-23-on-device-conversation-agent.md`
+          // 「セッション終了（画面遷移・アプリ終了・明示的な「終了する」操作）で
+          // 即時 clear する」契約どおり）。
+          onOpenSettings: conversationAgentFlow.close,
+          onRemovePeer: conversationAgentFlow.onRemovePeer,
+          onReset: conversationAgentFlow.onReset,
+          onScanPeer: conversationAgentFlow.onScanPeer,
+          onStart: conversationAgentFlow.onStart,
+          onSubmitPasteInput: conversationAgentFlow.onSubmitPasteInput,
+          onUseSampleCard: conversationAgentFlow.onUseSampleCard,
+          pasteInput: conversationAgentFlow.pasteInput,
+          peers: conversationAgentFlow.peers,
+          result: conversationAgentFlow.result,
+        }}
         diagnosticsFlow={diagnosticsFlow}
+        hasIntroCard={introCard !== null}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}
@@ -2338,6 +2438,7 @@ export default function PassportApp({
         onChangeLocale={handleChangeLocale}
         onCloseQuiz={closeQuiz}
         onCloseSettings={closeSettings}
+        onOpenConversationAgent={() => conversationAgentFlow.open(introCard)}
         onOpenQuiz={openQuiz}
         pilotMeasurementFlow={pilotMeasurementFlow}
         quizProgress={quizProgress}
@@ -2558,11 +2659,16 @@ export default function PassportApp({
             removeOtherLink(current, index)
           ),
         onSave: () => void saveIntroCard(),
+        onToggleThemeId: (id) =>
+          setIntroCardDraftThemeIds((current) =>
+            toggleClueId(current, id, INTRO_CARD_MAX_THEMES)
+          ),
         organization: introCardDraftOrganization,
         otherLinks: introCardDraftOtherLinks,
         phone: introCardDraftPhone,
         saving: introCardSaving,
         selfIntro: introCardDraftSelfIntro,
+        themeIds: introCardDraftThemeIds,
         title: introCardDraftTitle,
       }}
       locale={locale}

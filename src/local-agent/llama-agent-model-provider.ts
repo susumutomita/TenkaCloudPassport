@@ -41,10 +41,34 @@ export interface LlamaModulePort {
     readonly model: string;
     readonly n_ctx: number;
     readonly n_gpu_layers: number;
+    readonly n_parallel: number;
+    readonly use_mmap: boolean;
+    readonly use_mlock: boolean;
+    readonly no_extra_bufts: boolean;
   }): Promise<LlamaContextPort>;
 }
 
 export type LlamaModuleLoader = () => Promise<LlamaModulePort>;
+
+/**
+ * Issue 104 Priority 2（Bonsai-ready 化、両スパイクの知見）: `llama.rn` 既定の
+ * `n_parallel`（8 並列 sequence）は 1 Encounter に 1 Context しか使わないこの
+ * Repo の設計（`docs/design/llama-provider-development-build.md` の Context
+ * lifetime 節）には過大なため `1` に絞り、KV Cache の無駄な確保を避ける。
+ * `use_mmap: true` は Model File を Page Cache 経由で参照し常駐 Memory を
+ * 減らす。`use_mlock: false` は Page Out を許可し、OS の Memory 逼迫時に
+ * 強制終了されるリスクを避ける。`no_extra_bufts: true` は Weight の
+ * repack 用追加 Buffer を無効化し、Prompt 処理がやや遅くなる代わりに
+ * 常駐 Memory を減らす（`node_modules/llama.rn` の型定義コメント参照）。
+ * いずれも Model 固有ではない固定値のため `LocalModelConfiguration`
+ * （Model ごとに変わる `nCtx`/`nGpuLayers`/`nPredict`）には含めない。
+ */
+const FIXED_CONTEXT_PARAMETERS = {
+  n_parallel: 1,
+  use_mmap: true,
+  use_mlock: false,
+  no_extra_bufts: true,
+} as const;
 
 export interface LocalModelExecutionLease {
   release(): void;
@@ -133,6 +157,7 @@ async function initializeContext(
       model: configuration.modelPath,
       n_ctx: configuration.nCtx,
       n_gpu_layers: configuration.nGpuLayers,
+      ...FIXED_CONTEXT_PARAMETERS,
     });
   } catch (error: unknown) {
     throw normalizeNativeError(error);

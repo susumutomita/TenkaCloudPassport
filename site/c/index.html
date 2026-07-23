@@ -178,7 +178,31 @@
   const QUIZ_QUESTION_COUNT = 16;
   const QUIZ_PROGRESS_HEX_MAX_LENGTH = 32;
   const QUIZ_PROGRESS_HEX_PATTERN = /^[0-9a-f]+$/i;
-  const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q'];
+  const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q', 'm'];
+  // Issue 104 / ADR-0036: 会話テーマ ID（`m`）は最大 3 件
+  // （`src/domain/intro-card.ts` の INTRO_CARD_MAX_THEMES と一致、値は
+  // `scripts/intro-card-viewer-decoder-parity.test.ts` が固定する）。
+  const THEME_IDS_MAX_LENGTH = 3;
+  const THEME_ID_MAX_LENGTH = 4096;
+  // Issue 104 PR #132（Codex 指摘 major）: `m` の要素がカタログに実在する ID か
+  // どうかを、本体（`src/domain/intro-card.ts` の `resolveCatalogThemeIds`）と
+  // 同じ基準でこのビューアでも検証する（以前は形状だけを見て未知 ID を受理して
+  // おり、本体デコーダとの parity が壊れていた）。`src/domain/clue-catalog.ts`
+  // の `CLUE_IDS` と値・順序を一致させる（`scripts/intro-card-viewer.test.ts`
+  // がこの一致を固定する）。
+  const KNOWN_CLUE_IDS = [
+    'regional-event-operations',
+    'local-tournament',
+    'community-operations',
+    'open-source',
+    'accessibility',
+    'information-security',
+    'cloud-infrastructure',
+    'product-design',
+    'event-lessons',
+    'local-technology',
+    'responsible-ai',
+  ];
 
   function decodeBase64UrlToBytes(encoded) {
     if (encoded.length % 4 === 1) return null;
@@ -272,6 +296,33 @@
   }
 
   /**
+   * Issue 104 / ADR-0036: `m`（会話テーマ ID）の形状・件数・重複・カタログ実在を
+   * 検証する。Issue 104 PR #132（Codex 指摘 major）: 以前は形状だけを見て未知・
+   * 重複 ID を受理しており、本体デコーダ（`resolveCatalogThemeIds`）との parity
+   * が壊れていた。表示はしない（設計文書「表示は任意」、
+   * `docs/design/2026-07-23-on-device-conversation-agent.md`）。
+   */
+  function validatedThemeIds(value) {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) rejectField();
+    if (value.length === 0 || value.length > THEME_IDS_MAX_LENGTH) {
+      rejectField();
+    }
+    if (new Set(value).size !== value.length) rejectField();
+    return value.map((item) => {
+      if (
+        typeof item !== 'string' ||
+        item.length === 0 ||
+        item.length > THEME_ID_MAX_LENGTH ||
+        !KNOWN_CLUE_IDS.includes(item)
+      ) {
+        rejectField();
+      }
+      return item;
+    });
+  }
+
+  /**
    * `src/domain/intro-card.ts` の `createIntroCard` と同じ all-or-nothing 契約
    * （どれか 1 フィールドでも不正なら fragment 全体を拒否する）。未知の key も拒否する。
    */
@@ -287,6 +338,7 @@
       email: validatedEmail(parsed.e),
       phone: validatedPhone(parsed.p),
       stamp: validatedQuizProgressHex(parsed.q),
+      themeIds: validatedThemeIds(parsed.m),
     };
   }
 

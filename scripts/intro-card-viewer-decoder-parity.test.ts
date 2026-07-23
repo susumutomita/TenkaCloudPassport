@@ -64,6 +64,7 @@ interface DecodeAttempt {
   readonly email?: string;
   readonly phone?: string;
   readonly quizProgressHex?: string;
+  readonly themeIds?: readonly string[];
 }
 
 function decodeWithTypeScript(fragment: string): DecodeAttempt {
@@ -80,6 +81,7 @@ function decodeWithTypeScript(fragment: string): DecodeAttempt {
       email: card.email,
       phone: card.phone,
       quizProgressHex,
+      themeIds: card.themeIds,
     };
   } catch {
     return { ok: false };
@@ -102,6 +104,7 @@ function decodeWithViewer(
     email: card.email as string | undefined,
     phone: card.phone as string | undefined,
     quizProgressHex: card.stamp as string | undefined,
+    themeIds: card.themeIds as readonly string[] | undefined,
   };
 }
 
@@ -220,6 +223,69 @@ function buildFixtures(): readonly Fixture[] {
       expectValid: false,
     },
     {
+      name: '本体の encodeIntroCardUrl が生成した themeIds 付き fragment（Issue 104 / ADR-0036）',
+      fragment: new URL(
+        encodeIntroCardUrl(
+          createIntroCard({
+            name: 'テーマ太郎',
+            themeIds: ['open-source', 'accessibility'],
+          })
+        )
+      ).hash.slice(1),
+      expectValid: true,
+    },
+    {
+      name: '手組み themeIds（m）が上限（3 件）ちょうど',
+      fragment: fragmentFromPayload({
+        v: 1,
+        n: 'Bob',
+        m: ['open-source', 'accessibility', 'information-security'],
+      }),
+      expectValid: true,
+    },
+    {
+      name: 'm が配列ではない',
+      fragment: fragmentFromPayload({ v: 1, n: 'Eve', m: 'open-source' }),
+      expectValid: false,
+    },
+    {
+      name: 'm が空配列',
+      fragment: fragmentFromPayload({ v: 1, n: 'Eve', m: [] }),
+      expectValid: false,
+    },
+    {
+      name: 'm が上限（3 件）を超える',
+      fragment: fragmentFromPayload({
+        v: 1,
+        n: 'Eve',
+        m: [
+          'open-source',
+          'accessibility',
+          'information-security',
+          'cloud-infrastructure',
+        ],
+      }),
+      expectValid: false,
+    },
+    {
+      name: 'major（Issue 104 PR #132、Codex 指摘）: m の要素がカタログに実在しない ID',
+      fragment: fragmentFromPayload({
+        v: 1,
+        n: 'Eve',
+        m: ['not-a-real-clue-id'],
+      }),
+      expectValid: false,
+    },
+    {
+      name: 'major（Issue 104 PR #132、Codex 指摘）: m の要素が重複している',
+      fragment: fragmentFromPayload({
+        v: 1,
+        n: 'Eve',
+        m: ['open-source', 'open-source'],
+      }),
+      expectValid: false,
+    },
+    {
       name: '空文字の fragment',
       fragment: '',
       expectValid: false,
@@ -265,6 +331,7 @@ describe('intro-card-url の本体デコーダとビューアデコーダの par
       expect(viewerResult.email).toBe(tsResult.email);
       expect(viewerResult.phone).toBe(tsResult.phone);
       expect(viewerResult.quizProgressHex).toBe(tsResult.quizProgressHex);
+      expect(viewerResult.themeIds).toEqual(tsResult.themeIds);
     }
   });
 });
