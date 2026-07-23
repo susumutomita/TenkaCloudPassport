@@ -8192,3 +8192,65 @@ follow-up F-FDRGS4（`.claude/state/follow-ups.jsonl`）を解消する。
   既存 `LocalModelCard` の削除ボタンが `imported-not-active` 状態で重複する
   UX 上の冗長さは、機能的には壊れておらず本 PR の scope（有効化導線の追加）
   を超えるため follow-up へ列挙した（`01KY7KHNSF4ZP7EZZ0MWDJJHJ6`）。
+
+### [ios-release ワークフローの node_modules 欠落修正] - 2026-07-23
+
+#### 目的
+
+タグ v1.0.0 push で走った ios-release ワークフローが「Trigger EAS Build and
+submit to TestFlight」ステップで失敗した障害を修正する。エラーは
+`Failed to resolve plugin for module "llama.rn" relative to
+".../TenkaCloudPassport". Do you have node modules installed?` であり、
+`eas build --non-interactive --auto-submit` がランナー上で app.json の
+config を評価する際、`plugins` にある llama.rn（および他の Expo config
+plugin）を node_modules から解決する必要があるにもかかわらず、このワーク
+フローは依存インストールを省いていたことが原因である。
+
+#### 制約
+
+- 実ビルドは EAS クラウド側で完結するという既存設計は変更しない。ランナー
+  側で追加するのは config plugin 解決用の node_modules インストールのみ。
+- Supply Chain Security（Actions の full SHA ピン、Safe Chain、
+  `permissions: contents: read`）は維持する。
+- `bun install --ignore-scripts` は既存 `bun.lock` を使い、新規解決を
+  増やさない（`make install` と同一コマンド）。
+- llama.rn の Native artifact 取得（`make setup-llama-native`）は引き続き
+  EAS クラウド側の Custom Build config でのみ行い、ランナー側では行わない。
+
+#### タスク
+
+1. `.github/workflows/ios-release.yml` 冒頭のコメント（node_modules 不要と
+   誤って述べていた箇所）を、config plugin 解決に node_modules が必要な
+   事実へ訂正する。
+2. `Setup safe-chain` の後・`Trigger EAS Build and submit to TestFlight` の
+   前に `Install dependencies`（`bun install --ignore-scripts`）ステップを
+   `if: steps.check-secrets.outputs.expo_token_present == 'true'` 付きで
+   追加する。
+3. `EAS_BUILD_NO_EXPO_GO_WARNING: "true"` を EAS Build ステップの env に
+   追加し、「Expo Go for production」警告を抑制する。
+4. `make before-commit` を通す。
+
+#### 検証手順
+
+- ワークフロー YAML を目視で確認し、追加ステップの位置・`if` 条件・
+  コマンドが既存ステップと同じ規約（SHA ピン不要な自前 `run:` ステップ、
+  secret 未設定時 skip）に沿っていることを確認する。
+- `make before-commit`（architecture-harness、harness_test、dup_check、
+  lint_text、lint）が exit 0 になることを確認する。
+
+#### 進捗ログ
+
+- コメント訂正と `Install dependencies` ステップ追加、
+  `EAS_BUILD_NO_EXPO_GO_WARNING` 追加を実施した。
+
+#### 振り返り
+
+- **問題**: 「eas-cli は app.json を静的に読むだけで node_modules を必要と
+  しない」という当初の前提が、llama.rn を config plugin として使う現在の
+  構成では誤りだった。
+- **根本原因**: config plugin の解決評価がランナー上のローカル Node.js
+  プロセスで行われる点と、実ビルド自体が EAS クラウド側で行われる点を
+  混同し、後者が成立するなら前者も node_modules 不要だと誤って一般化した。
+- **予防策**: EAS Build を非対話・auto-submit で呼ぶワークフローを新設・
+  変更するときは、「実ビルドの実行場所」と「config 評価の実行場所」を
+  別の質問として切り分けて確認する。
