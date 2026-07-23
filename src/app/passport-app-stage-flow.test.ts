@@ -666,13 +666,29 @@ describe('PassportApp の Stage 遷移契約', () => {
       expect(text).toContain('onOpenSettings={onOpenSettings}');
     });
 
-    it('PassportApp.tsx は setLocale を直接呼び出さず、SettingsScreen の onChangeLocale へ関数参照として渡すだけ', async () => {
+    it('Issue 111: 明示切替は handleChangeLocale へ一本化し、setLocale と永続化を同時に行う', async () => {
       const text = await source();
 
-      // PassportApp.tsx 自身は `setLocale(...)` という呼び出しを一度も行わない
-      // （Settings 以外の Stage 遷移関数から locale を書き換える経路が無いことの固定）。
-      expect(text.match(/setLocale\(/g) ?? []).toHaveLength(0);
-      expect(text).toContain('onChangeLocale={setLocale}');
+      // 明示切替（Settings 画面・AppScreen ヘッダーの JA/EN トグル）は常に同じ関数
+      // 参照を渡し、保存し忘れる経路を作らない。
+      const changeLocaleOccurrences =
+        text.match(/onChangeLocale=\{handleChangeLocale\}/g) ?? [];
+      expect(changeLocaleOccurrences).toHaveLength(2);
+      // SettingsScreen 経由の onChangeLocale へ直接 setLocale を渡す旧配線が
+      // 残っていないことも固定する。
+      expect(text).not.toContain('onChangeLocale={setLocale}');
+
+      const handleChangeLocaleBody = functionBody(text, 'handleChangeLocale');
+      expect(handleChangeLocaleBody).toContain('setLocale(next)');
+      expect(handleChangeLocaleBody).toContain(
+        'localePreferenceStorage.save(next)'
+      );
+
+      // `setLocale(...)` という直接呼び出しは、明示切替（handleChangeLocale）と
+      // 起動時の保存済み選好の水和（Promise.all の then）の 2 箇所だけに限る
+      // （Settings 以外の Stage 遷移関数から locale を書き換える経路が無いことの固定、
+      // 632 行目付近のテストと合わせて Issue 111 の水和 1 箇所を新たに許容する）。
+      expect(text.match(/setLocale\(/g) ?? []).toHaveLength(2);
     });
   });
 });

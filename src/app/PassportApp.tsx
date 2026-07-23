@@ -96,9 +96,10 @@ import {
 import type { BackupSharePort } from './backup-share-port';
 import type { DiagnosticErrorSignal } from './diagnostic-recovery';
 import type { DiagnosticTransportState } from './diagnostic-report';
-import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
+import type { Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { inProcessTransportFingerprint } from './in-process-transport-binding';
+import type { InitialLocalePort } from './initial-locale-port';
 import {
   type IntroCardNotice,
   introCardNoticeFromError,
@@ -120,6 +121,7 @@ import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
 } from './local-profile-storage';
+import type { LocalePreferenceStoragePort } from './locale-preference-storage';
 import { reduceLounge } from './lounge-reducer';
 import {
   createDefaultPassportShareSelection,
@@ -172,6 +174,10 @@ interface PassportAppProps {
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly introCardStorage: IntroCardStoragePort;
   readonly backupSharePort: BackupSharePort;
+  /** Issue 111: 初回起動時、保存済みの明示選択が無いときだけ使う自動判定 Port。 */
+  readonly initialLocalePort: InitialLocalePort;
+  /** Issue 111: 明示切替（Settings / ヘッダートグル）の永続化先。 */
+  readonly localePreferenceStorage: LocalePreferenceStoragePort;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
   readonly agentModelProvider?: AgentModelProvider;
   /** Development Build だけが app-private GGUF lifecycle を注入する。 */
@@ -625,6 +631,8 @@ export default function PassportApp({
   localProfileStorage,
   introCardStorage,
   backupSharePort,
+  initialLocalePort,
+  localePreferenceStorage,
   agentModelProvider = RULES_MODEL_PROVIDER,
   localModelManagement = null,
   localModelMutationLeases = null,
@@ -644,13 +652,32 @@ export default function PassportApp({
   // Pet Interaction / 保存済み Local Profile のいずれの state にも触れない。既に画面へ
   // 表示済みの Notice（例: 直前に確定した保存成功メッセージ）は locale 変更を遡って
   // 再翻訳しない（`docs/design/i18n-and-accessibility.md` の Known follow-up）。
-  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
+  // Issue 111: 初期値は保存済みの明示選択が無い前提で `initialLocalePort` が同期的に
+  // 解決する（端末 / ブラウザの優先言語、判定不能なら既存の既定値 `ja`）。保存済みの
+  // 明示選択があれば、起動時の Promise.all（下記 useEffect）が同じコミットで上書きする
+  // （ADR-0034）。
+  const [locale, setLocale] = useState<Locale>(() =>
+    initialLocalePort.resolveInitialLocale()
+  );
   const localeRef = useRef(locale);
   localeRef.current = locale;
-  const [notice, setNotice] = useState<ProfileNotice>({
+  /**
+   * Issue 111: 明示切替（Settings 画面・`AppScreen` ヘッダーの JA/EN トグル）は
+   * 必ずこの 1 つの関数を経由させ、`setLocale` と永続化を同じ場所にまとめる。
+   * 保存は fire-and-forget とし、失敗しても表示の切替自体は妨げない
+   * （永続化に失敗した場合、次回起動時は自動判定へ委ねるだけになる）。
+   */
+  const handleChangeLocale = useCallback(
+    (next: Locale): void => {
+      setLocale(next);
+      localePreferenceStorage.save(next).catch(() => undefined);
+    },
+    [localePreferenceStorage]
+  );
+  const [notice, setNotice] = useState<ProfileNotice>(() => ({
     kind: 'empty',
-    message: MESSAGES[DEFAULT_LOCALE].passportApp.initialNotice,
-  });
+    message: MESSAGES[locale].passportApp.initialNotice,
+  }));
   // Issue 79: 自己紹介カードピボット Step 1。`introCardRef` は起動時 Promise.all の
   // `.then()` や各種 handler から同期的に「保存済みカードがあるか」を読むための参照で、
   // React state（`introCard`）と異なり同一 tick 内の再 render を待たずに最新値を返す
@@ -678,10 +705,12 @@ export default function PassportApp({
     readonly string[]
   >([]);
   const [introCardSaving, setIntroCardSaving] = useState(false);
-  const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>({
-    kind: 'empty',
-    message: MESSAGES[DEFAULT_LOCALE].introCard.initialNotice,
-  });
+  const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>(
+    () => ({
+      kind: 'empty',
+      message: MESSAGES[locale].introCard.initialNotice,
+    })
+  );
   // Issue 92: 保存失敗時にどの入力欄へ focus するか（`IntroCardEditScreen` の
   // `errorFieldKey` prop にそのまま渡す）。`introCardNotice` と同じタイミングで
   // 更新し、新しい失敗が起きるたびに `resolveIntroCardErrorFieldKey` で
@@ -1160,12 +1189,27 @@ export default function PassportApp({
       // 失敗しても起動そのものを妨げない・独自の Notice も出さない
       // （`.catch(() => null)` で「下書きなし」へ握り潰す）。
       introCardStorage.loadDraft().catch(() => null),
-    ]).then(([result, loadedIntroCard, loadedDraft]) => {
+      // Issue 111: 保存済みの明示選択があれば、`initialLocalePort` による自動判定の
+      // 初期値を上書きする（無ければ null、自動判定の結果をそのまま維持）。読込失敗も
+      // 「保存済みの選択なし」へ握り潰し、起動そのものは妨げない。
+      localePreferenceStorage.load().catch(() => null),
+    ]).then(([result, loadedIntroCard, loadedDraft, savedLocale]) => {
       if (!active) return;
       introCardRef.current = loadedIntroCard;
       setIntroCard(loadedIntroCard);
       if (loadedDraft && !isEmptyIntroCardDraft(loadedDraft)) {
         applyIntroCardDraftFields(loadedDraft);
+      }
+      if (savedLocale) {
+        setLocale(savedLocale);
+        // code-reviewer 指摘: `localeRef.current` は通常 render 本体でしか更新
+        // されない（この effect の外）。この直後に呼ぶ起動時復元の適用処理
+        // （下記 `applyStartupRecoveryResultRef` 経由）が同じ tick 内で
+        // `localeRef.current` を読んで起動時 Notice の文言を組み立てるため、
+        // 次の render を待たずここで同期的に上書きする。これを省くと、保存済み
+        // 選好が自動判定と異なるユーザーの起動時 Notice だけ古い言語のまま
+        // 固定される（Notice は locale 変更で遡って再翻訳しない設計のため）。
+        localeRef.current = savedLocale;
       }
       // 下書きの水和が済んだことを示す。`result.kind` の分岐（Profile Recovery の
       // 成否）とは独立の関心事のため、早期 return より前で必ず立てる。
@@ -1185,6 +1229,7 @@ export default function PassportApp({
     diagnosticsFlow.enterRecovery,
     introCardStorage,
     localDataControl,
+    localePreferenceStorage,
     localProfileStorage,
   ]);
 
@@ -2047,7 +2092,7 @@ export default function PassportApp({
         hasProfile={privateProfile !== null}
         locale={locale}
         modelManagement={localModels.view}
-        onChangeLocale={setLocale}
+        onChangeLocale={handleChangeLocale}
         onCloseSettings={closeSettings}
         pilotMeasurementFlow={pilotMeasurementFlow}
         stage={stage}
@@ -2196,7 +2241,7 @@ export default function PassportApp({
 
   return (
     <ProfileHomeGate
-      onChangeLocale={setLocale}
+      onChangeLocale={handleChangeLocale}
       creation={{
         languageSelection,
         notice,
