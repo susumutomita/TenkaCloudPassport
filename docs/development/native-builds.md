@@ -32,6 +32,10 @@ bunx expo install --check
 `make install` は lifecycle script を実行しない。`llama.rn` 導入後も `trustedDependencies` は空のままにし、
 Native Artifact は次の opt-in command だけで取得する。
 
+`bunx expo start --dev-client` の Metro が Zombie 化してポート（デフォルト 8081）が解放されない場合は、
+repository root で `make stop` を実行すると、8081 上の Expo/Metro プロセスだけを識別して安全に
+停止できる（無関係なプロセスは kill しない）。
+
 ```bash
 make setup-llama-native
 ```

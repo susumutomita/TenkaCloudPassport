@@ -6575,3 +6575,104 @@ Low 1 件）を解消する。あわせて、先に PR 120（Issue 117）が mai
 新規追加文で textlint が落ちた場合は、まず該当語が英語として不自然かどうかではなく、
 このルール由来の false positive でないかを疑い、同義語への言い換えで回避できないかを
 検討してから対処する。
+
+### [make stop 追加・start/dev 使い分け明確化] - 2026-07-23
+
+#### 目的
+
+Issue 112 に基づき、開発サーバー（Metro / Expo）を確実に停止する `make stop` を追加し、
+`make start`（Expo Go 向け）と `make dev`（Development Build / dev-client 向け）の使い分けを
+Makefile の `help` と関連 docs に明記する。owner が「ゾンビ Metro を止められない」
+「make start が実機の dev-client 版と繋がらない」と踏んだ DX 課題を解消する。
+
+#### 制約
+
+- `rm` コマンドは使わない（`kill` は可）。
+- ポート 8081 を無差別に kill しない。owner が実機接続に使っている別プロセスを巻き添えに
+  しないよう、対象 PID のコマンドラインを確認し Expo/Metro 由来と識別できたものだけを停止する。
+- `.claude/` 以外の設定ファイル・invariant は変更しない。
+- `ios/`・`node_modules/` は触らない。
+- 検証時も 8081 を実際に kill しない（`make -n stop` などドライな確認に留める）。
+
+#### 設計判断
+
+Issue 本文が示す `lsof -ti:8081 | xargs kill` 案は実装が単純だが、8081 上の任意プロセスを
+無差別に kill してしまう。オーナーが実機接続で 8081 を使っている場合に事故りうるため、
+`lsof -ti tcp:8081` で PID を集めたあと `ps -p <pid> -o command=` でコマンドラインを取得し、
+`expo` または `metro` を含むプロセスだけを kill する 2 段階の safety net を採用した。
+該当しない PID は kill せず警告だけ表示する。対象なしでも exit 0 にする（`|| true` 相当）。
+
+`make` を引数なしで叩くと現状の先頭 target（`install`）が動いてしまい、owner の
+「make うっても help が出ない」報告の原因になっていたため、`.DEFAULT_GOAL := help` を設定し、
+`start`/`dev`/`stop`/`restart` の使い分けを明示する `help` target を新設する。
+
+#### タスク
+
+1. Plan.md（本エントリ）を先に追記する。
+2. Makefile: `.DEFAULT_GOAL := help` と `help` target を追加し、`stop`（Expo/Metro 限定 kill）・
+   `restart`（stop → dev）を新設。`start`/`dev` のコメントを Expo Go / dev-client の区別で補強する。
+3. README.md / README.en.md の開発者向け節に `make stop` と start/dev の使い分けを追記する。
+4. AGENTS.md のコマンド一覧に `make stop`・`make restart`・`make dev` を追記し、
+   `make start` の説明を Expo Go 限定である旨に補強する。
+5. docs/development/native-builds.md に、`bunx expo start --dev-client` 運用中に Metro が
+   ゾンビ化した場合は `make stop` で安全に停止できる旨を 1 文追記する。
+6. `make -n stop` で recipe の構文だけをドライ確認する（8081 は実際に kill しない）。
+7. `make before-commit` を実行し exit 0 を確認する。textlint 対象 docs を 0 エラーにする。
+8. code-reviewer でレビューし、指摘を反映してから明示ファイルのみ commit する。
+
+#### 検証手順
+
+- `make -n stop` が構文エラーなく recipe を表示する（実 kill はしない）。
+- `make help` と `make`（引数なし）が同じ help 文言を表示する。
+- `make before-commit` が exit 0 になる。
+- `bun textlint README.md` / `README.en.md` / `docs/development/native-builds.md` がいずれも
+  0 エラーで終わる。
+
+#### 進捗ログ
+
+- 2026-07-23: Issue 112 を読み、設計（Makefile のみ・最小）と制約（8081 無差別 kill 禁止）を確認した。
+  隔離 worktree で `dx/make-stop-and-dev-start-clarity` ブランチを作成した（HEAD は origin/main と
+  一致、rebase 不要）。作業途中で一度、共有チェックアウト
+  （`/Users/susumu/product/TenkaCloudPassport`）側でブランチを切ってしまう誤操作をしたため、
+  即座に共有チェックアウトを `main` へ戻し、正しい隔離 worktree
+  （`.claude/worktrees/agent-a341c3f3070c16201`）側でブランチを checkout し直した。
+- 2026-07-23: Makefile へ `help`（`.DEFAULT_GOAL`）・`stop`（Expo/Metro 限定 kill）・
+  `restart` を実装し、`start`/`dev` のコメントを補強した。README.md / README.en.md /
+  AGENTS.md / docs/development/native-builds.md を更新した。`make -n stop` で構文確認、
+  `make help` と引数なし `make` の出力一致を確認した。実機で 8081 を実際に
+  `expo run:ios --device` が使用中だったため（`lsof -ti tcp:8081` で確認、PID は kill
+  していない）、`make stop` の実 kill 検証はポート 8081 に対して行わず、代わりに
+  `lsof`/`ps`/`kill` を差し替えた mock と、使い捨ての `sleep` プロセスに対する実 kill で
+  no-op / skip / 成功 / 失敗の 4 経路すべてを安全に検証した。
+- 2026-07-23: `bun textlint README.md README.en.md AGENTS.md
+  docs/development/native-builds.md Plan.md`（各 0 エラー）、`bun scripts/architecture-harness.ts
+  --staged --fail-on=error`（0 件）を確認した。`make before-commit` は 1 回目、
+  `scripts/source-release.test.ts` の「hash 済み basename の同一内容 inode 置換」テストが
+  フルスイート実行時のみ fail し（単独実行・再実行では pass）、本 PR の変更（Makefile/docs のみ）
+  と無関係な既知の flaky test と判断して follow-up (F-NBT7NA) に記録した。再実行で
+  `make before-commit` は exit 0 になった。
+- 2026-07-23: code-reviewer に staged diff をレビューさせた。should-fix 1 件
+  （`kill` が権限等で失敗した場合、成功時と同じ「該当プロセスなし」相当のメッセージになり
+  実態と食い違う）を指摘され、`identified`（Expo/Metro と識別できた数）と `stopped`
+  （実際に停止できた数）を分けるよう修正し、失敗時は非 0 で終了するようにした。修正後、
+  mock と使い捨てプロセスで 4 経路を再検証し、`make before-commit` を再実行して exit 0 を
+  再確認した。
+
+#### 振り返り
+
+**問題**: 作業序盤で `cd /Users/susumu/product/TenkaCloudPassport && git checkout -b ...` を
+実行してしまい、複数 agent が共有する main checkout のブランチを一時的に切り替えてしまった
+（共有チェックアウトはこのタスクの作業対象ではなく、隔離 worktree
+`.claude/worktrees/agent-a341c3f3070c16201` が本来の作業場所だった）。
+
+**根本原因**: 過去の commit 履歴確認や `gh issue view` は cwd に依存しないため
+`cd <絶対パス>` を安易に使ったが、その絶対パスが「自分に割り当てられた隔離 worktree」ではなく
+「複数 agent が共有する main checkout」だったことに気づかず、そのまま `git checkout -b` という
+状態変更コマンドまで実行してしまった。Edit ツールが shared-checkout パスへの書き込みを
+明示的にブロックしたことで初めて誤りに気づいた。
+
+**予防策**: 複数 worktree が並行する環境では、状態変更を伴う git 操作（`checkout -b` 等）の前に
+必ず `pwd` で cwd を確認し、絶対パスを打つ場合も「割り当てられた worktree のパスと一致するか」を
+毎回照合する。ツールが shared-checkout への書き込みをブロックした場合は、それを唯一のシグナルに
+頼らず、すでに実行済みの読み取り以外のコマンド（今回は `git checkout -b`）まで遡って影響範囲を
+確認し、即座に安全な状態（`main` に戻す）へ復旧してから作業を再開する。
