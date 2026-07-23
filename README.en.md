@@ -3,40 +3,77 @@
 [Japanese](./README.md)
 
 TenkaCloud Passport is a free, account-free Expo app that lets you hand off an introduction without a business
-card. Show your name, title, and self-introduction as a QR code; the other person needs no app, just their
-phone's standard camera, to open your Intro Card page in a browser. Adding you to contacts is an optional
-action they choose inside that page. See the
-[landing page](https://card.tenkacloud.com/en/) for details.
+card. Just show a QR code and the other person opens your Intro Card page with their phone's standard camera,
+no app required. See the [landing page](https://card.tenkacloud.com/en/) for details.
+
+## Demo video
+
+[![Demo video](https://img.youtube.com/vi/KgMwSKu05a4/hqdefault.jpg)](https://youtube.com/shorts/KgMwSKu05a4)
 
 ## What it does
 
-- Enter your name (required), title, organization, self-introduction, and links. Nothing stays on the device until
-  you explicitly save it.
-- Once saved, it shows a real QR code (a URL to your Intro Card page) that a standard camera can scan. Scanning
-  it opens the page in the other person's browser; adding you to contacts is an optional action they choose
-  inside that page.
-- No server and no account are required. The only way data leaves the device is a manual JSON export you perform yourself.
+Create a card, show the QR code, the other person scans it with their standard camera, their browser opens
+your Intro Card page, and adding you to contacts stays optional.
+
+- Enter your name (required), title, organization, self-introduction, and links. Nothing stays on the device
+  until you explicitly save it.
+- Once saved, it shows a real QR code (a URL to your Intro Card page) that a standard camera can scan.
+  Scanning it opens the page in the other person's browser; adding you to contacts is an optional action they
+  choose inside that page.
+- Viewing the card itself works the same on iOS and Android. Adding to contacts has been verified only on
+  iPhone/Safari. On Android, it requires one extra step—save the `.vcf` file, then open it—and remains
+  unverified. In in-app browsers for SNS apps such as LINE, X, and Instagram, saving the `.vcf` file may fail
+  entirely, so adding the contact may not work.
+- No account is required, and no server stores the card. To share it, you display a QR code whose URL
+  fragment contains the Intro Card data, and the recipient scans it. The fragment is not sent to the server.
+  Manual JSON backup is a separate owner-initiated export path.
 - The existing Pet / Lounge / Bridge code and tests are kept but removed from the default screens. They are
   expected to return in roadmap Step 4 (a concept for on-device agents finding a connection). See the Roadmap
   section on the landing page for details.
 
-## Try it in two minutes
+This repository's Public OSS Alpha is currently `Blocked` (it stays unpublished until every required physical
+verification gate is met). See the
+[Release Status and Device Matrix](./docs/releases/status.md) for details.
+
+## Try it now
+
+Easiest options first.
+
+### (a) Just open the Web version
+
+<https://card.tenkacloud.com/app/>
+
+No install needed, open it in your browser right away. Add it to your home screen to launch it like an app.
+
+- Data is stored in the browser's on-device storage. Switching browsers or devices does not carry your card
+  over.
+- The first load requires an online connection. Full offline support via a Service Worker is not implemented
+  yet (tracked as a follow-up).
+- On iOS Safari, tap the Share icon and choose "Add to Home Screen"; on Android Chrome, open the menu and
+  choose "Add to Home Screen" or "Install app". Either way you get an icon on your home screen that launches
+  the app directly. This is not App Store or Play Store distribution.
+
+### (b) For developers
 
 ```bash
 make install
-make start
+make dev
 ```
 
-Install Expo Go on your phone, connect it to the same network as your Mac, then scan the QR code shown in the
-terminal. The app opens on the Intro Card creation screen. Enter a name and save it, and you move to the screen
-that shows a QR code a standard camera can scan.
+`make dev` targets a Development Build. If you have not set one up on a device or simulator yet, read
+[Native Development Builds](./docs/development/native-builds.md) first. If you just want to try it with no
+setup, run `make start` after `make install` to launch it in Expo Go instead.
 
-Verifying on a physical device that scanning this QR with a standard camera opens the Intro Card page in a
-browser is Not run as of this README (a cloud environment cannot perform physical-device verification). Adding a
-contact is an optional action the other person chooses inside that page, and it requires them to be online at
-scan time.
+The owner has verified on a physical device that scanning this QR with a standard camera opens the Intro Card
+page in a browser. This does not carry the device family, OS version, and other evidence the release matrix
+requires, so it stays `Not run` rather than `Verified`. See the
+[Release Status and Device Matrix](./docs/releases/status.md) for details.
 
-## Current release state
+## For contributors
+
+Everything below is for contributors and native developers.
+
+### Current release state
 
 | Scope | State | Allowed now | Stop condition |
 | --- | --- | --- | --- |
@@ -50,22 +87,7 @@ scan time.
 one environment. They are not interchangeable. See the
 [Release Status and Device Matrix](./docs/releases/status.md) for evidence per combination.
 
-### Try it from your phone with no dev environment (Web version)
-
-If you have neither a Mac nor Expo Go handy, open the Web version we publish on Cloudflare Workers
-directly in your phone's browser.
-
-<https://card.tenkacloud.com/app/>
-
-- Data is stored in the browser's on-device storage. Switching browsers or devices does not carry your
-  card over.
-- The first load requires an online connection. Full offline support via a Service Worker is not
-  implemented yet (tracked as a follow-up).
-- On iOS Safari, tap the Share icon and choose "Add to Home Screen"; on Android Chrome, open the menu and
-  choose "Add to Home Screen" or "Install app". Either way you get an icon on your home screen that launches
-  the app directly. This is not App Store or Play Store distribution.
-
-## Choose one entry path
+### Choose one entry path
 
 | Path | For whom | Prerequisites | First success | Current assurance |
 | --- | --- | --- | --- | --- |
@@ -74,7 +96,7 @@ directly in your phone's browser.
 | Expo Go | Physical-device UI reviewer | Compatible Expo Go and same network | The first screen opens from the Metro QR. | Expo Go's bundled native modules only; no Local LLM or real Nearby. |
 | Native development build | Native developer | macOS + Xcode, or Android SDK / JDK | A dedicated build starts on the target device. | `Not run`; a simulator or successful compile is not provider evidence. |
 
-### Repository gate
+#### 1. Repository gate
 
 Check out the exact release tag or commit first. A moving `main` branch is not a reproducibility input.
 
@@ -86,7 +108,7 @@ make before-commit
 Success means the architecture harness, tests, lint, typecheck, coverage, and Web Export all exit 0. On failure, fix the
 first error. Do not weaken invariants, `biome.json`, or coverage thresholds.
 
-### Web
+#### 2. Web
 
 ```bash
 make install_ci
@@ -97,18 +119,20 @@ Open the printed URL and confirm only that the initial Passport screen appears. 
 physical camera QR, or Nearby Transport. If the URL cannot be opened, return to the Web Export gate and keep Expo Go
 as `Not run`.
 
-### Expo Go
+#### 3. Expo Go
 
 ```bash
-make install_ci
-bun run start
+make start
 ```
 
-Scan Metro's QR from Expo Go on the same network and confirm that the first screen appears. Expo Go cannot add arbitrary
-custom native code, so Local LLM and real Nearby Transport are outside this path. If connectivity cannot be recovered,
-keep this path as `Not run` and return to Web.
+Install Expo Go on your phone, connect it to the same network as your Mac, and scan the QR code shown in
+the terminal with Expo Go. `make start` installs dependencies first if they are missing, then overrides
+expo-dev-client's default to start the dev server in Expo Go mode (`--go`). Expo Go cannot add arbitrary
+custom native code, so Local LLM and real Nearby Transport are outside this path. If you cannot connect,
+check the network prerequisites, and if that does not resolve it, keep this path as `Not run` and return to
+Web.
 
-### Native development build
+#### 4. Native development build
 
 Read [Native Development Builds](./docs/development/native-builds.md) for platform prerequisites, generated files,
 signing, and recovery. iOS / Android devices, Local LLM, and Nearby Transport are currently `Not run` or `Blocked` in
@@ -117,7 +141,11 @@ the release matrix.
 Read [iOS TestFlight Automated Release](./docs/development/ios-testflight-release.md) for the tag-push-to-TestFlight
 pipeline (EAS Build + EAS Submit via GitHub Actions).
 
-## Reproduce a draft source candidate
+Distribution follows the [Pilot Distribution Tiers and Scale Gate](./docs/design/distribution-tiers.md): Tier A
+for Web / Expo Go, Tier B for a small number of physical devices, and Tier C for continuous distribution to
+non-developers. Do not present Local LLM or Nearby Transport as working in Tier A.
+
+### Reproduce a draft source candidate
 
 This validates a source-only candidate, not a public release. Replace `<candidate-commit>` with the exact 40-character
 commit SHA supplied by the release operator.
@@ -135,12 +163,20 @@ checksums. The output path must not exist yet; symlinks and existing candidates 
 distribute partial output or a checksum mismatch. Quarantine it and retry with another uncreated path. See the
 [Source Release Runbook](./docs/development/source-release.md).
 
-## Architecture and canonical documents
+### Architecture
 
-[Architecture Overview](./docs/architecture/overview.md) provides both a diagram and an equivalent text description.
-The pure TypeScript Domain does not import React Native, Storage, Transport, or model runtimes. The App layer calls
-Ports, and platform adapters implement external capabilities. Web and Expo Go use the Rules Provider. Local LLM and
-real Nearby Transport are not supported capabilities on the default branch.
+[Architecture Overview](./docs/architecture/overview.md) provides both a diagram and an equivalent text
+description of the dependency direction across Domain, Agent Runtime, Rules / Local LLM, Storage, QR, and
+Nearby Transport. The current highlights are:
+
+- The pure TypeScript Domain does not import React Native, Storage, Transport, or model runtimes.
+- The App layer calls Ports, and platform adapters implement external capabilities.
+- Web and Expo Go use the Rules Provider.
+- Local LLM and real Nearby Transport are not supported capabilities on the default branch.
+- Lounge-derived data is never persisted; it is discarded at the earliest of leaving, the host ending the
+  Lounge, or the 20-minute timeout.
+
+### Canonical documents
 
 - [Concept](./CONCEPT.md) / [Product Contract](./docs/product/product-contract.md) / [Glossary](./docs/product/glossary.md)
 - [Privacy Data Inventory](./docs/privacy/data-inventory.md) / [Retention](./docs/privacy/retention-policy.md)
@@ -153,6 +189,8 @@ real Nearby Transport are not supported capabilities on the default branch.
 The Facilitator Kit is currently for a document walkthrough only. Do not enter names, photos, profiles, or device IDs;
 do not create or scan a real QR; and do not start Nearby or a group Lounge. Follow the
 [safe walkthrough](./docs/facilitator/walkthrough.en.md) and keep every physical capability `Not run`.
+
+### Development discipline
 
 Development follows [AGENTS.md](./AGENTS.md), [CLAUDE.md](./CLAUDE.md), the
 [Definition of Done](./docs/architecture/quality-bar.md), and the
