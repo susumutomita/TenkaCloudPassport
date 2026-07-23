@@ -26,7 +26,6 @@ your Intro Card page, and adding you to contacts stays optional.
   entirely, so adding the contact may not work.
 - No account is required, and no server stores the card. To share it, you display a QR code whose URL
   fragment contains the Intro Card data, and the recipient scans it. The fragment is not sent to the server.
-  Manual JSON backup is a separate owner-initiated export path.
 - The existing Pet / Lounge / Bridge code and tests are kept but removed from the default screens. They are
   expected to return in roadmap Step 4 (a concept for on-device agents finding a connection). See the Roadmap
   section on the landing page for details.

@@ -61,15 +61,13 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(developmentBuild.kind).toBe('local-agent');
   });
 
-  it('App Composition Root は Platform Provider を PassportApp へ明示的に渡す', async () => {
+  it('App Composition Root は Platform Provider を PassportApp へ明示的に渡す（Issue 118: distributionCapability は SettingsScreen が使わなくなり App Composition からも外した）', async () => {
     const app = await source('../../App.tsx');
 
     expect(app).toContain('createDefaultAgentModelProvider(localDataLeases)');
     expect(app).toContain('agentModelProvider={agentModelProvider}');
-    expect(app).toContain('DEFAULT_DISTRIBUTION_CAPABILITY');
-    expect(app).toContain(
-      'distributionCapability={DEFAULT_DISTRIBUTION_CAPABILITY}'
-    );
+    expect(app).not.toContain('DEFAULT_DISTRIBUTION_CAPABILITY');
+    expect(app).not.toContain('distributionCapability');
     expect(app).toContain('createDefaultLocalModelManagement(localDataLeases)');
     expect(app).toContain(
       'localModelManagement={localModelComposition?.management ?? null}'

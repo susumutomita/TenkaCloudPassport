@@ -59,10 +59,6 @@ import {
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
-import BackupExportScreen from '../screens/BackupExportScreen';
-import BackupImportScreen, {
-  type BackupImportValidationView,
-} from '../screens/BackupImportScreen';
 import ConversationSelfReportScreen from '../screens/ConversationSelfReportScreen';
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
@@ -97,11 +93,9 @@ import {
   type ProviderRuntimeState,
   pilotProviderRunFromOutcome,
 } from './agent-provider-session';
-import type { BackupImportParseResult } from './backup-import';
 import type { BackupSharePort } from './backup-share-port';
 import type { DiagnosticErrorSignal } from './diagnostic-recovery';
 import type { DiagnosticTransportState } from './diagnostic-report';
-import type { DistributionCapability } from './distribution-capability';
 import { DEFAULT_LOCALE, type Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { inProcessTransportFingerprint } from './in-process-transport-binding';
@@ -160,7 +154,6 @@ import {
   recoverLocalStateAtStartup,
   type StartupLocalRecoveryResult,
 } from './startup-local-recovery';
-import { type BackupFlow, useBackupFlow } from './use-backup-flow';
 import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
@@ -179,7 +172,6 @@ interface PassportAppProps {
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly introCardStorage: IntroCardStoragePort;
   readonly backupSharePort: BackupSharePort;
-  readonly distributionCapability: DistributionCapability;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
   readonly agentModelProvider?: AgentModelProvider;
   /** Development Build だけが app-private GGUF lifecycle を注入する。 */
@@ -195,8 +187,6 @@ type SetupStage =
   | 'host-invite'
   | 'guest-scan'
   | 'guest-share-preview'
-  | 'backup-export'
-  | 'backup-import'
   | 'settings'
   | 'diagnostics'
   | 'pilot-measurement'
@@ -258,21 +248,6 @@ const VALIDATION_ERROR_FALLBACK = '入力を確認して、もう一度実行し
 const IN_PROCESS_DISCOVERY_HINT = 'in-process-v1:host';
 
 /**
- * `BackupImportParseResult`（app 層、`backup` 本体まで持つ）を、`BackupImportScreen` が
- * 表示に必要な最小の形（`BackupImportValidationView`）へ変換する。ネストした三項演算子を
- * PassportApp 本体から追い出し、Cognitive Complexity を抑える。
- */
-function backupImportValidationView(
-  result: BackupImportParseResult | null
-): BackupImportValidationView {
-  if (result === null) return null;
-  if (result.kind === 'rejected') {
-    return { kind: 'rejected', message: result.message };
-  }
-  return { kind: 'parsed', items: result.items };
-}
-
-/**
  * Issue 92: 保存失敗時、どの入力欄へ focus し直下にエラーを出すかを 1 つ特定する。
  * `IntroCardNotice.field`（domain 由来、`links` は単一フィールドにまとまる）を、
  * `links` の場合だけ `firstInvalidNamedLinkField`（`intro-card-links.ts`）で
@@ -289,12 +264,6 @@ function resolveIntroCardErrorFieldKey(
   }
   if (notice.field !== 'links') return notice.field;
   return firstInvalidNamedLinkField(linksDraft);
-}
-
-function isBackupStage(
-  stage: SetupStage
-): stage is 'backup-export' | 'backup-import' {
-  return stage === 'backup-export' || stage === 'backup-import';
 }
 
 /**
@@ -317,7 +286,7 @@ interface EncounterBranchProps {
   readonly onBack: () => void;
 }
 
-/** `PassportCreationScreen`（Step 1）が要求する Prop のうち `onOpenBackup` 以外をまとめる。 */
+/** `PassportCreationScreen`（Step 1）が要求する Prop のうち `onOpenSettings` 以外をまとめる。 */
 interface PassportCreationBranchProps {
   readonly petName: string;
   readonly petEmoji: PetEmoji;
@@ -338,7 +307,7 @@ interface ProfileHomeGateProps {
   readonly stage: SetupStage;
   readonly privateProfile: LocalPrivateProfile | null;
   readonly locale: Locale;
-  readonly backupFlow: BackupFlow;
+  readonly onChangeLocale: (locale: Locale) => void;
   readonly onOpenSettings: () => void;
   readonly encounter: EncounterBranchProps;
   readonly creation: PassportCreationBranchProps;
@@ -350,19 +319,19 @@ interface ProfileHomeGateProps {
 }
 
 /**
- * Room 作成前（Lounge Data が存在しない）段階の 3 つの Stage（Backup Export・Import・
- * Encounter）と、その既定の着地点（Profile 作成）を 1 つの Component へ集約する。
- * `PassportApp` 本体に 3 つ目・4 つ目の `if` を追加すると Cognitive Complexity が
- * 上限を超えるため、`SharePreviewGate` と同じ「複数 Stage を子 Component へ集約する」
- * 方針をここにも適用する。呼び出し側の Prop は `EncounterSetupScreen` /
- * `PassportCreationScreen` それぞれの Prop 形をそのまま反映した `encounter` /
- * `creation` の 2 object にまとめ、無関係な 2 画面分の Prop を平坦に並べない。
+ * Room 作成前（Lounge Data が存在しない）段階の Stage（Encounter）と、その既定の
+ * 着地点（Profile 作成）を 1 つの Component へ集約する。`PassportApp` 本体に `if` を
+ * 追加すると Cognitive Complexity が上限を超えるため、`SharePreviewGate` と同じ
+ * 「複数 Stage を子 Component へ集約する」方針をここにも適用する。呼び出し側の Prop は
+ * `EncounterSetupScreen` / `PassportCreationScreen` それぞれの Prop 形をそのまま反映した
+ * `encounter` / `creation` の 2 object にまとめ、無関係な 2 画面分の Prop を平坦に並べない。
+ * Issue 118: JSON Backup 機能自体を削除したため、旧 `BackupStageGate` 分岐は無い。
  */
 function ProfileHomeGate({
   stage,
   privateProfile,
   locale,
-  backupFlow,
+  onChangeLocale,
   onOpenSettings,
   encounter,
   creation,
@@ -381,20 +350,9 @@ function ProfileHomeGate({
         edit={introCardEdit}
         introCard={introCard}
         locale={locale}
+        onChangeLocale={onChangeLocale}
         onDelete={onDeleteIntroCard}
         onEdit={onEditIntroCard}
-        onOpenBackup={backupFlow.open}
-        onOpenSettings={onOpenSettings}
-        stage={stage}
-      />
-    );
-  }
-  if (isBackupStage(stage)) {
-    return (
-      <BackupStageGate
-        backupFlow={backupFlow}
-        hasExistingProfile={privateProfile !== null}
-        locale={locale}
         stage={stage}
       />
     );
@@ -426,7 +384,6 @@ function ProfileHomeGate({
       notice={creation.notice}
       onChangeOwnerAlias={creation.onChangeOwnerAlias}
       onChangePetName={creation.onChangePetName}
-      onOpenBackup={backupFlow.open}
       onOpenSettings={onOpenSettings}
       onSave={creation.onSave}
       onSelectPetEmoji={creation.onSelectPetEmoji}
@@ -437,57 +394,6 @@ function ProfileHomeGate({
       petName={creation.petName}
       saving={creation.saving}
       selectedIds={creation.ownerSelection}
-    />
-  );
-}
-
-interface BackupStageGateProps {
-  readonly stage: 'backup-export' | 'backup-import';
-  readonly backupFlow: BackupFlow;
-  readonly hasExistingProfile: boolean;
-  readonly locale: Locale;
-}
-
-/**
- * Export・Import は Lounge / Room のどの state とも独立した機能であり、
- * `PassportApp` 本体に 2 つの `if` として直接展開すると Cognitive Complexity が
- * 上限を超える。`SharePreviewGate` と同じ「複数 Stage を 1 つの子 Component へ
- * 集約する」方針で、判定自体をこの Component 側へ移す。
- */
-function BackupStageGate({
-  stage,
-  backupFlow,
-  hasExistingProfile,
-  locale,
-}: BackupStageGateProps) {
-  if (stage === 'backup-export') {
-    return (
-      <BackupExportScreen
-        locale={locale}
-        notice={backupFlow.exportNotice}
-        onBack={backupFlow.close}
-        onOpenImport={backupFlow.openImport}
-        onShare={() => void backupFlow.share()}
-        preview={backupFlow.exportPreview}
-        sharing={backupFlow.sharing}
-      />
-    );
-  }
-  return (
-    <BackupImportScreen
-      choice={backupFlow.importChoice}
-      committing={backupFlow.committing}
-      hasExistingProfile={hasExistingProfile}
-      locale={locale}
-      notice={backupFlow.importNotice}
-      onBack={backupFlow.close}
-      onChangeChoice={backupFlow.setImportChoice}
-      onChangeRawInput={backupFlow.changeRawInput}
-      onCommit={() => void backupFlow.commit()}
-      onOpenExport={backupFlow.open}
-      onValidate={backupFlow.validate}
-      rawInput={backupFlow.rawInput}
-      validation={backupImportValidationView(backupFlow.importResult)}
     />
   );
 }
@@ -569,7 +475,6 @@ const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
 interface UtilityStageGateProps {
   readonly stage: SetupStage;
   readonly diagnosticsFlow: LocalDiagnosticsFlow;
-  readonly distributionCapability: DistributionCapability;
   readonly pilotMeasurementFlow: PilotMeasurementFlow;
   readonly hasLounge: boolean;
   readonly hasProfile: boolean;
@@ -582,7 +487,6 @@ interface UtilityStageGateProps {
 function UtilityStageGate({
   stage,
   diagnosticsFlow,
-  distributionCapability,
   pilotMeasurementFlow,
   hasLounge,
   hasProfile,
@@ -609,7 +513,6 @@ function UtilityStageGate({
   if (stage === 'settings') {
     return (
       <SettingsScreen
-        distributionCapability={distributionCapability}
         locale={locale}
         modelManagement={modelManagement}
         onBack={onCloseSettings}
@@ -629,28 +532,29 @@ const INTRO_CARD_STAGES: ReadonlySet<SetupStage> = new Set([
 
 /**
  * Issue 79: 自己紹介カードピボット Step 1 の 2 Stage（表示・編集）を 1 つの
- * Component へ集約する。`UtilityStageGate` / `BackupStageGate` と同じ「複数 Stage を
- * 子 Component へ集約して Cognitive Complexity を抑える」方針。編集画面用の Prop は
+ * Component へ集約する。`UtilityStageGate` と同じ「複数 Stage を子 Component へ
+ * 集約して Cognitive Complexity を抑える」方針。編集画面用の Prop は
  * `edit` に 1 つの object としてまとめ、`ProfileHomeGate` の `creation` / `encounter`
- * と同じ形にする。
+ * と同じ形にする。Issue 118: Backup・Settings への導線を削除し、代わりに言語切替
+ * （`onChangeLocale`）をヘッダーへ渡す（`AppScreen` の言語トグル、`IntroCardScreen` /
+ * `IntroCardEditScreen` 側の詳細を参照）。
  */
 /**
  * Issue 90 の code-reviewer 指摘（重複解消）: `IntroCardEditScreenProps` と
- * ほぼ同じ形（`locale`・`onOpenBackup`・`onOpenSettings` の 3 つだけ
- * `IntroCardStageGate` 側の引数として別に渡す）を手で並べて重複させず、
- * `Omit` で screen 側の型から直接導出する（jscpd の重複検出・型の drift 両方を防ぐ）。
+ * ほぼ同じ形（`locale`・`onChangeLocale` の 2 つだけ `IntroCardStageGate` 側の
+ * 引数として別に渡す）を手で並べて重複させず、`Omit` で screen 側の型から
+ * 直接導出する（jscpd の重複検出・型の drift 両方を防ぐ）。
  */
 type IntroCardEditBranchProps = Omit<
   IntroCardEditScreenProps,
-  'locale' | 'onOpenBackup' | 'onOpenSettings'
+  'locale' | 'onChangeLocale'
 >;
 
 interface IntroCardStageGateProps {
   readonly stage: SetupStage;
   readonly introCard: IntroCard | null;
   readonly locale: Locale;
-  readonly onOpenBackup: () => void;
-  readonly onOpenSettings: () => void;
+  readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
   readonly edit: IntroCardEditBranchProps;
@@ -660,8 +564,7 @@ function IntroCardStageGate({
   stage,
   introCard,
   locale,
-  onOpenBackup,
-  onOpenSettings,
+  onChangeLocale,
   onEdit,
   onDelete,
   edit,
@@ -674,10 +577,9 @@ function IntroCardStageGate({
           edit.notice.kind === 'delete-error' ? edit.notice.message : null
         }
         locale={locale}
+        onChangeLocale={onChangeLocale}
         onDelete={onDelete}
         onEdit={onEdit}
-        onOpenBackup={onOpenBackup}
-        onOpenSettings={onOpenSettings}
       />
     );
   }
@@ -698,14 +600,13 @@ function IntroCardStageGate({
       onChangeLinkLinkedin={edit.onChangeLinkLinkedin}
       onChangeLinkPortfolio={edit.onChangeLinkPortfolio}
       onChangeLinkX={edit.onChangeLinkX}
+      onChangeLocale={onChangeLocale}
       onChangeName={edit.onChangeName}
       onChangeOrganization={edit.onChangeOrganization}
       onChangeOtherLink={edit.onChangeOtherLink}
       onChangePhone={edit.onChangePhone}
       onChangeSelfIntro={edit.onChangeSelfIntro}
       onChangeTitle={edit.onChangeTitle}
-      onOpenBackup={onOpenBackup}
-      onOpenSettings={onOpenSettings}
       onRemoveOtherLink={edit.onRemoveOtherLink}
       onSave={edit.onSave}
       organization={edit.organization}
@@ -724,7 +625,6 @@ export default function PassportApp({
   localProfileStorage,
   introCardStorage,
   backupSharePort,
-  distributionCapability,
   agentModelProvider = RULES_MODEL_PROVIDER,
   localModelManagement = null,
   localModelMutationLeases = null,
@@ -1007,41 +907,16 @@ export default function PassportApp({
       if (encounterKey) providerRunner.forget(encounterKey);
     };
   }, [providerResultApplicationGate, providerRunner]);
-  const handleBackupImportCommitted = useCallback(
-    (committed: LocalPrivateProfile): void => {
-      setPrivateProfile(committed);
-      setShareSelection(createDefaultPassportShareSelection(committed));
-    },
-    []
-  );
-  // Issue 79: `restoring` を false にした直後や Settings / Backup を閉じた後の着地先は、
+  // Issue 79: `restoring` を false にした直後や Settings を閉じた後の着地先は、
   // 既定でこの Callback が決める。起動時（`applyStartupRecoveryResult` の 'recovered'
   // 分岐）と Diagnostics の「全データ削除」の両方から呼ばれるため、その場の React state
   // ではなく `introCardRef.current`（同期参照）で判定する。全データ削除は Intro Card
-  // Storage を対象にしないため（Issue 79 の follow-up、JSON Backup 統合と同様に別
-  // Issue）、削除前後で Intro Card の有無は変化しない。
+  // Storage を対象にしないため、削除前後で Intro Card の有無は変化しない。
   const introCardHomeStage = useCallback(
     (): SetupStage => (introCardRef.current ? 'intro-card' : 'intro-card-edit'),
     []
   );
 
-  // Issue 79: Backup も Intro Card 側の画面から開くのが既定経路のため、閉じた後は
-  // Pet 側の 'profile' ではなく Intro Card の着地先へ戻す。
-  const closeBackupStage = useCallback(
-    () => setStage(introCardHomeStage()),
-    [introCardHomeStage]
-  );
-  const backupFlow = useBackupFlow({
-    localProfileStorage,
-    backupSharePort,
-    privateProfile,
-    locale,
-    reduceMotion,
-    onImportCommitted: handleBackupImportCommitted,
-    onOpenStage: setStage,
-    onCloseStage: closeBackupStage,
-    onDiagnosticError: setLastDiagnosticError,
-  });
   const pilotMeasurementFlow = usePilotMeasurementFlow({
     sharePort: backupSharePort,
     onOpen: () => setStage('pilot-measurement'),
@@ -1144,7 +1019,6 @@ export default function PassportApp({
       forgetLoungeForDiagnostics();
       localModels.invalidateAfterExternalPurge();
       resetPassportInMemory();
-      backupFlow.reset();
       pilotMeasurementFlow.reset();
       if (!recoveryRequired) {
         setRestoring(false);
@@ -1152,7 +1026,6 @@ export default function PassportApp({
       }
     },
     [
-      backupFlow,
       forgetLoungeForDiagnostics,
       introCardHomeStage,
       localModels.invalidateAfterExternalPurge,
@@ -2170,7 +2043,6 @@ export default function PassportApp({
     return (
       <UtilityStageGate
         diagnosticsFlow={diagnosticsFlow}
-        distributionCapability={distributionCapability}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}
@@ -2324,7 +2196,7 @@ export default function PassportApp({
 
   return (
     <ProfileHomeGate
-      backupFlow={backupFlow}
+      onChangeLocale={setLocale}
       creation={{
         languageSelection,
         notice,

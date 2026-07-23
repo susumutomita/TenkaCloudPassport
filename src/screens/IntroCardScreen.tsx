@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
@@ -9,6 +9,7 @@ import type { IntroCard } from '../domain/intro-card';
 import { encodeIntroCardUrl } from '../protocol/intro-card-url';
 import { encodeQr } from '../qr/encoder';
 import { colors, spacing } from '../ui/theme';
+import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 import IntroCardPreview from './IntroCardPreview';
 
 export interface IntroCardScreenProps {
@@ -20,10 +21,9 @@ export interface IntroCardScreenProps {
    */
   readonly deleteError: string | null;
   readonly locale?: Locale;
+  readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
-  readonly onOpenBackup: () => void;
-  readonly onOpenSettings: () => void;
 }
 
 /**
@@ -40,19 +40,19 @@ export default function IntroCardScreen({
   card,
   deleteError,
   locale = DEFAULT_LOCALE,
+  onChangeLocale,
   onEdit,
   onDelete,
-  onOpenBackup,
-  onOpenSettings,
 }: IntroCardScreenProps) {
   const t = MESSAGES[locale].introCard;
-  const common = MESSAGES[locale].common;
   const encodedQr = useMemo(() => encodeQr(encodeIntroCardUrl(card)), [card]);
 
   return (
     <AppScreen
       description={t.cardDescription}
       eyebrow={t.cardEyebrow}
+      locale={locale}
+      onChangeLocale={onChangeLocale}
       title={t.cardTitle}
     >
       {deleteError ? (
@@ -81,24 +81,20 @@ export default function IntroCardScreen({
         label={t.editButton}
         onPress={onEdit}
       />
-      <ActionButton
-        accessibilityHint={MESSAGES[locale].passportCreation.backupButtonHint}
-        label={MESSAGES[locale].passportCreation.backupButton}
-        onPress={onOpenBackup}
-        variant="secondary"
-      />
-      <ActionButton
-        accessibilityHint={common.settingsButtonHint}
-        label={common.settingsButton}
-        onPress={onOpenSettings}
-        variant="secondary"
-      />
-      <ActionButton
+      {/* Issue 118（owner 実機フィードバック）: 「見せるカード（QR 表示画面）の
+          下に削除があるのが分かりにくい」。破壊的操作である削除を、編集と並ぶ
+          目立つボタンから、編集の下にある控えめな下線付きテキストリンクへ
+          移す。主導線は「編集」に集中させ、削除は二次的な位置づけにする
+          （タップ領域自体は WCAG 2.5.5 相当の 44pt を維持する）。 */}
+      <Pressable
         accessibilityHint={t.deleteButtonHint}
-        label={t.deleteButton}
+        accessibilityLabel={t.deleteButton}
+        accessibilityRole="button"
         onPress={onDelete}
-        variant="danger"
-      />
+        style={styles.deleteLink}
+      >
+        <Text style={styles.deleteLinkText}>{t.deleteButton}</Text>
+      </Pressable>
     </AppScreen>
   );
 }
@@ -130,5 +126,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
+  },
+  deleteLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.md,
+  },
+  deleteLinkText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

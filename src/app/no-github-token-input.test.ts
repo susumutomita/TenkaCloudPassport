@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'bun:test';
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 /**
  * Issue 14 の受け入れ条件「GitHub Token 入力欄を作らない」を、`src/` 配下の全ソースを
- * 走査するソーステキスト検査として固定する。`docs/guides/backup.md` が案内する手動配置は
- * GitHub の Web UI 経由のファイルアップロードか `git push` であり、アプリ自身は GitHub API・
- * GitHub CLI 認証・Personal Access Token・OAuth のいずれも要求しない。
+ * 走査するソーステキスト検査として固定する。JSON Backup 機能自体（`docs/guides/backup.md`
+ * が案内していた手動配置を含む）は Issue 118 / ADR-0033 で削除したが、アプリ本体は元々
+ * GitHub API・GitHub CLI 認証・Personal Access Token・OAuth のいずれも要求しておらず、
+ * この受け入れ条件は Backup の有無によらず引き続き成り立つ。
  *
- * 「Token を扱いません」という UI 上の説明文はこの契約を守っている証拠であり、
- * 語彙の近接（"github" と "token"）だけを禁止すると、その正しい説明文まで
- * 誤検知してしまう。そのため、この Test は「実際に Token を入力させる仕組み」
- * （`TextInput` の label・placeholder、変数・interface field 名）だけを対象にする。
+ * 「Token を扱いません」という UI 上の説明文（Backup 削除に伴い今は存在しない）は
+ * この契約を守っている証拠だった。語彙の近接（"github" と "token"）だけを禁止すると、
+ * そのような正しい説明文まで誤検知してしまう。そのため、この Test は「実際に Token を
+ * 入力させる仕組み」（`TextInput` の label・placeholder、変数・interface field 名）
+ * だけを対象にする。
  */
 const TOKEN_IDENTIFIER_PATTERN =
   /\b(?:github[_-]?(?:personal[_-]?access[_-]?)?token|gh[_-]?token|personal[_-]?access[_-]?token|githubpat|ghpat)\b/i;
@@ -80,20 +82,23 @@ describe('GitHub Token 入力欄が存在しないことの契約（Issue 14）'
     }
   });
 
-  it('BackupExportScreen・BackupImportScreen が GitHub Token を要求しないことを明示する', async () => {
+  it('Issue 118: JSON Backup 機能自体（BackupExportScreen・BackupImportScreen・Message Catalog の backupExport/backupImport 文言）を削除済みであり、GitHub Token 関連の説明文自体が存在しない', async () => {
+    // Issue 14 時点では、Backup Export/Import 画面が「GitHub Token を扱わない」旨を
+    // 明示していた。Issue 118 / ADR-0033 で JSON Backup 機能自体を削除したため、
+    // その画面・説明文はもう存在しない。この Test は「削除されたことの確認」であり、
+    // 「GitHub Token 入力欄を作らない」という受け入れ条件自体は上の 2 Test（走査ベース）
+    // が引き続き機械検証する。
+    const srcRoot = path.join(import.meta.dir, '..');
     for (const fileName of [
-      '../screens/BackupExportScreen.tsx',
-      '../screens/BackupImportScreen.tsx',
+      'screens/BackupExportScreen.tsx',
+      'screens/BackupImportScreen.tsx',
     ]) {
-      const text = await Bun.file(new URL(fileName, import.meta.url)).text();
-      expect(TOKEN_IDENTIFIER_PATTERN.test(text)).toBe(false);
+      expect(existsSync(path.join(srcRoot, fileName))).toBe(false);
     }
-    // Issue 15: 説明文そのものは Message Catalog（`src/app/i18n/messages.ts`）へ
-    // 集約したため、JA/EN 双方に「Token を扱わない」旨があることをそちらで確認する。
     const messagesText = await Bun.file(
       new URL('./i18n/messages.ts', import.meta.url)
     ).text();
-    expect(messagesText).toContain('GitHub API と接続せず、Token を扱いません');
-    expect(messagesText).toContain('never handles a Token');
+    expect(messagesText).not.toContain('backupExport:');
+    expect(messagesText).not.toContain('backupImport:');
   });
 });

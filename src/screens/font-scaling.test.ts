@@ -45,8 +45,6 @@ describe('200％ Text（allowFontScaling を無効化せず、本文を 1 行へ
       'EncounterSetupScreen.tsx',
       'PassportSharePreviewScreen.tsx',
       'OwnerQuestionScreen.tsx',
-      'BackupExportScreen.tsx',
-      'BackupImportScreen.tsx',
     ]) {
       const text = await source(fileName);
       // TextInput の入力欄自体は複数行編集領域として `height` を固定してよいため対象外

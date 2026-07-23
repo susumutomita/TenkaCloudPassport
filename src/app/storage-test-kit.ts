@@ -47,10 +47,10 @@ export function removeTemporaryDirectory(directory: string): void {
 }
 
 /**
- * 複数のテストファイル（Issue 9 の Privacy Regression Test、Issue 14 の
- * `backup-import.test.ts` / `web-backup-share.test.ts`）が、同じ「使い捨てディレクトリを
- * 作り、各テスト後に必ず削除する」という `afterEach` 登録パターンを重複実装していたため、
- * ここへ集約する。呼び出し側は `create()` で新しいディレクトリを作るだけでよい。
+ * 複数のテストファイル（Issue 9 の Privacy Regression Test、`web-backup-share.test.ts`、
+ * `pilot-measurement.test.ts` 等）が、同じ「使い捨てディレクトリを作り、各テスト後に
+ * 必ず削除する」という `afterEach` 登録パターンを重複実装していたため、ここへ集約する。
+ * 呼び出し側は `create()` で新しいディレクトリを作るだけでよい。
  */
 export function trackTemporaryDirectories(): { create(): string } {
   const roots: string[] = [];
@@ -219,13 +219,12 @@ export class DeleteFailingWebStorage implements WebKeyValueStorage {
 }
 
 /**
- * Issue 14: `commitBackupImport` の write-then-verify が、`save()` 自体は成功したが
- * 読み戻した内容が一致しない場合に `LocalProfileStorageError`（`WRITE_FAILED`）を投げる
- * ことを検証するための実装。`save()` を実ファイルへ委譲する（Real I/O）一方、`load()` は
- * 常に `mismatchedProfile` を返す。この不一致は、実際の Storage adapter（Web の
- * `localStorage.setItem` は単一 key の原子的操作、Native の実ファイル書き込みは
- * 直後の読み戻しが同一内容になる）では通常発生しないため、Port 契約レベルでだけ
- * 再現できる。
+ * `local-profile-storage.test.ts` が、write-then-verify（`save()` 自体は成功したが
+ * 読み戻した内容が一致しない場合の挙動）を検証するための実装。`save()` を実ファイルへ
+ * 委譲する（Real I/O）一方、`load()` は常に `mismatchedProfile` を返す。この不一致は、
+ * 実際の Storage adapter（Web の `localStorage.setItem` は単一 key の原子的操作、
+ * Native の実ファイル書き込みは直後の読み戻しが同一内容になる）では通常発生しないため、
+ * Port 契約レベルでだけ再現できる。
  */
 export class VerifyMismatchStorage implements LocalProfileStoragePort {
   constructor(

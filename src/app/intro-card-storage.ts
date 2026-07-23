@@ -8,8 +8,8 @@ import {
  * 自己紹介カードピボット Step 1（Issue 79）の Storage Port。
  * `src/app/local-profile-storage.ts`（Port + Web/Native 2 adapter + factory の
  * 4 ファイル構成）をそのまま踏襲する。Local Private Profile とは別の端末内キー・
- * ファイルへ保存し、JSON Backup の allowlist（ADR-0007）へは含めない
- * （Backup 統合は follow-up、Issue 79 本文で明記済み）。
+ * ファイルへ保存する。JSON Backup 機能自体を Issue 118 / ADR-0033 で削除したため、
+ * どの allowlist にも統合しない。
  */
 export interface IntroCardStoragePort {
   load(): Promise<IntroCard | null>;

@@ -92,8 +92,7 @@ export interface IntroCardEditScreenProps {
   readonly onAddOtherLink: () => void;
   readonly onRemoveOtherLink: (index: number) => void;
   readonly onSave: () => void;
-  readonly onOpenBackup: () => void;
-  readonly onOpenSettings: () => void;
+  readonly onChangeLocale: (locale: Locale) => void;
 }
 
 function Notice({
@@ -271,11 +270,9 @@ export default function IntroCardEditScreen({
   onAddOtherLink,
   onRemoveOtherLink,
   onSave,
-  onOpenBackup,
-  onOpenSettings,
+  onChangeLocale,
 }: IntroCardEditScreenProps) {
   const t = MESSAGES[locale].introCard;
-  const common = MESSAGES[locale].common;
   const overBudget = cardUrlByteUsage > QR_ENCODER_MAX_BYTES;
   // Issue 93 の simplify/efficiency レビュー指摘: 以前は `nonEmptyLinkCount`
   // 用の `linksDraft` object literal と、ライブプレビュー用 `useMemo` の中で
@@ -433,32 +430,16 @@ export default function IntroCardEditScreen({
       description={t.editDescription}
       eyebrow={t.editEyebrow}
       footer={
-        <>
-          <ActionButton
-            accessibilityHint={t.saveButtonHint}
-            disabled={saving}
-            label={t.saveButton(saving)}
-            onPress={handleSave}
-          />
-          <ActionButton
-            accessibilityHint={
-              MESSAGES[locale].passportCreation.backupButtonHint
-            }
-            disabled={saving}
-            label={MESSAGES[locale].passportCreation.backupButton}
-            onPress={onOpenBackup}
-            variant="secondary"
-          />
-          <ActionButton
-            accessibilityHint={common.settingsButtonHint}
-            disabled={saving}
-            label={common.settingsButton}
-            onPress={onOpenSettings}
-            variant="secondary"
-          />
-        </>
+        <ActionButton
+          accessibilityHint={t.saveButtonHint}
+          disabled={saving}
+          label={t.saveButton(saving)}
+          onPress={handleSave}
+        />
       }
       keyboardDismissMode="on-drag"
+      locale={locale}
+      onChangeLocale={onChangeLocale}
       title={t.editTitle}
     >
       <Notice locale={locale} notice={notice} />

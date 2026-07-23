@@ -84,6 +84,12 @@ export interface AppMessages {
     readonly settingsButton: string;
     readonly settingsButtonHint: string;
     readonly backButton: string;
+    /** Issue 118: 自己紹介カード系画面のヘッダーに常設する言語切替トグルの文言。 */
+    readonly localeToggleAccessibilityLabel: (
+      currentLabel: string,
+      nextLabel: string
+    ) => string;
+    readonly localeToggleHint: string;
   };
   readonly profileLoading: {
     readonly title: string;
@@ -120,8 +126,6 @@ export interface AppMessages {
     readonly languagesNote: string;
     readonly saveButton: (saving: boolean) => string;
     readonly saveButtonHint: string;
-    readonly backupButton: string;
-    readonly backupButtonHint: string;
   };
   readonly encounterSetup: {
     readonly title: string;
@@ -288,44 +292,9 @@ export interface AppMessages {
     };
     readonly restartButton: string;
   };
-  readonly backupExport: {
-    readonly title: string;
-    readonly description: string;
-    readonly warningTitle: string;
-    readonly warningText: string;
-    readonly previewSectionTitle: string;
-    readonly byteLength: (bytes: number) => string;
-    readonly shareButton: (sharing: boolean) => string;
-    readonly shareButtonHint: string;
-    readonly openImportButton: string;
-    readonly backButton: string;
-  };
-  readonly backupImport: {
-    readonly title: string;
-    readonly description: string;
-    readonly rawInputLabel: string;
-    readonly rawInputAccessibilityLabel: string;
-    readonly rawInputHint: (maxBytes: number) => string;
-    readonly rawInputPlaceholder: string;
-    readonly validateButton: string;
-    readonly validateButtonHint: string;
-    readonly rejectedTitle: string;
-    readonly rejectedUnchangedNotice: string;
-    readonly parsedSectionTitle: string;
-    readonly conflictQuestion: string;
-    readonly keepExistingButton: (selected: boolean) => string;
-    readonly keepExistingHint: string;
-    readonly useImportedButton: (selected: boolean) => string;
-    readonly useImportedHint: string;
-    readonly commitButton: (committing: boolean) => string;
-    readonly commitButtonHint: string;
-    readonly openExportButton: string;
-    readonly backButton: string;
-  };
   readonly settings: {
     readonly title: string;
     readonly description: string;
-    readonly distributionSectionTitle: string;
     readonly distribution: {
       readonly runtime: {
         readonly web: string;
@@ -552,14 +521,6 @@ export interface AppMessages {
     readonly notLoungeInviteQr: string;
     readonly unresolvedGuestProfile: string;
   };
-  readonly backupNotice: {
-    readonly shareSucceeded: string;
-    readonly shareDismissed: string;
-    readonly shareSavedToFile: (destination: string) => string;
-    readonly shareFailedFallback: string;
-    readonly importCommittedSucceeded: string;
-    readonly importCommitFailedFallback: string;
-  };
   readonly profileNotice: {
     readonly readErrorFallback: string;
     readonly saveErrorFallback: string;
@@ -636,6 +597,9 @@ const ja: AppMessages = {
     settingsButtonHint:
       '表示言語を切り替えます。Lounge の進行状況や同意は失われません。',
     backButton: '戻る',
+    localeToggleAccessibilityLabel: (currentLabel, nextLabel) =>
+      `表示言語: ${currentLabel}。タップで ${nextLabel} に切り替えます。`,
+    localeToggleHint: 'タップするたびに表示言語を切り替えます。',
   },
   profileLoading: {
     title: '端末内の保存状態を確認しています。',
@@ -693,9 +657,6 @@ const ja: AppMessages = {
     saveButton: (saving) =>
       saving ? '端末内に保存中' : 'Local Profile を端末内に明示保存',
     saveButtonHint: '検証済みの Local Profile をこの端末だけに保存します。',
-    backupButton: 'Backup（JSON の書き出し・復元）',
-    backupButtonHint:
-      '端末内の設定を JSON として書き出す、または JSON バックアップから復元します。',
   },
   encounterSetup: {
     title: '相手が公開した手掛かりを受け取る。',
@@ -886,58 +847,10 @@ const ja: AppMessages = {
     },
     restartButton: '保存済み Profile で新しい Encounter',
   },
-  backupExport: {
-    title: '端末内の設定を JSON として書き出す。',
-    description:
-      'Local Passport、Pet 設定、Model 設定のうち秘匿値でないものだけを書き出します。アプリは GitHub API と接続せず、Token を扱いません。',
-    warningTitle: 'この JSON は暗号化されません。',
-    warningText:
-      '保存先の同期・共有範囲・版管理・削除は Owner 自身の責任です。アプリは保存先のファイルを一切追跡しません。',
-    previewSectionTitle: 'Export される全項目（Preview）',
-    byteLength: (bytes) => `${bytes} bytes`,
-    shareButton: (sharing) => (sharing ? '共有中' : 'Share Sheet で共有する'),
-    shareButtonHint:
-      'Export した JSON を OS の Share Sheet（または Web の場合はファイル保存）で共有します。',
-    openImportButton: 'バックアップを復元する（Import）',
-    backButton: 'Profile 編集へ戻る',
-  },
-  backupImport: {
-    title: 'JSON バックアップを読み込む。',
-    description:
-      'Export した JSON を貼り付けてください。GitHub Token など認証情報の入力欄はありません。',
-    rawInputLabel: 'バックアップ JSON（貼り付け）',
-    rawInputAccessibilityLabel: 'バックアップ JSON',
-    rawInputHint: (maxBytes) =>
-      `最大 ${maxBytes} byte までの JSON を貼り付けます。`,
-    rawInputPlaceholder: '{"backupSchemaVersion": 2, ...}',
-    validateButton: '内容を確認する（Preview / Validation）',
-    validateButtonHint:
-      '貼り付けた JSON を strict schema で検証し、Preview を表示します。',
-    rejectedTitle: '読み込めませんでした。',
-    rejectedUnchangedNotice: '既存の Local Profile は変更していません。',
-    parsedSectionTitle: '読み込む内容（Preview）',
-    conflictQuestion: 'すでに Local Profile があります。どちらを使いますか。',
-    keepExistingButton: (selected) =>
-      selected ? '既存を残す（選択中）' : '既存を残す',
-    keepExistingHint:
-      '既存の Local Profile をそのまま残し、読み込んだ内容を採用しません。',
-    useImportedButton: (selected) =>
-      selected
-        ? '読み込んだ内容に置き換える（選択中）'
-        : '読み込んだ内容に置き換える',
-    useImportedHint: '既存の Local Profile を、読み込んだ内容で置き換えます。',
-    commitButton: (committing) =>
-      committing ? 'Commit 中' : 'この内容を Commit する',
-    commitButtonHint:
-      '選択した内容を端末内 Storage へ Atomic に Commit します。失敗時は既存の Profile を保ちます。',
-    openExportButton: 'Export 画面へ戻る',
-    backButton: 'Profile 編集へ戻る',
-  },
   settings: {
-    title: '設定と現在の配布能力を確認する。',
+    title: '設定を確認する。',
     description:
-      'この実行環境で使える機能を表示します。言語を切り替えても、進行中の Lounge、同意、保存済み Local Profile は失われません。',
-    distributionSectionTitle: '現在の配布能力',
+      '表示言語や Local Model の管理をここから行います。言語を切り替えても、進行中の Lounge、同意、保存済み Local Profile は失われません。',
     distribution: {
       runtime: {
         web: 'Web',
@@ -1227,16 +1140,6 @@ const ja: AppMessages = {
     unresolvedGuestProfile:
       '相手の公開内容を確認できません。Encounter の入力を見直してください。',
   },
-  backupNotice: {
-    shareSucceeded: '共有しました。',
-    shareDismissed: 'Share Sheet を閉じました。共有は行われていません。',
-    shareSavedToFile: (destination) =>
-      `ファイルとして保存しました（${destination}）。`,
-    shareFailedFallback: 'Share Sheet を開けませんでした。',
-    importCommittedSucceeded: 'Import した内容を端末内へ保存しました。',
-    importCommitFailedFallback:
-      'Import の Commit に失敗したため、既存の Profile を保ちました。',
-  },
   profileNotice: {
     readErrorFallback:
       'Storage の処理に失敗しました。もう一度実行してください。',
@@ -1312,8 +1215,7 @@ const ja: AppMessages = {
     byteUsageLabel: (current, max) => `QR の目安: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `QR の上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
-    saveButton: (saving) =>
-      saving ? '端末内に保存中' : '自己紹介カードを端末内に明示保存',
+    saveButton: (saving) => (saving ? '保存中' : '保存'),
     saveButtonHint: '検証済みの自己紹介カードをこの端末だけに保存します。',
     cardEyebrow: 'Intro Card',
     cardTitle: '自己紹介カード',
@@ -1337,6 +1239,9 @@ const en: AppMessages = {
     settingsButtonHint:
       'Switches the display language. Your Lounge progress and consent are kept.',
     backButton: 'Back',
+    localeToggleAccessibilityLabel: (currentLabel, nextLabel) =>
+      `Display language: ${currentLabel}. Tap to switch to ${nextLabel}.`,
+    localeToggleHint: 'Switches the display language each time you tap.',
   },
   profileLoading: {
     title: 'Checking your on-device saved state.',
@@ -1396,9 +1301,6 @@ const en: AppMessages = {
         ? 'Saving to this device'
         : 'Explicitly save this Local Profile on this device',
     saveButtonHint: 'Saves a validated Local Profile only on this device.',
-    backupButton: 'Backup (export / restore JSON)',
-    backupButtonHint:
-      'Export your on-device settings as JSON, or restore from a JSON backup.',
   },
   encounterSetup: {
     title: 'Take in what the other side has published.',
@@ -1597,60 +1499,10 @@ const en: AppMessages = {
     },
     restartButton: 'Start a new Encounter with your saved profile',
   },
-  backupExport: {
-    title: 'Export your on-device settings as JSON.',
-    description:
-      'Exports only the non-sensitive parts of your Local Passport, Pet settings, and Model settings. The app never connects to the GitHub API and never handles a Token.',
-    warningTitle: 'This JSON is not encrypted.',
-    warningText:
-      'Sync, sharing scope, versioning, and deletion of the destination are the Owner’s own responsibility. The app never tracks the destination file.',
-    previewSectionTitle: 'Every item to be exported (Preview)',
-    byteLength: (bytes) => `${bytes} bytes`,
-    shareButton: (sharing) => (sharing ? 'Sharing' : 'Share via Share Sheet'),
-    shareButtonHint:
-      'Shares the exported JSON via the OS Share Sheet (or a file save on Web).',
-    openImportButton: 'Restore a backup (Import)',
-    backButton: 'Back to editing Profile',
-  },
-  backupImport: {
-    title: 'Load a JSON backup.',
-    description:
-      'Paste the exported JSON here. There is no field for a GitHub Token or any other credential.',
-    rawInputLabel: 'Backup JSON (paste)',
-    rawInputAccessibilityLabel: 'Backup JSON',
-    rawInputHint: (maxBytes) => `Paste JSON up to ${maxBytes} bytes.`,
-    rawInputPlaceholder: '{"backupSchemaVersion": 2, ...}',
-    validateButton: 'Check the content (Preview / Validation)',
-    validateButtonHint:
-      'Validates the pasted JSON against the strict schema and shows a Preview.',
-    rejectedTitle: 'Could not load this backup.',
-    rejectedUnchangedNotice:
-      'Your existing Local Profile has not been changed.',
-    parsedSectionTitle: 'What will be loaded (Preview)',
-    conflictQuestion:
-      'A Local Profile already exists on this device. Which should be used?',
-    keepExistingButton: (selected) =>
-      selected ? 'Keep existing (selected)' : 'Keep existing',
-    keepExistingHint:
-      'Keeps the existing Local Profile as-is and does not adopt the loaded content.',
-    useImportedButton: (selected) =>
-      selected
-        ? 'Replace with loaded content (selected)'
-        : 'Replace with loaded content',
-    useImportedHint:
-      'Replaces the existing Local Profile with the loaded content.',
-    commitButton: (committing) =>
-      committing ? 'Committing' : 'Commit this content',
-    commitButtonHint:
-      'Atomically commits the selected content to on-device storage. Keeps the existing Profile if this fails.',
-    openExportButton: 'Back to the Export screen',
-    backButton: 'Back to editing Profile',
-  },
   settings: {
-    title: 'Review settings and current distribution capabilities.',
+    title: 'Review your settings.',
     description:
-      'Shows what this runtime can use. Switching languages never loses an in-progress Lounge, consent, or your saved Local Profile.',
-    distributionSectionTitle: 'Current distribution capabilities',
+      'Manage the display language and Local Model from here. Switching languages never loses an in-progress Lounge, consent, or your saved Local Profile.',
     distribution: {
       runtime: {
         web: 'Web',
@@ -1942,15 +1794,6 @@ const en: AppMessages = {
     unresolvedGuestProfile:
       'Could not confirm what they published. Please review the Encounter input.',
   },
-  backupNotice: {
-    shareSucceeded: 'Shared.',
-    shareDismissed: 'Closed the Share Sheet. Nothing was shared.',
-    shareSavedToFile: (destination) => `Saved as a file (${destination}).`,
-    shareFailedFallback: 'Could not open the Share Sheet.',
-    importCommittedSucceeded: 'Saved the imported content on this device.',
-    importCommitFailedFallback:
-      'The import commit failed, so the existing Profile was kept.',
-  },
   profileNotice: {
     readErrorFallback: 'Storage operation failed. Please try again.',
     saveErrorFallback: 'Storage operation failed. Please try again.',
@@ -2021,8 +1864,7 @@ const en: AppMessages = {
     byteUsageLabel: (current, max) => `QR estimate: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `This exceeds the QR limit (${current} / ${max} byte). Please shorten your input.`,
-    saveButton: (saving) =>
-      saving ? 'Saving on this device' : 'Save Intro Card on this device',
+    saveButton: (saving) => (saving ? 'Saving...' : 'Save'),
     saveButtonHint: 'Saves the validated Intro Card only on this device.',
     cardEyebrow: 'Intro Card',
     cardTitle: 'Intro Card',

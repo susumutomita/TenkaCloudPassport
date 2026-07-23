@@ -1,5 +1,10 @@
 # JSON バックアップ Export・Import の設計
 
+**Status: Superseded（Issue 118 / ADR-0033 で機能ごと削除、2026-07-23）。** 自己紹介カードが
+2 タップで作り直せるため Backup の価値がコストに見合わないという owner 判断により、本書が
+設計した Export/Import 画面・Port・`domain/backup.ts` を含む機能一式を削除した。以下は
+削除前の設計判断の歴史的記録として残す。
+
 本書は Issue 14 の、Lounge 境界を守る手動 JSON バックアップの Export・復元を完成する設計を
 定める。バックアップ Schema 自体（`backupSchemaVersion` の Versioned strict schema と
 Migration）は Issue 5・7 で実装済みであり、

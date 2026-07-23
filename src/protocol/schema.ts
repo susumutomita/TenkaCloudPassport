@@ -1,9 +1,4 @@
 import type { AgentDecision } from '../domain/agent-decision';
-import type {
-  Backup,
-  DeviceSettings,
-  ModelVerification,
-} from '../domain/backup';
 import {
   type Bridge,
   createBridgeFromEvidence,
@@ -91,11 +86,9 @@ export {
 export const LOUNGE_MAX_PARTICIPANTS = 8;
 export const MATCH_EVIDENCE_MAX_CLUES = 3;
 export const PEER_ENVELOPE_MAX_BYTES = 4 * 1024;
-export const BACKUP_MAX_BYTES = 64 * 1024;
 export const LOCAL_PROFILE_MAX_BYTES = 8 * 1024;
 export const EXTERNAL_JSON_MAX_DEPTH = 8;
 export const MAX_SEQUENCE = PEER_MAX_SEQUENCE;
-export const MAX_MODEL_BYTES = 8 * 1024 * 1024 * 1024;
 
 function schemaVersion(
   record: { readonly schemaVersion: unknown },
@@ -930,122 +923,9 @@ export function parsePeerEnvelope(value: unknown): PeerEnvelope {
   };
 }
 
-function digest(value: unknown, path: string): string {
-  const candidate = stringValue(value, path, 64);
-  if (!/^[0-9a-f]{64}$/.test(candidate)) {
-    return schemaError(
-      'INVALID_VALUE',
-      path,
-      `${path} は小文字 16 進 256 bit digest ではありません。`
-    );
-  }
-  return candidate;
-}
-
-function deviceSettings(value: unknown): DeviceSettings {
-  const path = '$.backup.deviceSettings';
-  const record = strictRecord(value, path, [
-    'language',
-    'reduceMotion',
-    'selectedModelDigest',
-    'catalogVersion',
-  ]);
-  const selectedModelDigest =
-    record.selectedModelDigest === null
-      ? null
-      : digest(record.selectedModelDigest, `${path}.selectedModelDigest`);
-  return {
-    language: assertOneOf(record.language, ['ja', 'en'], `${path}.language`),
-    reduceMotion: booleanValue(record.reduceMotion, `${path}.reduceMotion`),
-    selectedModelDigest,
-    catalogVersion: catalogVersion(
-      record.catalogVersion,
-      `${path}.catalogVersion`
-    ),
-  };
-}
-
-function modelVerification(value: unknown): ModelVerification | null {
-  if (value === null) return null;
-  const path = '$.backup.modelVerification';
-  const record = strictRecord(value, path, [
-    'digest',
-    'sizeBytes',
-    'result',
-    'appVersion',
-  ]);
-  const appVersion = stringValue(record.appVersion, `${path}.appVersion`, 32);
-  if (!/^[0-9A-Za-z.+-]+$/.test(appVersion)) {
-    return schemaError(
-      'INVALID_VALUE',
-      `${path}.appVersion`,
-      'appVersion の形式が不正です。'
-    );
-  }
-  return {
-    digest: digest(record.digest, `${path}.digest`),
-    sizeBytes: integerValue(
-      record.sizeBytes,
-      `${path}.sizeBytes`,
-      1,
-      MAX_MODEL_BYTES
-    ),
-    result: assertOneOf(
-      record.result,
-      ['verified', 'rejected'],
-      `${path}.result`
-    ),
-    appVersion,
-  };
-}
-
-function exportedAt(value: unknown, path: string): string {
-  const candidate = stringValue(value, path, 32);
-  const parsed = new Date(candidate);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== candidate) {
-    return schemaError(
-      'INVALID_VALUE',
-      path,
-      `${path} は UTC ISO 8601 形式ではありません。`
-    );
-  }
-  return candidate;
-}
-
-export function parseBackup(value: unknown): Backup {
-  const path = '$.backup';
-  const record = strictRecord(value, path, [
-    'backupSchemaVersion',
-    'exportedAt',
-    'localPrivateProfile',
-    'deviceSettings',
-    'modelVerification',
-  ]);
-  if (record.backupSchemaVersion !== 2) {
-    return schemaError(
-      'UNSUPPORTED_VERSION',
-      `${path}.backupSchemaVersion`,
-      'Backup Schema Version は対応していません。'
-    );
-  }
-  return {
-    backupSchemaVersion: 2,
-    exportedAt: exportedAt(record.exportedAt, `${path}.exportedAt`),
-    localPrivateProfile: parseLocalPrivateProfile(record.localPrivateProfile),
-    deviceSettings: deviceSettings(record.deviceSettings),
-    modelVerification: modelVerification(record.modelVerification),
-  };
-}
-
 export function parsePeerEnvelopeJson(raw: string): PeerEnvelope {
   return parsePeerEnvelope(
     parseBoundedJson(raw, PEER_ENVELOPE_MAX_BYTES, EXTERNAL_JSON_MAX_DEPTH)
-  );
-}
-
-export function parseBackupJson(raw: string): Backup {
-  return parseBackup(
-    parseBoundedJson(raw, BACKUP_MAX_BYTES, EXTERNAL_JSON_MAX_DEPTH)
   );
 }
 
