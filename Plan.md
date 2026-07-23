@@ -7547,3 +7547,101 @@ PR #130（クラウド基礎クイズ、ブランチ `feat/cloud-basics-quiz`）
   予防策: allowlist や定数を比較するテストを書くときは、必ず「正本のエクスポート」
   を import して比較する（値を手で複製しない）。private な定数を参照したいテストが
   出てきた時点で、それは「この値を export すべきタイミング」のシグナルとして扱う。
+
+### [端末内会話エージェント] 設計＋実現性スパイク（Issue 104） - 2026-07-23
+
+目的: App Store v1.0 の native な目玉として owner が希望する「2 枚の自己紹介カードから
+共通点・会話の切り口をオンデバイスで発見する」機能について、PrismML Bonsai 27B
+（1-bit / Ternary）が `llama.rn` で現時点実行可能かを一次資料で判定し、設計文書と
+ADR にまとめる docs-only の設計フェーズを完了する。
+
+制約: `src/` の実装はしない（設計のみ）。`rm`/`npx` 禁止（`bunx`/`nlx`）。git add は
+明示ファイルのみ。実現性の主張には出典を付ける。確認質問で止まらず完走する。
+
+タスク:
+1. 既存アーキテクチャ調査: `llama.rn` version・GGUF lifecycle（Issue 18）・
+   Agent Model Provider Contract/Runtime・Local Model Safety Boundary・
+   `bridge-selection.ts` の N 者間 Fairness・Intro Card ピボット（ADR-0026/0027）・
+   follow-up VW8T2M（memory entitlement）を確認する。
+2. 既存 Issue 104（「端末内会話エージェントを自己紹介カードへ追加する」）を発見し、
+   受け入れ基準（カタログ会話テーマ最大 3 件・匿名化 Evidence のみ Provider へ・
+   N 者間 Fairness・Rules フォールバック・非永続セッション）を正本として採用する。
+3. Bonsai 27B の実現性を WebSearch/WebFetch で調査する（PrismML 公式ドキュメント・
+   Hugging Face・`ggml-org/llama.cpp` の Discussion/PR・`mybigday/llama.rn` の
+   Release、iOS memory entitlement、App Store 審査前例）。
+4. 設計文書 `docs/design/2026-07-23-on-device-conversation-agent.md` と
+   ADR `docs/adr/0036-on-device-conversation-agent.md` を作成する。
+5. `make before-commit` を通し、code-reviewer レビューを経て docs-only PR を作成する。
+
+検証手順: `make before-commit`（`architecture-harness` / `harness_test` / `dup_check` /
+`lint_text` / `lint`）が exit 0 であること。`src/` に差分が無いこと
+（`git diff --stat main -- src/` が空）。
+
+進捗ログ:
+- 2026-07-23: 既存設計・ADR・follow-up・Issue を調査し、Fable の依頼文にある
+  「connection agent」という呼称が、既に owner が起票済みの Issue 104
+  （「端末内会話エージェント / conversation agent」）と同一機能であると判明した。
+  同一機能に 2 つの名称・2 系統のドキュメントを作らないため、Issue 104 の名称・
+  受け入れ基準を正本として採用し、branch 名・ファイル名を
+  `on-device-conversation-agent` に統一した（Fable への return で明示する）。
+- 2026-07-23: Bonsai 27B の実現性を調査した。結論は「No（現時点では未実現）」。
+  1-bit 版（`Q1_0`, group 128）の量子化テンソル型は mainline `llama.cpp` へ
+  取り込み済みだが、Ternary 版（`Q2_0`）は PrismML 独自 fork 限定かつ PrismML 自身が
+  「約 7.2 GB は iOS の ~6 GB per-app budget を超える」と明言している。React Native
+  binding（`llama.rn`）・実機での Bonsai 動作実績を示す一次資料は見つからず、iPhone
+  実測（約 11 tok/s）は MLX Swift によるものであり `llama.cpp`/`llama.rn` 経由ではない。
+  1-bit 版単体でも本 Repo 既存の Resource Risk 式（ADR-0014、`ratio > 0.60` で
+  `blocked`）に当てはめると `ratio ≈ 0.79` となり、production entitlement が
+  development 限定の現状（follow-up VW8T2M）ではさらに悪化する。詳細な出典は
+  設計文書に記載した。
+- 2026-07-23: 会話エージェント自体の設計は、新しい Provider Contract・Prompt/Output
+  Schema を作らず、既存の `AgentModelProvider`・`model-safety-boundary.ts`・
+  `bridge-selection.ts` の N 者間 Fairness をそのまま再利用する形にした。Intro Card は
+  既存 `clue-catalog.ts` を再利用した `themeIds`（最大 3）を追加し、URL Schema には
+  既存の `q`（クイズ進捗）と同じ後方互換パターンで `m` key を追加する設計にした。
+  受信カードは非永続のメモリ限定セッションとし、ADR-0026 の該当記述を会話エージェントの
+  範囲に限り明示的に supersede する（ADR-0036）。
+- 2026-07-23: `make before-commit` を実行し exit 0 を確認した（docs のみの変更、
+  `src/` は無変更）。
+- 2026-07-23: code-reviewer subagent に設計文書・ADR・Plan.md のレビューを依頼した。
+  blocker 1 件（「相手の情報を受信・保存・パースしない」の出典を ADR-0007 と誤記し、
+  かつ「Lounge は」という原文に無い語を混入させていた。正しい出典は ADR-0026
+  であることをコードから確認して両ドキュメントと本 Plan.md を修正した）と major 1 件
+  （`m` key 追加の後方互換性を「既存の allowlist が未知 key を無視する」と説明していたが、
+  実際の `site/c/index.html` の `hasOnlyKnownKeys` と `src/protocol/validation.ts` の
+  `strictRecord` はどちらも `q` と同じ all-or-nothing の fail-closed 設計であり、未知 key
+  は拒否される。ビューアと app 側 decoder を同一 PR で同時対応させる必要がある段取りへ
+  記述を訂正した）を修正した。medium 1 件（`selectBridges` の再利用を「そのまま呼ぶ」と
+  表現していたが、`PublicPassport` の必須フィールド（`schemaVersion`/`catalogVersion`/
+  `petName`）に Intro Card の自然な対応が無く、アダプタがプレースホルダ値を合成する
+  必要があることを明記した）と minor 1 件（Q2_0 の mainline 化が CPU/Metal/Vulkan まで
+  進んでいる記述と Ternary「未取り込み」の結論が一見矛盾して見える点に、group size
+  64 と 128 のパラメータ不一致という理由を明記した）も反映した。修正後に
+  `bunx textlint` と `make before-commit` を再実行し、どちらも exit 0 を確認した。
+
+#### 振り返り
+
+- 問題: 呼び出し元（Fable）の依頼文にある機能名「on-device connection agent」を
+  そのまま採用しかけたが、既に owner が Issue 104 として同一機能を「conversation
+  agent」の名称・詳細な受け入れ基準付きで起票済みであることが調査の過程で判明した。
+  根本原因: Fable の依頼文は owner との対話を要約したものであり、既存 GitHub Issue の
+  正確な文言までは伝わっていなかった。設計着手前に `gh issue list` で関連 Issue の
+  有無を確認する手順を踏んだことで発見できたが、これを踏まなければ同一機能に
+  2 つの名称・2 系統の設計文書ツリーを作ってしまうところだった。
+  予防策: 新機能の設計・実装に着手する前は、依頼文の名称をそのまま信用せず、必ず
+  `gh issue list`/`gh issue view` で関連 Issue の既存有無を検索する。既存 Issue が
+  見つかった場合はその受け入れ基準・名称を正本として採用し、依頼文側の呼称は
+  Fable への return で明示的に差分として報告する。
+- 問題: ADR 本文で「相手の情報を受信・保存・パースしない」という既存記述を
+  supersede すると書いた際、出典を ADR-0007（Lounge / Public Passport / Pet Message の
+  匿名性契約）と誤記し、さらに存在しない「Lounge は」という語を引用に混入させた。
+  正しい出典は ADR-0026（Intro Card ピボット、Step 1 のスコープ外の記述）だった。
+  根本原因: 執筆時に「Intro Card 関連の受信禁止契約」という記憶だけを頼りに ADR 番号を
+  書き、実際に該当 ADR 本文を再読して一字一句を確認しなかった。ADR はこのリポジトリで
+  不変の historical record として扱われるため、誤った出典は将来の読者を実在しない
+  記述へ誤誘導する。
+  予防策: ADR・設計文書で既存記述を「supersede する」「引用する」と書くときは、
+  該当箇所を実際に Read してから ADR 番号・一次引用文をコピーする（記憶や推測で
+  番号を書かない）。今回は code-reviewer subagent に既存 ADR 本文との突き合わせを
+  依頼したことで発見できた。ドキュメントのみの変更でも、事実主張を含む PR は
+  コードと同じ水準で第三者レビューを経てから commit する。
