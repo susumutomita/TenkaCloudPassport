@@ -6953,3 +6953,126 @@ TenkaCloud ブランドの文脈づけと勉強会での会話のフックを作
   共有する形にした（コピペで済ませず 1 箇所にまとめることで、将来同じ見落としを防ぐ）。
   既存のフルテストスイートを都度実行していたため、コミット前に発見・修正できた
   （TDD の Red-Green サイクルを保った効果）。
+
+### [LP 公開整備] 開発者向け導線分離とプライバシーポリシー追加 - 2026-07-23
+
+#### 目的
+
+owner 指示（LP は開発者向けローカル実行導線を混ぜない、App Store 審査に必須のプライバシー
+ポリシーを用意する）に沿って、`site/index.html` / `site/en/index.html` からローカル実行
+（`git clone` / `make install` / `make start` 等）の案内を除去し README に集約する。あわせて
+`site/privacy/index.html` / `site/en/privacy/index.html` を追加し、
+`https://card.tenkacloud.com/privacy` / `.../en/privacy` で開けるようにする。PR 作成までで、
+マージは呼び出し元が行う。
+
+#### 制約
+
+- ユーザー向けの「Web 版を今すぐ試す」導線（`card.tenkacloud.com/app/`）は残す。
+- Issue 125 の連絡先追加注意書き（プラットフォーム差異）は無傷で維持する
+  （`scripts/landing-page-no-backup-claim.test.ts` が固定済み）。
+- README / `src/` / `site/c/`（ビューア）は不触。
+- 外部リクエストゼロ（フォント・スクリプト・画像等の外部ホスト読み込み）を増やさない。
+  inline style のみ、デザイントークンは既存 LP と同一にする。
+- プライバシーポリシー本文の日付・連絡先は owner レビュー前提のプレースホルダにする
+  （このリポジトリは Date API 相当を持たないため、固定日付をハードコードしない）。
+
+#### タスク
+
+1. `site/index.html` / `site/en/index.html` の `#run` セクションからローカル実行の案内
+   （コードパネルと Expo Go 手順）を削除し、残す「Web 版を直接開く」案内・実機検証 Not run
+   caveat に合わせて見出しとナビ文言を整える。未使用になった `.run-panel` / `pre.run` CSS を
+   除去する。
+2. `site/privacy/index.html`（ja）・`site/en/privacy/index.html`（en）を新規作成する。
+   LP と同じ Ink / Summit トークン・inline style・favicon data URI を再利用し、
+   アカウント不要・サーバー送信ゼロ・端末内保存のみ・共有は QR の URL フラグメントのみ・
+   トラッキングなし・連絡先追加はブラウザ内 vCard・問い合わせは GitHub Issues を本文に書く。
+   クイズ機能は `src/` に実装が無いため記述しない。
+3. 両 LP のフッターに、対応言語のプライバシーポリシーページへのリンクを追加する
+   （既存のオンページ `#privacy` アンカーとは別ラベルにして混同を避ける）。
+4. `make before-commit` を通し、`scripts/intro-card-viewer.test.ts` /
+   `scripts/landing-page-no-backup-claim.test.ts` を含む既存テストを壊していないこと、
+   外部リクエストゼロが維持されていることを確認する。
+
+#### 検証手順
+
+- `grep` で `make install` / `make start` / `git clone` 等のローカル実行案内が
+  `site/index.html` / `site/en/index.html` に残っていないことを確認する。
+- `grep` で Issue 125 の注意書き文言（ja/en）が両 LP に維持されていることを確認する。
+- 新規ページと変更後の LP に `<script src=http...>` / `<link ... href=http...>`（stylesheet 等の
+  resource-fetch 系）/ `<img src=http...>` が無いことを確認する（`rel=canonical` /
+  `rel=alternate` / `meta og:image` は既存 LP と同じくメタデータのみで実際にページが
+  fetch するものではないため対象外）。
+- `make before-commit` が exit 0 になることを確認する。
+- code-reviewer subagent でレビューし、指摘を反映する。
+
+#### 進捗ログ
+
+- 2026-07-23: 隔離 worktree（HEAD が `origin/main` の 4784d52 と一致）で
+  `docs/lp-user-facing-and-privacy` ブランチを作成した。既存の pre-release rules
+  （`scripts/pre-release-rules.ts`）が `packages/` / `src/` prefix のファイルにしか
+  scope しないため、`site/*.html` は `INVARIANT_PUBLIC_METADATA_PRESENT` 等の対象外である
+  ことをコードで確認した。`dup_check`（jscpd）は `{src,scripts}/**/*.{ts,tsx}` のみを見る
+  ため `site/` の ja/en 重複は対象外であることも確認した。Biome は `<style>` 内の埋め込み
+  CSS を解析するが、specificity 系は warning でしか出ず exit code には影響しないことを
+  既存の `site/index.html` に対する `bun biome check` で確認した。
+- 2026-07-23: `site/index.html` / `site/en/index.html` の `#run` セクションから
+  `git clone` / `make install` / `make start` のコードパネルと Expo Go 手順の run-note を
+  削除し、見出しを「ブラウザでそのまま試せます。」/ "Try it right in your browser." に
+  変更した。ナビの「動かす」を「試す」に更新した（en 側は元から "Try it" で一致していたため
+  変更不要）。未使用になった `.run-panel` / `.run-panel::before` / `pre.run` / `pre.run .c`
+  の CSS を両ファイルから除去した。Issue 125 の注意書き（`#how` セクション）は触っていない
+  ことを diff で確認した。
+- 2026-07-23: `site/privacy/index.html` と `site/en/privacy/index.html` を新規作成した。
+  LP の `:root` トークン・nav・footer パターンを踏襲しつつ、読みやすさのため本文は
+  720px 幅の `.doc` に収め、要点サマリ（4 カード）＋詳細セクション（h2 6 本）の構成にした。
+  最終更新日は `[owner が公開時に記入する日付]` のプレースホルダにし、問い合わせ先は
+  GitHub Issues のみを記載した（専用連絡先は owner が用意した場合に差し替える旨を本文と
+  PR 本文の両方に明記する）。両 LP のフッター Product 列に「プライバシーポリシー」
+  （en: "Privacy Policy"）リンクを追加し、オンページアンカーの「プライバシー」/
+  "Privacy" とラベルを分けて混同を避けた。
+- 2026-07-23: grep でローカル実行案内の残存が無いこと、Issue 125 の注意書きが両 LP に
+  維持されていること、新規・変更ファイルに resource-fetch 系の外部 URL 参照が無い
+  （canonical / alternate / og:image のメタデータのみ）ことを確認した。
+- 2026-07-23: 隔離 worktree に `node_modules` が無く `make before-commit` の `harness_test`
+  が jscpd 未解決で落ちた（PR #127 セッションと同じ既知の worktree 事象）。`make install`
+  で解消し、`make before-commit` が exit 0（1250 pass・100% coverage、dup_check は
+  baseline 以下、pre-release check 0 error）になることを確認した。
+- 2026-07-23: code-reviewer subagent に diff（`site/index.html` / `site/en/index.html` /
+  `site/privacy/index.html` / `site/en/privacy/index.html` / `Plan.md`）をレビューさせた。
+  blocker は無く、minor 2 件・nit 1 件を指摘された。(1) `site/privacy/index.html` の
+  「URL の フラグメント」に孤立した半角スペースがある typo（textlint 対象外で機械検出
+  されない）、(2) 新規プライバシーページが見出し階層を h1 → h3（要点サマリカード）→
+  h2（詳細セクション）の順で使っており 1 段飛ぶ、(3) フッターで「プライバシー」（オン
+  ページアンカー）と「プライバシーポリシー」（新規ページ）が同じ列に隣接して紛らわしい。
+  外部リクエストゼロ・相対リンクの解決・Issue 125 不可侵・HTML 構造・内容の正直さは
+  問題なしと判定された。
+- 2026-07-23: 指摘 3 件をすべて反映した。(1) 孤立スペースを削除。(2) 要点サマリカードの
+  見出しを `h3` → `h2` に、詳細セクションの見出しを `h2` → `h3` に入れ替え、対応する CSS
+  セレクタ（`.summary-grid h2`、`article h3`）も一致させ、h1 → h2 → h3 の順にした
+  （ja/en 両ファイル）。(3) 両 LP フッターのオンページアンカー側ラベルを
+  「プライバシー」→「プライバシー概要」（en: "Privacy" → "Privacy overview"）に変更し、
+  新規ページへのリンク「プライバシーポリシー」（en: "Privacy Policy"）と区別できるように
+  した。`make before-commit` を再実行し exit 0 を再確認した。
+
+#### 振り返り
+
+- 問題: 隔離 worktree に `node_modules` が存在せず、`make before-commit` の `harness_test`
+  （`bun test scripts/`）内で `bunx jscpd` の解決に失敗し `jscpd exited with status unknown`
+  で fail した。
+  根本原因: worktree 作成時に `node_modules` がコピーされない一方、`bun test` / `tsc` は
+  親ディレクトリの `node_modules` へ解決が波及するため一見動いているように見えるが、
+  `scripts/check-duplication.ts` が `node_modules/.bin/jscpd` を明示パスで呼ぶため、
+  そこだけ解決に失敗する。PR #127 のセッション（本ファイル 6857 行目付近）で一度
+  遭遇・記録済みの既知事象だが、新しい worktree ごとに再発する。
+  予防策: 新しい隔離 worktree で作業を始めるときは、最初のゲート実行前に
+  `ls node_modules` で存在確認し、無ければ `make install` を先に実行する
+  （このリポジトリの `AGENTS.md` セットアップ手順にある `make install` を、隔離 worktree
+  でも省略せず必ず一度は通すという運用を徹底する）。
+- 問題: プライバシーポリシーの新規ページで、デザイン上「サマリカードを目立たせたい」という
+  理由だけで見出しレベル（`h3`）を先に決め、記事本文側の見出し（`h2`）との階層関係を
+  後回しにしたため、h1 → h3 → h2 という skip が生まれた。
+  根本原因: 見出しタグを「視覚的なフォントサイズの選択」として扱い、文書構造
+  （アクセシビリティ上のセクション階層）として先に設計しなかった。
+  予防策: 見出しを追加するときは、先に DOM 順の h1 → h2 → h3 の論理階層を紙上で決めてから
+  CSS でスタイルを当てる（サイズは階層と独立して `clamp()` 等で自由に調整できるため、
+  階層を先に固定しても見た目の制約にはならない）。

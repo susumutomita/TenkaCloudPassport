@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy — TenkaCloud Passport</title>
+<meta name="description" content="Privacy Policy for TenkaCloud Passport. No account, zero server transmission, data stored on-device only. No tracking." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect x='26' y='24' width='68' height='12' rx='6' fill='%231d1d1f'/><path d='M26 90 L60 48 L94 90' fill='none' stroke='%231d1d1f' stroke-width='13' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<link rel="canonical" href="https://card.tenkacloud.com/en/privacy/" />
+<link rel="alternate" hreflang="ja" href="https://card.tenkacloud.com/privacy/" />
+<link rel="alternate" hreflang="en" href="https://card.tenkacloud.com/en/privacy/" />
+<link rel="alternate" hreflang="x-default" href="https://card.tenkacloud.com/privacy/" />
+<meta property="og:title" content="Privacy Policy — TenkaCloud Passport" />
+<meta property="og:description" content="No account, zero server transmission, data stored on-device only. No tracking." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://card.tenkacloud.com/en/privacy/" />
+<meta property="og:image" content="https://card.tenkacloud.com/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Privacy Policy — TenkaCloud Passport" />
+<meta name="twitter:description" content="No account, zero server transmission, data stored on-device only. No tracking." />
+<meta name="twitter:image" content="https://card.tenkacloud.com/og.png" />
+<style>
+  /* Zero external requests (including fonts). A page that claims no telemetry sends none itself. */
+  /* Brand tokens (ink / muted / border / summit) must stay in sync with src/ui/theme.ts and site/index.html. */
+  :root {
+    --canvas: #e7e8ec;
+    --canvas-high: #f5f6f8;
+    --card: #ffffff;
+    --surface: #f5f5f7;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --muted-light: #86868b;
+    --border: #d2d2d7;
+    --border-subtle: #e8e8ed;
+    --summit: #ff6a32;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: radial-gradient(1200px 520px at 50% -160px, var(--canvas-high), var(--canvas) 76%);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.9;
+    font-size: 16px;
+  }
+  ::selection { background: rgba(255, 106, 50, 0.22); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* nav */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(247, 247, 249, 0.82);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(16, 17, 20, 0.07);
+  }
+  .nav-inner {
+    max-width: 1080px; margin: 0 auto; padding: 0 24px; height: 60px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  a.nav-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; text-decoration: none; color: inherit; }
+  .nav-brand svg { display: block; flex: none; }
+  .nav-brand .co { color: var(--muted-light); font-weight: 400; }
+  .nav-right { display: flex; align-items: center; gap: 10px; }
+  .nav-right a.pill {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 16px;
+    background: var(--card); transition: background 0.2s;
+  }
+  .nav-right a.pill:hover, .nav-right a.pill:focus-visible { background: var(--surface); }
+
+  /* document body */
+  .doc { max-width: 720px; margin: 0 auto; padding: 64px 24px 96px; }
+  .sec-label {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em;
+    color: var(--muted-light); text-transform: uppercase; margin-bottom: 18px;
+  }
+  h1 {
+    font-weight: 800; font-size: clamp(28px, 3.6vw, 40px);
+    line-height: 1.3; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 22px;
+  }
+  .doc p.lede { color: #424245; font-size: 16px; max-width: 42em; }
+  .doc-meta { margin-top: 18px; font-family: var(--mono); font-size: 12px; color: var(--muted-light); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 36px; }
+  .summary-grid .card { display: flex; gap: 14px; align-items: flex-start; border: 1px solid var(--border-subtle); border-radius: 14px; padding: 18px; background: var(--card); }
+  .summary-grid .check {
+    flex: none; width: 28px; height: 28px; border-radius: 8px;
+    background: rgba(255, 106, 50, 0.12); color: var(--summit);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .summary-grid .check svg { width: 14px; height: 14px; }
+  .summary-grid h2 { font-size: 14.5px; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .summary-grid p { font-size: 13.5px; color: var(--muted); }
+
+  article section { margin-top: 44px; }
+  article h3 { font-weight: 800; font-size: clamp(19px, 2.4vw, 22px); letter-spacing: -0.01em; margin-bottom: 12px; color: var(--ink); }
+  article p { color: #424245; font-size: 15px; max-width: 42em; }
+  article p + p { margin-top: 10px; }
+  article a { color: var(--ink); }
+  article code { font-family: var(--mono); font-size: 13.5px; background: var(--surface); padding: 2px 6px; border-radius: 4px; }
+
+  /* footer */
+  footer { background: var(--surface); margin-top: 40px; border-top: 1px solid var(--border-subtle); }
+  .footer-bottom {
+    max-width: 1080px; margin: 0 auto; padding: 28px 24px;
+    font-size: 13px; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between;
+  }
+  .footer-bottom a { color: var(--ink); }
+
+  @media (max-width: 780px) {
+    .doc { padding: 40px 20px 64px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="../">
+      <svg viewBox="0 0 120 120" width="24" height="24" aria-hidden="true"><rect x="26" y="24" width="68" height="12" rx="6" fill="#1d1d1f"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="#1d1d1f" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <span>TenkaCloud <span class="co">Passport</span></span>
+    </a>
+    <div class="nav-right">
+      <a class="pill" href="../../privacy/" hreflang="ja" lang="ja">JA</a>
+      <a class="pill" href="https://github.com/susumutomita/TenkaCloudPassport">GitHub →</a>
+    </div>
+  </div>
+</header>
+
+<main class="doc">
+  <p class="sec-label">Legal</p>
+  <h1>Privacy Policy</h1>
+  <p class="lede">
+    TenkaCloud Passport is a free Intro Card app for in-person events, provided by independent
+    developer Susumu Tomita. This page explains what data the app handles, and what it does not,
+    all in one place.
+  </p>
+  <p class="doc-meta">Last updated: [owner to fill in at launch]</p>
+
+  <div class="summary-grid">
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>No account</h2>
+        <p>No sign-up, no login required.</p>
+      </div>
+    </div>
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>Zero server transmission</h2>
+        <p>There is no server that stores your card data.</p>
+      </div>
+    </div>
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>On-device only</h2>
+        <p>Drafts stay on your device until you delete them.</p>
+      </div>
+    </div>
+    <div class="card">
+      <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg></span>
+      <div>
+        <h2>No tracking</h2>
+        <p>No analytics, behavioral tracking, or third-party sharing.</p>
+      </div>
+    </div>
+  </div>
+
+  <article>
+    <section>
+      <h3>Account and data we collect</h3>
+      <p>
+        No account or login is required to use TenkaCloud Passport. Your name, title,
+        organization, self-introduction, and links are never sent anywhere until you
+        explicitly save your card.
+      </p>
+    </section>
+
+    <section>
+      <h3>Where your data is stored</h3>
+      <p>
+        Your saved Intro Card draft is stored only on your device. There is no export or
+        automatic backup feature, so it never leaves your device until you delete it.
+        Deleting the app, or clearing its on-device data, deletes your card as well.
+      </p>
+    </section>
+
+    <section>
+      <h3>How sharing works</h3>
+      <p>
+        The QR code you show to share your Intro Card encodes the card's contents only
+        inside the URL fragment (the part after <code>#</code>). When someone scans it,
+        their browser renders that fragment directly — the contents are never sent to
+        any server.
+      </p>
+    </section>
+
+    <section>
+      <h3>Analytics and tracking</h3>
+      <p>
+        We do not measure usage, track behavior, serve ads, or share data with third
+        parties. The app has no mechanism to send telemetry at all.
+      </p>
+    </section>
+
+    <section>
+      <h3>Adding a contact</h3>
+      <p>
+        When someone taps "Add to contacts" on your Intro Card page, a vCard
+        (<code>.vcf</code>) file is generated inside their own browser. That happens
+        entirely on their device and never touches a server. For which devices and
+        browsers this has been verified on, see
+        <a href="../#how">How it works</a> on the home page.
+      </p>
+    </section>
+
+    <section>
+      <h3>Contact us</h3>
+      <p>
+        Questions or concerns can be raised via
+        <a href="https://github.com/susumutomita/TenkaCloudPassport/issues">GitHub Issues</a>.
+        If a dedicated contact channel is set up later, this page will be updated accordingly.
+      </p>
+    </section>
+  </article>
+</main>
+
+<footer>
+  <div class="footer-bottom">
+    <span>TenkaCloud Passport — <a href="../">Back to home</a> · <a href="https://github.com/susumutomita/TenkaCloudPassport">GitHub</a></span>
+    <span>Apache-2.0 License</span>
+  </div>
+</footer>
+</body>
+</html>
