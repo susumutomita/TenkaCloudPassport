@@ -189,7 +189,6 @@ export class DeletionCoordinatedLocalProfileStorageAdapter
 export interface LocalDataPreview {
   readonly profileCount: number;
   readonly settingsCount: 0;
-  readonly backupCacheCount: 0;
   readonly modelCount: number;
   readonly totalBytes: number;
   readonly model: LocalModelInstallation | null;
@@ -238,7 +237,6 @@ function previewFrom(
   return {
     profileCount: profile.count,
     settingsCount: 0,
-    backupCacheCount: 0,
     modelCount: model?.count ?? 0,
     totalBytes: profile.bytes + (model?.sizeBytes ?? 0),
     model,

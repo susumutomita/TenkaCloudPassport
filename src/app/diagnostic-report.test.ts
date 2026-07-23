@@ -27,7 +27,6 @@ function reportInput() {
     storage: {
       profileCount: 1,
       settingsCount: 0,
-      backupCacheCount: 0,
       modelCount: 1,
       totalBytes: 4_294_967_512,
     },
@@ -56,7 +55,6 @@ describe('Sanitized Diagnostic Report の strict allowlist', () => {
       'error.phase',
       'storage.profileCount',
       'storage.settingsCount',
-      'storage.backupCacheCount',
       'storage.modelCount',
       'storage.totalBytes',
     ]);
@@ -97,7 +95,6 @@ describe('Sanitized Diagnostic Report の strict allowlist', () => {
       storage: {
         profileCount: 0,
         settingsCount: 0,
-        backupCacheCount: 0,
         modelCount: 0,
         totalBytes: 0,
       },
@@ -108,7 +105,6 @@ describe('Sanitized Diagnostic Report の strict allowlist', () => {
     expect(preview.report.storage).toEqual({
       profileCount: 0,
       settingsCount: 0,
-      backupCacheCount: 0,
       modelCount: 0,
       totalBytes: 0,
     });
@@ -135,6 +131,32 @@ describe('Sanitized Diagnostic Report の strict allowlist', () => {
       { ...valid, version: { ...valid.version, protocol: '999.0' } },
       null,
       [],
+    ];
+
+    for (const value of invalidValues) {
+      expect(() => parseDiagnosticReport(JSON.stringify(value))).toThrow(
+        DiagnosticReportError
+      );
+    }
+  });
+
+  it('Issue 118: JSON Backup 削除後の schema v2 は backup-import phase と backupCacheCount フィールドを持たない（v1 → v2 の破壊的変更）', () => {
+    expect(DIAGNOSTIC_REPORT_SCHEMA_VERSION).toBe(2);
+
+    const valid = createDiagnosticReportPreview(reportInput()).report;
+    const invalidValues: unknown[] = [
+      {
+        ...valid,
+        reportSchema: 1,
+      },
+      {
+        ...valid,
+        error: { code: 'UNEXPECTED_FAILURE', phase: 'backup-import' },
+      },
+      {
+        ...valid,
+        storage: { ...valid.storage, backupCacheCount: 0 },
+      },
     ];
 
     for (const value of invalidValues) {

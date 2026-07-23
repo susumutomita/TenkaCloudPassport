@@ -18,7 +18,9 @@ Release Gate として残す。
 
 ## Diagnostic Report allowlist
 
-Report Schema Version 1 は次の field だけを持つ。`additionalProperties` 相当はすべて拒否する。
+Report Schema Version 2 は次の field だけを持つ。`additionalProperties` 相当はすべて拒否する
+（Issue 118 / ADR-0033: JSON Backup 機能の削除に伴い、producer を失った `storage.backupCacheCount`
+と `error.phase` の `backup-import` を Version 1 から削除した破壊的変更）。
 
 | 区分 | 許可 field | 値 |
 | --- | --- | --- |
@@ -27,7 +29,7 @@ Report Schema Version 1 は次の field だけを持つ。`additionalProperties`
 | model | `architecture`、`sizeBytes`、`digestPrefix` | allowlist architecture、非負整数、digest 先頭 8 桁だけ |
 | transport | `state`、`peerCount`、`permission` | 閉じた状態、0〜6、Camera Permission の閉じた状態 |
 | error | `code`、`phase` | 閉じた固定値。本文と `cause` は含めない |
-| storage | `profileCount`、`settingsCount`、`backupCacheCount`、`modelCount`、`totalBytes` | 非負整数 |
+| storage | `profileCount`、`settingsCount`、`modelCount`、`totalBytes` | 非負整数 |
 
 Report は生成日時を持たない。Lounge / Participant / Device ID、Passport / Answer / Bridge / Prompt /
 Output、Model File Name / Full Path、IP / SSID / 位置 / 連絡先、Token / Key / Secret を型と schema の両方で
@@ -37,8 +39,9 @@ Output、Model File Name / Full Path、IP / SSID / 位置 / 連絡先、Token / 
 ## Data Control Port
 
 `LocalDataControl` は Profile Resource、Model Resource、Deletion Journal を合成する。`preview()` は件数と
-Byte 数だけを返す。個別操作は `resetPassport()` と `removeModel()` に分ける。Settings と Backup Cache は
-現在永続保存しないため件数 0 であり、将来保存を追加する変更が同じ Port と test を拡張する。
+Byte 数だけを返す。個別操作は `resetPassport()` と `removeModel()` に分ける。Settings は現在永続保存しない
+ため件数 0 であり、将来保存を追加する変更が同じ Port と test を拡張する（JSON Backup 機能は ADR-0033 で
+削除済みのため、Backup Cache という概念自体がもう存在しない）。
 
 GGUF lifecycle が有効な Development Build では、`LocalModelStoragePort` は versioned Manifest の全 Model を
 数え、Size を合計する。Diagnostic の Model 欄には active Model、無ければ先頭 Model の architecture と digest
@@ -52,11 +55,12 @@ Manifest snapshot の全 Model を順に staged delete し、途中失敗は tom
 2. 固定 tombstone を永続化する。ここを論理 commit とする。書込 API が失敗を返しても marker を再読込し、
    存在すれば未 commit と誤判定せず削除を続行する。存在を判定できない場合は commit 済みと断定せず、
    現 Process の Data を保持した失敗とする。後で marker を読めた場合は保存を閉じ、起動回復へ渡す。
-3. Profile、Model、将来の Settings / Backup Cache を冪等に削除する。
+3. Profile、Model、将来の Settings を冪等に削除する。
 4. 全 Resource の件数 0 を再確認する。
 5. tombstone を削除する。
 
-Profile save と Backup import は Composition Root で共有 lease に接続した Profile Storage を必ず使う。
+Profile save は Composition Root で共有 lease に接続した Profile Storage を必ず使う（JSON Backup
+機能は ADR-0033 で削除済みのため、Backup import はもう存在しない）。
 UI でも書込中の Settings / Diagnostic 遷移と削除中の Back を無効化するが、画面状態だけを排他の根拠に
 しない。tombstone が残る commit 後中断では排他 lease を保持し、同じ Process の回復または再起動時の
 回復が完了するまで Profile write と Model Context 取得を拒否する。fresh process の Model lease registry

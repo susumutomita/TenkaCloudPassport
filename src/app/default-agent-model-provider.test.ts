@@ -74,19 +74,6 @@ describe('AgentModelProvider の Platform Composition', () => {
     );
   });
 
-  it('Issue 28: Web / Expo Go / Native Build の Runtime capability を Platform Composition で分離する', async () => {
-    const fallback = await source('default-distribution-capability.ts');
-    const web = await source('default-distribution-capability.web.ts');
-    const native = await source('default-distribution-capability.native.ts');
-
-    expect(fallback).toContain("distributionCapabilityForRuntime('expo-go')");
-    expect(web).toContain("distributionCapabilityForRuntime('web')");
-    expect(native).toMatch(
-      /isRunningInExpoGo\(\)\s*\?\s*'expo-go'\s*:\s*'native-build'/
-    );
-    expect(native).not.toContain("'development-build'");
-  });
-
   it('Issue 18: Web / Expo Go は管理を無効化し、Development Build だけが private lifecycle を組み立てる', async () => {
     const fallback = await source('default-local-model-management.ts');
     const native = await source('default-local-model-management.native.ts');

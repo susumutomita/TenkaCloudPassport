@@ -239,14 +239,23 @@ const styles = StyleSheet.create({
   },
   brandRow: {
     alignItems: 'center',
+    // Issue 118 の Codex レビュー指摘: 200% Text と狭幅端末では
+    // 「TenkaCloud Passport」ロックアップと JA/EN トグルを 1 行に収め切れない
+    // ことがある。`flexWrap: 'wrap'` により、収まらない場合だけトグルが
+    // 次の行へ折り返し、クリップや重なりにならないようにする（通常の文字
+    // サイズ・幅では 1 行に収まるため見た目は変わらない）。
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 44,
+    rowGap: spacing.sm,
   },
   brandLockup: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexShrink: 1,
     gap: spacing.sm,
+    minWidth: 0,
   },
   localeToggle: {
     alignItems: 'center',
@@ -264,6 +273,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     color: colors.ink,
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,

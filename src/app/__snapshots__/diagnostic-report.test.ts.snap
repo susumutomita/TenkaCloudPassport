@@ -14,9 +14,8 @@ exports[`Sanitized Diagnostic Report の strict allowlist 許可した現在状�
   "provider": {
     "status": "falling-back",
   },
-  "reportSchema": 1,
+  "reportSchema": 2,
   "storage": {
-    "backupCacheCount": 0,
     "modelCount": 1,
     "profileCount": 1,
     "settingsCount": 0,

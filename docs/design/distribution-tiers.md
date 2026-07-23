@@ -47,9 +47,11 @@ Device Matrix がない場合は `unverified` と表示する。
 Issue 118 / ADR-0033 により、Settings 画面が Runtime / Tier / Rules Provider /
 Local Model / Nearby Transport を表示する仕様は削除した（一般ユーザー向け設定画面に
 開発者/診断向け情報が出ていたため）。`distributionCapability` の判定ロジック自体
-（`src/app/distribution-capability.ts` 等）は削除せず、Settings への表示だけを外した。
+（`src/app/distribution-capability.ts` 等）は、Settings への表示を外した時点では
+production 消費者が無いまま維持していたが、Codex レビューでの no-dead-code 指摘を
+受けて production 消費者不在を再確認した上で ADR-0033 のもとで削除済みです。
 以下の Runtime capability 判定・Android Release metadata Identity Gate の設計原則は、
-表示先が Settings かどうかによらず引き続き有効である。
+将来 Settings 以外の画面へ再実装する場合の参照として引き続き有効です。
 
 Provider の実行結果だけから Runtime を推測しない。Native Build でも Model 未設定なら Rules に
 なるため、Platform Composition Root が Runtime capability を明示的に注入する。Native Binary だけから

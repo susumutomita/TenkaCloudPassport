@@ -69,7 +69,6 @@ function reportStorage(preview: LocalDataPreview) {
   return {
     profileCount: preview.profileCount,
     settingsCount: preview.settingsCount,
-    backupCacheCount: preview.backupCacheCount,
     modelCount: preview.modelCount,
     totalBytes: preview.totalBytes,
   };
