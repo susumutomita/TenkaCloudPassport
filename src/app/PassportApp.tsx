@@ -99,8 +99,12 @@ import type { DiagnosticTransportState } from './diagnostic-report';
 import type { Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { inProcessTransportFingerprint } from './in-process-transport-binding';
-import type { InitialLocalePort } from './initial-locale-port';
 import {
+  type InitialLocalePort,
+  resolveEffectiveStartupLocale,
+} from './initial-locale-port';
+import {
+  buildInitialIntroCardNotice,
   type IntroCardNotice,
   introCardNoticeFromError,
 } from './intro-card-notice';
@@ -270,6 +274,64 @@ function resolveIntroCardErrorFieldKey(
   }
   if (notice.field !== 'links') return notice.field;
   return firstInvalidNamedLinkField(linksDraft);
+}
+
+/**
+ * `settleIntroCardLoad` の戻り値。`ok` で成否を判別する discriminated union にする
+ * （`error: unknown` の truthiness では判別しない。`throw undefined` / `throw 0` の
+ * ような falsy な値を reject 理由にされた場合でも、成功と誤判定しないため）。
+ */
+type IntroCardLoadResult =
+  | { readonly ok: true; readonly card: IntroCard | null }
+  | { readonly ok: false; readonly error: unknown };
+
+/**
+ * Issue 111 major fix（Codex Finding 1）: 起動時 `Promise.all` の一員として
+ * `introCardStorage.load()` を実行しつつ、その成否を rejection ではなく戻り値の形へ
+ * 畳み込む。以前は `introCardStorage.load().catch(...)` の中で直接
+ * `setIntroCardNotice(introCardNoticeFromError(error, 'load', localeRef.current))`
+ * を呼んでいたが、この catch ハンドラは自分が属する Promise が解決した時点で即実行される
+ * ため、同じ `Promise.all` に束ねた `localePreferenceStorage.load()`（保存済みの明示
+ * ロケール選択）がまだ解決していないタイミングで発火しうる。その場合 `localeRef.current`
+ * はまだ自動判定の値のままで、保存済み選好と自動判定が食い違うユーザーだけ Intro Card
+ * Notice が誤訳のまま固定される（画面のタイトルは現 locale で都度訳すため本文だけ言語が
+ * 混在する）。この関数は成否を保持したまま `Promise.all` の単一の `.then()` へ渡し、
+ * `resolveEffectiveStartupLocale` で effective locale が確定した「後」に初めて
+ * Notice を組み立てさせることで、このレースを構造的に無くす。
+ */
+function settleIntroCardLoad(
+  load: Promise<IntroCard | null>
+): Promise<IntroCardLoadResult> {
+  return load.then(
+    (card): IntroCardLoadResult => ({ ok: true, card }),
+    (error: unknown): IntroCardLoadResult => ({ ok: false, error })
+  );
+}
+
+/**
+ * Issue 111 major fix: `settleIntroCardLoad` の結果と effective locale から、
+ * `introCard` state（`card`）と `introCardNotice` state（`notice`）へ渡す値を
+ * 1 回で導出する。起動時 effect の `.then()` 本体からこの分岐を追い出し、
+ * Cognitive Complexity を抑える（`/review` 指摘のリファクタリング）。
+ */
+function startupIntroCardOutcome(
+  introCardLoad: IntroCardLoadResult,
+  effectiveLocale: Locale
+): { readonly card: IntroCard | null; readonly notice: IntroCardNotice } {
+  if (introCardLoad.ok) {
+    return {
+      card: introCardLoad.card,
+      notice: buildInitialIntroCardNotice(effectiveLocale),
+    };
+  }
+  return {
+    card: null,
+    notice: introCardNoticeFromError(
+      introCardLoad.error,
+      'load',
+      effectiveLocale
+    ),
+  };
 }
 
 /**
@@ -664,8 +726,12 @@ export default function PassportApp({
   /**
    * Issue 111: 明示切替（Settings 画面・`AppScreen` ヘッダーの JA/EN トグル）は
    * 必ずこの 1 つの関数を経由させ、`setLocale` と永続化を同じ場所にまとめる。
-   * 保存は fire-and-forget とし、失敗しても表示の切替自体は妨げない
-   * （永続化に失敗した場合、次回起動時は自動判定へ委ねるだけになる）。
+   * 保存は fire-and-forget とし、失敗しても表示の切替自体は妨げない（Codex レビュー
+   * 指摘: 保存失敗時のセマンティクスは best-effort であり「次回起動で自動判定に
+   * 委ねる」とは限らない。端末内に以前保存した値が既にあれば、今回の保存失敗後も
+   * その古い値が次回起動時の effective locale として優先され続ける。今回初めての
+   * 保存が失敗した場合だけ、保存済み値が無いままなので自動判定に委ねられる。
+   * いずれの場合も、今回の切替自体は表示上は即座に成功する）。
    */
   const handleChangeLocale = useCallback(
     (next: Locale): void => {
@@ -673,6 +739,31 @@ export default function PassportApp({
       localePreferenceStorage.save(next).catch(() => undefined);
     },
     [localePreferenceStorage]
+  );
+  /**
+   * Issue 111 major fix（Codex Finding 1 / Finding 3）: 起動時に保存済みの明示選択
+   * （`savedLocale`、`null` なら自動判定のまま）から effective locale を確定し、
+   * 自動判定と食い違っていれば `setLocale` と `localeRef.current` を同期的に更新する。
+   * 起動時 effect の `.then()` 本体からこの分岐を追い出し、Cognitive Complexity を
+   * 抑えつつ、`resolveEffectiveStartupLocale`（純関数、`initial-locale-port.test.ts`
+   * で挙動を固定）を単一の呼び出し口に集約する。
+   */
+  const applyEffectiveStartupLocale = useCallback(
+    (savedLocale: Locale | null): Locale => {
+      const effectiveLocale = resolveEffectiveStartupLocale(
+        localeRef.current,
+        savedLocale
+      );
+      if (effectiveLocale !== localeRef.current) {
+        setLocale(effectiveLocale);
+        // `applyStartupRecoveryResultRef` 等、この直後に同じ tick 内で
+        // `localeRef.current` を読む処理があるため、次の render を待たずここで
+        // 同期的に上書きする（詳細は呼び出し元の起動時 effect のコメント参照）。
+        localeRef.current = effectiveLocale;
+      }
+      return effectiveLocale;
+    },
+    []
   );
   const [notice, setNotice] = useState<ProfileNotice>(() => ({
     kind: 'empty',
@@ -705,11 +796,8 @@ export default function PassportApp({
     readonly string[]
   >([]);
   const [introCardSaving, setIntroCardSaving] = useState(false);
-  const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>(
-    () => ({
-      kind: 'empty',
-      message: MESSAGES[locale].introCard.initialNotice,
-    })
+  const [introCardNotice, setIntroCardNotice] = useState<IntroCardNotice>(() =>
+    buildInitialIntroCardNotice(locale)
   );
   // Issue 92: 保存失敗時にどの入力欄へ focus するか（`IntroCardEditScreen` の
   // `errorFieldKey` prop にそのまま渡す）。`introCardNotice` と同じタイミングで
@@ -1173,18 +1261,16 @@ export default function PassportApp({
     let active = true;
     // Issue 79: Intro Card の読込は Pet Profile Recovery（`recoverLocalStateAtStartup`）と
     // 完全に独立した Storage だが、既定の着地 stage は両方が揃ってから 1 回で決めたいため
-    // `Promise.all` で束ねる。`introCardStorage.load()` 自体の失敗は Promise.all 全体を
-    // reject させず、`null`（カードなし扱い）へ畳み込んだ上で Notice にだけ反映する。
+    // `Promise.all` で束ねる。Issue 111 major fix（Codex Finding 1）: `introCardStorage.load()`
+    // の成否は個別の `.catch()` で即座に Notice へ反映せず、`settleIntroCardLoad` で
+    // 一旦保持するだけにする。locale 依存の起動通知（Intro Card Notice）は、この
+    // `Promise.all` 全体が解決し `localePreferenceStorage.load()`（保存済みの明示選択）も
+    // 判明した「単一の `.then()`」内でだけ組み立てる。これにより、`introCardStorage.load()`
+    // が `localePreferenceStorage.load()` より先に解決するかどうかというタイミングに
+    // 依存せず、常に effective locale で Notice を組み立てられる。
     void Promise.all([
       recoverLocalStateAtStartup(localDataControl, localProfileStorage),
-      introCardStorage.load().catch((error: unknown) => {
-        if (active) {
-          setIntroCardNotice(
-            introCardNoticeFromError(error, 'load', localeRef.current)
-          );
-        }
-        return null;
-      }),
+      settleIntroCardLoad(introCardStorage.load()),
       // Issue 93: 下書き（未保存の編集中入力）の読込は nice-to-have であり、
       // 失敗しても起動そのものを妨げない・独自の Notice も出さない
       // （`.catch(() => null)` で「下書きなし」へ握り潰す）。
@@ -1193,23 +1279,20 @@ export default function PassportApp({
       // 初期値を上書きする（無ければ null、自動判定の結果をそのまま維持）。読込失敗も
       // 「保存済みの選択なし」へ握り潰し、起動そのものは妨げない。
       localePreferenceStorage.load().catch(() => null),
-    ]).then(([result, loadedIntroCard, loadedDraft, savedLocale]) => {
+    ]).then(([result, introCardLoad, loadedDraft, savedLocale]) => {
       if (!active) return;
-      introCardRef.current = loadedIntroCard;
-      setIntroCard(loadedIntroCard);
+      // Issue 111 major fix: effective locale を先に確定し、以降の locale 依存の
+      // 起動通知（Intro Card Notice）は必ずこの値で組み立てる。
+      const effectiveLocale = applyEffectiveStartupLocale(savedLocale);
+      const introCardOutcome = startupIntroCardOutcome(
+        introCardLoad,
+        effectiveLocale
+      );
+      introCardRef.current = introCardOutcome.card;
+      setIntroCard(introCardOutcome.card);
+      setIntroCardNotice(introCardOutcome.notice);
       if (loadedDraft && !isEmptyIntroCardDraft(loadedDraft)) {
         applyIntroCardDraftFields(loadedDraft);
-      }
-      if (savedLocale) {
-        setLocale(savedLocale);
-        // code-reviewer 指摘: `localeRef.current` は通常 render 本体でしか更新
-        // されない（この effect の外）。この直後に呼ぶ起動時復元の適用処理
-        // （下記 `applyStartupRecoveryResultRef` 経由）が同じ tick 内で
-        // `localeRef.current` を読んで起動時 Notice の文言を組み立てるため、
-        // 次の render を待たずここで同期的に上書きする。これを省くと、保存済み
-        // 選好が自動判定と異なるユーザーの起動時 Notice だけ古い言語のまま
-        // 固定される（Notice は locale 変更で遡って再翻訳しない設計のため）。
-        localeRef.current = savedLocale;
       }
       // 下書きの水和が済んだことを示す。`result.kind` の分岐（Profile Recovery の
       // 成否）とは独立の関心事のため、早期 return より前で必ず立てる。
@@ -1225,6 +1308,7 @@ export default function PassportApp({
       active = false;
     };
   }, [
+    applyEffectiveStartupLocale,
     applyIntroCardDraftFields,
     diagnosticsFlow.enterRecovery,
     introCardStorage,

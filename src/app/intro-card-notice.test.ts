@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { IntroCardError } from '../domain/intro-card';
-import { introCardNoticeFromError } from './intro-card-notice';
+import { MESSAGES } from './i18n/messages';
+import { resolveEffectiveStartupLocale } from './initial-locale-port';
+import {
+  buildInitialIntroCardNotice,
+  introCardNoticeFromError,
+} from './intro-card-notice';
 import { IntroCardStorageError } from './intro-card-storage';
 
 function storageError(
@@ -134,5 +139,77 @@ describe('Intro Card の Notice', () => {
     expect(
       introCardNoticeFromError(new Error('Web API failure'), 'load', 'en')
     ).toEqual({ kind: 'read-error', message: 'Web API failure' });
+  });
+});
+
+describe('buildInitialIntroCardNotice（Issue 111 major fix）', () => {
+  it('ja を渡すと empty kind・日本語の initialNotice を返す', () => {
+    expect(buildInitialIntroCardNotice('ja')).toEqual({
+      kind: 'empty',
+      message: MESSAGES.ja.introCard.initialNotice,
+    });
+  });
+
+  it('en を渡すと empty kind・英語の initialNotice を返す', () => {
+    expect(buildInitialIntroCardNotice('en')).toEqual({
+      kind: 'empty',
+      message: MESSAGES.en.introCard.initialNotice,
+    });
+  });
+});
+
+describe('起動時の Intro Card Notice は effective locale で組み立てる（Codex Finding 1: 端末ロケール=ja だが保存済み選択=en のときの言語混在バグの回帰テスト）', () => {
+  it('auto-detect=ja かつ persisted=en のとき、Intro Card Storage の読込が成功すれば初期 Notice は en になる（ja のままにならない）', () => {
+    const effectiveLocale = resolveEffectiveStartupLocale('ja', 'en');
+
+    const notice = buildInitialIntroCardNotice(effectiveLocale);
+
+    expect(notice).toEqual({
+      kind: 'empty',
+      message: MESSAGES.en.introCard.initialNotice,
+    });
+    expect(notice.message).not.toBe(MESSAGES.ja.introCard.initialNotice);
+  });
+
+  it('auto-detect=ja かつ persisted=en のとき、Intro Card Storage の読込が失敗しても Notice は en になる（ja のままにならない）', () => {
+    const effectiveLocale = resolveEffectiveStartupLocale('ja', 'en');
+
+    const notice = introCardNoticeFromError(
+      new Error('boom'),
+      'load',
+      effectiveLocale
+    );
+
+    expect(notice).toEqual({
+      kind: 'read-error',
+      message: 'boom',
+    });
+    // Error インスタンス自身の message ではなく Fallback 文言で比較したいケース
+    // （型なし例外）も、effective locale が en になっていることを確認する。
+    const fallbackNotice = introCardNoticeFromError(
+      {},
+      'load',
+      effectiveLocale
+    );
+    expect(fallbackNotice).toEqual({
+      kind: 'read-error',
+      message: MESSAGES.en.introCard.readErrorFallback,
+    });
+    expect(fallbackNotice.message).not.toBe(
+      MESSAGES.ja.introCard.readErrorFallback
+    );
+  });
+
+  it('auto-detect=ja かつ persisted 無し（null）のときは、従来どおり ja のままになる（回帰確認）', () => {
+    const effectiveLocale = resolveEffectiveStartupLocale('ja', null);
+
+    expect(buildInitialIntroCardNotice(effectiveLocale)).toEqual({
+      kind: 'empty',
+      message: MESSAGES.ja.introCard.initialNotice,
+    });
+    expect(introCardNoticeFromError({}, 'load', effectiveLocale)).toEqual({
+      kind: 'read-error',
+      message: MESSAGES.ja.introCard.readErrorFallback,
+    });
   });
 });

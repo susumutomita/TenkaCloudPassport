@@ -3,6 +3,7 @@ import {
   createInitialLocalePort,
   type InitialLocaleEnvironment,
   pickInitialLocale,
+  resolveEffectiveStartupLocale,
 } from './initial-locale-port';
 
 /** 常に日本語優先を返す実際の別実装。 */
@@ -54,6 +55,34 @@ describe('pickInitialLocale', () => {
 
   it('空配列（判定手段が無い）は既存の既定値 ja を維持する', () => {
     expect(pickInitialLocale([])).toBe('ja');
+  });
+
+  it('先頭タグの言語サブタグが空（地域コードのみの "-JP"）なら既存の既定値 ja を維持する（Codex nit 指摘）', () => {
+    expect(pickInitialLocale(['-JP'])).toBe('ja');
+  });
+
+  it('先頭タグの言語サブタグが空白のみ（" -JP"）でも trim 後に空として扱い ja を維持する', () => {
+    expect(pickInitialLocale([' -JP'])).toBe('ja');
+  });
+
+  it('先頭タグ自体が空白のみでも判定手段が無いのと同じ扱いで ja を維持する', () => {
+    expect(pickInitialLocale(['   '])).toBe('ja');
+  });
+});
+
+describe('resolveEffectiveStartupLocale（Issue 111 major fix）', () => {
+  it('保存済みの明示選択があれば、自動判定より保存済みを優先する', () => {
+    expect(resolveEffectiveStartupLocale('ja', 'en')).toBe('en');
+    expect(resolveEffectiveStartupLocale('en', 'ja')).toBe('ja');
+  });
+
+  it('保存済みの明示選択が無ければ（null）、自動判定の値をそのまま使う', () => {
+    expect(resolveEffectiveStartupLocale('ja', null)).toBe('ja');
+    expect(resolveEffectiveStartupLocale('en', null)).toBe('en');
+  });
+
+  it('自動判定と保存済みが同じ値でも保存済みを優先した結果は変わらない（冪等）', () => {
+    expect(resolveEffectiveStartupLocale('ja', 'ja')).toBe('ja');
   });
 });
 

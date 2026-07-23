@@ -290,7 +290,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(recovery).toContain(
       'recoverLocalStateAtStartup(localDataControl, localProfileStorage)'
     );
-    expect(recovery).toContain('introCardStorage.load().catch(');
+    expect(recovery).toContain('settleIntroCardLoad(introCardStorage.load())');
     expectInOrder(text.slice(text.indexOf('const retryStartupRecovery')), [
       'recoverLocalStateAtStartup(',
       "result.kind === 'recovery-failed'",

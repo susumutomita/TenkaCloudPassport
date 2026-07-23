@@ -21,6 +21,19 @@ export type IntroCardNotice =
   | { readonly kind: 'invalid-data'; readonly message: string }
   | { readonly kind: 'read-error'; readonly message: string };
 
+/**
+ * Issue 111 major fix（Codex Finding 1 / Finding 3）: 起動時に Intro Card Storage の
+ * 読込が成功した（＝エラー通知を出す必要が無い）ときの既定 Notice を、effective locale
+ * （`resolveEffectiveStartupLocale` の戻り値）で組み立てる。`PassportApp.tsx` の起動
+ * hydration は、保存済みの明示選択（`localePreferenceStorage.load()`）が判明した
+ * 「後」にだけこの関数を呼ぶ。先に（自動判定の値だけで）呼んでしまうと、auto-detect と
+ * persisted が食い違うユーザーだけ Intro Card Notice が古い言語のまま固定される回帰になる
+ * （画面側の見出し `noticeTitles` は現 locale で都度訳すため、本文だけ言語が混在する）。
+ */
+export function buildInitialIntroCardNotice(locale: Locale): IntroCardNotice {
+  return { kind: 'empty', message: MESSAGES[locale].introCard.initialNotice };
+}
+
 export type IntroCardNoticeOperation = 'load' | 'save' | 'delete';
 
 function operationErrorKind(

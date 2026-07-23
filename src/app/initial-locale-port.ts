@@ -25,14 +25,36 @@ export interface InitialLocalePort {
  * - 空配列（判定手段が無い、権限拒否等で本当に何も分からない）は、既存の既定値を
  *   変えない保守的な選択として `DEFAULT_LOCALE`（`'ja'`）を返す
  *   （ADR-0034 の Tradeoff 節を参照）。
+ * - 先頭タグ自体はあるが言語サブタグが空・空白のみ（`'-JP'` のような不正なタグ）の
+ *   場合も、判定手段が無いのと同じ扱いで `DEFAULT_LOCALE` を返す（Codex レビュー
+ *   指摘: trim 前は空文字列が `'ja'` と不一致になり `'en'` へ誤フォールバックしていた）。
  */
 export function pickInitialLocale(
   preferredLanguageTags: readonly string[]
 ): Locale {
   const primary = preferredLanguageTags[0];
   if (!primary) return DEFAULT_LOCALE;
-  const [primarySubtag] = primary.split(/[-_]/);
-  return primarySubtag?.toLowerCase() === 'ja' ? 'ja' : 'en';
+  const [rawPrimarySubtag] = primary.split(/[-_]/);
+  const primarySubtag = rawPrimarySubtag?.trim().toLowerCase() ?? '';
+  if (!primarySubtag) return DEFAULT_LOCALE;
+  return primarySubtag === 'ja' ? 'ja' : 'en';
+}
+
+/**
+ * Issue 111 major fix（Codex Finding 1 / Finding 3）: 端末 / ブラウザから自動判定した
+ * 初期表示言語（`pickInitialLocale` 由来）と、端末内に保存済みの明示選択を 1 つの
+ * effective locale へ合成する純関数。
+ *
+ * `PassportApp.tsx` の起動 hydration は、この関数が返す値が確定してから locale 依存の
+ * 起動通知（Intro Card Notice 等）を組み立てる。先に（auto-detect の値だけで）組み立てて
+ * しまうと、auto-detect と persisted が食い違うユーザーだけ通知が古い言語のまま固定される
+ * 回帰になる（`docs/adr/0034-initial-locale-autodetection.md` 参照）。
+ */
+export function resolveEffectiveStartupLocale(
+  autoDetectedLocale: Locale,
+  savedLocale: Locale | null
+): Locale {
+  return savedLocale ?? autoDetectedLocale;
 }
 
 /**
