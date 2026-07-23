@@ -106,13 +106,17 @@ Role cohort、Locale cohort、Journey stage、Outcome class、Behavior code、Ev
 ## 全データ種別
 
 `Export 可否` の「可」は、Owner が明示した手動 JSON バックアップに含められることを表す。
-画面表示や Lounge 内共有の可否とは区別する。
+画面表示や Lounge 内共有の可否とは区別する。**Issue 118 / ADR-0033 により手動 JSON
+バックアップ機能自体を削除したため、本表の `Export 可否` 列は現在エクスポート経路が
+存在しないことを示す歴史的記録であり、実際に Export できることを意味しない。**
+Sanitized Diagnostic Report・Pilot Event Aggregate の明示 Share（OS Share Sheet 経由）は
+バックアップとは別の独立した経路であり、これらは引き続き利用できる。
 
 | データ種別 | 区分 | 生成元 | 主な内容 | 保存場所 | 共有先 | TTL | 削除契機 | Export 可否 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 手掛かりカタログ | `L0` | アプリの版管理済み資産である。 | 分類、値、表示文言、カタログ版である。 | アプリ領域である。 | Owner の画面と端末内 Pet である。 | アプリの版と同じである。 | アプリ更新または削除である。 | 否である。 |
 | Local Private Profile | `L1` | Owner が明示保存する。 | `schemaVersion`、Pet 表示情報、任意 Alias、手掛かり候補、Languages である。 | OS のアプリ専用保護領域である。 | Owner と端末内 Pet だけである。 | Owner が削除するまでである。 | 個別削除、Profile 初期化、アプリ削除である。 | 可である。 |
-| 自己紹介カード（Intro Card） | `L1`（ADR-0026 の例外） | Owner が明示保存する。 | 氏名（必須）、任意の肩書き・所属・自己紹介・リンク（最大 5 件）・メールアドレス・電話番号である。相手の情報は含まない。 | OS のアプリ専用保護領域（Local Private Profile とは別ファイル・別キー）である。 | Owner 自身と、Owner が QR を提示した相手（相手のブラウザで開く自己紹介ページ経由）である。 | Owner が削除するまでである。 | 個別削除、アプリ削除である。 | 否である（手動 JSON バックアップ統合は follow-up）。 |
+| 自己紹介カード（Intro Card） | `L1`（ADR-0026 の例外） | Owner が明示保存する。 | 氏名（必須）、任意の肩書き・所属・自己紹介・リンク（最大 5 件）・メールアドレス・電話番号である。相手の情報は含まない。 | OS のアプリ専用保護領域（Local Private Profile とは別ファイル・別キー）である。 | Owner 自身と、Owner が QR を提示した相手（相手のブラウザで開く自己紹介ページ経由）である。 | Owner が削除するまでである。 | 個別削除、アプリ削除である。 | 否である（Export 経路自体が存在しない、Issue 118 / ADR-0033）。 |
 | 自己紹介カード QR（自己紹介ページ URL、ADR-0027） | `L2` | 保存済み Intro Card から表示のたびに再生成する。 | `https://card.tenkacloud.com/c#<base64url(JSON)>`（Issue 94 で GitHub Pages から移行、ADR-0029）。フラグメントに氏名・任意項目を埋め込む。URL 全体で 1,024 byte 以内である。 | 画面表示中のメモリだけである。 | QR を撮影した人（相手のブラウザが `site/c/index.html` を開く。フラグメントはサーバーへ送信されない）である。 | 表示中だけである。 | 画面を閉じる、カード編集・削除である。 | 否である。 |
 | 自己紹介ページ表示（ビューア、`site/c/index.html`） | `L2` | 相手のブラウザが QR の URL を開き、fragment を相手の端末内 JS だけで decode する。 | Intro Card と同じ内容（氏名、任意項目）である。サーバーは fragment を受け取らないため関与しない。 | 相手のブラウザのメモリと画面だけである。 | 相手自身である。相手が「連絡先に追加」を押した場合だけ、相手のブラウザ内で `.vcf` を追加生成し相手の連絡先アプリへ渡す。 | 相手がページを閉じるまでである。 | 相手がページを閉じる、または明示操作をやめるである。 | 否である（Owner 側の Export 対象外。相手側の操作は Owner のアプリの管理外）。 |
 | Public Passport | `L2` | Owner の確認操作により Local Private Profile から投影する。 | `schemaVersion`、Pet Name、今回 ON にした任意表示情報、Languages、最大 3 件の手掛かりである。 | 現在の QR を作る間のメモリだけである。 | QR を見る人と参加を許可された Pet である。 | 投影から最大 20 分である。 | QR の閉鎖、再生成、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
@@ -131,7 +135,6 @@ Role cohort、Locale cohort、Journey stage、Outcome class、Behavior code、Ev
 | GGUF モデルファイル | `L0` | Owner が Files から手動で選ぶ。アプリは入手元を信頼済みと判定しない。 | モデル本体である。Size と digest は private Manifest に分離する。 | OS のアプリ専用モデル領域である。 | 端末内推論 runtime だけである。 | Owner が置換または削除するまでである。 | モデル削除、検証失敗時の隔離、アプリ削除である。 | 否である。 |
 | モデル検証記録 | `L1` | アプリが GGUF の検証時に生成する。 | digest、サイズ、検証結果、検証したアプリ版である。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | モデルの置換またはアプリ更新後の再検証までである。 | モデル削除、置換、設定初期化、アプリ削除である。 | 可である。 |
 | Local Model Benchmark | `L1` | Owner が開始した Import または端末内推論に伴いアプリが生成する。 | Model digest、Import / Load / First Token / Completion 時間、Peak Process Memory、Thermal、Battery Delta である。推論内容と端末識別子は含まない。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | Model ごとに直近 20 件である。 | Model 削除、計測記録削除、設定初期化、アプリ削除である。 | 否である。 |
-| 手動 JSON バックアップ | `L4` | Owner が Export を明示実行する。 | バックアップ schema 版、Local Private Profile、端末設定、モデル検証記録である。 | Owner がファイル選択画面で指定した保存先である。 | Owner と保存先を扱えるアプリまたはサービスである。 | Export 後は Owner が削除するまでである。 | Owner が保存先から削除する。アプリ内一時データは完了、取消、失敗、再起動で破棄する。 | 対象そのものである。 |
 | Sanitized Diagnostic Report | `L4` | Owner が Preview 後に Share を明示実行する。 | Version、Provider / Transport / Permission 状態、Model の Architecture / Size / digest 先頭 8 桁、固定 Error Code / Phase、Storage 件数 / Byte 数である。 | Preview 中はメモリだけ、Share 後は Owner が選んだ保存先である。 | Owner が選んだ保存先または共有先である。 | Preview 終了まで、Share 後は Owner が削除するまでである。 | Preview 終了または Owner が保存先から削除する。 | 対象そのものである。 |
 | Pilot Event Aggregate | `L3P`、手動 Share 後は `L4` | Lounge の固定遷移と任意 Self-report が内容なしの Counter を加算する。 | Schema Version、最低集計単位、Start / Ready、duration Bucket、Bridge / `no-signal`、Rules / Local LLM / Fallback、Self-report 件数である。 | Process Memory だけ、手動 Share 後は Owner が選んだ保存先である。 | Preview は Owner / Facilitator、Share 後は選択した保存先または共有先である。 | Process 終了まで、Share 後は Owner が削除するまでである。 | Process 終了、全 Local Data 削除、または Owner が保存先から削除する。 | Outcome 5 件以上の固定 Aggregate だけが対象である。 |
 | Formative Event Temporary Coded Record | `L6` | Product Consent とは別の明示的な Research Consent 後に Researcher が 1 セッション分を作る。 | Role cohort、Locale cohort、Journey stage、Outcome class、Behavior code、Evidence direction、Hypothesis reference の 7 Field だけである。氏名、連絡先、正確な日時、会場、端末 / Lounge ID、回答や会話の内容、逐語引用、Sensitive Data を含めない。 | Researcher だけが扱える暗号化済み一時領域である。 | 指定 Researcher だけである。Facilitator、Product、Repository、Issue、PR、Cloud Analytics と共有しない。 | Public Aggregate 更新直後またはセッション終了から 7 日以内の早い方である。 | セッションを閉じる確認前の撤回、Aggregate 更新、7 日満了、禁止 Field の発見のうち最も早い時点で Record 全体を削除する。 | 否である。`L6P` への明示投影だけを許可する。 |
@@ -174,22 +177,13 @@ Discovery Hint、Transport Fingerprint、発行時刻、満了時刻、定員、
 持つ。これらは Lounge をまたいで再利用しないため安定 ID ではなく、Public Passport の
 Field にも昇格させない。
 
-## 手動 JSON バックアップの allowlist
+## 手動 JSON バックアップの allowlist（歴史的記録、Issue 118 / ADR-0033 で機能削除）
 
-バックアップは `backupSchemaVersion`、`exportedAt`、`localPrivateProfile`、`deviceSettings`、
-`modelVerification` だけを直列化する。次のデータは暗黙にも選択式にも含めない。
-
-- Public Passport と QR 参加情報である。
-- Lounge セッション、暗号鍵、Replay 防止状態、Owner Question、Owner Answer である。
-- Pet Message、端末内推論データ、Bridge、`no-signal`、`retired`、Security Signal である。
-- GGUF モデル本体、端末の絶対パス、OS またはネットワークの識別子である。
-- Local Model Benchmark、process memory sample、Thermal State、Battery Delta である。
-- GitHub Token、Analytics データ、外部推論 API の設定値である。
-- 自己紹介カード（Intro Card）である。Local Private Profile とは独立した Storage
-  であり、本 allowlist への統合は follow-up とする（Issue 79、ADR-0026）。
-
-Import は同じ strict schema で未知フィールドを拒否する。バックアップ内のデータから
-Public Passport を自動生成せず、Owner が Import 後に公開候補を確認して QR を生成する。
+以前はバックアップが `backupSchemaVersion`、`exportedAt`、`localPrivateProfile`、
+`deviceSettings`、`modelVerification` だけを直列化していた。この allowlist の設計判断
+（何を含めないかの一覧）は Sanitized Diagnostic Report・Pilot Event Aggregate の allowlist
+設計にも引き継がれているため参考として残すが、手動 JSON バックアップ機能自体は
+削除済みであり、この allowlist を強制する実装（`domain/backup.ts` 等）は存在しない。
 
 Pilot Event Aggregate は手動 JSON バックアップと Diagnostic Report の Schema へ混ぜない。
 `aggregateSchemaVersion`、`minimumAggregationUnit`、`startReady`、`readyToBridgeDurationBuckets`、

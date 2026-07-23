@@ -2,7 +2,6 @@ import { StatusBar } from 'expo-status-bar';
 import packageManifest from './package.json';
 import { createDefaultAgentModelProvider } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
-import { DEFAULT_DISTRIBUTION_CAPABILITY } from './src/app/default-distribution-capability';
 import { createDefaultIntroCardStorage } from './src/app/default-intro-card-storage';
 import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
 import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
@@ -43,7 +42,6 @@ export default function App() {
         appVersion={packageManifest.version}
         agentModelProvider={agentModelProvider}
         backupSharePort={backupSharePort}
-        distributionCapability={DEFAULT_DISTRIBUTION_CAPABILITY}
         localModelManagement={localModelComposition?.management ?? null}
         localModelMutationLeases={localModelComposition?.mutationLeases ?? null}
         localDataControl={localDataControl}

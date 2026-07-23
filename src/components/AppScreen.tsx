@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   type LayoutChangeEvent,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   type ScrollViewProps,
@@ -11,9 +12,22 @@ import {
   Text,
   View,
 } from 'react-native';
+import { LOCALE_LABELS, LOCALES, type Locale } from '../app/i18n/locale';
+import { MESSAGES } from '../app/i18n/messages';
 import { colors, spacing } from '../ui/theme';
+import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 import { monoFontFamily } from '../ui/typography';
 import BrandMark from './BrandMark';
+
+/**
+ * Issue 118: ヘッダーの言語切替は 2 Locale（ja/en）の単純なトグルであるため、
+ * `LOCALES` 配列内で次の Locale を 1 つ返す。3 Locale 以上へ拡張する場合も
+ * 「現在位置の次」を返す本関数のロジックはそのまま使える。
+ */
+function nextLocale(current: Locale): Locale {
+  const index = LOCALES.indexOf(current);
+  return LOCALES[(index + 1) % LOCALES.length] ?? current;
+}
 
 /**
  * Issue 93 の `content.paddingBottom` 既定値。footer を持つ画面
@@ -104,6 +118,15 @@ interface AppScreenProps {
    * `hasFooter` の有無だけに依存し、キーボードの表示状態では変わらない。
    */
   readonly footer?: ReactNode;
+  /**
+   * Issue 118: 自己紹介カード系画面（`IntroCardScreen` / `IntroCardEditScreen`）の
+   * 右上ヘッダーへ、言語切替の常設トグルを表示する。両方渡した画面だけに出る
+   * optional prop で、渡さない既存の全 Screen は今までどおり BrandMark ロックアップ
+   * だけの見た目のまま変わらない。以前は Settings 画面までスクロールしないと
+   * 切り替えられなかった（owner 実機フィードバック）。
+   */
+  readonly locale?: Locale;
+  readonly onChangeLocale?: (locale: Locale) => void;
 }
 
 export default function AppScreen({
@@ -113,6 +136,8 @@ export default function AppScreen({
   children,
   keyboardDismissMode,
   footer,
+  locale,
+  onChangeLocale,
 }: AppScreenProps) {
   // code-reviewer 指摘: `footer !== undefined && footer !== null` だと
   // `footer={false}` 等の falsy な値でも「footer あり」判定になり、
@@ -143,10 +168,30 @@ export default function AppScreen({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.brandRow}>
-            <BrandMark size={20} />
-            <Text style={styles.brand}>
-              TenkaCloud <Text style={styles.brandSub}>Passport</Text>
-            </Text>
+            <View style={styles.brandLockup}>
+              <BrandMark size={20} />
+              <Text style={styles.brand}>
+                TenkaCloud <Text style={styles.brandSub}>Passport</Text>
+              </Text>
+            </View>
+            {locale && onChangeLocale ? (
+              <Pressable
+                accessibilityHint={MESSAGES[locale].common.localeToggleHint}
+                accessibilityLabel={MESSAGES[
+                  locale
+                ].common.localeToggleAccessibilityLabel(
+                  LOCALE_LABELS[locale],
+                  LOCALE_LABELS[nextLocale(locale)]
+                )}
+                accessibilityRole="button"
+                onPress={() => onChangeLocale(nextLocale(locale))}
+                style={styles.localeToggle}
+              >
+                <Text style={styles.localeToggleText}>
+                  {locale.toUpperCase()}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
           <Text style={styles.title}>{title}</Text>
@@ -194,12 +239,41 @@ const styles = StyleSheet.create({
   },
   brandRow: {
     alignItems: 'center',
+    // Issue 118 の Codex レビュー指摘: 200% Text と狭幅端末では
+    // 「TenkaCloud Passport」ロックアップと JA/EN トグルを 1 行に収め切れない
+    // ことがある。`flexWrap: 'wrap'` により、収まらない場合だけトグルが
+    // 次の行へ折り返し、クリップや重なりにならないようにする（通常の文字
+    // サイズ・幅では 1 行に収まるため見た目は変わらない）。
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     marginBottom: 44,
+    rowGap: spacing.sm,
+  },
+  brandLockup: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: spacing.sm,
+    minWidth: 0,
+  },
+  localeToggle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    minWidth: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.sm,
+  },
+  localeToggleText: {
+    color: colors.ink,
+    fontFamily: monoFontFamily,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
   brand: {
     color: colors.ink,
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,

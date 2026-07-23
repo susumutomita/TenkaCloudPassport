@@ -599,15 +599,13 @@ describe('PassportApp の Stage 遷移契約', () => {
       );
     });
 
-    it('Issue 28: Settings へ実行時の配布能力をそのまま渡す', async () => {
+    it('Issue 118: Settings は配布能力デバッグ表示を受け取らない（distributionCapability prop を渡さない）', async () => {
       const text = await source();
       const settingsBlockStart = text.indexOf('<SettingsScreen');
       const settingsBlockEnd = text.indexOf('/>', settingsBlockStart);
       const settingsBlock = text.slice(settingsBlockStart, settingsBlockEnd);
 
-      expect(settingsBlock).toContain(
-        'distributionCapability={distributionCapability}'
-      );
+      expect(settingsBlock).not.toContain('distributionCapability');
     });
 
     it('openSettings / closeSettings は setStage だけを呼び、Lounge / Room / Interaction / Profile の state に触れない', async () => {

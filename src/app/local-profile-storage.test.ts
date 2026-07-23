@@ -248,27 +248,50 @@ describe('Local Profile Storage adapter', () => {
       temporaryDirectory(),
       'write-failing-profile.json'
     );
-    await new BunProfileDocument(nativePath).write(
-      JSON.stringify({ persisted: true })
-    );
+    await new ExpoFileSystemLocalProfileStorageAdapter(
+      new BunProfileDocument(nativePath)
+    ).save(profile());
     const native = new ExpoFileSystemLocalProfileStorageAdapter(
       new WriteFailingProfileDocument(nativePath, new Error('write failure'))
     );
     expect((await native.inspect()).count).toBe(1);
+    // 書き込みだけが失敗するダブルであることを確認する: 読み込み（内部で
+    // `text()` を委譲先の実ファイルへ通す）は書き込み失敗の影響を受けない。
+    expect(await native.load()).toEqual(profile());
     await native.remove();
 
     const webRoot = temporaryDirectory();
     const webDelegate = new FileBackedWebStorage(webRoot);
     await new WebLocalProfileStorageAdapter(webDelegate).save(profile());
-    await new WebLocalProfileStorageAdapter(
+    const webWriteFailing = new WebLocalProfileStorageAdapter(
       new WriteFailingWebStorage(webRoot, new Error('write failure'))
-    ).remove();
+    );
+    // 同様に、読み込み（内部で `getItem()` を委譲先の実 Storage へ通す）は
+    // 書き込み失敗の影響を受けない。
+    expect(await webWriteFailing.load()).toEqual(profile());
+    await webWriteFailing.remove();
 
     const mismatchDelegate = new WebLocalProfileStorageAdapter(
       new FileBackedWebStorage(temporaryDirectory())
     );
-    const mismatch = new VerifyMismatchStorage(mismatchDelegate, profile());
+    const mismatchedProfile = createLocalPrivateProfile({
+      petName: 'ずれ',
+      petEmoji: '🐾',
+      ownerAlias: '',
+      candidateClueIds: ['open-source'],
+      selectedForPassportClueIds: ['open-source'],
+      languageCodes: ['ja'],
+    });
+    const mismatch = new VerifyMismatchStorage(
+      mismatchDelegate,
+      mismatchedProfile
+    );
     expect(await mismatch.inspect()).toEqual({ count: 0, bytes: 0 });
+    // `save()` は検証を挟まず委譲先へそのまま委譲する一方、`load()` は常に
+    // 注入した不一致 Profile を返す（実際に保存した内容とは無関係）。
+    await mismatch.save(profile());
+    expect(await mismatchDelegate.load()).toEqual(profile());
+    expect(await mismatch.load()).toEqual(mismatchedProfile);
     await mismatch.remove();
   });
 });

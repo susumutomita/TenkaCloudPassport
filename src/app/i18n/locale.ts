@@ -1,7 +1,7 @@
 /**
  * Issue 15: 日本語・英語の Runtime Language Switch。この repo に React Context の前例が
  * 無く、レンダリング用の統合テスト基盤（React Testing Library 相当）も持たないため、
- * `Locale` は他の横断状態（`backupFlow` 等）と同じ「`PassportApp` が `useState` で保持し、
+ * `Locale` は他の横断状態（`restoring` 等）と同じ「`PassportApp` が `useState` で保持し、
  * Prop として渡す」設計に揃える（`docs/design/i18n-and-accessibility.md` を正本とする）。
  *
  * Domain 層の `LanguageCode`（`src/domain/clue-catalog.ts`）は Passport の会話材料としての

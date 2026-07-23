@@ -2,7 +2,16 @@ import { PROTOCOL_VERSION } from '../protocol/peer-envelope';
 import type { ProviderRuntimeStatus } from './agent-provider-session';
 import type { CameraPermissionState } from './qr-scanner-port';
 
-export const DIAGNOSTIC_REPORT_SCHEMA_VERSION = 1;
+/**
+ * Issue 118 / ADR-0033: schema v1 は JSON Backup 機能が存在した頃の
+ * `storage.backupCacheCount` フィールドを含んでいたが、Backup 機能の削除後は
+ * producer を失い常に `0` で構築される機能的残骸になっていた（Codex レビュー指摘）。
+ * v2 でこのフィールドを削除する。schema version を上げずに黙って形を変えると、
+ * 過去に共有された v1 の Report（`backupCacheCount` を含む）と今後の Report が
+ * 同じ version 番号で異なる形になり、Report を読む側（サポート担当者・開発者）を
+ * 誤解させるため、破壊的変更として明示的にバージョンを分ける。
+ */
+export const DIAGNOSTIC_REPORT_SCHEMA_VERSION = 2;
 export const DIAGNOSTIC_REPORT_MAX_BYTES = 64 * 1024;
 
 const MODEL_ARCHITECTURES = [
@@ -42,7 +51,6 @@ const ERROR_PHASES = [
   'startup',
   'profile-read',
   'profile-write',
-  'backup-import',
   'backup-export',
   'permission',
   'transport',
@@ -66,7 +74,6 @@ export type DiagnosticErrorPhase = (typeof ERROR_PHASES)[number];
 export interface DiagnosticStorageSummary {
   readonly profileCount: number;
   readonly settingsCount: number;
-  readonly backupCacheCount: number;
   readonly modelCount: number;
   readonly totalBytes: number;
 }
@@ -92,7 +99,7 @@ export interface DiagnosticReportInput {
 }
 
 export interface DiagnosticReport {
-  readonly reportSchema: 1;
+  readonly reportSchema: 2;
   readonly version: {
     readonly app: string;
     readonly protocol: string;
@@ -237,14 +244,12 @@ function parseStorage(value: unknown): DiagnosticStorageSummary {
   const storage = exactRecord(value, [
     'profileCount',
     'settingsCount',
-    'backupCacheCount',
     'modelCount',
     'totalBytes',
   ] as const);
   return {
     profileCount: boundedInteger(storage.profileCount),
     settingsCount: boundedInteger(storage.settingsCount),
-    backupCacheCount: boundedInteger(storage.backupCacheCount),
     modelCount: boundedInteger(storage.modelCount),
     totalBytes: boundedInteger(storage.totalBytes),
   };
@@ -340,7 +345,6 @@ function previewItems(report: DiagnosticReport): DiagnosticPreviewItem[] {
   for (const key of [
     'profileCount',
     'settingsCount',
-    'backupCacheCount',
     'modelCount',
     'totalBytes',
   ] as const) {

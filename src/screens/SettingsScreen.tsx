@@ -1,6 +1,4 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { DistributionCapability } from '../app/distribution-capability';
-import { distributionCapabilityNotice } from '../app/distribution-capability-notice';
 import {
   DEFAULT_LOCALE,
   LOCALE_LABELS,
@@ -19,7 +17,6 @@ import type {
 import { colors, spacing } from '../ui/theme';
 
 interface SettingsScreenProps {
-  readonly distributionCapability: DistributionCapability;
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onOpenDiagnostics: () => void;
@@ -238,7 +235,6 @@ function LocalModelCandidateCard({
  * の設計判断 1）。
  */
 export default function SettingsScreen({
-  distributionCapability,
   locale = DEFAULT_LOCALE,
   onChangeLocale,
   onOpenDiagnostics,
@@ -247,24 +243,8 @@ export default function SettingsScreen({
   modelManagement,
 }: SettingsScreenProps) {
   const t = MESSAGES[locale].settings;
-  const capabilityNotice = distributionCapabilityNotice(
-    distributionCapability,
-    locale
-  );
   return (
     <AppScreen description={t.description} eyebrow="Settings" title={t.title}>
-      <Text style={styles.sectionTitle}>{t.distributionSectionTitle}</Text>
-      <View style={styles.capabilityCard}>
-        <Text style={styles.capabilityText}>{capabilityNotice.runtime}</Text>
-        <Text style={styles.capabilityText}>{capabilityNotice.tier}</Text>
-        <Text style={styles.capabilityText}>
-          {capabilityNotice.rulesProvider}
-        </Text>
-        <Text style={styles.capabilityText}>{capabilityNotice.localModel}</Text>
-        <Text style={styles.capabilityText}>
-          {capabilityNotice.nearbyTransport}
-        </Text>
-      </View>
       <Text style={styles.sectionTitle}>{t.languageSectionTitle}</Text>
       <View style={styles.options}>
         {LOCALES.map((option) => {
@@ -398,19 +378,6 @@ export default function SettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  capabilityCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  capabilityText: {
-    color: colors.ink,
-    fontSize: 16,
-    lineHeight: 24,
-  },
   sectionTitle: {
     color: colors.ink,
     fontSize: 18,

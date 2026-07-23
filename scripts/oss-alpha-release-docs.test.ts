@@ -408,7 +408,9 @@ describe('Issue 29: Architecture と状態 Matrix の非誇張契約', () => {
     const modelRows = markdownRowsAfter(status, '## Model Matrix');
     const transportRows = markdownRowsAfter(status, '## Transport Matrix');
 
-    expect(featureRows.length).toBeGreaterThanOrEqual(10);
+    // Issue 118 / ADR-0032: JSON Backup 機能自体を削除したため Feature Matrix の
+    // 行数が 10 → 9 へ減った（弱体化ではなく、削除した機能の行を正しく除いた結果）。
+    expect(featureRows.length).toBeGreaterThanOrEqual(9);
     expect(deviceRows.length).toBeGreaterThanOrEqual(6);
     expect(modelRows.length).toBeGreaterThanOrEqual(3);
     expect(transportRows.length).toBeGreaterThanOrEqual(3);

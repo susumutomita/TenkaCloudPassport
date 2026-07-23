@@ -20,7 +20,6 @@
 | Account-free Passport onboarding | `Implemented` | `Not run`: rerun on Candidate commit and attach immutable Actions URL / reviewer | `Not run`: iOS / Android first-use study | 初見 90 秒と実 Storage は Issue 30 待ち。 |
 | Rules Provider Bridge / no-signal | `Implemented` | `Not run`: rerun on Candidate commit and attach immutable Actions URL / reviewer | `Not run`: physical offline E2E | Green tests are not Airplane Mode evidence. |
 | QR Invite / Ready contract | `Implemented` | `Not run`: rerun on Candidate commit and attach immutable Actions URL / reviewer | `Not run`: real camera and multi-device scan | Camera permission and QR rotation remain physical gates. |
-| JSON Backup | `Implemented` | `Not run`: rerun on Candidate commit and attach immutable Actions URL / reviewer | `Not run`: native share and physical round-trip | Lounge data must remain excluded. |
 | Group Lounge coordinator | `Experimental` | `Not run`: rerun on Candidate commit and attach immutable Actions URL / reviewer | `Not run`: mixed-device 30-minute セッション | No real Nearby Adapter is connected. |
 | Local diagnostics / full delete | `Experimental` | `Not run`: rerun on Candidate commit and attach immutable Actions URL / reviewer | `Not run`: OS log and physical storage inspection | Real Model / Transport cleanup is not connected. |
 | Local LLM Provider | `Planned` | `Blocked`: Draft PR 48 is not on default branch | `Not run`: iPhone / Android arm64 GGUF | Do not claim Local LLM from Draft CI. |

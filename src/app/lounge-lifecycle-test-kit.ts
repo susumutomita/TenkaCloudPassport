@@ -23,11 +23,12 @@ import {
 } from './pet-interaction-flow';
 
 /**
- * 複数のテストファイル（`lounge-privacy-regression.test.ts`（Issue 9）と
- * `backup-export-privacy-regression.test.ts`（Issue 14））が、同じ「Room の forming から
+ * `lounge-privacy-regression.test.ts`（Issue 9）が、「Room の forming から
  * Bridge 確定・完全破棄までのフル行程を、実際に `PassportApp` が呼ぶのと同じ Use Case
  * 関数の並びで実行する」ヘルパーと Lounge 由来の禁止語彙一覧を必要とするため、ここへ集約する
  * （`src/app/storage-test-kit.ts` / `src/screens/accessibility-test-kit.ts` と同じ集約方針）。
+ * 以前は `backup-export-privacy-regression.test.ts`（Issue 14）も利用していたが、
+ * JSON Backup 機能自体を Issue 118 / ADR-0033 で削除したためこのファイルも削除済みである。
  */
 const LOUNGE_LIFECYCLE_CLOCK = {
   wallClockMs: 1_700_000_000_000,

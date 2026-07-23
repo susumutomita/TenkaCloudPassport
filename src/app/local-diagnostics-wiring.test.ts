@@ -20,19 +20,11 @@ function compositionSource(): Promise<string> {
   return readSourceFile(import.meta.url, '../../App.tsx');
 }
 
-function backupFlowSource(): Promise<string> {
-  return readSourceFile(import.meta.url, 'use-backup-flow.ts');
-}
-
 function passportCreationSource(): Promise<string> {
   return readSourceFile(
     import.meta.url,
     '../screens/PassportCreationScreen.tsx'
   );
-}
-
-function backupImportSource(): Promise<string> {
-  return readSourceFile(import.meta.url, '../screens/BackupImportScreen.tsx');
 }
 
 function screenSource(): Promise<string> {
@@ -72,11 +64,9 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
     ]);
   });
 
-  it('Profile / Backup の保存中は Diagnostic 全削除へ遷移できない', async () => {
+  it('Profile の保存中は Diagnostic 全削除へ遷移できない（Issue 118: JSON Backup 機能自体を削除したため Backup 側の契約は無い）', async () => {
     const app = await appSource();
-    const backup = await backupFlowSource();
     const creation = await passportCreationSource();
-    const backupImport = await backupImportSource();
     const openSettingsStart = app.indexOf('function openSettings()');
     const closeSettingsStart = app.indexOf(
       'function closeSettings()',
@@ -86,9 +76,7 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
     expect(app.slice(openSettingsStart, closeSettingsStart)).toContain(
       'if (saving) return'
     );
-    expect(backup).toContain('if (committing) return');
-    expect(creation.match(/disabled=\{saving\}/g)).toHaveLength(3);
-    expect(backupImport.match(/disabled=\{committing\}/g)).toHaveLength(3);
+    expect(creation.match(/disabled=\{saving\}/g)).toHaveLength(2);
   });
 
   it('削除中は Back を閉じ、commit 後中断は旧 Preview を破棄して Recovery 専用状態に留まる', async () => {
@@ -176,16 +164,22 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
     expect(text).toContain('localDataPreview');
   });
 
-  it('Profile / Backup / Permission / Transport の失敗を本文なしの固定 Error Signal へ接続する', async () => {
+  it('Profile / Permission / Transport の失敗を本文なしの固定 Error Signal へ接続する（Issue 118: use-backup-flow.ts 自体を削除したため Backup 側の契約は無い。Diagnostics 自身の share() 失敗は phase: backup-export を引き続き使う、下のテスト参照）', async () => {
     const app = await appSource();
-    const backup = await backupFlowSource();
 
     expect(app).toContain("phase: 'profile-write'");
     expect(app).toContain("phase: 'permission'");
     expect(app).toContain("phase: 'transport'");
     expect(app).toContain("code: 'TRANSPORT_UNAVAILABLE'");
-    expect(backup).toContain("phase: 'backup-export'");
-    expect(backup).toContain("phase: 'backup-import'");
-    expect(backup).toContain('onDiagnosticError({');
+  });
+
+  it('Diagnostic Report の共有失敗は phase: backup-export（共有 Port 呼び出し失敗の既存 Phase 名）で Error Signal を作る（Issue 118: BackupSharePort は Diagnostics・Pilot Measurement とも共有する Port であり削除していない）', async () => {
+    const text = await flowSource();
+    const shareStart = text.indexOf('const share = useCallback(');
+    const shareEnd = text.indexOf('const endAndForgetLounge', shareStart);
+    const shareBody = text.slice(shareStart, shareEnd);
+
+    expect(shareBody).toContain("phase: 'backup-export'");
+    expect(shareBody).toContain("code: 'UNEXPECTED_FAILURE'");
   });
 });

@@ -113,20 +113,6 @@ describe('Lounge 由来データの Storage 不揮発化を保証する Privacy 
     }
   });
 
-  it('Backup 型は Local Profile 由来の情報だけを持ち、Lounge / Pet Interaction 由来の語彙を含まない', async () => {
-    const text = await Bun.file(
-      new URL('../domain/backup.ts', import.meta.url)
-    ).text();
-
-    for (const forbidden of [
-      ...LOUNGE_FORBIDDEN_VOCABULARY,
-      'PetInteraction',
-      'OwnerQuestion',
-    ]) {
-      expect(text).not.toContain(forbidden);
-    }
-  });
-
   it('Owner Question の回答画面・段階は Storage Port を一切 import しない（メモも含めて端末へ保存しない）', async () => {
     for (const fileName of [
       '../screens/OwnerQuestionScreen.tsx',

@@ -27,17 +27,15 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     ]);
   });
 
-  it('編集画面の保存ボタンは AppScreen の footer prop（画面下部固定）にあり、Save / Backup / Settings の順で並ぶ（Issue 93）', async () => {
+  it('編集画面の保存ボタンは AppScreen の footer prop（画面下部固定）にある（Issue 93、Issue 118: Backup / Settings 導線は footer から削除済み）', async () => {
     const text = await source('IntroCardEditScreen.tsx');
     const footerStart = text.indexOf('footer={');
     const footerEnd = text.indexOf('keyboardDismissMode', footerStart);
     const footerBlock = text.slice(footerStart, footerEnd);
 
-    expectInOrder(footerBlock, [
-      't.saveButton(saving)',
-      'MESSAGES[locale].passportCreation.backupButton',
-      'common.settingsButton',
-    ]);
+    expect(footerBlock).toContain('t.saveButton(saving)');
+    expect(footerBlock).not.toContain('onOpenBackup');
+    expect(footerBlock).not.toContain('onOpenSettings');
   });
 
   it('編集画面の必須入力（名前）は accessibilityLabel と accessibilityHint を持つ', async () => {
@@ -88,12 +86,28 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     expect(text).toContain("t.noticeTitles['delete-error']");
   });
 
-  it('表示画面・編集画面のどちらも Settings と Backup への導線を維持する', async () => {
+  it('表示画面の削除は編集の下に続く控えめな下線付きテキストリンクであり、QR 直下の目立つ danger ActionButton にはしない（Issue 118 owner 実機フィードバック: 削除が主導線に見えて分かりにくい）', async () => {
+    const text = await source('IntroCardScreen.tsx');
+    const editButtonStart = text.indexOf('label={t.editButton}');
+    const deleteLinkStart = text.indexOf('onPress={onDelete}');
+
+    expect(editButtonStart).toBeGreaterThan(-1);
+    expect(deleteLinkStart).toBeGreaterThan(editButtonStart);
+    expect(text).toContain('<Pressable');
+    expect(text).toContain('accessibilityLabel={t.deleteButton}');
+    expect(text).not.toContain('label={t.deleteButton}');
+    expect(text).not.toContain('variant="danger"');
+    expect(text).toContain("from '../ui/touch-target'");
+    expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
+  });
+
+  it('表示画面・編集画面のどちらも AppScreen へ言語切替（locale / onChangeLocale）を渡し、Settings と Backup への導線は持たない（Issue 118）', async () => {
     for (const fileName of ['IntroCardScreen.tsx', 'IntroCardEditScreen.tsx']) {
       const text = await source(fileName);
 
-      expect(text).toContain('onPress={onOpenSettings}');
-      expect(text).toContain('onPress={onOpenBackup}');
+      expect(text).toContain('onChangeLocale={onChangeLocale}');
+      expect(text).not.toContain('onPress={onOpenSettings}');
+      expect(text).not.toContain('onPress={onOpenBackup}');
     }
   });
 
@@ -397,7 +411,7 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     ]);
   });
 
-  it('編集画面の Save / Backup / Settings ボタンは AppScreen の footer prop へ渡し、キーボード非表示時に sticky footer の操作可能な位置に存在する（Issue 93、キーボード表示中の footer 非表示契約は Issue 117 の app-screen.test.ts で検証）', async () => {
+  it('編集画面の Save ボタンは AppScreen の footer prop へ渡し、キーボード非表示時に sticky footer の操作可能な位置に存在する（Issue 93、キーボード表示中の footer 非表示契約は Issue 117 の app-screen.test.ts で検証。Issue 118: footer から Backup / Settings 導線を削除し、Save だけにした）', async () => {
     const text = await source('IntroCardEditScreen.tsx');
 
     expect(text).toContain('footer={');
@@ -405,8 +419,8 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     const footerEnd = text.indexOf('keyboardDismissMode', footerStart);
     const footerBlock = text.slice(footerStart, footerEnd);
     expect(footerBlock).toContain('onPress={handleSave}');
-    expect(footerBlock).toContain('onPress={onOpenBackup}');
-    expect(footerBlock).toContain('onPress={onOpenSettings}');
+    expect(footerBlock).not.toContain('onPress={onOpenBackup}');
+    expect(footerBlock).not.toContain('onPress={onOpenSettings}');
   });
 
   it('編集画面は各入力欄に onBlur を持ち、domain の validateIntroCardFieldValue を再利用して保存前に検証する（Issue 93、保存時判定との drift を防ぐ）', async () => {

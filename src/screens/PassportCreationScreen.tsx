@@ -32,7 +32,6 @@ interface PassportCreationScreenProps {
   readonly onToggleClue: (id: ClueId) => void;
   readonly onToggleLanguage: (code: LanguageCode) => void;
   readonly onSave: () => void;
-  readonly onOpenBackup: () => void;
   readonly onOpenSettings: () => void;
 }
 
@@ -73,7 +72,6 @@ export default function PassportCreationScreen({
   onToggleClue,
   onToggleLanguage,
   onSave,
-  onOpenBackup,
   onOpenSettings,
 }: PassportCreationScreenProps) {
   const t = MESSAGES[locale].passportCreation;
@@ -155,13 +153,6 @@ export default function PassportCreationScreen({
         disabled={saving}
         label={t.saveButton(saving)}
         onPress={onSave}
-      />
-      <ActionButton
-        accessibilityHint={t.backupButtonHint}
-        disabled={saving}
-        label={t.backupButton}
-        onPress={onOpenBackup}
-        variant="secondary"
       />
       <ActionButton
         accessibilityHint={common.settingsButtonHint}

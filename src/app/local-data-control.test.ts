@@ -286,7 +286,6 @@ describe('Local Data の Preview と個別削除', () => {
     expect(await localData.preview()).toEqual({
       profileCount: 0,
       settingsCount: 0,
-      backupCacheCount: 0,
       modelCount: 0,
       totalBytes: 0,
       model: null,

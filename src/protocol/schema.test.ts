@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { CATALOG_VERSION } from '../domain/clue-catalog';
 import {
-  BACKUP_MAX_BYTES,
   EXTERNAL_JSON_MAX_DEPTH,
   isSchemaValidationError,
   PEER_ENVELOPE_MAX_BYTES,
   parseAgentDecision,
-  parseBackup,
-  parseBackupJson,
   parseBridge,
   parseLocalPrivateProfile,
   parseLounge,
@@ -90,19 +87,6 @@ const PEER_ENVELOPE = {
   payload: { kind: 'public-passport', publicPassport: PASSPORT },
 } as const;
 
-const BACKUP = {
-  backupSchemaVersion: 2,
-  exportedAt: '2026-07-17T00:00:00.000Z',
-  localPrivateProfile: PROFILE,
-  deviceSettings: {
-    language: 'ja',
-    reduceMotion: false,
-    selectedModelDigest: null,
-    catalogVersion: CATALOG_VERSION,
-  },
-  modelVerification: null,
-} as const;
-
 function expectSchemaError(
   action: () => void,
   code: SchemaValidationError['code']
@@ -119,7 +103,7 @@ function expectSchemaError(
 }
 
 describe('Versioned Domain Schema', () => {
-  it('9 種類の Schema が正常な境界値を別型として検証する', () => {
+  it('8 種類の Schema が正常な境界値を別型として検証する', () => {
     const lounge = {
       schemaVersion: 1,
       loungeId: LOUNGE_ID,
@@ -136,7 +120,6 @@ describe('Versioned Domain Schema', () => {
     expect(parseBridge(BRIDGE).message).toContain('オープンソース');
     expect(parseAgentDecision(DECISION).kind).toBe('bridge');
     expect(parsePeerEnvelope(PEER_ENVELOPE)).toEqual(PEER_ENVELOPE);
-    expect(parseBackup(BACKUP)).toEqual(BACKUP);
   });
 
   it('Local Private Profile の除外トピックをカタログ値として再構築する', () => {
@@ -183,10 +166,6 @@ describe('Versioned Domain Schema', () => {
       [
         () => parsePeerEnvelope({ ...PEER_ENVELOPE, rawPrompt: 'hidden' }),
         'peer',
-      ],
-      [
-        () => parseBackup({ ...BACKUP, storagePath: '/private/data' }),
-        'backup',
       ],
     ];
 
@@ -254,11 +233,6 @@ describe('Versioned Domain Schema', () => {
           sequence: 0,
           sentAtEpochMs: SENT_AT_EPOCH_MS,
           expiresAtEpochMs: SENT_AT_EPOCH_MS + 60_000,
-        }),
-      () =>
-        parseBackup({
-          backupSchemaVersion: 2,
-          exportedAt: '2026-07-17T00:00:00.000Z',
         }),
     ];
 
@@ -532,93 +506,6 @@ describe('Versioned Domain Schema', () => {
     );
   });
 
-  it('Backup は端末設定とモデル検証の文字列境界を検証する', () => {
-    expectSchemaError(
-      () =>
-        parseBackup({
-          ...BACKUP,
-          deviceSettings: { ...BACKUP.deviceSettings, language: 'fr' },
-        }),
-      'INVALID_VALUE'
-    );
-    expectSchemaError(
-      () =>
-        parseBackup({
-          ...BACKUP,
-          modelVerification: {
-            digest: 'not-a-digest',
-            sizeBytes: 1,
-            result: 'verified',
-            appVersion: '1.0.0',
-          },
-        }),
-      'INVALID_VALUE'
-    );
-  });
-
-  it('Backup は allowlist 内のモデル検証記録を再構築する', () => {
-    const digest = 'a'.repeat(64);
-    const parsed = parseBackup({
-      ...BACKUP,
-      deviceSettings: {
-        ...BACKUP.deviceSettings,
-        selectedModelDigest: digest,
-      },
-      modelVerification: {
-        digest,
-        sizeBytes: 1,
-        result: 'verified',
-        appVersion: '1.0.0',
-      },
-    });
-
-    expect(parsed.deviceSettings.selectedModelDigest).toBe(digest);
-    expect(parsed.modelVerification?.digest).toBe(digest);
-  });
-
-  it('Backup の app Version は 32 文字まで受理し 33 文字目を拒否する', () => {
-    const verification = {
-      digest: 'a'.repeat(64),
-      sizeBytes: 1,
-      result: 'verified',
-      appVersion: 'a'.repeat(32),
-    };
-
-    expect(
-      parseBackup({ ...BACKUP, modelVerification: verification })
-        .modelVerification?.appVersion
-    ).toHaveLength(32);
-    expectSchemaError(
-      () =>
-        parseBackup({
-          ...BACKUP,
-          modelVerification: { ...verification, appVersion: 'a'.repeat(33) },
-        }),
-      'LIMIT_EXCEEDED'
-    );
-  });
-
-  it('Backup は不正な app Version、日時、Schema Version を拒否する', () => {
-    const verification = {
-      digest: 'a'.repeat(64),
-      sizeBytes: 1,
-      result: 'verified',
-      appVersion: 'version 1',
-    };
-    expectSchemaError(
-      () => parseBackup({ ...BACKUP, modelVerification: verification }),
-      'INVALID_VALUE'
-    );
-    expectSchemaError(
-      () => parseBackup({ ...BACKUP, exportedAt: '2026-07-17' }),
-      'INVALID_VALUE'
-    );
-    expectSchemaError(
-      () => parseBackup({ ...BACKUP, backupSchemaVersion: 3 }),
-      'UNSUPPORTED_VERSION'
-    );
-  });
-
   it('Schema Validation Error の型 guard は Error だけを識別する', () => {
     const error = new SchemaValidationError(
       'INVALID_VALUE',
@@ -772,23 +659,5 @@ describe('Peer Protocol Version と入力上限', () => {
 
   it('不正 JSON を拒否する', () => {
     expectSchemaError(() => parsePeerEnvelopeJson('{'), 'INVALID_JSON');
-  });
-
-  it('Backup の UTF-8 byte 数が 64 KiB を超える場合は拒否する', () => {
-    const raw = JSON.stringify({
-      ...BACKUP,
-      oversized: 'x'.repeat(BACKUP_MAX_BYTES),
-    });
-
-    expectSchemaError(() => parseBackupJson(raw), 'LIMIT_EXCEEDED');
-  });
-
-  it('有効な Backup JSON が 64 KiB 以下なら受理する', () => {
-    const raw = JSON.stringify(BACKUP);
-
-    expect(new TextEncoder().encode(raw).byteLength).toBeLessThanOrEqual(
-      BACKUP_MAX_BYTES
-    );
-    expect(parseBackupJson(raw)).toEqual(BACKUP);
   });
 });
