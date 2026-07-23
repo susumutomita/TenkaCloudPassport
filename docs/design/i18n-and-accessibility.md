@@ -188,6 +188,22 @@ Text へ `numberOfLines={1}` を付けないこと、`allowFontScaling={false}` 
    レイアウト順序を確認する目的のものは「特定の日本語文字列」ではなく「Message Catalog の
    Key 参照」を検査対象に変更し、正確な文言のピン留めは Message Catalog 自身のテストへ移す。
 
+## 初期ロケール自動判定と永続化（Issue 111）
+
+決定判断 1（`PassportApp` が `useState<Locale>` を持つ）を変えず、初期値の決め方と、
+明示切替の永続化を追加する。詳細な設計判断・代替案は
+[ADR-0034](../adr/0034-initial-locale-autodetection.md) を正本とする。要点は次の 2 つ。
+
+- 判定 Port（`src/app/initial-locale-port.ts`）は、この文書の Reduce Motion 節と同じ
+  「Port + 環境注入」で `expo-localization` を直接 import しない。純関数
+  `pickInitialLocale` は先頭の優先言語タグが `ja` なら `'ja'`、それ以外（`LOCALES` に
+  無い言語を含む）は `'en'`、判定不能（空配列）は既存の既定値 `'ja'` を返す。
+- 永続化 Port（`src/app/locale-preference-storage.ts`）は決定判断 3 と同じ製品語彙の
+  規律には関わらないが、Web（`localStorage`）/ Native（`expo-file-system`）の 2 adapter
+  構成を Local Profile 系の既存 Storage と揃える。明示切替（Settings・`AppScreen`
+  ヘッダーの JA/EN トグル）は `PassportApp.tsx` の `handleChangeLocale` へ一本化し、
+  `setLocale` と保存を同時に行う。
+
 ## Known follow-ups
 
 - カタログ Clue Label・Owner Question の質問文（Wire Protocol）の翻訳（Issue 13 から継続）。

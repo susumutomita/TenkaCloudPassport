@@ -165,6 +165,44 @@ export class WriteFailingProfileDocument implements ProfileDocument {
 }
 
 /**
+ * `WriteFailingProfileDocument` の対になる実装。読み込み（`exists` の同期アクセス・
+ * `text()`）だけを確実に失敗させ、`write()` / `delete()` は実ファイルへの本物の
+ * I/O（`BunProfileDocument` へ委譲）のまま残す。権限エラー・破損ファイル等、
+ * 「読込だけが失敗する」状況を安定して再現するための実装で、モックで振る舞いを
+ * 偽装するのではなく Port の契約を満たす別の本物の実装を注入する。
+ */
+export class ReadFailingProfileDocument implements ProfileDocument {
+  private readonly delegate: BunProfileDocument;
+
+  constructor(
+    filePath: string,
+    private readonly failure: Error
+  ) {
+    this.delegate = new BunProfileDocument(filePath);
+  }
+
+  get exists(): boolean {
+    throw this.failure;
+  }
+
+  get size(): null {
+    return null;
+  }
+
+  text(): Promise<string> {
+    return Promise.reject(this.failure);
+  }
+
+  write(content: string): Promise<void> {
+    return this.delegate.write(content);
+  }
+
+  delete(): Promise<void> {
+    return this.delegate.delete();
+  }
+}
+
+/**
  * Web 相当の同じ意図を持つ実装。`getItem` は `FileBackedWebStorage` （実ファイル I/O）へ
  * 委譲し、`setItem` だけが実ファイルへ一切触れずに確実に throw する。
  */

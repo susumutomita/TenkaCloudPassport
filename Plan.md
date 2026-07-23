@@ -6954,6 +6954,246 @@ TenkaCloud ブランドの文脈づけと勉強会での会話のフックを作
   既存のフルテストスイートを都度実行していたため、コミット前に発見・修正できた
   （TDD の Red-Green サイクルを保った効果）。
 
+### [初回ロケール自動判定と明示選択の永続化] - 2026-07-23
+
+#### 目的
+
+Issue 111（GitHub Issue 111）。アプリ初回起動時、日本語話者以外が開いても UI が日本語固定の
+ままで「英語版が無い」ように見える問題を解消する。英語翻訳と切替 UI（`AppScreen` ヘッダーの
+JA/EN トグル、Issue 15 / Issue 118・PR #127）は既存のため、本 Issue は次の 2 点だけを扱う。
+
+1. 保存済みの明示選択が無い初回だけ、端末 / ブラウザの優先言語から初期表示言語を自動判定する。
+2. 一度明示的に選んだ言語を端末内へ永続化し、次回以降は自動判定より優先する。
+
+#### 制約
+
+- ヘッダーの JA/EN トグル UI 自体は再実装しない（既存 UI を活かす）。
+- `rm` / `npx` 禁止（`git rm` / `bunx` / `nlx`）。git add は明示ファイルのみ。
+- 8081 kill 禁止、`ios/` / `node_modules` 不触。
+- 新規依存（`expo-localization`）追加時は ADR 必須（ADR-0034）。
+
+#### タスク
+
+1. ADR-0034 を作成する（依存追加・判定規則・永続化設計）。
+2. `bunx expo install expo-localization --ignore-scripts` で依存を追加し、`bun.lock` を更新する。
+3. `src/app/initial-locale-port.ts`（Port + 純関数 `pickInitialLocale`）と
+   `src/app/initial-locale-port.test.ts` を TDD で実装する。
+4. `src/app/locale-preference-storage.ts`（Port + Web/Native 2 adapter）と
+   `src/app/locale-preference-storage.test.ts` を TDD で実装する。
+5. `src/app/default-initial-locale-port.ts` / `src/app/default-locale-preference-storage.ts`
+   （Composition Root 向け factory、既存の `default-local-deletion-journal.ts` 等と同じく
+   専用テストは置かない）を実装する。
+6. `PassportApp.tsx` の `locale` 初期値を Port 経由にし、起動時 `Promise.all` へ保存済み選好の
+   読込を追加、明示切替を `handleChangeLocale`（`setLocale` + 保存）へ一本化する。
+7. `App.tsx` で新しい 2 つの Port を組み立てて `PassportApp` へ渡す。
+8. `passport-app-stage-flow.test.ts` の `setLocale` 契約テストを新しい配線に合わせて更新する。
+9. `docs/design/i18n-and-accessibility.md` に本 Issue の設計を追記する。
+
+#### 検証手順
+
+- `bun test src --coverage`（100% 維持）、`bun run typecheck`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit` が exit 0 になる。
+- code-reviewer によるレビューと反映。
+
+#### 進捗ログ
+
+- 2026-07-23: Issue 111 を読み、ADR-0034 を作成した（`expo-localization` 追加・
+  `pickInitialLocale` の判定規則・`locale-preference-storage.ts` の永続化設計）。
+  隔離 worktree（HEAD が `origin/main` と一致、rebase 不要）で
+  `i18n/initial-locale-autodetect` ブランチを作成した。
+- 2026-07-23: `bunx expo install expo-localization -- --ignore-scripts` で依存を追加し
+  （SDK 57 互換の `~57.0.1`）、`app.json` の plugins へ登録した（`bunx biome check --write`
+  で `assetBundlePatterns` 等の無関係な整形差分だけ元に戻した）。TDD で
+  `src/app/initial-locale-port.ts`（純関数 `pickInitialLocale` + Port、
+  `reduced-motion-port.ts` と同じ環境注入設計）と `src/app/locale-preference-storage.ts`
+  （Port + Web/Native 2 adapter、`local-deletion-journal.ts` と同じ設計）をテスト先行で
+  実装し、それぞれ 100% カバレッジを確認した。Composition Root 向け factory
+  （`default-initial-locale-port.ts` / `default-locale-preference-storage.ts`）は既存の
+  `default-local-deletion-journal.ts` 等と同じく専用テストを置かない方針に揃えた
+  （bun test はこれらを import する test が無いため coverage 集計対象外になる、既存 3 ファイルと
+  同じ挙動を確認済み）。
+- 2026-07-23: `PassportApp.tsx` の `locale` state 初期値を
+  `initialLocalePort.resolveInitialLocale()` に変更し、既存の起動時 `Promise.all`
+  （Local Profile 復元・Intro Card 読込・下書き読込）へ `localePreferenceStorage.load()` を
+  追加して保存済み選好があれば同じコミットで上書きするようにした。明示切替
+  （Settings・`AppScreen` ヘッダーの JA/EN トグル）は新設の `handleChangeLocale`
+  （`setLocale` + 永続化 fire-and-forget）へ一本化した。`App.tsx` で 2 つの新規 Port を
+  組み立てて配線した。`passport-app-stage-flow.test.ts` / `intro-card-app-wiring.test.ts` の
+  既存ソーステキスト契約テストを新しい配線（`handleChangeLocale`・4 要素の destructure）に
+  合わせて更新した。`bun test src --coverage`（1270 pass、100%）、`bun run typecheck`、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`（0 件）を確認した。
+- 2026-07-23: `make before-commit` を実行したところ、`scripts/nearby-transport-static-screening.test.ts`
+  が 2 件 fail した。`package.json`（`expo-localization` 追加）を変更したことで、
+  supply-chain 用の `docs/evidence/nearby-transport-static-screening.json` に固定されている
+  `packageJsonSha256` / `bunLockSha256` が stale になっていたためと判明した。
+  `shasum -a 256 package.json bun.lock` で正しいハッシュを算出し、baseline を更新した
+  （汎用エージェントに独立して再計算させ、自分でも `shasum` を実行して一致することを確認した
+  二重検証）。`make before-commit` を再実行し exit 0（1270 pass、100% coverage、
+  `dup_check` は実リポジトリに対しては baseline 以下、web export 成功）を確認した。
+- 2026-07-23: code-reviewer に staged diff（17 ファイル）をレビューさせた。
+  blocker 1 件（`docs/evidence/nearby-transport-static-screening.json` の hash 更新を
+  git add し忘れていた、そのままコミットすると supply-chain テストが壊れる）と、
+  high 1 件（起動時 `Promise.all` の `.then()` 内で `setLocale(savedLocale)` を呼んだ直後に
+  `applyStartupRecoveryResultRef.current(result)` が `localeRef.current` を読んで起動時
+  Notice の文言を組み立てるが、`localeRef.current` は通常 render 本体でしか更新されず、
+  同じ tick 内では古い値のままになるため、保存済み選好が自動判定と異なるユーザーの
+  起動時 Notice だけ誤訳のまま固定される回帰）を指摘された。両方とも修正した
+  （evidence ファイルを git add、`if (savedLocale) { setLocale(savedLocale); localeRef.current
+  = savedLocale; }` で同期的に ref も更新）。medium 1 件（`docs/design/i18n-and-accessibility.md`
+  が正本と ADR-0034 自身に明記されているのに未更新）も追記して解消し、low 2 件
+  （`notice` / `introCardNotice` の初期 `useState` を lazy initializer に揃える、
+  Web/Native 両 adapter の `load()` で trim を揃える）も反映した。反映後
+  `bun test src/app/intro-card-app-wiring.test.ts src/app/passport-app-stage-flow.test.ts`
+  で新しい配線の source-text 契約テストが green であることを確認した（コメント文中に
+  `applyStartupRecoveryResultRef.current(result)` という関数呼び出しと同一の文字列を
+  書いてしまい、`expectInOrder` の substring 検索が先にコメントの方へマッチして
+  一時的に fail する事故があったため、コメントの言い回しを変えて解消した）。
+- 2026-07-23: `/security-review` を実行した（skill 自体の git diff 取得が別ディレクトリを
+  見てしまい空になったため、diff を自分で `scratchpad` へ保存し、その内容を渡して
+  code-reviewer subagent にセキュリティ観点の分析を代行させた）。高信頼度の指摘は 0 件
+  （端末ロケール読取は第一者 Expo API・保存値は 2 値 allowlist 検証済み・固定パスのみで
+  path traversal 等の入力起因の脆弱性経路が無いと判断）。
+- 2026-07-23: `/simplify` を実行した（reuse / simplification / efficiency / altitude の
+  4 観点を並列 subagent でレビュー）。efficiency・altitude は「概ね適切、既存パターンを踏襲」
+  という結論で追加修正なし（altitude が提案した「`applyStartupRecoveryResult` へ locale を
+  明示引数として渡す」深い書き換えは、Diagnostics の全データ削除フロー等
+  `resetAllLocalMemory` / `resetPassportInMemory` にも波及する範囲の広い変更になるため、
+  本 Issue のスコープでは見送った）。reuse・simplification は同一の指摘（新設した
+  `locale-preference-storage.test.ts` 内の `ReadFailingDocument` が、
+  `local-deletion-journal.test.ts` の `ReadFailingJournalDocument` と同じ形の
+  ローカル定義を重複させている）を検出したため、`storage-test-kit.ts`
+  （既存の `WriteFailingProfileDocument` の対）へ `ReadFailingProfileDocument` として
+  切り出し、自分のテストからはそれを import して使うよう修正した（
+  `local-deletion-journal.test.ts` 側の既存重複はこの diff の対象外のファイルであり、
+  触ると scope が広がるためそのままにした）。切り出した新クラスの `write` / `delete` /
+  `size` / `text()` が既存テストでは未到達だったため coverage が 100% を割り込み、
+  「読込は失敗するが write/delete は実ファイルへの本物の I/O のまま」という
+  クラス自身の契約を直接検証するテストを追加して 100% へ戻した。
+  `make before-commit` を再実行し exit 0（1271 pass、100% coverage）を確認した。
+
+#### 振り返り
+
+**問題 1**: `package.json` へ新規依存（`expo-localization`）を足したことで、
+`docs/evidence/nearby-transport-static-screening.json` に固定されている
+`packageJsonSha256` / `bunLockSha256` が stale になり、`make before-commit` が
+`scripts/nearby-transport-static-screening.test.ts` で fail した。
+
+**根本原因**: この supply-chain baseline は `package.json` / `bun.lock` の内容と
+1 対 1 で結び付いているが、依存追加の一般的な手順（`bunx expo install` → `bun.lock` 反映）
+には含まれておらず、影響が及ぶことがコード上で自明ではない（grep で見つけない限り
+気付けない）。
+
+**予防策**: 依存を追加・更新する PR では、`package.json` / `bun.lock` を変更した直後に
+必ず `make before-commit`（または少なくとも `bun test scripts/`）を一度実行し、
+supply-chain baseline 系のテストが落ちていないか確認する。落ちていたら
+`shasum -a 256 package.json bun.lock` で正しい値を再計算し、baseline ファイルも
+同じコミットへ含める（今回のように hash 更新だけ `git add` し忘れると、コミット後の
+ツリーで再び矛盾した状態に戻ってしまう）。
+
+**問題 2**: code-reviewer 指摘を反映するために `src/app/PassportApp.tsx` の起動時
+effect へ説明コメントを足した際、そのコメント文中に実際のコード
+（`applyStartupRecoveryResultRef.current(result)`）と同一の文字列を書いてしまい、
+`intro-card-app-wiring.test.ts` の `expectInOrder`（部分文字列の出現順序を検査する
+source-text 契約テスト）がコメント側の出現位置を先にマッチしてしまい、一時的に fail した。
+
+**根本原因**: この repo は React レンダリング用の統合テスト基盤を持たず、
+`PassportApp.tsx` の正しさをソーステキスト内の部分文字列一致・出現順序で検証する
+契約テストに強く依存している。そのため、コメントであっても「実装コードと同一の
+文字列」を書くと、意図せずテストの検索対象に混入してしまう。
+
+**予防策**: source-text 契約テストの対象になっているファイル（`PassportApp.tsx` 等）へ
+コメントを追記するときは、実装コードの呼び出し式をそのまま引用せず、機能名や
+変数名だけに言い換える（例: `` `applyStartupRecoveryResultRef.current(result)` `` では
+なく「起動時復元の適用処理（`applyStartupRecoveryResultRef` 経由）」のように書く）。
+コメント追記後は必ず対応する `*.test.ts`（同じファイルを対象にする
+`passport-app-stage-flow.test.ts` / `intro-card-app-wiring.test.ts` 等）を実行して
+確認する。
+
+#### 追記: PR #129 レビュー（Codex）指摘の解消 - 2026-07-23
+
+**目的**: PR #129 に対する Codex レビューの major 1 件（Finding 1）・minor/nit 3 件
+（Finding 2・4・5）・カバレッジ観点の指摘（Finding 3）を解消する。マージは呼び出し元が行う。
+
+**進捗ログ**:
+
+- 隔離 worktree（HEAD が `origin/main` の #128 と一致）で `i18n/initial-locale-autodetect`
+  を checkout し、`origin/main` を merge した。`Plan.md` のみが衝突し、両ブランチの
+  追記（本エントリの前後）を両方残す形で解消した。`node_modules` が worktree に無く
+  merge commit の pre-commit hook（`make before-commit` 相当）が `jscpd` 未解決で
+  一度 fail したため、`make install` を実行してから再度 commit し直した（PR #127 の
+  セッションで一度遭遇済みの既知事象、本節でも再発）。
+- **Finding 1（major）**: `introCardStorage.load()` 自体の `.catch()` の中で
+  `localeRef.current` を読んで Notice を組み立てていたため、同じ `Promise.all` の
+  `localePreferenceStorage.load()` がまだ解決していないタイミングで catch が発火すると
+  Intro Card Notice が自動判定言語のまま固定される回帰があった。加えて、読込が成功した
+  ケースでは `introCardNotice` を一切更新し直しておらず、mount 時点（自動判定）の
+  言語のまま固定される、より頻度の高いバグも見つけた（Codex の verbatim が指摘していた
+  本体）。修正方針は案 B（起動 sequencing）を採用: `introCardStorage.load()` の成否を
+  `settleIntroCardLoad`（`{ok: true, card} | {ok: false, error}` の discriminated union、
+  `error: unknown` の truthiness に頼らない設計）で一旦保持するだけにし、`Promise.all`
+  全体が解決する単一の `.then()` の中で `resolveEffectiveStartupLocale`（純関数、
+  `savedLocale ?? autoDetectedLocale`）を使って effective locale を 1 回だけ確定してから
+  `startupIntroCardOutcome`（`introCard` state と `introCardNotice` state を同時に導出する
+  純関数）で Notice を組み立てるようにした。`IntroCardEditScreen.tsx` 側は
+  タイトルを現 locale で都度訳す設計を変えていないため無改修で正しく動作する
+  （画面が受け取る `notice.message` が effective locale で組み立て済みになるため）。
+- **Finding 3（実行される挙動テスト）**: `resolveEffectiveStartupLocale`
+  （`src/app/initial-locale-port.ts`）と `buildInitialIntroCardNotice`
+  （`src/app/intro-card-notice.ts`）という 2 つの実行可能な純関数へ reconciliation を
+  切り出し、`initial-locale-port.test.ts` / `intro-card-notice.test.ts` に
+  auto-detect=ja・persisted=en の組み合わせ（読込成功・失敗の両方、persisted 無しの
+  回帰確認を含む）を固定する挙動テストを追加した。`intro-card-app-wiring.test.ts` /
+  `passport-app-stage-flow.test.ts` の既存 source-text 契約テストも新しい配線
+  （`settleIntroCardLoad` / `applyEffectiveStartupLocale` / `startupIntroCardOutcome`）に
+  合わせて更新し、「effective locale 確定 → Notice 組み立て」の順序自体も source-text で
+  固定した。`default-initial-locale-port.ts` / `default-locale-preference-storage.ts` への
+  実行テスト追加は、probe で `expo-localization` / `react-native` の import が
+  bun test 環境では Flow 構文（`import typeof * as ReactNativePublicAPI`）を
+  パースできず即エラーになることを確認したため（既存の `default-local-deletion-journal.ts`
+  等、他の全 Platform 分岐 Composition Root factory も同じ理由で実行不可能で
+  source-text テストのみ）見送り、恒久対応の検討を follow-up として記録した
+  （`.claude/state/follow-ups.jsonl`）。
+- **Finding 2（nit）**: `pickInitialLocale` で `'-JP'` のような地域コードのみのタグが
+  空の言語サブタグを `'en'` に誤フォールバックしていた。primary subtag を trim してから
+  空文字列判定するよう直し、`'-JP'`・先頭空白付きタグ・タグ自体が空白のみのケースを
+  テストに追加した。
+- **Finding 4（minor）**: ADR-0034 の install コマンドを 2 箇所とも
+  `bunx expo install expo-localization -- --ignore-scripts`（canonical な pass-through
+  構文）に修正した。
+- **Finding 5（minor）**: ADR-0034 の「保存失敗時は次回起動で自動判定に委ねる」という
+  記述が、端末内に以前保存した値が既にある場合は不正確（その古い値が優先され続ける）
+  だったため、best-effort セマンティクスとして正確に書き直した（`PassportApp.tsx` の
+  対応するコメントも同様に修正）。alternatives 節を新設し、案 A（Notice を生データで
+  保持しレンダー時翻訳）と案 B（起動 sequencing、採用）を比較し、案 B を選んだ理由
+  （既存の `ProfileNotice` / `IntroCardNotice` が事前翻訳済み文字列を保持する設計に
+  広く浸透しており、案 A は型・全呼び出し箇所の書き換えを要する横断的な再設計になる）を
+  明記した。
+- `.then()` コールバック内の分岐が増えたことで Biome の
+  `noExcessiveCognitiveComplexity`（上限 15、19 まで増加）に抵触したため、
+  `applyEffectiveStartupLocale`（`useCallback`）と `startupIntroCardOutcome`
+  （モジュールスコープの純関数）の 2 つへ分割してリファクタリングした。
+- `make before-commit` を実行し exit 0（1284 pass、100% coverage、`PassportApp.tsx` は
+  従来どおり実行対象外で coverage レポートに現れないことを確認済み、dup_check は
+  baseline 以下、typecheck 成功）を確認した。
+
+#### 振り返り
+
+**問題**: 起動時の locale 依存 Notice（Intro Card Notice）を effective locale で
+組み立てる修正を `.then()` コールバック内にそのまま書き足したところ、Biome の
+`noExcessiveCognitiveComplexity`（上限 15）を 19 まで超過した。
+
+**根本原因**: 元の `.then()` 本体には既に「アクティブ判定・下書き反映判定・
+recovery 失敗判定」の分岐があり、そこへ「effective locale 確定」「Intro Card 読込結果の
+成否振り分け」という 2 つの新しい分岐を素朴に追加してしまったため。
+
+**予防策**: 既存の分岐が多い関数へ新しい分岐を足すときは、先に Cognitive Complexity の
+余裕を確認し、余裕が無ければ最初から専用の小さな関数（`useCallback` またはモジュール
+スコープの純関数）へ切り出す設計にする。今回のように「複数の関連する分岐をまとめて
+1 つの意味のある単位（effective locale の確定、Notice の組み立て）」として切り出すと、
+Cognitive Complexity が下がるだけでなく、それぞれが独立した挙動テストの対象にもなり、
+Finding 3（実行される挙動テストで固定する）の要求にも同時に応えられた。
+
 ### [LP 公開整備] 開発者向け導線分離とプライバシーポリシー追加 - 2026-07-23
 
 #### 目的

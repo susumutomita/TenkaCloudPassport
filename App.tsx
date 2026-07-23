@@ -2,10 +2,12 @@ import { StatusBar } from 'expo-status-bar';
 import packageManifest from './package.json';
 import { createDefaultAgentModelProvider } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
+import { createDefaultInitialLocalePort } from './src/app/default-initial-locale-port';
 import { createDefaultIntroCardStorage } from './src/app/default-intro-card-storage';
 import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
 import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
+import { createDefaultLocalePreferenceStorage } from './src/app/default-locale-preference-storage';
 import { createDefaultQuizProgressStorage } from './src/app/default-quiz-progress-storage';
 import {
   createLocalDataControl,
@@ -25,6 +27,8 @@ const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
 const introCardStorage = createDefaultIntroCardStorage();
 const quizProgressStorage = createDefaultQuizProgressStorage();
 const backupSharePort = createDefaultBackupSharePort();
+const initialLocalePort = createDefaultInitialLocalePort();
+const localePreferenceStorage = createDefaultLocalePreferenceStorage();
 const agentModelProvider = createDefaultAgentModelProvider(localDataLeases);
 const localModelComposition =
   createDefaultLocalModelManagement(localDataLeases);
@@ -50,6 +54,8 @@ export default function App() {
         localDataControl={localDataControl}
         localProfileStorage={localProfileStorage}
         introCardStorage={introCardStorage}
+        initialLocalePort={initialLocalePort}
+        localePreferenceStorage={localePreferenceStorage}
         quizProgressStorage={quizProgressStorage}
       />
     </>
