@@ -24,14 +24,29 @@ import {
   WebDeletionJournalAdapter,
 } from './local-deletion-journal';
 import type { LocalProfileStoragePort } from './local-profile-storage';
+import type { QuizProgressStoragePort } from './quiz-progress-storage';
 import {
   DeleteFailingWebStorage,
   FileBackedWebStorage,
   trackTemporaryDirectories,
 } from './storage-test-kit';
 import { WebLocalProfileStorageAdapter } from './web-local-profile-storage';
+import { WebQuizProgressStorageAdapter } from './web-quiz-progress-storage';
 
 const temporaryDirectories = trackTemporaryDirectories();
+
+/**
+ * Issue 130（Codex 指摘 blocker）: クイズ進捗（Issue 110）も全削除 transaction の
+ * 対象に含めた。既存のテストの大半は Profile / Model / Journal の組み合わせを
+ * 個別に検証する目的で個々に Storage を組み立てているため、クイズ進捗側は
+ * 各テストの関心事に影響しない「常に正常動作する実 Storage」を都度新しい一時
+ * ディレクトリで用意する（No Mock: 実ファイル I/O を使う `FileBackedWebStorage`）。
+ */
+function newQuizStorage(): QuizProgressStoragePort {
+  return new WebQuizProgressStorageAdapter(
+    new FileBackedWebStorage(temporaryDirectories.create())
+  );
+}
 
 class FileBackedLocalModelStorage implements LocalModelStoragePort {
   constructor(private readonly filePath: string) {}
@@ -240,6 +255,32 @@ class DeleteRetainingProfileStorage implements LocalProfileStoragePort {
   }
 }
 
+/**
+ * Issue 130（Codex 指摘 blocker）: `DeleteRetainingProfileStorage` と同じ役割を
+ * クイズ進捗側でも検証する（`remove()` が例外を投げず成功を装うが、実際には
+ * 削除できていないケースを `removeCommittedData` の再検証 `preview()` が
+ * 見抜くことを固定する）。
+ */
+class DeleteRetainingQuizProgressStorage implements QuizProgressStoragePort {
+  constructor(private readonly delegate: QuizProgressStoragePort) {}
+
+  load() {
+    return this.delegate.load();
+  }
+
+  save(value: Parameters<QuizProgressStoragePort['save']>[0]) {
+    return this.delegate.save(value);
+  }
+
+  inspect() {
+    return this.delegate.inspect();
+  }
+
+  remove(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 function profile() {
   return createLocalPrivateProfile({
     petName: 'こむぎ',
@@ -257,6 +298,7 @@ function control(storage: FileBackedWebStorage) {
     modelStorage: new NoLocalModelStorageAdapter(),
     modelContexts: new LocalModelContextLeaseRegistry(false),
     deletionJournal: new WebDeletionJournalAdapter(storage),
+    quizStorage: newQuizStorage(),
   });
 }
 
@@ -287,6 +329,7 @@ describe('Local Data の Preview と個別削除', () => {
       profileCount: 0,
       settingsCount: 0,
       modelCount: 0,
+      quizProgressCount: 0,
       totalBytes: 0,
       model: null,
     });
@@ -321,6 +364,7 @@ describe('Local Data の Preview と個別削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: contexts,
       deletionJournal: new WebDeletionJournalAdapter(storage),
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -357,6 +401,7 @@ describe('Local Data の Preview と個別削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: contexts,
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
 
     expect(() => contexts.acquire()).toThrow(LocalDataAccessBlockedError);
@@ -411,6 +456,7 @@ describe('Local Data の Preview と個別削除', () => {
       deletionJournal: new WebDeletionJournalAdapter(
         new FileBackedWebStorage(root)
       ),
+      quizStorage: newQuizStorage(),
     });
 
     const before = await localData.preview();
@@ -442,6 +488,7 @@ describe('Local Data の Preview と個別削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(stable),
+      quizStorage: newQuizStorage(),
     });
     await expectControlError(
       () => profileFailure.resetPassport(),
@@ -454,6 +501,7 @@ describe('Local Data の Preview と個別削除', () => {
       modelStorage: new UnavailableLocalModelStorage(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(stable),
+      quizStorage: newQuizStorage(),
     });
     await expectControlError(
       () => modelFailure.preview(),
@@ -476,6 +524,7 @@ describe('Local Data の Preview と個別削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(null),
+      quizStorage: newQuizStorage(),
     });
     await expectControlError(
       () => journalFailure.recoverPendingDeletion(),
@@ -486,16 +535,28 @@ describe('Local Data の Preview と個別削除', () => {
 });
 
 describe('write-ahead tombstone による全削除', () => {
-  it('Preview 後の全削除は tombstone を経由し、Profile と marker を残さない', async () => {
+  it('Preview 後の全削除は tombstone を経由し、Profile・クイズ進捗と marker を残さない（Issue 130）', async () => {
     const storage = new FileBackedWebStorage(temporaryDirectories.create());
     const profileStorage = new WebLocalProfileStorageAdapter(storage);
     const journal = new WebDeletionJournalAdapter(storage);
+    const quizStorage = new WebQuizProgressStorageAdapter(storage);
     await profileStorage.save(profile());
+    await quizStorage.save(new Set(['lambda-basics']));
 
-    const deleted = await control(storage).deleteAll();
+    const localData = createLocalDataControl({
+      profileStorage,
+      modelStorage: new NoLocalModelStorageAdapter(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
+      deletionJournal: journal,
+      quizStorage,
+    });
+    const deleted = await localData.deleteAll();
 
     expect(deleted.profileCount).toBe(1);
+    expect(deleted.quizProgressCount).toBe(1);
     expect(await profileStorage.load()).toBeNull();
+    expect(await quizStorage.load()).toEqual(new Set());
+    expect((await quizStorage.inspect()).count).toBe(0);
     expect(await journal.isPending()).toBeFalse();
   });
 
@@ -512,6 +573,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -546,6 +608,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new CorruptManifestPurgeableModelStorage(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
 
     expect(await localData.recoverPendingDeletion()).toBe('recovered');
@@ -565,6 +628,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage,
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
 
     expect(await journal.isPending()).toBeFalse();
@@ -588,6 +652,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new ManifestOnlyPurgeableModelStorage(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
 
     const preview = await localData.preview();
@@ -614,6 +679,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: failingJournal,
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -635,6 +701,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new MarkerWrittenThenThrowingJournal(journal),
+      quizStorage: newQuizStorage(),
     });
 
     expect((await localData.deleteAll()).profileCount).toBe(1);
@@ -653,6 +720,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new UnconfirmedMarkerJournal(journal, false),
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -677,6 +745,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new UnconfirmedMarkerJournal(journal, true),
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -702,6 +771,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: restartedContexts,
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
     expect(await restarted.recoverPendingDeletion()).toBe('recovered');
     const modelLease = restartedContexts.acquire();
@@ -734,6 +804,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage,
       modelContexts: contexts,
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
 
     await localData.deleteAll();
@@ -765,6 +836,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: contexts,
       deletionJournal: new FailOnceClearJournal(journal),
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -792,6 +864,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: restartedContexts,
       deletionJournal: journal,
+      quizStorage: newQuizStorage(),
     });
     expect(await restarted.recoverPendingDeletion()).toBe('recovered');
     await restartedProfileStorage.save(profile());
@@ -814,6 +887,7 @@ describe('write-ahead tombstone による全削除', () => {
           'remove'
         )
       ),
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -835,6 +909,7 @@ describe('write-ahead tombstone による全削除', () => {
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(false),
       deletionJournal: new WebDeletionJournalAdapter(storage),
+      quizStorage: newQuizStorage(),
     });
 
     await expectControlError(
@@ -843,6 +918,28 @@ describe('write-ahead tombstone による全削除', () => {
       true
     );
     expect(await profileStorage.load()).toEqual(profile());
+    expect(await new WebDeletionJournalAdapter(storage).isPending()).toBeTrue();
+  });
+
+  it('クイズ進捗 Storage が成功を返して Data を残した場合も false-pass せず committed Error にする（Issue 130）', async () => {
+    const root = temporaryDirectories.create();
+    const storage = new FileBackedWebStorage(root);
+    const quizStorage = new WebQuizProgressStorageAdapter(storage);
+    await quizStorage.save(new Set(['lambda-basics']));
+    const localData = createLocalDataControl({
+      profileStorage: new WebLocalProfileStorageAdapter(storage),
+      modelStorage: new NoLocalModelStorageAdapter(),
+      modelContexts: new LocalModelContextLeaseRegistry(false),
+      deletionJournal: new WebDeletionJournalAdapter(storage),
+      quizStorage: new DeleteRetainingQuizProgressStorage(quizStorage),
+    });
+
+    await expectControlError(
+      () => localData.deleteAll(),
+      'DELETE_INTERRUPTED',
+      true
+    );
+    expect(await quizStorage.load()).toEqual(new Set(['lambda-basics']));
     expect(await new WebDeletionJournalAdapter(storage).isPending()).toBeTrue();
   });
 });

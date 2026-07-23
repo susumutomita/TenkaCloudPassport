@@ -2,10 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import jsQR from 'jsqr';
 import type { IntroCard } from '../domain/intro-card';
 import { IntroCardError } from '../domain/intro-card';
+import { QUIZ_PROGRESS_HEX_MAX_LENGTH } from '../domain/quiz-progress-code';
 import { encodeQr, QR_ENCODER_MAX_BYTES } from '../qr/encoder';
 import {
   decodeIntroCardUrlFragment,
+  decodeIntroCardUrlFragmentQuizProgressHex,
   encodeIntroCardUrl,
+  encodeIntroCardUrlBestEffort,
   INTRO_CARD_VIEWER_URL,
   introCardUrlByteLength,
 } from './intro-card-url';
@@ -146,6 +149,37 @@ describe('encodeIntroCardUrl', () => {
       expect(error.message).toContain('s ');
       // 値そのもの（自己紹介の内容）を message に含めない。
       expect(error.message).not.toContain(oversizedSelfIntro);
+    }
+  });
+
+  it('quizProgressHex に自分自身の decode 側が拒否する不正値（空文字・16 進以外・桁数超過）を渡すと、埋め込む前に INVALID_SHARE_URL で拒否する（Issue 130 minor: 自己矛盾した URL を作れないようにする）', () => {
+    const card: IntroCard = { name: '田中太郎' };
+    const invalidHexValues = [
+      '',
+      'zz',
+      '-1',
+      'f'.repeat(QUIZ_PROGRESS_HEX_MAX_LENGTH + 1),
+    ];
+
+    for (const invalidHex of invalidHexValues) {
+      const error = captureError(() => encodeIntroCardUrl(card, invalidHex));
+      expect(error).toBeInstanceOf(IntroCardError);
+      if (error instanceof IntroCardError) {
+        expect(error.code).toBe('INVALID_SHARE_URL');
+      }
+    }
+  });
+
+  it('quizProgressHex が不正なとき encodeIntroCardUrlBestEffort も CARD_TOO_LARGE ではなく同じ INVALID_SHARE_URL を投げ、カード本体だけの URL へフォールバックしない', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    const error = captureError(() =>
+      encodeIntroCardUrlBestEffort(card, 'not-hex')
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('INVALID_SHARE_URL');
     }
   });
 
@@ -291,5 +325,188 @@ describe('decodeIntroCardUrlFragment', () => {
     if (error instanceof IntroCardError) {
       expect(error.code).toBe('NAME_REQUIRED');
     }
+  });
+});
+
+/**
+ * Issue 110 / ADR-0035: クイズ進捗ビットマスク（`q`）を既存の payload
+ * `{v,n,t,o,s,l,e,p}` へ任意キーとして相乗りさせる契約。
+ */
+describe('クイズ進捗ビットマスク（q）の QR 相乗り', () => {
+  it('quizProgressHex を省略すると、既存の QR と同じ payload（q キーなし）になる', () => {
+    const withHex = encodeIntroCardUrl({ name: '田中太郎' }, undefined);
+    const withoutHex = encodeIntroCardUrl({ name: '田中太郎' });
+
+    expect(withHex).toBe(withoutHex);
+  });
+
+  it('quizProgressHex が "0"（全問未合格）でも q キーを省略する（既存 QR と同じ byte 数）', () => {
+    const withZero = encodeIntroCardUrl({ name: '田中太郎' }, '0');
+    const withoutHex = encodeIntroCardUrl({ name: '田中太郎' });
+
+    expect(withZero).toBe(withoutHex);
+  });
+
+  it('quizProgressHex を渡すと q キーを含む URL になり、decode で復元できる', () => {
+    const url = encodeIntroCardUrl({ name: '田中太郎' }, 'ffff');
+
+    expect(decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(url))).toBe(
+      'ffff'
+    );
+    expect(decodeIntroCardUrlFragment(fragmentOf(url))).toEqual({
+      name: '田中太郎',
+    });
+  });
+
+  it('q キーが無い（省略された）fragment からは undefined を返す', () => {
+    const url = encodeIntroCardUrl({ name: '田中太郎' });
+
+    expect(
+      decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(url))
+    ).toBeUndefined();
+  });
+
+  it('16 進以外の q は fragment 全体を INVALID_SHARE_URL として拒否する（fail-closed）', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: '田中太郎', q: 'not-hex!' })
+    );
+
+    const error = captureError(() => decodeIntroCardUrlFragment(fragment));
+
+    expectInvalidShareUrl(error);
+    expectInvalidShareUrl(
+      captureError(() => decodeIntroCardUrlFragmentQuizProgressHex(fragment))
+    );
+  });
+
+  it('桁数が上限を超える q は fragment 全体を INVALID_SHARE_URL として拒否する（DoS 対策）', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: '田中太郎', q: 'f'.repeat(33) })
+    );
+
+    const error = captureError(() => decodeIntroCardUrlFragment(fragment));
+
+    expectInvalidShareUrl(error);
+  });
+
+  it('空文字の q は fragment 全体を INVALID_SHARE_URL として拒否する', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: '田中太郎', q: '' })
+    );
+
+    const error = captureError(() => decodeIntroCardUrlFragment(fragment));
+
+    expectInvalidShareUrl(error);
+  });
+
+  it('jsQR で実際に読み取れる QR に q を含めても、読み取った URL から card と進捗の両方を復元できる', () => {
+    const url = encodeIntroCardUrl(FULL_CARD, '2a3');
+
+    const decodedUrl = decodeUrlQr(url);
+
+    expect(decodedUrl).toBe(url);
+    const fragment = fragmentOf(decodedUrl ?? '');
+    expect(decodeIntroCardUrlFragment(fragment)).toEqual(FULL_CARD);
+    expect(decodeIntroCardUrlFragmentQuizProgressHex(fragment)).toBe('2a3');
+  });
+});
+
+describe('introCardUrlByteLength（quizProgressHex 込み）', () => {
+  it('quizProgressHex を渡すと省略時より byte 数が増える', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    const withoutHex = introCardUrlByteLength(card);
+    const withHex = introCardUrlByteLength(card, 'ffff');
+
+    expect(withHex).toBeGreaterThan(withoutHex);
+  });
+
+  it('quizProgressHex が "0" のときは省略時と同じ byte 数になる', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    expect(introCardUrlByteLength(card, '0')).toBe(
+      introCardUrlByteLength(card)
+    );
+  });
+});
+
+describe('encodeIntroCardUrlBestEffort', () => {
+  it('quizProgressHex を含めても上限に収まる場合はそのまま q を含め、quizProgressIncluded は true を返す', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    const result = encodeIntroCardUrlBestEffort(card, 'ffff');
+
+    expect(
+      decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(result.url))
+    ).toBe('ffff');
+    expect(result.quizProgressIncluded).toBe(true);
+  });
+
+  it('quizProgressHex を含めると上限を超える場合は q を黙って省略し、カード本体は表示できる。quizProgressIncluded は false を返す（Issue 121 の 1,351 byte フルカード相当）', () => {
+    const selfIntro =
+      '弊社では分散システムと生成AIを組み合わせたプロダクト開発に取り組んでいます。'
+        .repeat(10)
+        .slice(0, 280);
+    const nearMaxCard: IntroCard = {
+      name: '田中太郎',
+      title: '最高技術責任者',
+      organization: '天下クラウド株式会社',
+      selfIntro,
+      links: ['https://tenkacloud.com', 'https://bull.example'],
+      email: 'taro@tenkacloud.com',
+    };
+    // カード単体では収まるが、太めの quizProgressHex を足すと超過する状況を作る。
+    const oversizedHex = 'f'.repeat(QUIZ_PROGRESS_HEX_MAX_LENGTH);
+    expect(() => encodeIntroCardUrl(nearMaxCard)).not.toThrow();
+    expect(() => encodeIntroCardUrl(nearMaxCard, oversizedHex)).toThrow(
+      IntroCardError
+    );
+
+    const result = encodeIntroCardUrlBestEffort(nearMaxCard, oversizedHex);
+
+    expect(decodeIntroCardUrlFragment(fragmentOf(result.url))).toEqual(
+      nearMaxCard
+    );
+    expect(
+      decodeIntroCardUrlFragmentQuizProgressHex(fragmentOf(result.url))
+    ).toBeUndefined();
+    expect(result.quizProgressIncluded).toBe(false);
+  });
+
+  it('quizProgressHex を渡さない場合、カード本体自体の上限超過はフォールバックせずそのまま CARD_TOO_LARGE を投げる', () => {
+    const oversizedCard: IntroCard = { name: 'A', selfIntro: 'a'.repeat(2000) };
+
+    const error = captureError(() =>
+      encodeIntroCardUrlBestEffort(oversizedCard)
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('CARD_TOO_LARGE');
+    }
+  });
+
+  it('quizProgressHex を渡してもカード本体自体が上限を超える場合は、q を省略した再試行も超過するため CARD_TOO_LARGE を投げる', () => {
+    const oversizedCard: IntroCard = { name: 'A', selfIntro: 'a'.repeat(2000) };
+
+    const error = captureError(() =>
+      encodeIntroCardUrlBestEffort(oversizedCard, 'ffff')
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('CARD_TOO_LARGE');
+    }
+  });
+
+  it('quizProgressHex が undefined・"0"（全問未合格）のときは省略ではないため quizProgressIncluded は true のままにする（Issue 130 minor）', () => {
+    const card: IntroCard = { name: '田中太郎' };
+
+    const withoutHex = encodeIntroCardUrlBestEffort(card);
+    const withZeroHex = encodeIntroCardUrlBestEffort(card, '0');
+
+    expect(withoutHex.quizProgressIncluded).toBe(true);
+    expect(withZeroHex.quizProgressIncluded).toBe(true);
+    expect(withoutHex.url).toBe(withZeroHex.url);
   });
 });

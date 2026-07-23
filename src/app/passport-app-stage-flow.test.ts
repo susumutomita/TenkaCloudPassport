@@ -282,7 +282,7 @@ describe('PassportApp の Stage 遷移契約', () => {
       'diagnosticsFlow.enterRecovery(result.error)',
     ]);
     expect(startupEffectFailure).toContain(
-      'diagnosticsFlow.enterRecovery(result.error);\n        return;'
+      'diagnosticsFlow.enterRecovery(result.error);\n          return;'
     );
     expect(recovery).toContain('applyStartupRecoveryResultRef.current(result)');
     expect(text).toContain("result.kind === 'profile-load-failed'");
@@ -689,6 +689,135 @@ describe('PassportApp の Stage 遷移契約', () => {
       // （Settings 以外の Stage 遷移関数から locale を書き換える経路が無いことの固定、
       // 632 行目付近のテストと合わせて Issue 111 の水和 1 箇所を新たに許容する）。
       expect(text.match(/setLocale\(/g) ?? []).toHaveLength(2);
+    });
+  });
+
+  describe('Issue 110 / ADR-0035: クラウド基礎クイズは Settings 経由の 1 経路だけを持つ', () => {
+    it('UTILITY_STAGES は quiz を settings / diagnostics / pilot-measurement と同じ集合に含める', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        'const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set(['
+      );
+      const end = text.indexOf(']);', start);
+      const body = text.slice(start, end);
+
+      expect(body).toContain("'settings'");
+      expect(body).toContain("'diagnostics'");
+      expect(body).toContain("'pilot-measurement'");
+      expect(body).toContain("'quiz'");
+    });
+
+    it('openQuiz は quiz stage を設定し、closeQuiz は settings へ戻す（diagnostics / pilot-measurement と同型の導線）', async () => {
+      const text = await source();
+
+      expect(text).toContain(
+        "const openQuiz = useCallback((): void => setStage('quiz'), []);"
+      );
+      const closeQuizBody = functionBody(text, 'closeQuiz');
+      expect(closeQuizBody).toContain("setStage('settings');");
+    });
+
+    it('UtilityStageGate は stage === "quiz" のとき QuizScreen へ進捗・採点・戻る導線を渡す', async () => {
+      const text = await source();
+      const quizBlockStart = text.indexOf('<QuizScreen');
+      const quizBlockEnd = text.indexOf('/>', quizBlockStart);
+      const quizBlock = text.slice(quizBlockStart, quizBlockEnd);
+
+      expect(quizBlock).toContain('clearedIds={quizProgress}');
+      expect(quizBlock).toContain(
+        'onAnswerCorrect={onAnswerQuizQuestionCorrect}'
+      );
+      expect(quizBlock).toContain('onBack={onCloseQuiz}');
+      expect(quizBlock).toContain('onChangeLocale={onChangeLocale}');
+    });
+
+    it('Settings 画面は onOpenQuiz を受け取り、クイズを開く唯一の導線として渡す', async () => {
+      const text = await source();
+      const settingsBlockStart = text.lastIndexOf('<SettingsScreen');
+      const settingsBlockEnd = text.indexOf('/>', settingsBlockStart);
+      const settingsBlock = text.slice(settingsBlockStart, settingsBlockEnd);
+
+      expect(settingsBlock).toContain('onOpenQuiz={onOpenQuiz}');
+    });
+
+    it('handleQuizQuestionCorrect は setQuizProgress の関数型 updater だけを呼び、Storage へは直接触れない（副作用を持たない）', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        'const handleQuizQuestionCorrect = useCallback((id: QuizQuestionId): void => {'
+      );
+      const end = text.indexOf('}, []);', start);
+      const body = text.slice(start, end);
+
+      expect(body).toContain(
+        'setQuizProgress((current) => withQuizQuestionCleared(current, id));'
+      );
+      expect(body).not.toContain('quizProgressStorage');
+    });
+
+    it('quizProgress の永続化は専用の useEffect が担い、quizProgressHydrated が true になるまで何もしない（起動時読込との競合防止）', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        'if (!quizProgressHydrated) return;\n    if (skipNextQuizProgressSaveRef.current) {'
+      );
+
+      expect(start).toBeGreaterThan(-1);
+    });
+
+    it('quizProgress の永続化 effect は skipNextQuizProgressSaveRef が立っている間だけ 1 回 save を skip し、flag を消費する（Issue 130: 全データ削除直後に空データで復活させない）', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        '  useEffect(() => {\n    if (!quizProgressHydrated) return;'
+      );
+      const end = text.indexOf(
+        '}, [quizProgress, quizProgressHydrated, quizProgressStorage]);',
+        start
+      );
+      const body = text.slice(start, end);
+
+      expectInOrder(body, [
+        'if (!quizProgressHydrated) return;',
+        'if (skipNextQuizProgressSaveRef.current) {',
+        'skipNextQuizProgressSaveRef.current = false;',
+        'quizProgressStorage.save(quizProgress).catch(() => undefined);',
+      ]);
+    });
+
+    it('resetAllLocalMemory は resetQuizProgressInMemory を呼び、全データ削除後の in-memory 進捗を空へ戻す（Issue 130 blocker）', async () => {
+      const text = await source();
+      const body = functionBody(text, 'resetAllLocalMemory');
+
+      expect(body).toContain('resetQuizProgressInMemory();');
+    });
+
+    it('resetQuizProgressInMemory は既に空なら何もせず、空でないときだけ skip flag を立てて EMPTY_QUIZ_PROGRESS へ戻す（永続化 effect を無駄に armed のまま残さない）', async () => {
+      const text = await source();
+      const start = text.indexOf(
+        'const resetQuizProgressInMemory = useCallback((): void => {'
+      );
+      const end = text.indexOf('\n  }, []);', start);
+      const body = text.slice(start, end);
+
+      expectInOrder(body, [
+        'if (quizProgressRef.current.size === 0) return;',
+        'skipNextQuizProgressSaveRef.current = true;',
+        'setQuizProgress(EMPTY_QUIZ_PROGRESS);',
+      ]);
+    });
+
+    it('起動時 effect はクイズ進捗の水和完了も、Profile Recovery の結果分岐より前に立てる', async () => {
+      const text = await source();
+      const effectStart = text.indexOf('void Promise.all([');
+      const effectBody = text.slice(
+        effectStart,
+        text.indexOf('return () => {', effectStart)
+      );
+
+      const hydratedAt = effectBody.indexOf('setQuizProgressHydrated(true)');
+      const recoveryFailedAt = effectBody.indexOf(
+        "result.kind === 'recovery-failed'"
+      );
+      expect(hydratedAt).toBeGreaterThan(-1);
+      expect(hydratedAt).toBeLessThan(recoveryFailedAt);
     });
   });
 });
