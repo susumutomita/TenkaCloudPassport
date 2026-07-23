@@ -90,8 +90,8 @@ describe('Invite payload の encode 後サイズ予算', () => {
 
     expect(encodedBytes).toBeGreaterThan(QR_VERSION_17_BYTE_BUDGET);
     expect(encodedBytes).toBe(725);
-    // 「壊れない上限」(QR_PAYLOAD_MAX_BYTES = 1,024 byte) 自体は超過しないことは
-    // 別途固定する。
+    // 「壊れない上限」(QR_PAYLOAD_MAX_BYTES = 1,367 byte、ADR-0032 で誤り訂正 L へ
+    // 切替) 自体は超過しないことは別途固定する。
     expect(encodedBytes).toBeLessThanOrEqual(QR_PAYLOAD_MAX_BYTES);
   });
 });
