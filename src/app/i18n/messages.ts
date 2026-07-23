@@ -366,6 +366,9 @@ export interface AppMessages {
     /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く導線。 */
     readonly quizButton: string;
     readonly quizButtonHint: string;
+    /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く導線。 */
+    readonly conversationAgentButton: string;
+    readonly conversationAgentButtonHint: string;
     readonly backButton: string;
   };
   readonly pilotMeasurement: {
@@ -566,6 +569,14 @@ export interface AppMessages {
     readonly addLinkButton: string;
     readonly addLinkButtonHint: string;
     readonly removeLinkButtonLabel: (index: number) => string;
+    /**
+     * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマの選択欄
+     * （`ClueSelector` を再利用、`clueSelector` 名前空間のラベルとは別に
+     * この欄固有の見出し・件数表示だけをここで持つ）。
+     */
+    readonly themeIdsLabel: string;
+    readonly themeIdsHint: string;
+    readonly themeIdsCounter: (current: number, max: number) => string;
     readonly byteUsageLabel: (current: number, max: number) => string;
     readonly byteUsageOverBudget: (current: number, max: number) => string;
     readonly saveButton: (saving: boolean) => string;
@@ -632,6 +643,45 @@ export interface AppMessages {
     readonly explanationLabel: string;
     readonly backToListButton: string;
     readonly backToListButtonHint: string;
+  };
+  /**
+   * Issue 104 / ADR-0036: 端末内会話エージェント画面（`ConversationAgentScreen.tsx`）
+   * の UI chrome。会話理由・最初の質問の本文は Domain 側
+   * （`agent-model-provider.ts` の `evidenceNarrative`）が組み立てた固定文をそのまま
+   * 表示し、ここでは持たない。
+   */
+  readonly conversationAgent: {
+    readonly eyebrow: string;
+    readonly title: string;
+    readonly description: string;
+    readonly selfCardMissingNotice: string;
+    readonly peerSectionTitle: string;
+    readonly noPeerNotice: string;
+    readonly scanButton: string;
+    readonly scanButtonHint: string;
+    readonly pasteLabel: string;
+    readonly pasteHint: string;
+    readonly pastePlaceholder: string;
+    readonly pasteSubmitButton: string;
+    readonly pasteSubmitButtonHint: string;
+    readonly sampleButton: string;
+    readonly sampleButtonHint: string;
+    readonly peerLabel: (name: string) => string;
+    readonly removePeerButtonLabel: (name: string) => string;
+    readonly removePeerButtonHint: string;
+    readonly startButton: string;
+    readonly startButtonHint: string;
+    readonly resetButton: string;
+    readonly resetButtonHint: string;
+    readonly runningNotice: string;
+    readonly noSignalTitle: string;
+    readonly noSignalMessage: string;
+    readonly bridgeReasonTitle: string;
+    readonly bridgeOpenerTitle: string;
+    readonly runErrorMessage: string;
+    readonly backButton: string;
+    readonly settingsButton: string;
+    readonly settingsButtonHint: string;
   };
 }
 
@@ -968,6 +1018,9 @@ const ja: AppMessages = {
     quizButton: 'クラウド基礎クイズに挑戦',
     quizButtonHint:
       'クラウド基礎の四択クイズに挑戦し、進捗を端末内に保存します。',
+    conversationAgentButton: '端末内会話エージェントを試す',
+    conversationAgentButtonHint:
+      '相手の自己紹介カードから、会話のきっかけを端末内だけで見つけます。',
     backButton: '戻る',
   },
   pilotMeasurement: {
@@ -1245,6 +1298,10 @@ const ja: AppMessages = {
     addLinkButtonHint:
       '自由な URL の入力欄を追加します。名前付き欄と合わせて最大 5 件までです。',
     removeLinkButtonLabel: (index) => `その他のリンク ${index} を削除`,
+    themeIdsLabel: '会話テーマ（任意）',
+    themeIdsHint:
+      '端末内会話エージェントが相手との共通点を探すのに使います。最大 3 件まで選べます。',
+    themeIdsCounter: (current, max) => `${current} / ${max} 件選択`,
     byteUsageLabel: (current, max) => `QR の目安: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `QR の上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
@@ -1298,6 +1355,46 @@ const ja: AppMessages = {
     explanationLabel: '解説',
     backToListButton: '一覧に戻る',
     backToListButtonHint: 'クイズの一覧画面に戻ります。',
+  },
+  conversationAgent: {
+    eyebrow: '端末内会話エージェント',
+    title: '会話のきっかけを見つける。',
+    description:
+      '相手の自己紹介ページ URL を取り込むと、確認済みの会話テーマから共通点と最初の質問を端末内だけで探します。相手の情報は端末のメモリにだけ保持し、終了すると消えます。',
+    selfCardMissingNotice:
+      '自己紹介カードをまだ作成していません。先に自己紹介カードを作成してください。',
+    peerSectionTitle: '相手のカード',
+    noPeerNotice:
+      'まだ相手のカードを受信していません。QR を再スキャンするか、URL を貼り付けてください。',
+    scanButton: 'QR を再スキャン',
+    scanButtonHint: '相手の自己紹介ページ QR を読み取ります。',
+    pasteLabel: '自己紹介ページ URL を貼り付け',
+    pasteHint:
+      'カメラが使えない場合は、相手から共有された URL をそのまま貼り付けてください。',
+    pastePlaceholder: '例: https://card.tenkacloud.com/c/#...',
+    pasteSubmitButton: '追加',
+    pasteSubmitButtonHint: '貼り付けた URL から相手のカードを取り込みます。',
+    sampleButton: 'サンプルで試す',
+    sampleButtonHint:
+      '実在しないサンプルの相手カードで、この機能の流れを一人で確認できます。',
+    peerLabel: (name) => `相手: ${name}`,
+    removePeerButtonLabel: (name) => `${name} を削除`,
+    removePeerButtonHint: '受信したカードをこのセッションから外します。',
+    startButton: '会話のきっかけを見つける',
+    startButtonHint:
+      '確認済みの会話テーマから、共通点と最初の質問を計算します。',
+    resetButton: 'カードを外してやり直す',
+    resetButtonHint: '受信したカードを外し、別のカードを取り込み直せます。',
+    runningNotice: '共通点を探しています…',
+    noSignalTitle: '共通点が見つかりませんでした',
+    noSignalMessage:
+      'お互いが確認済みの会話テーマに重なりがありませんでした。会話テーマを増やすと見つかりやすくなります。',
+    bridgeReasonTitle: '共通点',
+    bridgeOpenerTitle: '最初の質問',
+    runErrorMessage: '計算を完了できませんでした。もう一度お試しください。',
+    backButton: '戻る',
+    settingsButton: 'Settings（言語切り替え等）',
+    settingsButtonHint: 'Settings 画面に戻ります。',
   },
 };
 
@@ -1646,6 +1743,9 @@ const en: AppMessages = {
     quizButton: 'Try the cloud basics quiz',
     quizButtonHint:
       'Take the cloud basics multiple-choice quiz and save your progress on this device.',
+    conversationAgentButton: 'Try the on-device conversation agent',
+    conversationAgentButtonHint:
+      "Finds a conversation opener from someone's intro card, entirely on this device.",
     backButton: 'Back',
   },
   pilotMeasurement: {
@@ -1915,6 +2015,10 @@ const en: AppMessages = {
     addLinkButtonHint:
       'Adds a free-form URL field. Up to 5 links in total, including the named fields.',
     removeLinkButtonLabel: (index) => `Remove other link ${index}`,
+    themeIdsLabel: 'Conversation topics (optional)',
+    themeIdsHint:
+      'Used by the on-device conversation agent to find common ground with someone you meet. Choose up to 3.',
+    themeIdsCounter: (current, max) => `${current} / ${max} selected`,
     byteUsageLabel: (current, max) => `QR estimate: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `This exceeds the QR limit (${current} / ${max} byte). Please shorten your input.`,
@@ -1968,6 +2072,46 @@ const en: AppMessages = {
     explanationLabel: 'Explanation',
     backToListButton: 'Back to list',
     backToListButtonHint: 'Return to the quiz list screen.',
+  },
+  conversationAgent: {
+    eyebrow: 'On-device conversation agent',
+    title: 'Find a conversation opener.',
+    description:
+      'Bring in someone’s intro card URL, and this finds a shared topic and opening question from confirmed conversation topics, entirely on this device. The other person’s card only lives in memory and disappears when you finish.',
+    selfCardMissingNotice:
+      'You have not created an intro card yet. Please create one first.',
+    peerSectionTitle: 'Their card',
+    noPeerNotice:
+      'You have not received their card yet. Re-scan the QR code or paste the URL.',
+    scanButton: 'Re-scan QR code',
+    scanButtonHint: "Scans the other person's intro page QR code.",
+    pasteLabel: 'Paste their intro page URL',
+    pasteHint:
+      'If the camera is unavailable, paste the URL they shared with you.',
+    pastePlaceholder: 'e.g., https://card.tenkacloud.com/c/#...',
+    pasteSubmitButton: 'Add',
+    pasteSubmitButtonHint: 'Imports their card from the pasted URL.',
+    sampleButton: 'Try with a sample',
+    sampleButtonHint:
+      'Try this feature by yourself with a fictional sample card.',
+    peerLabel: (name) => `With: ${name}`,
+    removePeerButtonLabel: (name) => `Remove ${name}`,
+    removePeerButtonHint: 'Removes the received card from this session.',
+    startButton: 'Find a conversation opener',
+    startButtonHint:
+      'Computes a shared topic and opening question from confirmed conversation topics.',
+    resetButton: 'Remove card and start over',
+    resetButtonHint: 'Removes the received card so you can bring in another.',
+    runningNotice: 'Looking for common ground…',
+    noSignalTitle: 'No common ground found',
+    noSignalMessage:
+      'Your confirmed conversation topics did not overlap. Adding more topics makes a match more likely.',
+    bridgeReasonTitle: 'Common ground',
+    bridgeOpenerTitle: 'Opening question',
+    runErrorMessage: 'Could not finish. Please try again.',
+    backButton: 'Back',
+    settingsButton: 'Settings (language, etc.)',
+    settingsButtonHint: 'Returns to the Settings screen.',
   },
 };
 

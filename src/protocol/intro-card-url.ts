@@ -1,6 +1,7 @@
 import {
   createIntroCard,
   INTRO_CARD_MAX_LINKS,
+  INTRO_CARD_MAX_THEMES,
   type IntroCard,
   IntroCardError,
 } from '../domain/intro-card';
@@ -55,6 +56,13 @@ interface IntroCardUrlPayload {
    * 保つため、`undefined` または全問未合格（'0'）なら省略する（`buildPayload` 参照）。
    */
   readonly q?: string;
+  /**
+   * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマ ID
+   * （`IntroCard.themeIds`、最大 `INTRO_CARD_MAX_THEMES` 件）。`themeIds` が
+   * `undefined` または空のカードは、この key 自体を省略する（`buildPayload`
+   * 参照）。既存 QR との byte 一致（回帰テスト）は、この省略によって保たれる。
+   */
+  readonly m?: readonly string[];
 }
 
 /**
@@ -74,6 +82,7 @@ export const OPTIONAL_PAYLOAD_KEYS = [
   'e',
   'p',
   'q',
+  'm',
 ] as const;
 
 const QUIZ_PROGRESS_HEX_PATTERN = /^[0-9a-f]+$/i;
@@ -183,6 +192,22 @@ function optionalLinksField(
 }
 
 /**
+ * Issue 104: `m` の形状（配列・件数・要素が文字列であること）だけをここで検証する。
+ * 「カタログに実在する ID か」「重複が無いか」は `createIntroCard` の
+ * `validatedThemeIds` に一本化する（`optionalLinksField` が URL 形式検証を
+ * `createIntroCard` に委ねるのと同じ役割分担）。
+ */
+function optionalThemeIdsField(
+  value: unknown,
+  path: string
+): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  return arrayValue(value, path, 1, INTRO_CARD_MAX_THEMES).map((item, index) =>
+    stringValue(item, `${path}[${index}]`, INTRO_CARD_URL_FIELD_MAX_LENGTH)
+  );
+}
+
+/**
  * デコードした payload を `createIntroCard` へ通すことで、`IntroCard` の妥当性
  * ルール（文字数上限・URL 形式・メール形式など）を domain 側 1 か所だけに保つ
  * （`src/domain/intro-card.ts` の `withIntroCardOptionalFields` と同じ、
@@ -204,6 +229,7 @@ function strictPayloadRecord(parsed: unknown): {
   readonly e?: unknown;
   readonly p?: unknown;
   readonly q?: unknown;
+  readonly m?: unknown;
 } {
   const path = '$.introCardUrlPayload';
   const record = strictRecord(
@@ -216,6 +242,10 @@ function strictPayloadRecord(parsed: unknown): {
   // `q` の妥当性はここで確定させる（結果は呼び出し側が使うかどうかを選べる）。不正なら
   // 他のフィールドと同じ fail-closed 契約でここで throw する。
   validateQuizProgressHex(record.q, `${path}.q`);
+  // Issue 104: `m`（会話テーマ）も `decodeIntroCardUrlFragmentQuizProgressHex`
+  // 経由（`decodePayload` を経ない）の呼び出しで見落とされないよう、ここで
+  // 形状だけ確定させる（all-or-nothing 契約、`q` と同じ理由）。
+  optionalThemeIdsField(record.m, `${path}.m`);
   return record;
 }
 
@@ -240,6 +270,7 @@ function decodePayload(
   const links = optionalLinksField(record.l, `${path}.l`);
   const email = optionalStringField(record.e, `${path}.e`);
   const phone = optionalStringField(record.p, `${path}.p`);
+  const themeIds = optionalThemeIdsField(record.m, `${path}.m`);
 
   return createIntroCard({
     name,
@@ -249,6 +280,7 @@ function decodePayload(
     ...(links === undefined ? {} : { links }),
     ...(email === undefined ? {} : { email }),
     ...(phone === undefined ? {} : { phone }),
+    ...(themeIds === undefined ? {} : { themeIds }),
   });
 }
 
@@ -332,6 +364,7 @@ function buildPayload(
     validatedQuizProgressHex === '0'
       ? {}
       : { q: validatedQuizProgressHex }),
+    ...(card.themeIds === undefined ? {} : { m: card.themeIds }),
   };
 }
 
@@ -377,6 +410,7 @@ function urlTooLargeError(
       'q',
       quizProgressHex === '0' ? undefined : quizProgressHex
     ),
+    fieldBreakdownEntry('m', card.themeIds),
   ]
     .filter((entry): entry is string => entry !== null)
     .join(', ');

@@ -411,6 +411,116 @@ describe('クイズ進捗ビットマスク（q）の QR 相乗り', () => {
   });
 });
 
+describe('会話テーマ ID（m）の QR 相乗り（Issue 104 / ADR-0036）', () => {
+  it('themeIds を持たないカードは、既存の QR と同じ payload（m キーなし）になる（回帰テスト）', () => {
+    const withoutThemes = encodeIntroCardUrl({ name: '田中太郎' });
+    const legacyCard: IntroCard = { name: '田中太郎' };
+
+    expect(encodeIntroCardUrl(legacyCard)).toBe(withoutThemes);
+    expect(fragmentOf(withoutThemes)).toBe(
+      toBase64Url(JSON.stringify({ v: 1, n: '田中太郎' }))
+    );
+  });
+
+  it('themeIds を持つカードは m キーを含む URL になり、decode で復元できる', () => {
+    const card: IntroCard = {
+      name: '田中太郎',
+      themeIds: ['open-source', 'accessibility'],
+    };
+
+    const url = encodeIntroCardUrl(card);
+
+    expect(decodeIntroCardUrlFragment(fragmentOf(url))).toEqual(card);
+  });
+
+  it('m キーが無い（旧バージョンの QR）fragment は themeIds を持たないカードとして復元する（クラッシュしない）', () => {
+    const fragment = toBase64Url(JSON.stringify({ v: 1, n: 'Eve' }));
+
+    expect(decodeIntroCardUrlFragment(fragment)).toEqual({ name: 'Eve' });
+  });
+
+  it('m が配列ではない場合、fragment 全体を INVALID_SHARE_URL として拒否する（fail-closed）', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: 'Eve', m: 'open-source' })
+    );
+
+    expectInvalidShareUrl(
+      captureError(() => decodeIntroCardUrlFragment(fragment))
+    );
+  });
+
+  it('m が空配列の場合、fragment 全体を INVALID_SHARE_URL として拒否する（省略と空配列を区別する fail-closed 契約）', () => {
+    const fragment = toBase64Url(JSON.stringify({ v: 1, n: 'Eve', m: [] }));
+
+    expectInvalidShareUrl(
+      captureError(() => decodeIntroCardUrlFragment(fragment))
+    );
+  });
+
+  it(`m が上限（${3} 件）を超える場合、fragment 全体を INVALID_SHARE_URL として拒否する`, () => {
+    const fragment = toBase64Url(
+      JSON.stringify({
+        v: 1,
+        n: 'Eve',
+        m: [
+          'open-source',
+          'accessibility',
+          'information-security',
+          'cloud-infrastructure',
+        ],
+      })
+    );
+
+    expectInvalidShareUrl(
+      captureError(() => decodeIntroCardUrlFragment(fragment))
+    );
+  });
+
+  it('m の要素が文字列ではない場合、fragment 全体を INVALID_SHARE_URL として拒否する', () => {
+    const fragment = toBase64Url(JSON.stringify({ v: 1, n: 'Eve', m: [1] }));
+
+    expectInvalidShareUrl(
+      captureError(() => decodeIntroCardUrlFragment(fragment))
+    );
+  });
+
+  it('m の要素がカタログに実在しない ID の場合、createIntroCard 由来の INVALID_THEME_IDS をそのまま伝える（domain 層の妥当性、Issue 130 と同じ既存契約）', () => {
+    const fragment = toBase64Url(
+      JSON.stringify({ v: 1, n: 'Eve', m: ['not-a-real-clue-id'] })
+    );
+
+    const error = captureError(() => decodeIntroCardUrlFragment(fragment));
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    if (error instanceof IntroCardError) {
+      expect(error.code).toBe('INVALID_THEME_IDS');
+    }
+  });
+
+  it('decodeIntroCardUrlFragmentQuizProgressHex 経由でも m の不正値を fail-closed で拒否する（q だけでなく m も all-or-nothing 契約に従う）', () => {
+    const fragment = toBase64Url(JSON.stringify({ v: 1, n: 'Eve', m: [] }));
+
+    expectInvalidShareUrl(
+      captureError(() => decodeIntroCardUrlFragmentQuizProgressHex(fragment))
+    );
+  });
+
+  it('jsQR で実際に読み取れる QR に themeIds を含めても、読み取った URL から card を復元できる', () => {
+    const cardWithThemes: IntroCard = {
+      ...FULL_CARD,
+      themeIds: ['open-source', 'accessibility', 'information-security'],
+    };
+
+    const url = encodeIntroCardUrl(cardWithThemes);
+    const decodedUrl = decodeUrlQr(url);
+
+    expect(decodedUrl).toBe(url);
+    expect(decodeIntroCardUrlFragment(fragmentOf(decodedUrl ?? ''))).toEqual(
+      cardWithThemes
+    );
+  });
+});
+
 describe('introCardUrlByteLength（quizProgressHex 込み）', () => {
   it('quizProgressHex を渡すと省略時より byte 数が増える', () => {
     const card: IntroCard = { name: '田中太郎' };

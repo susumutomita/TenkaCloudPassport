@@ -3,6 +3,7 @@ import {
   createIntroCard,
   INTRO_CARD_LINK_MAX_LENGTH,
   INTRO_CARD_MAX_LINKS,
+  INTRO_CARD_MAX_THEMES,
   INTRO_CARD_NAME_MAX_LENGTH,
   INTRO_CARD_ORGANIZATION_MAX_LENGTH,
   INTRO_CARD_PHONE_MAX_LENGTH,
@@ -12,6 +13,7 @@ import {
   type IntroCardField,
   validateIntroCardFieldValue,
 } from './intro-card';
+import { PUBLIC_PASSPORT_MAX_CLUES } from './passport';
 
 function repeat(character: string, length: number): string {
   return character.repeat(length);
@@ -551,5 +553,83 @@ describe('validateIntroCardFieldValue', () => {
         value: 'https://example.com/ｔａｒｏ',
       })
     ).toBeNull();
+  });
+});
+
+describe('createIntroCard の themeIds（Issue 104: 端末内会話エージェント）', () => {
+  it('themeIds を指定しない場合、themeIds を持たないカードを作る', () => {
+    const card = createIntroCard({ name: '田中太郎' });
+
+    expect(card.themeIds).toBeUndefined();
+  });
+
+  it('themeIds が空配列の場合、undefined へ正規化する', () => {
+    const card = createIntroCard({ name: '田中太郎', themeIds: [] });
+
+    expect(card.themeIds).toBeUndefined();
+  });
+
+  it('カタログに実在する themeIds を指定した場合、そのまま保持する', () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      themeIds: ['open-source', 'accessibility'],
+    });
+
+    expect(card.themeIds).toEqual(['open-source', 'accessibility']);
+  });
+
+  it(`themeIds が上限（${INTRO_CARD_MAX_THEMES} 件）ちょうどの場合、受理する`, () => {
+    const card = createIntroCard({
+      name: '田中太郎',
+      themeIds: ['open-source', 'accessibility', 'information-security'],
+    });
+
+    expect(card.themeIds).toHaveLength(INTRO_CARD_MAX_THEMES);
+  });
+
+  it('INTRO_CARD_MAX_THEMES は Public Passport の PUBLIC_PASSPORT_MAX_CLUES と一致する（会話テーマとカタログ上限の drift を防ぐ）', () => {
+    expect(INTRO_CARD_MAX_THEMES).toBe(PUBLIC_PASSPORT_MAX_CLUES);
+  });
+
+  it(`themeIds が上限（${INTRO_CARD_MAX_THEMES} 件）を超える場合、INVALID_THEME_IDS を投げる`, () => {
+    const error = captureError(() =>
+      createIntroCard({
+        name: '田中太郎',
+        themeIds: [
+          'open-source',
+          'accessibility',
+          'information-security',
+          'cloud-infrastructure',
+        ],
+      })
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    expect((error as IntroCardError).code).toBe('INVALID_THEME_IDS');
+    expect((error as IntroCardError).field).toBeUndefined();
+  });
+
+  it('themeIds に重複がある場合、INVALID_THEME_IDS を投げる', () => {
+    const error = captureError(() =>
+      createIntroCard({
+        name: '田中太郎',
+        themeIds: ['open-source', 'open-source'],
+      })
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    expect((error as IntroCardError).code).toBe('INVALID_THEME_IDS');
+  });
+
+  it('themeIds にカタログに存在しない ID が含まれる場合、INVALID_THEME_IDS を投げる', () => {
+    const error = captureError(() =>
+      createIntroCard({
+        name: '田中太郎',
+        themeIds: ['not-a-real-clue-id'],
+      })
+    );
+
+    expect(error).toBeInstanceOf(IntroCardError);
+    expect((error as IntroCardError).code).toBe('INVALID_THEME_IDS');
   });
 });

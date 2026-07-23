@@ -1,3 +1,5 @@
+import { type ClueId, isClueId } from './clue-catalog';
+
 /**
  * 自己紹介カードピボット Step 1（Issue 79）のドメイン型。
  * 正本は `docs/specs/2026-07-20-digital-meishi-pivot.md` と Issue 79 本文。
@@ -13,6 +15,15 @@ export const INTRO_CARD_SELF_INTRO_MAX_LENGTH = 300;
 export const INTRO_CARD_MAX_LINKS = 5;
 export const INTRO_CARD_LINK_MAX_LENGTH = 120;
 export const INTRO_CARD_PHONE_MAX_LENGTH = 20;
+/**
+ * Issue 104（端末内会話エージェント Step A）: 会話テーマは Passport と同じ
+ * 版管理済みカタログ（`clue-catalog.ts`）を再利用する。専用の新しいカタログは
+ * 作らない（ADR-0036「案 C」）。上限は Public Passport の
+ * `PUBLIC_PASSPORT_MAX_CLUES`（`src/domain/passport.ts`）と同じ 3 件にする
+ * （`passport.ts` を import すると循環 import になるため値は独立させる。
+ * 一致は `conversation-agent-evidence.test.ts` が固定する）。
+ */
+export const INTRO_CARD_MAX_THEMES = 3;
 
 export interface IntroCard {
   readonly name: string;
@@ -22,6 +33,13 @@ export interface IntroCard {
   readonly links?: readonly string[];
   readonly email?: string;
   readonly phone?: string;
+  /**
+   * Issue 104: 端末内会話エージェントが共通点抽出に使う、確認済みの会話テーマ
+   * （最大 `INTRO_CARD_MAX_THEMES` 件）。Passport の `ConfirmedClue` とは異なり
+   * `category` を持たない（`src/domain/conversation-agent-evidence.ts` が
+   * `clueById` から都度導出する）。
+   */
+  readonly themeIds?: readonly ClueId[];
 }
 
 export type IntroCardErrorCode =
@@ -31,7 +49,8 @@ export type IntroCardErrorCode =
   | 'INVALID_EMAIL'
   | 'INVALID_PHONE'
   | 'CARD_TOO_LARGE'
-  | 'INVALID_SHARE_URL';
+  | 'INVALID_SHARE_URL'
+  | 'INVALID_THEME_IDS';
 
 /**
  * Issue 92: 保存失敗時にどの入力欄が原因かを画面側で特定するための識別子。
@@ -42,6 +61,11 @@ export type IntroCardErrorCode =
  * 処理は `src/screens/intro-card-links.ts` の `firstInvalidNamedLinkField` が担う）。
  * `CARD_TOO_LARGE`（`vcard.ts`）・`INVALID_SHARE_URL`（`intro-card-url.ts`）は
  * どの入力欄の問題でもないため対象外（`IntroCardError.field` は未設定のまま）。
+ * `INVALID_THEME_IDS`（会話テーマ、Issue 104）も同じ理由で対象外にする。
+ * 会話テーマはカタログからの選択式（`ClueSelector` の checkbox）であり、
+ * 名前・肩書き等のような「入力中の 1 欄を focus する」体験が必要な自由記述
+ * 欄ではないため、他の欄と同じ per-field 検証（`IntroCardFieldValueInput`）の
+ * 対象にも含めない。
  */
 export type IntroCardField =
   | 'name'
@@ -84,15 +108,18 @@ export class IntroCardError extends Error {
   }
 }
 
-export interface CreateIntroCardInput {
-  readonly name: string;
-  readonly title?: string;
-  readonly organization?: string;
-  readonly selfIntro?: string;
-  readonly links?: readonly string[];
-  readonly email?: string;
-  readonly phone?: string;
-}
+/**
+ * `IntroCard` と同じ形にするため、フィールド一覧を手で複製せず `Omit` + 追記で
+ * 導出する（jscpd 重複検出の指摘: 7 フィールドをそのまま複製すると
+ * `IntroCard` と drift しうる）。`themeIds` だけ検証前の生文字列配列
+ * （`readonly string[]`）にする。カタログ ID として妥当かどうかは
+ * `validatedThemeIds` が検証する。URL デコード（`intro-card-url.ts`）・
+ * Storage 読み戻し（`intro-card-storage.ts`）のどちらから来た値も、ここで
+ * 同じ 1 か所の検証を通す。
+ */
+export type CreateIntroCardInput = Omit<IntroCard, 'themeIds'> & {
+  readonly themeIds?: readonly string[];
+};
 
 export interface IntroCardOptionalFields {
   readonly title: string | undefined;
@@ -109,6 +136,13 @@ export interface IntroCardOptionalFields {
  * key はそもそも生成しない。`createIntroCard` と、Storage から読み戻した JSON を
  * 同じ形へ変換する `src/app/intro-card-storage.ts` の両方がこの組み立てを必要とする
  * ため、ここへ一本化する（jscpd 重複検出の指摘を実装で解消）。
+ *
+ * Issue 104 の `themeIds` はここに含めない: `createIntroCard` が渡す値は検証済みの
+ * `readonly ClueId[]`、`intro-card-storage.ts` が渡す値は検証前の `readonly
+ * string[]`（`CreateIntroCardInput.themeIds` へ二重目の `createIntroCard` 呼び出しで
+ * 初めて検証される）であり、型が異なる。両呼び出し元がそれぞれ 1 行の
+ * `themeIds === undefined ? base : { ...base, themeIds }` で付け足す
+ * （型を偽装する共通ヘルパーを作らない）。
  */
 export function withIntroCardOptionalFields(
   name: string,
@@ -291,6 +325,45 @@ function validatedPhone(value: string | undefined): string | undefined {
   return normalized;
 }
 
+/**
+ * Issue 104: 会話テーマ ID は自由記述ではなく版管理済みカタログからの選択式の
+ * ため、`normalizeOptional`（trim・正規化）は適用しない。`undefined` または
+ * 空配列は「テーマ未設定」として `undefined` へ正規化し（他の optional array
+ * である `links` と同じ契約）、それ以外は全件がカタログに実在し、重複が無く、
+ * `INTRO_CARD_MAX_THEMES` 件以内であることを fail-closed で検証する。
+ * URL デコード（`m` key）・Storage 読み戻しのどちらから来た値も、無効な値を
+ * 静かに間引かず全体を拒否する（`links` の「不正な 1 件だけ弾く」とは異なり、
+ * カタログ ID は呼び出し側のバグ・改ざんの兆候として扱う）。
+ */
+function validatedThemeIds(
+  values: readonly string[] | undefined
+): readonly ClueId[] | undefined {
+  if (values === undefined || values.length === 0) return undefined;
+  if (values.length > INTRO_CARD_MAX_THEMES) {
+    throw new IntroCardError(
+      'INVALID_THEME_IDS',
+      `会話テーマは ${INTRO_CARD_MAX_THEMES} 件までにしてください。`
+    );
+  }
+  if (new Set(values).size !== values.length) {
+    throw new IntroCardError(
+      'INVALID_THEME_IDS',
+      '同じ会話テーマを重複して指定することはできません。'
+    );
+  }
+  const themeIds: ClueId[] = [];
+  for (const value of values) {
+    if (!isClueId(value)) {
+      throw new IntroCardError(
+        'INVALID_THEME_IDS',
+        '会話テーマは版管理済みカタログから選んでください。'
+      );
+    }
+    themeIds.push(value);
+  }
+  return themeIds;
+}
+
 export function createIntroCard(input: CreateIntroCardInput): IntroCard {
   const name = validatedName(input.name);
   const title = validatedOptionalField(
@@ -314,8 +387,9 @@ export function createIntroCard(input: CreateIntroCardInput): IntroCard {
   const links = validatedLinks(input.links);
   const email = validatedEmail(input.email);
   const phone = validatedPhone(input.phone);
+  const themeIds = validatedThemeIds(input.themeIds);
 
-  return withIntroCardOptionalFields(name, {
+  const card = withIntroCardOptionalFields(name, {
     title,
     organization,
     selfIntro,
@@ -323,6 +397,7 @@ export function createIntroCard(input: CreateIntroCardInput): IntroCard {
     email,
     phone,
   });
+  return themeIds === undefined ? card : { ...card, themeIds };
 }
 
 /**

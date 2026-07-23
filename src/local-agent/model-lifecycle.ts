@@ -193,9 +193,17 @@ const REQUIRED_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 const MAX_FILE_NAME_BYTES = 128;
 const MAX_MODELS = 8;
 const MAX_REPORTS_PER_MODEL = 20;
+/**
+ * Issue 104 Priority 2（Bonsai-ready 化）: CPU-only（`nGpuLayers: 0`）から Native
+ * の GPU offload を既定で使う設定へ変更する（ADR-0037・
+ * `docs/design/llama-provider-development-build.md` 参照）。owner が Settings の
+ * Model 管理画面から import する GGUF に適用される既定値であり、Resource Risk
+ * Gate（`evaluateModelResourceRisk`）は `nCtx` だけを見るため本変更の影響を
+ * 受けない。
+ */
 const DEFAULT_CONFIGURATION = {
   nCtx: 2_048,
-  nGpuLayers: 0,
+  nGpuLayers: 99,
   nPredict: 96,
 } as const;
 

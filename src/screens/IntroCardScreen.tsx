@@ -5,6 +5,7 @@ import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import RealQrView from '../components/RealQrView';
+import SettingsLinkFooter from '../components/SettingsLinkFooter';
 import type { IntroCard } from '../domain/intro-card';
 import { encodeIntroCardUrlBestEffort } from '../protocol/intro-card-url';
 import { encodeQr } from '../qr/encoder';
@@ -123,15 +124,11 @@ export default function IntroCardScreen({
           編集ボタンより目立たせず、削除より上（削除は最も控えめな位置を保つ、
           直下コメント参照）に置く控えめなテキストリンクにする。タップ領域は
           削除リンクと同じく WCAG 2.5.5 相当の 44pt を維持する。 */}
-      <Pressable
-        accessibilityHint={t.settingsButtonHint}
-        accessibilityLabel={t.settingsButton}
-        accessibilityRole="button"
+      <SettingsLinkFooter
+        hint={t.settingsButtonHint}
+        label={t.settingsButton}
         onPress={onOpenSettings}
-        style={styles.settingsLink}
-      >
-        <Text style={styles.settingsLinkText}>{t.settingsButton}</Text>
-      </Pressable>
+      />
       {/* Issue 118（owner 実機フィードバック）: 「見せるカード（QR 表示画面）の
           下に削除があるのが分かりにくい」。破壊的操作である削除を、編集と並ぶ
           目立つボタンから、編集の下にある控えめな下線付きテキストリンクへ
@@ -184,20 +181,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 19,
     textAlign: 'center',
-  },
-  settingsLink: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    minHeight: MIN_TOUCH_TARGET,
-    minWidth: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.md,
-  },
-  settingsLinkText: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
   },
   deleteLink: {
     alignItems: 'center',

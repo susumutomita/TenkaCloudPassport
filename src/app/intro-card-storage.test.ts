@@ -59,6 +59,10 @@ function card(): IntroCard {
     title: 'Engineer',
     selfIntro: 'LT 登壇者です。',
     links: ['https://github.com/example'],
+    // Issue 104: themeIds も往復対象に含め、既存の save/load 契約テスト
+    // （`saveAndRestore` 等）がそのまま themeIds の往復も固定するようにする
+    // （code-reviewer 指摘: 追加時 themeIds の往復が一切テストされていなかった）。
+    themeIds: ['open-source', 'accessibility'],
   };
 }
 
@@ -152,6 +156,34 @@ describe('Intro Card Storage adapter', () => {
     webStorage.setItem(
       INTRO_CARD_STORAGE_KEY,
       JSON.stringify({ name: '田中太郎', links: 'not-an-array' })
+    );
+
+    await expectStorageError(
+      () => new WebIntroCardStorageAdapter(webStorage).load(),
+      'INVALID_DATA'
+    );
+  });
+
+  it('themeIds が文字列配列ではない保存データを INVALID_DATA として拒否する（Issue 104）', async () => {
+    const webRoot = temporaryDirectory();
+    const webStorage = new FileBackedWebStorage(webRoot);
+    webStorage.setItem(
+      INTRO_CARD_STORAGE_KEY,
+      JSON.stringify({ name: '田中太郎', themeIds: 'not-an-array' })
+    );
+
+    await expectStorageError(
+      () => new WebIntroCardStorageAdapter(webStorage).load(),
+      'INVALID_DATA'
+    );
+  });
+
+  it('themeIds にカタログへ実在しない ID を含む保存データを INVALID_DATA として拒否する（Issue 104: createIntroCard の検証に一本化）', async () => {
+    const webRoot = temporaryDirectory();
+    const webStorage = new FileBackedWebStorage(webRoot);
+    webStorage.setItem(
+      INTRO_CARD_STORAGE_KEY,
+      JSON.stringify({ name: '田中太郎', themeIds: ['not-a-real-clue-id'] })
     );
 
     await expectStorageError(

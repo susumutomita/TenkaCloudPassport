@@ -226,6 +226,7 @@ interface UnknownIntroCardRecord {
   readonly links?: unknown;
   readonly email?: unknown;
   readonly phone?: unknown;
+  readonly themeIds?: unknown;
 }
 
 /**
@@ -246,6 +247,7 @@ function asCreateIntroCardInput(
   const email = record.email;
   const phone = record.phone;
   const links = record.links;
+  const themeIds = record.themeIds;
   if (typeof name !== 'string') {
     throw new Error('Intro Card の name が文字列ではありません。');
   }
@@ -255,11 +257,12 @@ function asCreateIntroCardInput(
     !isOptionalString(selfIntro) ||
     !isOptionalString(email) ||
     !isOptionalString(phone) ||
-    !isOptionalStringArray(links)
+    !isOptionalStringArray(links) ||
+    !isOptionalStringArray(themeIds)
   ) {
     throw new Error('Intro Card のフィールドの型が不正です。');
   }
-  return withIntroCardOptionalFields(name, {
+  const card = withIntroCardOptionalFields(name, {
     title,
     organization,
     selfIntro,
@@ -267,6 +270,7 @@ function asCreateIntroCardInput(
     email,
     phone,
   });
+  return themeIds === undefined ? card : { ...card, themeIds };
 }
 
 export function parseStoredIntroCard(raw: string): IntroCard {

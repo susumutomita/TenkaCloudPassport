@@ -178,7 +178,12 @@
   const QUIZ_QUESTION_COUNT = 16;
   const QUIZ_PROGRESS_HEX_MAX_LENGTH = 32;
   const QUIZ_PROGRESS_HEX_PATTERN = /^[0-9a-f]+$/i;
-  const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q'];
+  const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q', 'm'];
+  // Issue 104 / ADR-0036: 会話テーマ ID（`m`）は最大 3 件
+  // （`src/domain/intro-card.ts` の INTRO_CARD_MAX_THEMES と一致、値は
+  // `scripts/intro-card-viewer-decoder-parity.test.ts` が固定する）。
+  const THEME_IDS_MAX_LENGTH = 3;
+  const THEME_ID_MAX_LENGTH = 4096;
 
   function decodeBase64UrlToBytes(encoded) {
     if (encoded.length % 4 === 1) return null;
@@ -272,6 +277,30 @@
   }
 
   /**
+   * Issue 104 / ADR-0036: `m`（会話テーマ ID）の形状だけを検証する。カタログに
+   * 実在する ID かどうかはこのビューアでは判定しない（`q` が実際のクイズ
+   * カタログを参照しないのと同じ理由）。表示はしない（設計文書「表示は任意」、
+   * `docs/design/2026-07-23-on-device-conversation-agent.md`）。
+   */
+  function validatedThemeIds(value) {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) rejectField();
+    if (value.length === 0 || value.length > THEME_IDS_MAX_LENGTH) {
+      rejectField();
+    }
+    return value.map((item) => {
+      if (
+        typeof item !== 'string' ||
+        item.length === 0 ||
+        item.length > THEME_ID_MAX_LENGTH
+      ) {
+        rejectField();
+      }
+      return item;
+    });
+  }
+
+  /**
    * `src/domain/intro-card.ts` の `createIntroCard` と同じ all-or-nothing 契約
    * （どれか 1 フィールドでも不正なら fragment 全体を拒否する）。未知の key も拒否する。
    */
@@ -287,6 +316,7 @@
       email: validatedEmail(parsed.e),
       phone: validatedPhone(parsed.p),
       stamp: validatedQuizProgressHex(parsed.q),
+      themeIds: validatedThemeIds(parsed.m),
     };
   }
 

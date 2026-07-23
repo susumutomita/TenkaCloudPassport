@@ -23,6 +23,8 @@ interface SettingsScreenProps {
   readonly onOpenPilotMeasurement: () => void;
   /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く。 */
   readonly onOpenQuiz: () => void;
+  /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く。 */
+  readonly onOpenConversationAgent: () => void;
   readonly onBack: () => void;
   readonly modelManagement?: LocalModelManagementView;
 }
@@ -348,6 +350,7 @@ export default function SettingsScreen({
   onOpenDiagnostics,
   onOpenPilotMeasurement,
   onOpenQuiz,
+  onOpenConversationAgent,
   onBack,
   modelManagement,
 }: SettingsScreenProps) {
@@ -394,6 +397,13 @@ export default function SettingsScreen({
         disabled={modelManagement?.busy ?? false}
         label={t.quizButton}
         onPress={onOpenQuiz}
+        variant="secondary"
+      />
+      <ActionButton
+        accessibilityHint={t.conversationAgentButtonHint}
+        disabled={modelManagement?.busy ?? false}
+        label={t.conversationAgentButton}
+        onPress={onOpenConversationAgent}
         variant="secondary"
       />
       <ActionButton

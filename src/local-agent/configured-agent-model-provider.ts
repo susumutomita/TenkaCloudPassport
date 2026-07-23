@@ -15,7 +15,13 @@ export interface LocalModelEnvironment {
 }
 
 const DEFAULT_N_CTX = '2048';
-const DEFAULT_N_GPU_LAYERS = '0';
+/**
+ * Issue 104 Priority 2（Bonsai-ready 化）: CPU-only（`0`）から Native の GPU
+ * offload を既定で使う設定へ変更する。`docs/design/llama-provider-development-build.md`
+ * の memory entitlement 節・ADR-0037 参照。Development / Preview / Production の
+ * どの entitlement profile でも `EXPO_PUBLIC_LOCAL_MODEL_GPU_LAYERS` で上書きできる。
+ */
+const DEFAULT_N_GPU_LAYERS = '99';
 const DEFAULT_N_PREDICT = '96';
 
 function unavailableCompletionPort(): LocalModelCompletionPort {

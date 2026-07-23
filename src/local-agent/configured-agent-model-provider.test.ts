@@ -64,7 +64,11 @@ describe('Native LocalModelCompletionPort の構成', () => {
         expect(parameters).toEqual({
           model: 'file:///data/model.gguf',
           n_ctx: 2048,
-          n_gpu_layers: 0,
+          n_gpu_layers: 99,
+          n_parallel: 1,
+          use_mmap: true,
+          use_mlock: false,
+          no_extra_bufts: true,
         });
         return new NoSignalContext();
       },

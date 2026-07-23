@@ -7645,3 +7645,233 @@ ADR にまとめる docs-only の設計フェーズを完了する。
   番号を書かない）。今回は code-reviewer subagent に既存 ADR 本文との突き合わせを
   依頼したことで発見できた。ドキュメントのみの変更でも、事実主張を含む PR は
   コードと同じ水準で第三者レビューを経てから commit する。
+
+### [端末内会話エージェント Step A 実装 + Bonsai-ready 化] - 2026-07-23
+
+#### 目的
+
+Issue 104（端末内会話エージェント）の Step A を、正本設計
+`docs/adr/0036-on-device-conversation-agent.md` /
+`docs/design/2026-07-23-on-device-conversation-agent.md` に従い実装し、App Store
+v1.0 で出荷可能にする。あわせて Bonsai-27B 採用に備えたオンデバイスモデル基盤の
+Bonsai-ready 化（既定 off / gated）を同 PR で可能な範囲まで進める。
+
+#### 制約
+
+- Priority 1（テーマ・カタログ方式の 2-party 会話エージェント）を完遂すれば v1.0
+  は出荷可能。Priority 2（Bonsai-ready 化）は同 PR に入れば理想、無理なら
+  follow-up へ列挙する。
+- 新しい Provider Contract・Prompt/Output Schema は作らない（ADR-0036）。
+- 受信カードは非永続のメモリ限定 `ConversationSession`（Storage Port を持たない）。
+- `themeIds`・`m` key は既存カタログ・既存 all-or-nothing fail-closed 契約を再利用
+  する（専用カタログ・専用検証ロジックを新設しない）。
+- Bonsai-27B は既定 off（owner 実機テスト前に本番デフォルトにしない）。
+- `git rm`/`bunx`/`nlx`・git add 明示ファイルのみ・モックデータ禁止・型エスケープ
+  禁止・MVP 未実装 throw 残さない。
+
+#### タスク
+
+1. `IntroCard.themeIds`（`clue-catalog.ts` 再利用、最大 3 件、`INTRO_CARD_MAX_THEMES`）。
+2. `intro-card-url.ts` に加算的 `m` key（`q` と同じ all-or-nothing fail-closed
+   契約）。`site/c/index.html` の allowlist・decoder parity test も同時対応。
+3. `intro-card-storage.ts` の themeIds 往復（Storage 読み戻し）。
+4. `ConversationSession`（新規、メモリ限定）・`conversation-agent-evidence.ts`
+   （IntroCard -> PublicPassport adapter、`bridge-selection.ts` の N-party
+   fairness 再利用）。
+5. UI: 相手カード QR 再スキャン / 貼り付け → 共通点・最初の質問画面。#127 の
+   Settings 導線と同じ控えめな入口。IntroCardEditScreen へ themeIds picker
+   （既存 `ClueSelector` を再利用）。
+6. Priority 2: app.json entitlements、model-lifecycle.ts / llama-agent-model-provider.ts
+   の GPU 既定、Bonsai-27B-Q1_0 manifest（gated・既定 off）、device-resource-telemetry
+   （Swift）拡張、実機テストハーネス。
+7. ADR 追加（0036 の次）、`make before-commit`、code-reviewer、PR 作成（マージ
+   しない）。
+
+#### 検証手順
+
+`make before-commit`（architecture-harness / harness_test / dup_check / lint_text /
+lint）が exit 0。カバレッジ 100%（Rules パスはテストで固定、Native 実推論は owner
+実機ゲート）。`bun run typecheck` が exit 0。
+
+#### 進捗ログ
+
+- 2026-07-23: worktree で `feat/on-device-conversation-agent-step-a` を作成
+  （HEAD は origin/main と同期済み、rebase 不要）。既存アーキテクチャ（
+  `clue-catalog.ts` / `intro-card.ts` / `intro-card-url.ts` / `bridge-selection.ts` /
+  `agent-model-provider.ts` / `model-safety-boundary.ts` /
+  `llama-agent-model-provider.ts` / `agent-provider-session.ts` /
+  `PassportApp.tsx` の Stage 機構 / `ClueSelector` component / QR scanner port /
+  device-resource-telemetry Swift module）を Read で precisely 調査した。
+  `PublicPassport` の `parsePublicPassport` が `clues` に min 1 を要求するため、
+  Evidence が 0 件（no-signal）のときは Local Agent へ到達する前に短絡させる
+  設計にすれば安全であることを確認した（Evidence が 1 件でもあれば両者の
+  `clues` は必ず非空になるため）。
+- 2026-07-23: `IntroCard.themeIds`（`INTRO_CARD_MAX_THEMES = 3`、`clue-catalog.ts`
+  再利用）を `src/domain/intro-card.ts` へ追加した。`withIntroCardOptionalFields`
+  は既存 6 フィールドのみを扱う型のまま変更せず、`themeIds` は
+  `createIntroCard`・`intro-card-storage.ts` の両呼び出し元がそれぞれ 1 行の
+  `themeIds === undefined ? card : { ...card, themeIds }` で付け足す設計にした
+  （`createIntroCard` が渡す値は検証済み `ClueId[]`、Storage が渡す値は検証前
+  `string[]` で型が異なり、共通ヘルパーへ混ぜると型を偽装することになるため）。
+  `intro-card-storage.ts` の往復も対応した。
+- 2026-07-23: `intro-card-url.ts` に `m` key（`OPTIONAL_PAYLOAD_KEYS` へ追加）を
+  実装した。`q` と同じく `strictPayloadRecord` 内で形状を eager 検証し（
+  `decodeIntroCardUrlFragmentQuizProgressHex` 経由でも見落とされないように
+  する）、カタログ実在チェックは `createIntroCard` に一本化した。`themeIds` が
+  無い/空のカードは `m` key 自体を省略するため、既存 QR との byte 一致を
+  回帰テストで固定した。`site/c/index.html` の `KNOWN_PAYLOAD_KEYS` と
+  `scripts/intro-card-viewer-decoder-parity.test.ts` も同時対応し、`bun test`
+  （1807 pass）・`bun run typecheck`・`biome check` を確認した。
+- 2026-07-23: `src/domain/conversation-session.ts`（非永続 in-memory セッション、
+  Storage Port を持たない）と `src/domain/conversation-agent-evidence.ts`
+  （IntroCard -> PublicPassport adapter、`bridge-selection.ts` の N 者間
+  Fairness と既存 2 者間 `AgentModelProvider` Contract への橋渡し）を新規実装
+  した。petName にはプレースホルダ定数（`CONVERSATION_AGENT_PLACEHOLDER_PET_NAME`）
+  を使い、Intro Card の本名を投影しないことをテストで固定した。3 者間 Fairness・
+  triple bridge（Step B 相当）・bridge と session の不整合に対する防御も直接
+  テストした。両ファイルとも 100% coverage。
+- 2026-07-23: UI を実装した。`IntroCardEditScreen.tsx` に既存 `ClueSelector`
+  component（Passport 作成画面と同じ）を再利用したテーマ選択欄を追加し、
+  `PassportApp.tsx` の `introCardDraftThemeIds` state・`introCardDraftAsShape`・
+  `loadIntroCardDraftFrom` を対応させた（draft 永続化の対象にはしない設計、
+  Profile Creation の選択式 state と同じ流儀）。新規 `ConversationAgentScreen.tsx`
+  （QR 再スキャン・手動貼り付け・審査官向けサンプルカードの 3 経路で相手カードを
+  取り込み、結果を表示）と `src/app/conversation-agent-flow.ts`（decode・
+  サンプルカード定数）を実装した。
+- 2026-07-23: `PassportApp.tsx` へ直接すべての handler を書いたところ
+  `noExcessiveCognitiveComplexity`（Biome、上限 15、実測 16）で failed した。
+  `use-pilot-measurement-flow.ts` / `use-local-diagnostics-flow.ts` と同じ
+  「複雑な flow を hook へ集約する」既存方針に従い、新規
+  `src/app/use-conversation-agent-flow.ts` へ state・handler をすべて切り出し、
+  `PassportApp.tsx` 側は 1 回の hook 呼び出し + JSX props 受け渡しだけに縮めた
+  （`providerRunner`・`localModels.provider` は Pet Interaction と同じ共有
+  instance をそのまま渡す）。Settings 経由の 1 経路（`onOpenConversationAgent`）
+  を追加し、`SettingsScreen.tsx` にボタンを追加した。i18n（ja/en）を
+  `src/app/i18n/messages.ts` の `conversationAgent` 名前空間に追加した。
+  `src/screens/conversation-agent-accessibility.test.ts`（ソーステキスト検査、
+  この repo に render test 基盤が無いため他の画面と同じ流儀）と
+  `touch-target.test.ts` へのエントリ追加も行った。`bun test`（1852 pass）・
+  `bun run typecheck`・`biome check` を確認した。
+- 2026-07-23: ADR-0037（モデル選定 + Step A 実装まとめ）を作成した。依頼文の
+  2 候補（Bonsai-8B-Q1_0 / Qwen2.5-1.5B・3B-Instruct）を一次資料で確認し、
+  Qwen2.5-3B-Instruct が Apache-2.0 ではなく `qwen-research` license である
+  ことを発見して不採用にした（Qwen2.5-1.5B-Instruct は Apache-2.0、
+  Q4_K_M で 1.12 GB、モデルカード自身が `llama.cpp` 利用方法を明記）。
+  Bonsai-8B-Q1_0 は実在するが `llama.rn` 実機実行の一次資料が無く、ADR-0036 と
+  同じ理由で follow-up のまま残した。Model ID は既存の環境変数 / Issue 18 GGUF
+  Import 経路でそのまま注入され、コードには一切影響しない（ADR 追記のみで
+  将来差し替え可能）。`textlint` で「既定」を「デフォルト」へ統一する等の
+  ドキュメント規則違反を修正した。
+- 2026-07-23: Priority 2（Bonsai-ready 化）に着手した。
+  1. `app.json` の `entitlementsProfile` を `["development"]` から
+     `["preview", "production"]` へ戻した（follow-up VW8T2M の app.json 部分）。
+     `docs/design/llama-provider-development-build.md` に Apple Developer
+     capability 有効化・TestFlight 再提出・実機証跡の再取得という owner ゲートの
+     検証手順を追記した（コード変更だけでは有効化されないことを明記）。
+  2. `src/local-agent/llama-agent-model-provider.ts` の `initLlama` 呼び出しへ
+     `n_parallel: 1` / `use_mmap: true` / `use_mlock: false` /
+     `no_extra_bufts: true` を固定値として追加し（`node_modules/llama.rn` の
+     型定義で全フィールドの実在を確認済み）、`model-lifecycle.ts` の
+     `DEFAULT_CONFIGURATION.nGpuLayers` と `configured-agent-model-provider.ts`
+     の `DEFAULT_N_GPU_LAYERS` を `0`（CPU-only）から `99` へ変更した。
+     既存テスト（`llama-agent-model-provider.test.ts` /
+     `configured-agent-model-provider.test.ts`）を新しい既定値・パラメータ形状に
+     追従させた。
+  3. `modules/device-resource-telemetry/ios/TenkaDeviceResourceTelemetryModule.swift`
+     に `task_vm_info`（`phys_footprint`）と `os_proc_available_memory()` を
+     追加した。`resident_size`（compressed memory を含まない）から
+     `phys_footprint`（Apple 推奨の実測値）へ置き換え、常に `nil` にしていた
+     `processMemoryLimitBytes` を `os_proc_available_memory()` の実測値で埋めた。
+     TS 側 `DeviceResourceSnapshot` の shape・`device-resource-snapshot.ts` の
+     Parser は変更不要（既存 shape のまま）。
+  4. 実機テストハーネス（Codex 提供仕様）を `src/local-agent/bonsai-benchmark-harness.ts`
+     として実装した。`initLlama` の baseline config・200ms 間隔（Token
+     コールバック内で経過時間判定、実時間 Timer は使わない設計にし Fake Port で
+     決定的にテストできるようにした）の Telemetry 採取・load/first-token/tok/s
+     計測・JSON Report 出力・技術 GO / 本番 GO のしきい値判定を実装した。手書き
+     Fake Port（No Mock）で 100% coverage を達成した。
+  5. Bonsai-27B-Q1_0 の manifest 登録（background download+resume+SHA 検証を
+     含む新規サブシステム）は、現行の GGUF Import が Document Picker 経由のみで
+     アプリ内蔵の Download 機構が存在しないため、本 PR の scope に収まらないと
+     判断し follow-up へ列挙した（`/follow-up add`、詳細は PR body 参照）。
+
+#### 振り返り
+
+- 問題: `PassportApp.tsx` へ会話エージェントの state・handler（9 関数、
+  useState 5 個）を直接書き足したところ、`noExcessiveCognitiveComplexity`
+  （Biome、上限 15）を 16 で超過した。
+  根本原因: `PassportApp.tsx` は既に 2500 行超の巨大な component 関数であり、
+  新機能を「まず動かす」ために直接書き足す最初の実装が、この repo の既存方針
+  （複雑な flow は `use-*-flow.ts` hook へ切り出す）を踏まずに Cognitive
+  Complexity の限界へ到達することを事前に見積もっていなかった。
+  予防策: `PassportApp.tsx` へ新しい state・handler を追加する前に、
+  `usePilotMeasurementFlow` / `useLocalDiagnosticsFlow` / `useLocalModelManagement`
+  という既存 3 つの hook を先に確認し、「複雑な flow は必ず専用 hook へ最初から
+  切り出す」という設計判断を実装前に行う。`biome check` を各ファイル追加の
+  たびに実行していたため、複雑度超過は同じセッション内で早期に検出・修正
+  できた。
+- 問題: ADR-0037 の下書きで「Qwen2.5-3B-Instruct も Apache-2.0」という owner
+  依頼文の前提（3B も 1.5B と同じ緩いライセンス）を検証せずに書きかけた。
+  根本原因: 依頼文が「Qwen2.5-1.5B/3B-Instruct 等」と 2 サイズを並列に例示して
+  いたため、両方とも同じライセンスだろうという思い込みが生じた。
+  予防策: WebFetch で実際のモデルカードを個別に確認したところ
+  Qwen2.5-3B-Instruct-GGUF のライセンスが `qwen-research`（Apache-2.0 ではない）
+  であることが分かり、下書きを訂正した。ライセンス・数値などの具体的な事実は
+  候補が複数あっても 1 つずつ一次資料で個別に確認し、似た名前の候補間で
+  前提を使い回さない。
+- 問題: `evaluateBonsaiBenchmark` のしきい値テストで、最初に選んだ数値の組が
+  意図した分岐（例: 「256 トークン未満では完了時間上限を適用しない」）を
+  実際には通らず、2 件のテストが red になった。
+  根本原因: p50 相当の tok/s（本番 GO のしきい値）と Decode 速度（技術 GO の
+  しきい値）は同じ生成トークン数・完了時間から導出されるため、一方を満たす
+  数値が他方を意図せず満たしてしまう（またはその逆）ケースが algebra 的に
+  発生しうることを、テスト値を決め打ちする前に検算していなかった。
+  予防策: 複数のしきい値が同じ入力変数から導出される純粋関数のテストでは、
+  期待する分岐だけが成立する数値を代入前に簡単な算数で検算する（本件では
+  「p50 チェックが暗に Decode 速度チェックより厳しい」という関係を検算で
+  発見し、上限適用の有無を確認するテストの意図を「256 件ちょうどとの比較」
+  ではなく「OR 分岐の短絡評価」へ書き直して整合させた）。
+
+### code-reviewer レビューと反映 - 2026-07-23
+
+`code-reviewer` subagent（隔離コンテキスト、read-only）に diff 全体のレビューを
+依頼した。Blocker 1 件・Major 4 件・Minor 1 件の指摘を受け、すべて反映した。
+
+- Blocker: `use-conversation-agent-flow.ts` の `addPeer` が人数上限を見ておらず、
+  非同期の QR スキャンと同期的な貼り付け/サンプル追加が競合すると、見えない・
+  個別に削除できない 2 人目がセッションに紛れ込みうる（Step A は 2 者間限定の
+  はずが UI の見た目だけで担保していた）。既存 Lounge Guest Join フロー
+  （`guestJoinInFlightRef`）と同じ「非同期操作中の二重実行防止」パターンが
+  抜けていた。`addPeer` の `setSession` 更新関数の先頭に
+  `if (current.peers.length > 0) return current;` を追加して修正した。
+- Major: `onReset` / `onRemovePeer` / `close` / `open` が `runKeyRef` を `null` に
+  戻すだけで `providerRunner.forget(encounterKey)` を呼んでおらず、実行中の
+  Local Agent 呼び出し（Native Lane を最大 45 秒直列占有）が後始末されない
+  まま残りうる。Pet Interaction 側の `cancelActiveProvider` と同じ後始末を
+  `forgetActiveRun()` として切り出し、全リセット経路から呼ぶよう修正した。
+- Major: follow-up ID `01KY4W8FE17WMR049WB3VW8T2M` が worktree 固有の
+  `.claude/state/follow-ups.jsonl`（gitignore 対象、per-developer）に存在せず
+  検証できないという指摘。確認したところメインチェックアウト側の同ファイルには
+  実在しており、worktree 分離によるローカル state の不一致だった（コード上の
+  不具合ではない）。本 worktree の state file をメインチェックアウトの内容と
+  マージして整合させた（コミット対象外のファイルのため PR には影響しない）。
+- Major: `intro-card-storage.test.ts` が `themeIds` の往復・不正値拒否を
+  一切検証していなかった（100% line coverage は「既存分岐が通っただけ」で
+  新しい振る舞いを固定していなかった）。共有 `card()` fixture に `themeIds` を
+  追加して既存の往復テスト群がそのまま themeIds も検証するようにし、
+  「themeIds が文字列配列でない」「カタログに実在しない ID を含む」の 2 つの
+  拒否テストを追加した。
+- Major: iOS の `processMemoryLimitBytes`（`os_proc_available_memory()` 単体、
+  「あと確保できる残り」）と Android の同名フィールド（`processCeiling =
+  min(totalMem, availMem + residentMemoryBytes)`、「到達しうる総容量」）が
+  異なる意味を持ったまま同じ `evaluateModelResourceRisk` の分母として使われて
+  いた。iOS 側を `min(physicalMemoryBytes, physFootprintBytes +
+  availableMemoryBytes)` に変更し、Android と同じ「Ceiling」の意味へ揃えた。
+- Minor: `bonsai-benchmark-harness.test.ts` のインラインコメントが、
+  `onToken` コールバック内で `firstTokenAtMs` 判定と `sampleIfDue` 判定が
+  それぞれ独立に `clock.nowMs()` を呼ぶ実装の実際のトレースと食い違っていた。
+  コメントを直すだけでなく、実装自体を「1 Token につき `now` を 1 回だけ読み、
+  両方の判定に使い回す」形へ簡潔化し、Port 呼び出し回数も減らした。
+
+修正後、`bun run typecheck`・`bun test`（1871 pass）・`make before-commit`
+（exit 0、100% coverage 全ファイル、web export 成功）を再確認した。
