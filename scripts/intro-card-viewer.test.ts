@@ -9,6 +9,8 @@ import {
   INTRO_CARD_SELF_INTRO_MAX_LENGTH,
   INTRO_CARD_TITLE_MAX_LENGTH,
 } from '../src/domain/intro-card';
+import { QUIZ_QUESTION_COUNT } from '../src/domain/quiz-catalog';
+import { QUIZ_PROGRESS_HEX_MAX_LENGTH } from '../src/domain/quiz-progress-code';
 
 /**
  * Issue 84: `site/c/index.html` は完全静的・外部リクエストゼロの自己紹介ページ
@@ -207,5 +209,115 @@ describe('自己紹介ページビューワー（site/c/index.html、Issue 84）
     // card.tenkacloud.com へ移行した後も、この不変条件（ドメイン非依存）は変わらない。
     expect(text).not.toContain('card.tenkacloud.com');
     expect(text).not.toContain('susumutomita.github.io');
+  });
+});
+
+/**
+ * Issue 110 / ADR-0034: クイズ進捗ビットマスク（`q`）のスタンプ表示契約。
+ * `src/domain/quiz-catalog.ts` / `src/domain/quiz-progress-code.ts` /
+ * `src/protocol/intro-card-url.ts` の allowlist・定数と、このビューアの複製が
+ * ドリフトしていないことを固定する。
+ */
+describe('クイズ進捗スタンプ（q、Issue 110 / ADR-0034）の表示契約', () => {
+  it('KNOWN_PAYLOAD_KEYS に q を含む（intro-card-url.ts の allowlist 二重更新）', async () => {
+    const text = await readViewerSource();
+
+    expect(text).toContain(
+      "const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q'];"
+    );
+  });
+
+  it('QUIZ_QUESTION_COUNT・QUIZ_PROGRESS_HEX_MAX_LENGTH が domain の定数と同じ値を複製している（drift 検出）', async () => {
+    const text = await readViewerSource();
+
+    expect(text).toContain(
+      `const QUIZ_QUESTION_COUNT = ${QUIZ_QUESTION_COUNT};`
+    );
+    expect(text).toContain(
+      `const QUIZ_PROGRESS_HEX_MAX_LENGTH = ${QUIZ_PROGRESS_HEX_MAX_LENGTH};`
+    );
+  });
+
+  it('validatedQuizProgressHex は 16 進以外・空文字・桁数超過を rejectField で fail-closed に拒否する', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function validatedQuizProgressHex(value) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain('if (value === undefined) return undefined;');
+    expect(body).toContain(
+      'value.length === 0 || value.length > QUIZ_PROGRESS_HEX_MAX_LENGTH'
+    );
+    expect(body).toContain('QUIZ_PROGRESS_HEX_PATTERN.test(value)');
+    expect(body.match(/rejectField\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(
+      3
+    );
+  });
+
+  it('buildCardFromPayload は stamp フィールドとして q を validatedQuizProgressHex 経由で組み込む', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function buildCardFromPayload(parsed) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain('stamp: validatedQuizProgressHex(parsed.q)');
+  });
+
+  it('quizStampCells は q を BigInt ビット演算で QUIZ_QUESTION_COUNT 桁分だけデコードする（未定義の高位ビットは無視）', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function quizStampCells(hex) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toMatch(/const mask = BigInt\(`0x\$\{hex\}`\);/);
+    expect(body).toContain('index < QUIZ_QUESTION_COUNT');
+    expect(body).toContain('(mask & (1n << BigInt(index))) !== 0n');
+  });
+
+  it('renderQuizStamp は q が無い（undefined）カードでは何もせず、既存 QR の見た目を変えない', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function renderQuizStamp(card) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain('if (card.stamp === undefined) return;');
+  });
+
+  it('renderQuizStamp はセルを createElement + className だけで組み立て、innerHTML を使わない', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function renderQuizStamp(card) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expect(body).toContain("document.createElement('span')");
+    expect(body).toContain('cell.className =');
+    expect(body).not.toContain('innerHTML');
+    expect(body).toContain(
+      "document.getElementById('quiz-stamp-count').textContent ="
+    );
+    expect(body).toContain(
+      "document.getElementById('quiz-stamp').hidden = false;"
+    );
+  });
+
+  it('renderCard は renderContacts の後に renderQuizStamp を呼ぶ', async () => {
+    const text = await readViewerSource();
+    const start = text.indexOf('function renderCard(card) {');
+    const end = text.indexOf('\n  }', start);
+    const body = text.slice(start, end);
+
+    expectInOrder(body, ['renderContacts(card);', 'renderQuizStamp(card);']);
+  });
+
+  it('quiz-stamp セクションは HTML 上は既定で hidden であり、グリッドと件数表示の 2 要素を持つ', async () => {
+    const text = await readViewerSource();
+
+    expect(text).toContain('<div id="quiz-stamp" class="quiz-stamp" hidden>');
+    expect(text).toContain(
+      '<div id="quiz-stamp-grid" class="quiz-stamp-grid"></div>'
+    );
+    expect(text).toContain(
+      '<p id="quiz-stamp-count" class="quiz-stamp-count"></p>'
+    );
   });
 });

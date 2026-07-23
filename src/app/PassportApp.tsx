@@ -41,6 +41,13 @@ import {
 } from '../domain/passport';
 import type { PetInteractionState } from '../domain/pet-interaction';
 import { INTERACTION_DEADLINE_MS } from '../domain/pet-interaction';
+import type { QuizQuestionId } from '../domain/quiz-catalog';
+import {
+  EMPTY_QUIZ_PROGRESS,
+  type QuizProgress,
+  withQuizQuestionCleared,
+} from '../domain/quiz-progress';
+import { encodeQuizProgressHex } from '../domain/quiz-progress-code';
 import {
   createParticipantId,
   createSessionIdentifiers,
@@ -85,6 +92,7 @@ import PassportSharePreviewScreen from '../screens/PassportSharePreviewScreen';
 import PilotMeasurementScreen from '../screens/PilotMeasurementScreen';
 import ProfileLoadingScreen from '../screens/ProfileLoadingScreen';
 import QrScanScreen from '../screens/QrScanScreen';
+import QuizScreen from '../screens/QuizScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import {
   createAgentProviderSessionRunner,
@@ -148,6 +156,7 @@ import {
   type CameraPermissionState,
   createInProcessQrScannerPort,
 } from './qr-scanner-port';
+import type { QuizProgressStoragePort } from './quiz-progress-storage';
 import { readableError } from './readable-error';
 import { createReducedMotionPort } from './reduced-motion-port';
 import {
@@ -171,6 +180,8 @@ interface PassportAppProps {
   readonly appVersion: string;
   readonly localProfileStorage: LocalProfileStoragePort;
   readonly introCardStorage: IntroCardStoragePort;
+  /** Issue 110 / ADR-0034: クラウド基礎クイズのクリア済み進捗を保存する。 */
+  readonly quizProgressStorage: QuizProgressStoragePort;
   readonly backupSharePort: BackupSharePort;
   /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
   readonly agentModelProvider?: AgentModelProvider;
@@ -190,6 +201,9 @@ type SetupStage =
   | 'settings'
   | 'diagnostics'
   | 'pilot-measurement'
+  // Issue 110: クラウド基礎クイズ。Settings 経由の 1 経路だけを持つ（diagnostics /
+  // pilot-measurement と同じ導線設計、ADR-0034）。
+  | 'quiz'
   // Issue 79: 自己紹介カードピボット Step 1 のメインフロー。Pet / Lounge / Encounter 系
   // stage は導線から外れ、既定の着地点はこの 2 つになる。
   | 'intro-card'
@@ -316,6 +330,8 @@ interface ProfileHomeGateProps {
   readonly introCardEdit: IntroCardEditBranchProps;
   readonly onEditIntroCard: () => void;
   readonly onDeleteIntroCard: () => void;
+  /** Issue 110 / ADR-0034: 詳細は `IntroCardStageGate` を参照。 */
+  readonly quizProgressHex: string | undefined;
 }
 
 /**
@@ -339,6 +355,7 @@ function ProfileHomeGate({
   introCardEdit,
   onEditIntroCard,
   onDeleteIntroCard,
+  quizProgressHex,
 }: ProfileHomeGateProps) {
   // Issue 79: 自己紹介カードピボット Step 1 の既定フロー。Pet / Encounter より前に
   // 判定する。`PassportApp` 本体へ `if` を追加すると Cognitive Complexity が上限を
@@ -353,6 +370,7 @@ function ProfileHomeGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDeleteIntroCard}
         onEdit={onEditIntroCard}
+        quizProgressHex={quizProgressHex}
         stage={stage}
       />
     );
@@ -470,6 +488,7 @@ const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
   'settings',
   'diagnostics',
   'pilot-measurement',
+  'quiz',
 ]);
 
 interface UtilityStageGateProps {
@@ -482,6 +501,15 @@ interface UtilityStageGateProps {
   readonly modelManagement: LocalModelManagementView;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onCloseSettings: () => void;
+  /**
+   * Issue 110 / ADR-0034: クラウド基礎クイズの進捗・採点・導線。`diagnostics` /
+   * `pilot-measurement` と同じく Settings 経由の 1 経路だけを持つ（設計文書
+   * `docs/design/2026-07-23-cloud-basics-quiz.md` 7 節）。
+   */
+  readonly quizProgress: ReadonlySet<QuizQuestionId>;
+  readonly onAnswerQuizQuestionCorrect: (id: QuizQuestionId) => void;
+  readonly onOpenQuiz: () => void;
+  readonly onCloseQuiz: () => void;
 }
 
 function UtilityStageGate({
@@ -494,6 +522,10 @@ function UtilityStageGate({
   modelManagement,
   onChangeLocale,
   onCloseSettings,
+  quizProgress,
+  onAnswerQuizQuestionCorrect,
+  onOpenQuiz,
+  onCloseQuiz,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
     return (
@@ -510,6 +542,17 @@ function UtilityStageGate({
       <PilotMeasurementScreen flow={pilotMeasurementFlow} locale={locale} />
     );
   }
+  if (stage === 'quiz') {
+    return (
+      <QuizScreen
+        clearedIds={quizProgress}
+        locale={locale}
+        onAnswerCorrect={onAnswerQuizQuestionCorrect}
+        onBack={onCloseQuiz}
+        onChangeLocale={onChangeLocale}
+      />
+    );
+  }
   if (stage === 'settings') {
     return (
       <SettingsScreen
@@ -519,6 +562,7 @@ function UtilityStageGate({
         onChangeLocale={onChangeLocale}
         onOpenDiagnostics={diagnosticsFlow.open}
         onOpenPilotMeasurement={pilotMeasurementFlow.open}
+        onOpenQuiz={onOpenQuiz}
       />
     );
   }
@@ -553,6 +597,8 @@ type IntroCardEditBranchProps = Omit<
 interface IntroCardStageGateProps {
   readonly stage: SetupStage;
   readonly introCard: IntroCard | null;
+  /** Issue 110 / ADR-0034: 表示画面の QR に相乗りさせるクイズ進捗ビットマスク。 */
+  readonly quizProgressHex: string | undefined;
   readonly locale: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
@@ -563,6 +609,7 @@ interface IntroCardStageGateProps {
 function IntroCardStageGate({
   stage,
   introCard,
+  quizProgressHex,
   locale,
   onChangeLocale,
   onEdit,
@@ -580,6 +627,7 @@ function IntroCardStageGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDelete}
         onEdit={onEdit}
+        {...(quizProgressHex === undefined ? {} : { quizProgressHex })}
       />
     );
   }
@@ -624,6 +672,7 @@ export default function PassportApp({
   appVersion,
   localProfileStorage,
   introCardStorage,
+  quizProgressStorage,
   backupSharePort,
   agentModelProvider = RULES_MODEL_PROVIDER,
   localModelManagement = null,
@@ -657,6 +706,15 @@ export default function PassportApp({
   // （`applyStartupRecoveryResult` / `resetAllLocalMemory` の stage 決定がこれに依存する）。
   const [introCard, setIntroCard] = useState<IntroCard | null>(null);
   const introCardRef = useRef<IntroCard | null>(null);
+  // Issue 110 / ADR-0034: クリア済み設問 id の集合だけを保持する。「全データ削除」
+  // (Diagnostics) は Intro Card 同様この Storage を対象にしない
+  // （設計文書 10 節、follow-up として記録済み）。
+  const [quizProgress, setQuizProgress] =
+    useState<QuizProgress>(EMPTY_QUIZ_PROGRESS);
+  // code-reviewer 指摘: 起動時の読込が終わる前に永続化 effect が走ると、
+  // まだ読み込んでいない保存済み進捗を空の初期値で上書きしてしまう
+  // （`introCardDraftHydrated` と同じレース条件、上記コメント参照）。
+  const [quizProgressHydrated, setQuizProgressHydrated] = useState(false);
   const [introCardDraftName, setIntroCardDraftName] = useState('');
   const [introCardDraftTitle, setIntroCardDraftTitle] = useState('');
   const [introCardDraftOrganization, setIntroCardDraftOrganization] =
@@ -1123,6 +1181,24 @@ export default function PassportApp({
     providerRuntimeState.status,
   ]);
   const openDiagnostics = useCallback((): void => setStage('diagnostics'), []);
+  const openQuiz = useCallback((): void => setStage('quiz'), []);
+  /**
+   * Issue 110 / ADR-0034: 正解した設問だけを進捗集合へ追加する（不正解・解答履歴は
+   * 保持しない）。永続化は state 変化を検知する別の `useEffect`（下書き保存と同じ
+   * `*Hydrated` フラグ付きの流儀）に委ね、この updater 自体は副作用を持たない
+   * （code-reviewer 指摘: React の `setState` 関数型 updater の中で外部 I/O を
+   * 呼ぶのは推奨されないパターンのため分離した）。
+   */
+  const handleQuizQuestionCorrect = useCallback((id: QuizQuestionId): void => {
+    setQuizProgress((current) => withQuizQuestionCleared(current, id));
+  }, []);
+  // Issue 110 / ADR-0034: 自己紹介カード QR に相乗りさせる進捗ビットマスク。全問未合格
+  // （'0'）なら `encodeIntroCardUrlBestEffort` 側が `q` を省略するため、ここでは
+  // 単純に encode するだけでよい。
+  const quizProgressHex = useMemo(
+    () => encodeQuizProgressHex(quizProgress),
+    [quizProgress]
+  );
   const diagnosticsFlow = useLocalDiagnosticsFlow({
     localDataControl,
     backupSharePort,
@@ -1160,13 +1236,20 @@ export default function PassportApp({
       // 失敗しても起動そのものを妨げない・独自の Notice も出さない
       // （`.catch(() => null)` で「下書きなし」へ握り潰す）。
       introCardStorage.loadDraft().catch(() => null),
-    ]).then(([result, loadedIntroCard, loadedDraft]) => {
+      // Issue 110: クイズ進捗も同じ理由（自己申告のスタンプという nice-to-have な
+      // データ）で、読込失敗時は空の進捗へ握り潰し、独自の Notice は出さない。
+      quizProgressStorage.load().catch(() => EMPTY_QUIZ_PROGRESS),
+    ]).then(([result, loadedIntroCard, loadedDraft, loadedQuizProgress]) => {
       if (!active) return;
       introCardRef.current = loadedIntroCard;
       setIntroCard(loadedIntroCard);
       if (loadedDraft && !isEmptyIntroCardDraft(loadedDraft)) {
         applyIntroCardDraftFields(loadedDraft);
       }
+      setQuizProgress(loadedQuizProgress);
+      // Issue 110: クイズ進捗の水和完了も、下書き同様に result の分岐より前で立てる
+      // （永続化 effect が読込前の初期値で上書きしないためのガード）。
+      setQuizProgressHydrated(true);
       // 下書きの水和が済んだことを示す。`result.kind` の分岐（Profile Recovery の
       // 成否）とは独立の関心事のため、早期 return より前で必ず立てる。
       setIntroCardDraftHydrated(true);
@@ -1186,6 +1269,7 @@ export default function PassportApp({
     introCardStorage,
     localDataControl,
     localProfileStorage,
+    quizProgressStorage,
   ]);
 
   /**
@@ -1210,6 +1294,19 @@ export default function PassportApp({
       introCardStorage.saveDraft(fields).catch(() => undefined);
     }
   }, [introCardDraftFieldsSnapshot, introCardDraftHydrated, introCardStorage]);
+
+  /**
+   * Issue 110 / ADR-0034: `quizProgress` が変わるたびに Storage へ反映する
+   * （`handleQuizQuestionCorrect` 自体は state 更新だけに専念させ、副作用はここへ
+   * 分離する）。`quizProgressHydrated` が `true` になるまでは何もしない（起動時の
+   * `quizProgressStorage.load()` と競合して、読み込む前の初期値で上書きしてしまう
+   * レースを防ぐ、上記 `introCardDraftHydrated` と同じ流儀）。保存は fire-and-forget
+   * にし、失敗しても採点結果の表示を妨げない（設計文書 4 節）。
+   */
+  useEffect(() => {
+    if (!quizProgressHydrated) return;
+    quizProgressStorage.save(quizProgress).catch(() => undefined);
+  }, [quizProgress, quizProgressHydrated, quizProgressStorage]);
 
   /**
    * Issue 11: Active Lounge の 1 秒 tick / Background 復帰の両方が、Lounge 本体の期限
@@ -2035,6 +2132,14 @@ export default function PassportApp({
     setStage(introCardHomeStage());
   }
 
+  /**
+   * Issue 110: `diagnostics` / `pilot-measurement` と同じく、クイズは Settings 経由
+   * だけで開き、閉じたら Settings（Intro Card の着地先ではなく）へ戻す。
+   */
+  function closeQuiz(): void {
+    setStage('settings');
+  }
+
   // Settings と Diagnostics は Lounge の状態確認より先に判定する。これにより、Active
   // Lounge / Owner Question / Outcome / Destroyed のどの段階からでも設定と診断を開ける。
   // 戻る操作は `stage` だけを変えるため、Diagnostics の明示削除 Action を実行しない限り
@@ -2047,9 +2152,13 @@ export default function PassportApp({
         hasProfile={privateProfile !== null}
         locale={locale}
         modelManagement={localModels.view}
+        onAnswerQuizQuestionCorrect={handleQuizQuestionCorrect}
         onChangeLocale={setLocale}
+        onCloseQuiz={closeQuiz}
         onCloseSettings={closeSettings}
+        onOpenQuiz={openQuiz}
         pilotMeasurementFlow={pilotMeasurementFlow}
+        quizProgress={quizProgress}
         stage={stage}
       />
     );
@@ -2278,6 +2387,7 @@ export default function PassportApp({
       onEditIntroCard={openIntroCardEdit}
       onOpenSettings={openSettings}
       privateProfile={privateProfile}
+      quizProgressHex={quizProgressHex}
       stage={stage}
     />
   );

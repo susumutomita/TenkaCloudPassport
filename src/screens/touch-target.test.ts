@@ -92,4 +92,12 @@ describe('Touch Target が 44 pt 以上である', () => {
     expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
     expect(text).toContain('minWidth: MIN_TOUCH_TARGET');
   });
+
+  it('QuizScreen の一覧行・選択肢は共有定数を使って 44 pt 以上を強制する（Issue 110）', async () => {
+    const text = await source('QuizScreen.tsx');
+    expect(text).toContain("from '../ui/touch-target'");
+    expect(
+      text.match(/minHeight: MIN_TOUCH_TARGET/g)?.length ?? 0
+    ).toBeGreaterThanOrEqual(2);
+  });
 });

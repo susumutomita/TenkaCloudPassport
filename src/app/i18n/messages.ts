@@ -363,6 +363,9 @@ export interface AppMessages {
     readonly diagnosticsButtonHint: string;
     readonly pilotMeasurementButton: string;
     readonly pilotMeasurementButtonHint: string;
+    /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く導線。 */
+    readonly quizButton: string;
+    readonly quizButtonHint: string;
     readonly backButton: string;
   };
   readonly pilotMeasurement: {
@@ -570,6 +573,46 @@ export interface AppMessages {
     readonly editButtonHint: string;
     readonly deleteButton: string;
     readonly deleteButtonHint: string;
+  };
+  /**
+   * Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）の UI chrome。設問・選択肢・解説
+   * 本文は `src/domain/quiz-catalog.ts` の `{ja, en}` を直接使う（ここには含めない）。
+   */
+  readonly quiz: {
+    readonly eyebrow: string;
+    readonly listTitle: string;
+    readonly listDescription: string;
+    readonly clearedCount: (current: number, total: number) => string;
+    /** Issue 110 code-reviewer 指摘: `isQuizComplete` を実際に使う全問クリア演出。 */
+    readonly allClearedNotice: string;
+    readonly categoryLabels: {
+      readonly iam: string;
+      readonly network: string;
+      readonly storage: string;
+      readonly compute: string;
+      readonly observability: string;
+    };
+    readonly clearedStatusLabel: string;
+    readonly notClearedStatusLabel: string;
+    readonly questionAccessibilityLabel: (
+      prompt: string,
+      cleared: boolean
+    ) => string;
+    readonly backButton: string;
+    readonly backButtonHint: string;
+    readonly questionEyebrow: string;
+    readonly choiceAccessibilityLabel: (
+      index: number,
+      text: string,
+      selected: boolean
+    ) => string;
+    readonly submitButton: string;
+    readonly submitButtonHint: string;
+    readonly correctTitle: string;
+    readonly incorrectTitle: string;
+    readonly explanationLabel: string;
+    readonly backToListButton: string;
+    readonly backToListButtonHint: string;
   };
 }
 
@@ -903,6 +946,9 @@ const ja: AppMessages = {
     pilotMeasurementButton: 'Pilot の匿名 Aggregate',
     pilotMeasurementButtonHint:
       'Process 内 Counter の全項目を Preview し、最低集計単位を満たす場合だけ手動共有できます。',
+    quizButton: 'クラウド基礎クイズに挑戦',
+    quizButtonHint:
+      'クラウド基礎の四択クイズに挑戦し、進捗を端末内に保存します。',
     backButton: '戻る',
   },
   pilotMeasurement: {
@@ -1195,6 +1241,37 @@ const ja: AppMessages = {
     deleteButton: 'カードを削除する',
     deleteButtonHint:
       '端末内の自己紹介カードを削除します。この操作は取り消せません。',
+  },
+  quiz: {
+    eyebrow: 'Cloud Basics Quiz',
+    listTitle: 'クラウド基礎クイズ',
+    listDescription:
+      'クラウドの基礎知識を四択で確認します。正解した設問は端末内にスタンプとして保存され、自己紹介カードの QR に合格数だけが載ります（誤答・解答履歴は載りません）。',
+    clearedCount: (current, total) => `${current} / ${total} 問クリア`,
+    allClearedNotice: '全問クリアしました。おめでとうございます。',
+    categoryLabels: {
+      iam: 'IAM',
+      network: 'ネットワーク',
+      storage: 'ストレージ',
+      compute: 'コンピュート',
+      observability: '可観測性',
+    },
+    clearedStatusLabel: 'クリア済み',
+    notClearedStatusLabel: '未クリア',
+    questionAccessibilityLabel: (prompt, cleared) =>
+      `${prompt}、${cleared ? 'クリア済み' : '未クリア'}`,
+    backButton: '設定に戻る',
+    backButtonHint: 'クイズを終えて設定画面に戻ります。',
+    questionEyebrow: 'Question',
+    choiceAccessibilityLabel: (index, text, selected) =>
+      `選択肢 ${index + 1}、${text}${selected ? '、選択中' : ''}`,
+    submitButton: '回答する',
+    submitButtonHint: '選んだ選択肢で採点します。',
+    correctTitle: '正解',
+    incorrectTitle: '不正解',
+    explanationLabel: '解説',
+    backToListButton: '一覧に戻る',
+    backToListButtonHint: 'クイズの一覧画面に戻ります。',
   },
 };
 
@@ -1540,6 +1617,9 @@ const en: AppMessages = {
     pilotMeasurementButton: 'Anonymous Pilot aggregate',
     pilotMeasurementButtonHint:
       'Previews every in-process counter and permits manual sharing only after the minimum aggregation unit.',
+    quizButton: 'Try the cloud basics quiz',
+    quizButtonHint:
+      'Take the cloud basics multiple-choice quiz and save your progress on this device.',
     backButton: 'Back',
   },
   pilotMeasurement: {
@@ -1824,6 +1904,37 @@ const en: AppMessages = {
     deleteButton: 'Delete card',
     deleteButtonHint:
       'Deletes the Intro Card on this device. This cannot be undone.',
+  },
+  quiz: {
+    eyebrow: 'Cloud Basics Quiz',
+    listTitle: 'Cloud basics quiz',
+    listDescription:
+      'Check your cloud fundamentals with multiple-choice questions. Questions you answer correctly are stamped on this device, and only the cleared count is added to your Intro Card QR (wrong answers and history are never included).',
+    clearedCount: (current, total) => `${current} / ${total} cleared`,
+    allClearedNotice: "You've cleared every question. Congratulations!",
+    categoryLabels: {
+      iam: 'IAM',
+      network: 'Network',
+      storage: 'Storage',
+      compute: 'Compute',
+      observability: 'Observability',
+    },
+    clearedStatusLabel: 'Cleared',
+    notClearedStatusLabel: 'Not cleared',
+    questionAccessibilityLabel: (prompt, cleared) =>
+      `${prompt}, ${cleared ? 'cleared' : 'not cleared'}`,
+    backButton: 'Back to Settings',
+    backButtonHint: 'Finish the quiz and return to Settings.',
+    questionEyebrow: 'Question',
+    choiceAccessibilityLabel: (index, text, selected) =>
+      `Choice ${index + 1}, ${text}${selected ? ', selected' : ''}`,
+    submitButton: 'Submit answer',
+    submitButtonHint: 'Score the selected choice.',
+    correctTitle: 'Correct',
+    incorrectTitle: 'Incorrect',
+    explanationLabel: 'Explanation',
+    backToListButton: 'Back to list',
+    backToListButtonHint: 'Return to the quiz list screen.',
   },
 };
 

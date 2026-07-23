@@ -6,7 +6,7 @@ import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import RealQrView from '../components/RealQrView';
 import type { IntroCard } from '../domain/intro-card';
-import { encodeIntroCardUrl } from '../protocol/intro-card-url';
+import { encodeIntroCardUrlBestEffort } from '../protocol/intro-card-url';
 import { encodeQr } from '../qr/encoder';
 import { colors, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
@@ -20,6 +20,11 @@ export interface IntroCardScreenProps {
    * 保存成功・空状態等の他の Notice はこの画面の関心事ではないため含めない。
    */
   readonly deleteError: string | null;
+  /**
+   * Issue 110 / ADR-0034: クイズ進捗ビットマスク（16 進文字列）。省略・`'0'`
+   * （全問未合格）なら QR に `q` を含めない（既存 QR と完全に同じ byte 数、後方互換）。
+   */
+  readonly quizProgressHex?: string;
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
@@ -34,18 +39,24 @@ export interface IntroCardScreenProps {
  * 選べる（読んだら即座に連絡先へ追加されることはない）。保存済みの `IntroCard` から
  * 毎回 URL を再生成して実 QR を描く（`IntroCardEditScreen` の保存時点で
  * `encodeIntroCardUrl` を通した card だけがここへ渡るため、1,367 byte 超過は
- * 発生しない前提で `useMemo` の中で直接呼ぶ）。
+ * 発生しない前提で `useMemo` の中で直接呼ぶ）。Issue 110: `quizProgressHex` は
+ * `encodeIntroCardUrlBestEffort` 経由で乗せる（`q` を含めると上限を超える場合だけ
+ * 黙って省略し、カード本体の表示は失敗させない）。
  */
 export default function IntroCardScreen({
   card,
   deleteError,
+  quizProgressHex,
   locale = DEFAULT_LOCALE,
   onChangeLocale,
   onEdit,
   onDelete,
 }: IntroCardScreenProps) {
   const t = MESSAGES[locale].introCard;
-  const encodedQr = useMemo(() => encodeQr(encodeIntroCardUrl(card)), [card]);
+  const encodedQr = useMemo(
+    () => encodeQr(encodeIntroCardUrlBestEffort(card, quizProgressHex)),
+    [card, quizProgressHex]
+  );
 
   return (
     <AppScreen

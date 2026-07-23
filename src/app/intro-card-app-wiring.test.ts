@@ -66,14 +66,30 @@ describe('自己紹介カードピボット Step 1（Issue 79）のメインフ�
       'recoverLocalStateAtStartup(localDataControl, localProfileStorage)',
       'introCardStorage.load().catch(',
       'introCardStorage.loadDraft().catch(() => null)',
-      ']).then(([result, loadedIntroCard, loadedDraft]) => {',
+      'quizProgressStorage.load().catch(() => EMPTY_QUIZ_PROGRESS)',
+      ']).then(([result, loadedIntroCard, loadedDraft, loadedQuizProgress]) => {',
       'introCardRef.current = loadedIntroCard',
       'setIntroCard(loadedIntroCard)',
       'applyIntroCardDraftFields(loadedDraft)',
+      'setQuizProgress(loadedQuizProgress)',
       'setIntroCardDraftHydrated(true)',
       "result.kind === 'recovery-failed'",
       'applyStartupRecoveryResultRef.current(result)',
     ]);
+  });
+
+  it('起動時 effect は Intro Card 同様、クイズ進捗の読込失敗も握り潰し独自の Notice を出さない（Issue 110）', async () => {
+    const text = await source();
+    const effectStart = text.indexOf('void Promise.all([');
+    const effectBody = text.slice(
+      effectStart,
+      text.indexOf('return () => {', effectStart)
+    );
+
+    expect(effectBody).toContain(
+      'quizProgressStorage.load().catch(() => EMPTY_QUIZ_PROGRESS)'
+    );
+    expect(effectBody).not.toContain('setQuizProgressNotice');
   });
 
   it('起動時 effect は下書きが空でなければ水和し、result の分岐（recovery-failed 早期 return）より前に必ず introCardDraftHydrated を立てる（Issue 93）', async () => {

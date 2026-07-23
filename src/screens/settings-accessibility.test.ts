@@ -140,4 +140,16 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
       'modelManagement.cancelProviderOperation',
     ]);
   });
+
+  it('Issue 110: クイズボタンは Pilot Measurement ボタンと戻るボタンの間に配置し、onOpenQuiz を呼ぶ', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      'onPress={onOpenPilotMeasurement}',
+      'accessibilityHint={t.quizButtonHint}',
+      'label={t.quizButton}',
+      'onPress={onOpenQuiz}',
+      'label={t.backButton}',
+    ]);
+  });
 });

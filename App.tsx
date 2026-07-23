@@ -6,6 +6,7 @@ import { createDefaultIntroCardStorage } from './src/app/default-intro-card-stor
 import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
 import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
+import { createDefaultQuizProgressStorage } from './src/app/default-quiz-progress-storage';
 import {
   createLocalDataControl,
   DeletionCoordinatedLocalProfileStorageAdapter,
@@ -22,6 +23,7 @@ const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
   localDeletionJournal
 );
 const introCardStorage = createDefaultIntroCardStorage();
+const quizProgressStorage = createDefaultQuizProgressStorage();
 const backupSharePort = createDefaultBackupSharePort();
 const agentModelProvider = createDefaultAgentModelProvider(localDataLeases);
 const localModelComposition =
@@ -47,6 +49,7 @@ export default function App() {
         localDataControl={localDataControl}
         localProfileStorage={localProfileStorage}
         introCardStorage={introCardStorage}
+        quizProgressStorage={quizProgressStorage}
       />
     </>
   );

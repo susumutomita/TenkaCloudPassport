@@ -21,6 +21,8 @@ interface SettingsScreenProps {
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onOpenDiagnostics: () => void;
   readonly onOpenPilotMeasurement: () => void;
+  /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く。 */
+  readonly onOpenQuiz: () => void;
   readonly onBack: () => void;
   readonly modelManagement?: LocalModelManagementView;
 }
@@ -228,6 +230,112 @@ function LocalModelCandidateCard({
   );
 }
 
+interface ModelManagementSectionProps {
+  readonly modelManagement: LocalModelManagementView;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}
+
+/**
+ * Issue 110 の code-reviewer 指摘（Cognitive Complexity 上限超過）: `SettingsScreen`
+ * 本体に導線ボタンを 1 つ足しただけで上限（15）を超えたため、既に肥大化していた
+ * Local Model 管理セクション（複数の条件付き表示を含む）を、`LocalModelCard` /
+ * `LocalModelCandidateCard` と同じ「子 Component へ切り出す」方針でここへ抽出する。
+ * 呼び出し側は `modelManagement?.available` の真偽だけで出し分ける。
+ */
+function ModelManagementSection({
+  modelManagement,
+  t,
+}: ModelManagementSectionProps) {
+  return (
+    <View style={styles.modelSection}>
+      <Text style={styles.sectionTitle}>{t.modelSectionTitle}</Text>
+      <Text style={styles.body}>{t.modelDescription}</Text>
+      {modelManagement.busy ? (
+        <Text accessibilityLiveRegion="polite" style={styles.body}>
+          {t.modelBusy}
+        </Text>
+      ) : null}
+      {modelManagement.errorCode ? (
+        <Text accessibilityLiveRegion="assertive" style={styles.error}>
+          {t.modelError(modelManagement.errorCode)}
+        </Text>
+      ) : null}
+      <ActionButton
+        accessibilityHint={t.selectModelHint}
+        disabled={
+          modelManagement.busy || modelManagement.candidateSelectionBlocked
+        }
+        label={t.selectModelButton}
+        onPress={modelManagement.selectCandidate}
+        variant="secondary"
+      />
+      {modelManagement.candidate ? (
+        <LocalModelCandidateCard
+          availableStorageBytes={modelManagement.candidateAvailableStorageBytes}
+          busy={modelManagement.busy}
+          candidate={modelManagement.candidate}
+          importInProgress={modelManagement.importInProgress}
+          onCancel={modelManagement.cancelCandidate}
+          onCancelRunning={modelManagement.cancelImport}
+          onConfirm={modelManagement.confirmImport}
+          t={t}
+        />
+      ) : null}
+      {modelManagement.manifest?.models.map((model) => {
+        const active =
+          model.sha256 === modelManagement.manifest?.activeModelSha256;
+        const reports =
+          modelManagement.manifest?.benchmarkReports.filter(
+            (report) => report.modelSha256 === model.sha256
+          ) ?? [];
+        return (
+          <LocalModelCard
+            active={active}
+            busy={modelManagement.busy}
+            key={model.sha256}
+            model={model}
+            onActivate={modelManagement.activate}
+            onDelete={modelManagement.deleteModel}
+            onUnload={modelManagement.unload}
+            reports={reports}
+            t={t}
+          />
+        );
+      })}
+      {modelManagement.cautionAssessment ? (
+        <View style={styles.modelCard}>
+          <Text style={styles.modelTitle}>{t.cautionTitle}</Text>
+          <Text style={styles.body}>{t.cautionDescription}</Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.confirmCautionButton}
+            onPress={modelManagement.confirmCautionActivation}
+            variant="danger"
+          />
+        </View>
+      ) : null}
+      {modelManagement.pendingProviderOperation ? (
+        <View style={styles.modelCard}>
+          <Text style={styles.modelTitle}>{t.providerOperationTitle}</Text>
+          <Text style={styles.body}>{t.providerOperationDescription}</Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.confirmProviderOperationButton}
+            onPress={modelManagement.confirmProviderOperation}
+            variant="danger"
+          />
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.cancelProviderOperationButton}
+            onPress={modelManagement.cancelProviderOperation}
+            variant="secondary"
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /**
  * Issue 15: 表示言語を切り替える最小の Settings 画面。`onChangeLocale` は `PassportApp.tsx`
  * が保持する `locale` state だけを更新し、進行中の Lounge / Room / Pet Interaction /
@@ -239,6 +347,7 @@ export default function SettingsScreen({
   onChangeLocale,
   onOpenDiagnostics,
   onOpenPilotMeasurement,
+  onOpenQuiz,
   onBack,
   modelManagement,
 }: SettingsScreenProps) {
@@ -264,94 +373,7 @@ export default function SettingsScreen({
         })}
       </View>
       {modelManagement?.available ? (
-        <View style={styles.modelSection}>
-          <Text style={styles.sectionTitle}>{t.modelSectionTitle}</Text>
-          <Text style={styles.body}>{t.modelDescription}</Text>
-          {modelManagement.busy ? (
-            <Text accessibilityLiveRegion="polite" style={styles.body}>
-              {t.modelBusy}
-            </Text>
-          ) : null}
-          {modelManagement.errorCode ? (
-            <Text accessibilityLiveRegion="assertive" style={styles.error}>
-              {t.modelError(modelManagement.errorCode)}
-            </Text>
-          ) : null}
-          <ActionButton
-            accessibilityHint={t.selectModelHint}
-            disabled={
-              modelManagement.busy || modelManagement.candidateSelectionBlocked
-            }
-            label={t.selectModelButton}
-            onPress={modelManagement.selectCandidate}
-            variant="secondary"
-          />
-          {modelManagement.candidate ? (
-            <LocalModelCandidateCard
-              availableStorageBytes={
-                modelManagement.candidateAvailableStorageBytes
-              }
-              busy={modelManagement.busy}
-              candidate={modelManagement.candidate}
-              importInProgress={modelManagement.importInProgress}
-              onCancel={modelManagement.cancelCandidate}
-              onCancelRunning={modelManagement.cancelImport}
-              onConfirm={modelManagement.confirmImport}
-              t={t}
-            />
-          ) : null}
-          {modelManagement.manifest?.models.map((model) => {
-            const active =
-              model.sha256 === modelManagement.manifest?.activeModelSha256;
-            const reports =
-              modelManagement.manifest?.benchmarkReports.filter(
-                (report) => report.modelSha256 === model.sha256
-              ) ?? [];
-            return (
-              <LocalModelCard
-                active={active}
-                busy={modelManagement.busy}
-                key={model.sha256}
-                model={model}
-                onActivate={modelManagement.activate}
-                onDelete={modelManagement.deleteModel}
-                onUnload={modelManagement.unload}
-                reports={reports}
-                t={t}
-              />
-            );
-          })}
-          {modelManagement.cautionAssessment ? (
-            <View style={styles.modelCard}>
-              <Text style={styles.modelTitle}>{t.cautionTitle}</Text>
-              <Text style={styles.body}>{t.cautionDescription}</Text>
-              <ActionButton
-                disabled={modelManagement.busy}
-                label={t.confirmCautionButton}
-                onPress={modelManagement.confirmCautionActivation}
-                variant="danger"
-              />
-            </View>
-          ) : null}
-          {modelManagement.pendingProviderOperation ? (
-            <View style={styles.modelCard}>
-              <Text style={styles.modelTitle}>{t.providerOperationTitle}</Text>
-              <Text style={styles.body}>{t.providerOperationDescription}</Text>
-              <ActionButton
-                disabled={modelManagement.busy}
-                label={t.confirmProviderOperationButton}
-                onPress={modelManagement.confirmProviderOperation}
-                variant="danger"
-              />
-              <ActionButton
-                disabled={modelManagement.busy}
-                label={t.cancelProviderOperationButton}
-                onPress={modelManagement.cancelProviderOperation}
-                variant="secondary"
-              />
-            </View>
-          ) : null}
-        </View>
+        <ModelManagementSection modelManagement={modelManagement} t={t} />
       ) : null}
       <ActionButton
         accessibilityHint={t.diagnosticsButtonHint}
@@ -365,6 +387,13 @@ export default function SettingsScreen({
         disabled={modelManagement?.busy ?? false}
         label={t.pilotMeasurementButton}
         onPress={onOpenPilotMeasurement}
+        variant="secondary"
+      />
+      <ActionButton
+        accessibilityHint={t.quizButtonHint}
+        disabled={modelManagement?.busy ?? false}
+        label={t.quizButton}
+        onPress={onOpenQuiz}
         variant="secondary"
       />
       <ActionButton

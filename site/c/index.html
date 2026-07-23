@@ -58,6 +58,23 @@
     font-size: 15px; line-height: 1.8; white-space: pre-wrap;
   }
   .contacts { margin-top: 18px; display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+  .quiz-stamp {
+    margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border-subtle);
+  }
+  .quiz-stamp-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    color: var(--muted-light); text-transform: uppercase;
+  }
+  .quiz-stamp-grid {
+    margin-top: 10px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px;
+    max-width: 220px;
+  }
+  .quiz-stamp-cell {
+    display: block; width: 100%; aspect-ratio: 1; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .quiz-stamp-cell.cleared { background: var(--summit); border-color: var(--summit); }
+  .quiz-stamp-count { margin-top: 10px; font-size: 13px; color: var(--muted); }
   .links { margin-top: 12px; display: grid; gap: 6px; }
   .links a {
     color: var(--ink); font-size: 14px; word-break: break-all; text-decoration: underline;
@@ -107,6 +124,11 @@
     <p id="card-self-intro" class="self-intro" hidden></p>
     <div id="card-links" class="links" hidden></div>
     <div id="card-contacts" class="contacts" hidden></div>
+    <div id="quiz-stamp" class="quiz-stamp" hidden>
+      <p class="quiz-stamp-title">クラウド基礎クイズ / Cloud Basics Quiz</p>
+      <div id="quiz-stamp-grid" class="quiz-stamp-grid"></div>
+      <p id="quiz-stamp-count" class="quiz-stamp-count"></p>
+    </div>
     <button id="connect-button" class="connect" type="button">
       連絡先に追加 / Add to contacts
     </button>
@@ -149,7 +171,14 @@
   const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const PHONE_PATTERN = /^[0-9+\-() ]+$/;
   const URL_PATTERN = /^https?:\/\//i;
-  const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p'];
+  // Issue 110 / ADR-0034: クイズ進捗ビットマスク（`q`）関連の定数。
+  // `src/domain/quiz-catalog.ts` の QUIZ_QUESTION_COUNT、
+  // `src/domain/quiz-progress-code.ts` の QUIZ_PROGRESS_HEX_MAX_LENGTH と値を一致させる
+  // （`scripts/intro-card-viewer.test.ts` がこの一致を固定する）。
+  const QUIZ_QUESTION_COUNT = 16;
+  const QUIZ_PROGRESS_HEX_MAX_LENGTH = 32;
+  const QUIZ_PROGRESS_HEX_PATTERN = /^[0-9a-f]+$/i;
+  const KNOWN_PAYLOAD_KEYS = ['v', 'n', 't', 'o', 's', 'l', 'e', 'p', 'q'];
 
   function decodeBase64UrlToBytes(encoded) {
     if (encoded.length % 4 === 1) return null;
@@ -228,6 +257,21 @@
   }
 
   /**
+   * Issue 110 / ADR-0034: クイズ進捗ビットマスク（16 進文字列）。
+   * `src/protocol/intro-card-url.ts` の `validateQuizProgressHex` と同じ検証基準
+   * （16 進以外・空文字・桁数超過は fragment 全体を fail-closed で拒否する）。
+   */
+  function validatedQuizProgressHex(value) {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string') rejectField();
+    if (value.length === 0 || value.length > QUIZ_PROGRESS_HEX_MAX_LENGTH) {
+      rejectField();
+    }
+    if (!QUIZ_PROGRESS_HEX_PATTERN.test(value)) rejectField();
+    return value;
+  }
+
+  /**
    * `src/domain/intro-card.ts` の `createIntroCard` と同じ all-or-nothing 契約
    * （どれか 1 フィールドでも不正なら fragment 全体を拒否する）。未知の key も拒否する。
    */
@@ -242,7 +286,24 @@
       links: validatedLinks(parsed.l),
       email: validatedEmail(parsed.e),
       phone: validatedPhone(parsed.p),
+      stamp: validatedQuizProgressHex(parsed.q),
     };
+  }
+
+  /**
+   * `q` を `src/domain/quiz-progress-code.ts` の `decodeQuizProgressHex` と同じ
+   * BigInt ビット演算で独立に再実装する（ビルドステップを持たない静的ファイルのため
+   * import できない）。`QUIZ_QUESTION_COUNT` 桁分だけを見るため、将来カタログが
+   * 拡張されて桁数が増えた QR をこのビューアが開いても、未定義の高位ビットは
+   * 安全に無視される。
+   */
+  function quizStampCells(hex) {
+    const mask = BigInt(`0x${hex}`);
+    const cells = [];
+    for (let index = 0; index < QUIZ_QUESTION_COUNT; index += 1) {
+      cells.push((mask & (1n << BigInt(index))) !== 0n);
+    }
+    return cells;
   }
 
   function decodeFragmentBytesToJson(fragment) {
@@ -397,6 +458,29 @@
     contacts.hidden = false;
   }
 
+  /**
+   * Issue 110 / ADR-0034: `q`（進捗ビットマスク）が無い（省略された）カードでは
+   * 何もしない。ファミコン風マス目グリッド + "N / 16 クリア" で表示する
+   * （bitIndex→カテゴリ対応表は持たない、ビューア側のドリフト面を小さくする設計判断、
+   * `docs/design/2026-07-23-cloud-basics-quiz.md` 6 節）。
+   */
+  function renderQuizStamp(card) {
+    if (card.stamp === undefined) return;
+    const cells = quizStampCells(card.stamp);
+    const clearedCount = cells.filter(Boolean).length;
+    const grid = document.getElementById('quiz-stamp-grid');
+    cells.forEach((cleared) => {
+      const cell = document.createElement('span');
+      cell.className = cleared
+        ? 'quiz-stamp-cell cleared'
+        : 'quiz-stamp-cell';
+      grid.appendChild(cell);
+    });
+    document.getElementById('quiz-stamp-count').textContent =
+      `${clearedCount} / ${QUIZ_QUESTION_COUNT} クリア / ${clearedCount} / ${QUIZ_QUESTION_COUNT} cleared`;
+    document.getElementById('quiz-stamp').hidden = false;
+  }
+
   function renderCard(card) {
     document.title = `${card.name} さんの自己紹介 | TenkaCloud Passport`;
     document.getElementById('card-name').textContent = card.name;
@@ -405,6 +489,7 @@
     renderSelfIntro(card);
     renderLinks(card);
     renderContacts(card);
+    renderQuizStamp(card);
 
     document.getElementById('connect-button').addEventListener('click', () => {
       triggerVCardDownload(card);

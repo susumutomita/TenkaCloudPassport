@@ -65,10 +65,12 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     ]);
   });
 
-  it('表示画面の QR は encodeIntroCardUrl（自己紹介ページ URL）から生成し vCard 直埋めには依存しない（Issue 84）', async () => {
+  it('表示画面の QR は encodeIntroCardUrlBestEffort（自己紹介ページ URL、Issue 110 でクイズ進捗ビットマスクを best-effort で相乗り）から生成し vCard 直埋めには依存しない（Issue 84）', async () => {
     const text = await source('IntroCardScreen.tsx');
 
-    expect(text).toContain('encodeQr(encodeIntroCardUrl(card))');
+    expect(text).toContain(
+      'encodeQr(encodeIntroCardUrlBestEffort(card, quizProgressHex))'
+    );
     expect(text).not.toContain('encodeVCard');
   });
 
