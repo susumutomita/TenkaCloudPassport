@@ -1590,7 +1590,7 @@ export default function PassportApp({
     setIntroCardSaving(true);
     try {
       const card = createIntroCard(introCardDraftAsShape());
-      // 自己紹介ページ URL 化と 1,024 byte 上限の検証をここで通す（保存後の
+      // 自己紹介ページ URL 化と 1,367 byte 上限の検証をここで通す（保存後の
       // 表示画面では再検証せずそのまま QR 化できる前提を保つ。Issue 84 で
       // QR の中身が vCard 直埋めから URL へ変わったため、検証対象も
       // encodeVCard から encodeIntroCardUrl へ揃える）。

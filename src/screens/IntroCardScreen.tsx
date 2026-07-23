@@ -33,7 +33,7 @@ export interface IntroCardScreenProps {
  * QR をカメラで読むとブラウザで自己紹介を読み、連絡先への追加は相手がページ内で
  * 選べる（読んだら即座に連絡先へ追加されることはない）。保存済みの `IntroCard` から
  * 毎回 URL を再生成して実 QR を描く（`IntroCardEditScreen` の保存時点で
- * `encodeIntroCardUrl` を通した card だけがここへ渡るため、1,024 byte 超過は
+ * `encodeIntroCardUrl` を通した card だけがここへ渡るため、1,367 byte 超過は
  * 発生しない前提で `useMemo` の中で直接呼ぶ）。
  */
 export default function IntroCardScreen({

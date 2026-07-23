@@ -1,4 +1,20 @@
-export const QR_ENCODER_MAX_BYTES = 1024;
+// 誤り訂正レベル L（ISO/IEC 18004）採用時に、密度（QR Version = モジュール数）を
+// 変えないまま選べる最大 byte 数。導出（ADR-0032 参照）:
+//   1. 旧構成（誤り訂正 M）で 1,024 byte の payload が選んでいた QR Version は 26
+//      （encoder.test.ts の '1,024 byte 境界の入力を Version 26 で encode' で固定）。
+//      これが現状の最密 QR の Version であり、変えてはならない。
+//   2. Version 26・誤り訂正 L のデータ容量は RS_BLOCKS_L[25] から
+//      data codewords 合計 = 10 * 114 + 2 * 115 = 1,370 byte、
+//      capacity bit = 1,370 * 8 = 10,960 bit。
+//      Byte mode のオーバーヘッド（mode 指示子 4 bit + 文字数指示子 16 bit
+//      ［Version 26 は 10 以上のため 16 bit］）を引くと
+//      (10,960 - 4 - 16) / 8 = 1,367.5 → floor で 1,367 byte。
+//   3. 1,367 byte は Version 25・L の容量（1,273 byte）を超えるため Version 26 を
+//      選び続け、1,368 byte からは Version 27 が必要になる（未対応の Version）。
+//      つまり 1,367 byte が「Version 26 のまま収まる最大値」＝新しい上限として
+//      厳密に一致する。
+// 1,024 → 1,367 で約 33.5%（≈ 30%）の容量増。
+export const QR_ENCODER_MAX_BYTES = 1367;
 
 export type QrEncodingErrorCode = 'DATA_TOO_LARGE' | 'INVALID_DATA';
 
@@ -14,7 +30,7 @@ export class QrEncodingError extends Error {
 
 export interface EncodedQr {
   readonly version: number;
-  readonly errorCorrection: 'M';
+  readonly errorCorrection: 'L';
   readonly matrix: readonly (readonly boolean[])[];
 }
 
@@ -55,84 +71,90 @@ const ALIGNMENT_PATTERN_POSITIONS: readonly (readonly number[])[] = [
   [6, 30, 58, 86, 114],
 ];
 
-const RS_BLOCKS_M: readonly (readonly (readonly [number, number, number])[])[] =
+// ISO/IEC 18004 Table 9（誤り訂正レベル L）の Reed-Solomon ブロック構成を
+// Version 1〜26（旧 RS_BLOCKS_M と同じ Version 数）ぶん転記した正準値。
+// 各 [count, totalCodewords, dataCodewords] は「同一構成のブロックが count 個」を表す
+// （例: Version 8 は totalCodewords 121・dataCodewords 97 のブロックが 2 個で 1 group）。
+// 転記値は下記 2 系統でそれぞれ独立に突合済み（ADR-0032）。
+//   - Version ごとの data byte 容量（count * dataCodewords の合計）が、QR 規格でよく
+//     参照される Byte mode 容量表（Version1 L=17 byte 〜 Version26 L=1,367 byte）と
+//     一致すること。
+//   - 本プロジェクトの devDependency ではない第三者 QR エンコーダ実装
+//     （`toqr`、EC level enum 値が ISO の format info indicator と同じ 0=M/1=L/2=H/3=Q）
+//     を一時スクリプトで実行し、各 Version の「収まる最大 byte 数」の境界が
+//     この表からの計算値と全 Version で一致すること。
+const RS_BLOCKS_L: readonly (readonly (readonly [number, number, number])[])[] =
   [
-    [[1, 26, 16]],
-    [[1, 44, 28]],
-    [[1, 70, 44]],
-    [[2, 50, 32]],
-    [[2, 67, 43]],
-    [[4, 43, 27]],
-    [[4, 49, 31]],
+    [[1, 26, 19]],
+    [[1, 44, 34]],
+    [[1, 70, 55]],
+    [[1, 100, 80]],
+    [[1, 134, 108]],
+    [[2, 86, 68]],
+    [[2, 98, 78]],
+    [[2, 121, 97]],
+    [[2, 146, 116]],
     [
-      [2, 60, 38],
-      [2, 61, 39],
+      [2, 86, 68],
+      [2, 87, 69],
+    ],
+    [[4, 101, 81]],
+    [
+      [2, 116, 92],
+      [2, 117, 93],
+    ],
+    [[4, 133, 107]],
+    [
+      [3, 145, 115],
+      [1, 146, 116],
     ],
     [
-      [3, 58, 36],
-      [2, 59, 37],
+      [5, 109, 87],
+      [1, 110, 88],
     ],
     [
-      [4, 69, 43],
-      [1, 70, 44],
+      [5, 122, 98],
+      [1, 123, 99],
     ],
     [
-      [1, 80, 50],
-      [4, 81, 51],
+      [1, 135, 107],
+      [5, 136, 108],
     ],
     [
-      [6, 58, 36],
-      [2, 59, 37],
+      [5, 150, 120],
+      [1, 151, 121],
     ],
     [
-      [8, 59, 37],
-      [1, 60, 38],
+      [3, 141, 113],
+      [4, 142, 114],
     ],
     [
-      [4, 64, 40],
-      [5, 65, 41],
+      [3, 135, 107],
+      [5, 136, 108],
     ],
     [
-      [5, 65, 41],
-      [5, 66, 42],
+      [4, 144, 116],
+      [4, 145, 117],
     ],
     [
-      [7, 73, 45],
-      [3, 74, 46],
+      [2, 139, 111],
+      [7, 140, 112],
     ],
     [
-      [10, 74, 46],
-      [1, 75, 47],
+      [4, 151, 121],
+      [5, 152, 122],
     ],
     [
-      [9, 69, 43],
-      [4, 70, 44],
+      [6, 147, 117],
+      [4, 148, 118],
     ],
     [
-      [3, 70, 44],
-      [11, 71, 45],
+      [8, 132, 106],
+      [4, 133, 107],
     ],
     [
-      [3, 67, 41],
-      [13, 68, 42],
-    ],
-    [[17, 68, 42]],
-    [[17, 74, 46]],
-    [
-      [4, 75, 47],
-      [14, 76, 48],
-    ],
-    [
-      [6, 73, 45],
-      [14, 74, 46],
-    ],
-    [
-      [8, 75, 47],
-      [13, 76, 48],
-    ],
-    [
-      [19, 74, 46],
-      [4, 75, 47],
+      [10, 142, 114],
+      [2, 143, 115],
     ],
   ];
 
@@ -171,7 +193,7 @@ class BitBuffer {
 }
 
 function rsBlocks(version: number): RsBlock[] {
-  const definition = RS_BLOCKS_M[version - 1];
+  const definition = RS_BLOCKS_L[version - 1];
   if (!definition) {
     throw new QrEncodingError(
       'INVALID_DATA',
@@ -202,7 +224,7 @@ function dataTooLargeError(): QrEncodingError {
 }
 
 function chooseVersion(byteLength: number): number {
-  for (let version = 1; version <= RS_BLOCKS_M.length; version += 1) {
+  for (let version = 1; version <= RS_BLOCKS_L.length; version += 1) {
     const requiredBits = 4 + characterCountBits(version) + byteLength * 8;
     if (requiredBits <= dataCapacityBits(version)) return version;
   }
@@ -403,6 +425,13 @@ function bchDigit(value: number): number {
   return digit;
 }
 
+// ISO/IEC 18004 の format information における誤り訂正レベル指標（2 bit）。
+// L=01・M=00・Q=11・H=10 の順で固定されており、M（0b00）はこの 2 bit が 0 のため
+// 従来 `bchTypeInfo(mask)`（指標 0 相当）でも偶然結果が一致していたが、L（0b01）は
+// 指標が 0 ではないため、mask の上位に明示的に組み込まないと format info が壊れる
+// （jsQR round-trip テストが検出する）。
+const ERROR_CORRECTION_LEVEL_INDICATOR_L = 0b01;
+
 function bchTypeInfo(value: number): number {
   let data = value << 10;
   const generator = 0x537;
@@ -451,7 +480,7 @@ function setupTypeInfo(
   mask: number,
   test: boolean
 ): void {
-  const bits = bchTypeInfo(mask);
+  const bits = bchTypeInfo((ERROR_CORRECTION_LEVEL_INDICATOR_L << 3) | mask);
   for (let index = 0; index < 15; index += 1) {
     writeTypeInfoBit(matrix, index, !test && ((bits >>> index) & 1) === 1);
   }
@@ -693,7 +722,7 @@ export function encodeQr(value: string): EncodedQr {
   const codewords = interleavedCodewords(data, version);
   return {
     version,
-    errorCorrection: 'M',
+    errorCorrection: 'L',
     matrix: bestMatrix(version, codewords),
   };
 }

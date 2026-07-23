@@ -116,7 +116,7 @@ describe('encodeVCard', () => {
     expect(vcard).toContain('FN:Doe\\; John\r\n');
   });
 
-  it('vCard がちょうど 1,024 byte の場合は例外を投げない', () => {
+  it('vCard がちょうど 1,367 byte の場合は例外を投げない', () => {
     const base = encodeVCard({ name: 'A' });
     const overhead = byteLength('NOTE:\r\n');
     const padLength = QR_ENCODER_MAX_BYTES - byteLength(base) - overhead;
@@ -127,7 +127,7 @@ describe('encodeVCard', () => {
     expect(byteLength(vcard)).toBe(QR_ENCODER_MAX_BYTES);
   });
 
-  it('vCard が 1,024 byte を 1 byte でも超える場合、項目名と byte 数の内訳を持つ CARD_TOO_LARGE を投げる', () => {
+  it('vCard が 1,367 byte を 1 byte でも超える場合、項目名と byte 数の内訳を持つ CARD_TOO_LARGE を投げる', () => {
     const base = encodeVCard({ name: 'A' });
     const overhead = byteLength('NOTE:\r\n');
     const padLength = QR_ENCODER_MAX_BYTES - byteLength(base) - overhead + 1;
@@ -146,13 +146,13 @@ describe('encodeVCard', () => {
     }
   });
 
-  it('vCardByteLength は encodeVCard と同じ byte 数を返す（1,024 byte 以内）', () => {
+  it('vCardByteLength は encodeVCard と同じ byte 数を返す（1,367 byte 以内）', () => {
     const card: IntroCard = { name: '田中太郎', title: 'Engineer' };
 
     expect(vCardByteLength(card)).toBe(byteLength(encodeVCard(card)));
   });
 
-  it('vCardByteLength は 1,024 byte を超える draft でも例外を投げず実際の byte 数を返す', () => {
+  it('vCardByteLength は 1,367 byte を超える draft でも例外を投げず実際の byte 数を返す', () => {
     const overSizedCard: IntroCard = {
       name: '田中太郎',
       selfIntro: 'あ'.repeat(1000),
