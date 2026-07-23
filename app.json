@@ -48,7 +48,8 @@
           "enableOpenCLAndHexagon": true
         }
       ],
-      "expo-build-properties"
+      "expo-build-properties",
+      "expo-localization"
     ],
     "extra": {
       "eas": {
