@@ -163,4 +163,105 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
       'hasIntroCard\n            ? t.conversationAgentButtonHint\n            : t.conversationAgentButtonDisabledHint'
     );
   });
+
+  it('Follow-up F-FDRGS4: オンデバイス AI 導線は Document Picker の GGUF 選択より前に配置し、未取得時は明示同意ボタンだけを出す', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      't.modelSectionTitle',
+      '<OnDeviceAiSection modelManagement={modelManagement} t={t} />',
+      't.selectModelButton',
+    ]);
+    expect(text).toContain(
+      "onDeviceAiFlow === 'idle' && onDeviceAiStatus === 'not-acquired'"
+    );
+    expectInOrder(text, [
+      't.onDeviceAiDescription(',
+      'accessibilityHint={t.onDeviceAiEnableButtonHint}',
+      'label={t.onDeviceAiEnableButton}',
+      'onPress={modelManagement.requestEnableOnDeviceAi}',
+    ]);
+  });
+
+  it('Follow-up F-FDRGS4: ダウンロード前に Model 名・Size・ライセンス・同意確認を表示し、同意後だけダウンロードを開始する', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      "onDeviceAiFlow === 'consent-pending'",
+      't.onDeviceAiConsentTitle',
+      't.onDeviceAiConsentBody(',
+      'source.displayName',
+      'source.license',
+      'label={t.onDeviceAiConsentStartButton}',
+      'onPress={modelManagement.confirmEnableOnDeviceAiConsent}',
+      'label={t.onDeviceAiConsentCancelButton}',
+      'onPress={modelManagement.cancelEnableOnDeviceAiConsent}',
+    ]);
+  });
+
+  it('Follow-up F-FDRGS4: ダウンロード中は進捗を Live Region で読み上げ、中止できる', async () => {
+    const text = await source();
+
+    // `OnDeviceAiDownloadingCard` は `OnDeviceAiSection` から呼ばれる子
+    // Component として先に定義されるため、ファイル内の出現順は
+    // 「進捗表示 -> 呼び出し側の分岐」になる。子 Component 内部の並び順と、
+    // 親からの呼び出し条件をそれぞれ固定する。
+    expectInOrder(text, [
+      't.onDeviceAiDownloadStatus(',
+      'label={t.onDeviceAiDownloadCancelButton}',
+      'onPress={modelManagement.cancelOnDeviceAiDownload}',
+    ]);
+    expect(text).toContain(
+      '<Text accessibilityLiveRegion="polite" style={styles.body}>\n        {t.onDeviceAiDownloadStatus('
+    );
+    expectInOrder(text, [
+      "onDeviceAiFlow === 'downloading'",
+      '<OnDeviceAiDownloadingCard',
+    ]);
+  });
+
+  it('Follow-up F-FDRGS4（code-reviewer 指摘、Cancel の実効性）: import/activate 中は Cancel を出さず仕上げ処理中であることだけを案内する', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      "onDeviceAiFlow === 'finalizing'",
+      't.onDeviceAiFinalizingStatus',
+    ]);
+    expect(text).toContain(
+      '<Text accessibilityLiveRegion="polite" style={styles.body}>\n          {t.onDeviceAiFinalizingStatus}'
+    );
+    // 'finalizing' の分岐だけを切り出し、Cancel ボタンを含まないことを固定する。
+    const finalizingStart = text.indexOf("onDeviceAiFlow === 'finalizing'");
+    const consentStart = text.indexOf(
+      "onDeviceAiFlow === 'consent-pending'",
+      finalizingStart
+    );
+    const finalizingBlock = text.slice(finalizingStart, consentStart);
+    expect(finalizingBlock).not.toContain('onDeviceAiDownloadCancelButton');
+  });
+
+  it('Follow-up F-FDRGS4: 取得済みは使用中/未使用を示し、無効化(削除)は既存 deleteModel 経路（removeOnDeviceAiModel）へ委譲する', async () => {
+    const text = await source();
+
+    expect(text).toContain(
+      "onDeviceAiFlow === 'idle' &&\n      onDeviceAiStatus &&\n      onDeviceAiStatus !== 'not-acquired'"
+    );
+    expectInOrder(text, [
+      "onDeviceAiStatus === 'active'\n              ? t.onDeviceAiActiveStatus\n              : t.onDeviceAiImportedNotActiveStatus",
+      'label={t.onDeviceAiRemoveButton}',
+      'onPress={modelManagement.removeOnDeviceAiModel}',
+    ]);
+  });
+
+  it('Follow-up F-FDRGS4（code-reviewer 指摘）: Expo Go / Web は modelManagement.available の分岐で ModelManagementSection ごと表示せず、OnDeviceAiSection の source null 分岐は将来の構成差分に備えた防御的な二重チェックである', async () => {
+    const text = await source();
+
+    // 実際の Expo Go / Web 除外は呼び出し側（modelManagement?.available）が担う。
+    expect(text).toContain(
+      'modelManagement?.available ? (\n        <ModelManagementSection'
+    );
+    // trustedModelSource は現状 native の唯一の実装で必ず設定されるため
+    // 到達しないが、将来 source を持たない構成が増えたときのための防御。
+    expect(text).toContain('if (!source) return null;');
+  });
 });

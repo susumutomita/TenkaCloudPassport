@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AgentModelProvider,
   AgentModelProviderError,
@@ -7,11 +7,12 @@ import type {
   ImportedLocalModel,
   LocalModelManifest,
 } from '../local-agent/local-model-manifest';
-import {
-  type ActivationAssessment,
-  type ModelImportCandidate,
-  ModelLifecycleError,
+import type {
+  ActivationAssessment,
+  ModelImportCandidate,
 } from '../local-agent/model-lifecycle';
+import type { TrustedModelSource } from '../local-agent/trusted-model-catalog';
+import type { TrustedModelDownloadProgress } from '../local-agent/trusted-model-download';
 import {
   confirmLocalModelCaution,
   createLocalModelOperationLane,
@@ -21,6 +22,13 @@ import {
 } from './local-model-management-controller';
 import type { LocalModelManagementPort } from './local-model-management-port';
 import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
+import {
+  enableOnDeviceAi,
+  mapOnDeviceAiErrorCode,
+  type OnDeviceAiErrorCode,
+  type OnDeviceAiStatus,
+  onDeviceAiStatusFromManifest,
+} from './trusted-model-enablement-controller';
 
 export interface LocalModelManagementView {
   readonly available: boolean;
@@ -37,11 +45,9 @@ export interface LocalModelManagementView {
     | 'confirm-caution'
     | 'unload'
     | 'delete'
+    | 'enable-on-device-ai'
     | null;
-  readonly errorCode:
-    | ModelLifecycleError['code']
-    | 'BENCHMARK_WRITE_FAILED'
-    | null;
+  readonly errorCode: OnDeviceAiErrorCode | 'BENCHMARK_WRITE_FAILED' | null;
   readonly reload: () => void;
   readonly selectCandidate: () => void;
   readonly confirmImport: () => void;
@@ -53,6 +59,33 @@ export interface LocalModelManagementView {
   readonly deleteModel: (sha256: string) => void;
   readonly confirmProviderOperation: () => void;
   readonly cancelProviderOperation: () => void;
+  /**
+   * Follow-up F-FDRGS4: Settings の「オンデバイス AI を有効化」導線。
+   * `trustedModelSource` は Native かつ Development Build のときだけ非 `null`
+   *（`management` が有効な場合と同じ条件）。
+   */
+  readonly trustedModelSource: TrustedModelSource | null;
+  readonly onDeviceAiStatus: OnDeviceAiStatus | null;
+  /**
+   * code-reviewer 指摘（simplify・altitude）: 「同意待ち」「ダウンロード中」は
+   * 同じ一連の流れの排他な段階であり、独立した 2 つの boolean にすると
+   * `SettingsScreen.tsx` 側で二重否定の条件分岐が必要になる。単一の tag に
+   * まとめ、`LocalModelCard` 等が単一 flag で分岐する既存流儀に合わせる。
+   * `finalizing`（code-reviewer 指摘、Cancel の実効性）: ダウンロード完了後の
+   * import・activate は `AbortSignal` を受け取らない区間を含み、Cancel を
+   * 押しても効かない。この区間では Cancel 導線自体を提示しない。
+   */
+  readonly onDeviceAiFlow:
+    | 'idle'
+    | 'consent-pending'
+    | 'downloading'
+    | 'finalizing';
+  readonly onDeviceAiDownloadProgress: TrustedModelDownloadProgress | null;
+  readonly requestEnableOnDeviceAi: () => void;
+  readonly confirmEnableOnDeviceAiConsent: () => void;
+  readonly cancelEnableOnDeviceAiConsent: () => void;
+  readonly cancelOnDeviceAiDownload: () => void;
+  readonly removeOnDeviceAiModel: () => void;
 }
 
 interface UseLocalModelManagementInput {
@@ -69,15 +102,14 @@ type PendingProviderOperation =
   | { readonly kind: 'activate'; readonly sha256: string }
   | { readonly kind: 'confirm-caution' }
   | { readonly kind: 'unload' }
-  | { readonly kind: 'delete'; readonly sha256: string };
+  | { readonly kind: 'delete'; readonly sha256: string }
+  | { readonly kind: 'enable-on-device-ai' };
 
-function errorCode(error: unknown): ModelLifecycleError['code'] {
+function errorCode(error: unknown): OnDeviceAiErrorCode {
   if (error instanceof AgentModelProviderError && error.nativeLaneQuarantined) {
     return 'NATIVE_CONTEXT_UNAVAILABLE';
   }
-  return error instanceof ModelLifecycleError
-    ? error.code
-    : 'MANIFEST_READ_FAILED';
+  return mapOnDeviceAiErrorCode(error);
 }
 
 function activeModel(manifest: LocalModelManifest): ImportedLocalModel | null {
@@ -114,6 +146,11 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
     useState<PendingProviderOperation | null>(null);
   const [importInProgress, setImportInProgress] = useState(false);
   const importControllerRef = useRef<AbortController | null>(null);
+  const [onDeviceAiFlow, setOnDeviceAiFlow] =
+    useState<LocalModelManagementView['onDeviceAiFlow']>('idle');
+  const [onDeviceAiDownloadProgress, setOnDeviceAiDownloadProgress] =
+    useState<TrustedModelDownloadProgress | null>(null);
+  const trustedModelControllerRef = useRef<AbortController | null>(null);
   const [error, setError] =
     useState<LocalModelManagementView['errorCode']>(null);
   const [busy, setBusy] = useState(false);
@@ -164,6 +201,7 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
   useEffect(
     () => () => {
       importControllerRef.current?.abort();
+      trustedModelControllerRef.current?.abort();
       operationLaneRef.current.dispose();
     },
     []
@@ -377,8 +415,106 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
     [hasActiveProviderRun, performDelete]
   );
 
+  const requestEnableOnDeviceAi = useCallback((): void => {
+    if (!management || hasActiveProviderRun) return;
+    setOnDeviceAiFlow('consent-pending');
+  }, [hasActiveProviderRun, management]);
+
+  const cancelEnableOnDeviceAiConsent = useCallback((): void => {
+    setOnDeviceAiFlow((flow) => (flow === 'consent-pending' ? 'idle' : flow));
+  }, []);
+
+  /**
+   * code-reviewer 指摘（efficiency）: Native の `DownloadTask.onProgress` は
+   * chunk ごとに間引きなしで発火するため、そのまま `setState` へ繋ぐと
+   * 約 1 GB の Download 全体で大量の再 render を招く。四捨五入した % が
+   * 変わったときだけ state を更新し、同じ % の連続通知は無視する。
+   */
+  const performEnableOnDeviceAi = useCallback((): void => {
+    if (!management || !mutationLeases) return;
+    const { trustedModelAcquisition, trustedModelSource, lifecycle } =
+      management;
+    const controller = new AbortController();
+    setOnDeviceAiDownloadProgress(null);
+    let lastReportedPercent = -1;
+    const started = run(async () => {
+      try {
+        await waitForNativeTeardown();
+        await withLocalModelMutationLease(mutationLeases, () =>
+          enableOnDeviceAi({
+            acquisition: trustedModelAcquisition,
+            source: trustedModelSource,
+            lifecycle,
+            consented: true,
+            signal: controller.signal,
+            onProgress: (progress) => {
+              const percent =
+                trustedModelSource.sizeBytes > 0
+                  ? Math.floor(
+                      (progress.bytesWritten / trustedModelSource.sizeBytes) *
+                        100
+                    )
+                  : 0;
+              if (percent === lastReportedPercent) return;
+              lastReportedPercent = percent;
+              setOnDeviceAiDownloadProgress(progress);
+            },
+            onBeforeActivation: () => setOnDeviceAiFlow('finalizing'),
+            refresh,
+            setCautionAssessment,
+          })
+        );
+      } finally {
+        if (trustedModelControllerRef.current === controller) {
+          trustedModelControllerRef.current = null;
+          setOnDeviceAiFlow('idle');
+          setOnDeviceAiDownloadProgress(null);
+        }
+      }
+    });
+    if (started) {
+      trustedModelControllerRef.current = controller;
+      setOnDeviceAiFlow('downloading');
+    }
+  }, [management, mutationLeases, refresh, run, waitForNativeTeardown]);
+
+  /**
+   * code-reviewer 指摘（altitude、major）: 他の全 Model mutation
+   *（`confirmImport`・`activate`・`confirmCautionActivation`・`unload`・
+   * `deleteModel`）は実行直前にも `hasActiveProviderRun` を再確認し、
+   * 実行中なら `pendingProviderOperation` へ確認待ちにする。同意カードを
+   * 開いた時点（`requestEnableOnDeviceAi`）でしか確認していなかったため、
+   * カードを開いたまま Lounge が開始された場合に `waitForNativeTeardown()`
+   * を無条件に呼んでしまう抜け穴があった。他の 4 操作と同じ形へ揃える。
+   */
+  const confirmEnableOnDeviceAiConsent = useCallback((): void => {
+    if (!management || !mutationLeases) return;
+    if (hasActiveProviderRun) {
+      setOnDeviceAiFlow('idle');
+      setPendingProviderOperation({ kind: 'enable-on-device-ai' });
+      return;
+    }
+    setOnDeviceAiFlow('idle');
+    performEnableOnDeviceAi();
+  }, [
+    hasActiveProviderRun,
+    management,
+    mutationLeases,
+    performEnableOnDeviceAi,
+  ]);
+
+  const cancelOnDeviceAiDownload = useCallback((): void => {
+    trustedModelControllerRef.current?.abort();
+  }, []);
+
+  const removeOnDeviceAiModel = useCallback((): void => {
+    if (!management) return;
+    deleteModel(management.trustedModelSource.sha256);
+  }, [deleteModel, management]);
+
   const invalidateAfterExternalPurge = useCallback((): void => {
     importControllerRef.current?.abort();
+    trustedModelControllerRef.current?.abort();
     setProvider(fallbackProvider);
     setManifest(null);
     setCandidate(null);
@@ -386,6 +522,8 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
     setCautionAssessment(null);
     setPendingProviderOperation(null);
     setError(null);
+    setOnDeviceAiFlow('idle');
+    setOnDeviceAiDownloadProgress(null);
   }, [fallbackProvider]);
 
   const confirmProviderOperation = useCallback((): void => {
@@ -408,15 +546,33 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
       performCautionActivation();
       return;
     }
+    if (pending.kind === 'enable-on-device-ai') {
+      performEnableOnDeviceAi();
+      return;
+    }
     performDelete(pending.sha256);
   }, [
     pendingProviderOperation,
     performActivation,
     performCautionActivation,
     performDelete,
+    performEnableOnDeviceAi,
     performImport,
     performUnload,
   ]);
+
+  /**
+   * code-reviewer 指摘（efficiency）: `busy` や `candidate` など無関係な
+   * state の更新でも毎 render `manifest.models` を走査していたため、
+   * manifest / management が変わったときだけ再計算する。
+   */
+  const onDeviceAiStatus = useMemo(
+    () =>
+      management
+        ? onDeviceAiStatusFromManifest(manifest, management.trustedModelSource)
+        : null,
+    [management, manifest]
+  );
 
   return {
     provider,
@@ -448,6 +604,15 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
       deleteModel,
       confirmProviderOperation,
       cancelProviderOperation: () => setPendingProviderOperation(null),
+      trustedModelSource: management?.trustedModelSource ?? null,
+      onDeviceAiStatus,
+      onDeviceAiFlow,
+      onDeviceAiDownloadProgress,
+      requestEnableOnDeviceAi,
+      confirmEnableOnDeviceAiConsent,
+      cancelEnableOnDeviceAiConsent,
+      cancelOnDeviceAiDownload,
+      removeOnDeviceAiModel,
     },
   };
 }
