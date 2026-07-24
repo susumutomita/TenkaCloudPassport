@@ -10,8 +10,10 @@ import {
 
 /**
  * Issue 104 PR #132（Codex 指摘 major、モデル入手経路）: `expo-file-system` の
- * `DownloadTask`（iOS `sessionType: 'background'`・進捗コールバック・
- * `AbortSignal` 経由の Cancel を Native が提供する）を使う。ダウンロード先は
+ * `DownloadTask`（進捗コールバック・`AbortSignal` 経由の Cancel を Native が
+ * 提供する）を前面(foreground)セッションで使う（Issue 138: background だと 100%
+ * 到達後に完了 Promise が解決せず固まったため。runDownload のコメント参照）。
+ * ダウンロード先は
  * `Paths.cache`（Issue 18 の既存 `.incoming.gguf` とは別領域）に置き、検証済みの
  * 結果だけを呼び出し側が `LocalModelLifecycle.importCandidate` へ渡す
  * （`LocalModelFileStore` の「1 つの incoming file だけを持つ」既存契約を
@@ -49,7 +51,13 @@ async function runDownload(
   }
 ): Promise<TrustedModelDownloadOutcome> {
   const task = new DownloadTask(source.url, destination, {
-    sessionType: 'background',
+    // Issue 138（実機で判明）: 前面(foreground)セッションで実行する。
+    // `sessionType: 'background'` だと iOS のバックグラウンド URLSession の完了が
+    // AppDelegate のバックグラウンドイベント経由で届く設計のため、転送が 100% に
+    // 達してもアプリ前面の間は `downloadAsync()` の Promise が解決せず、UI が
+    // 「ダウンロード中 100%」で固まったまま検証・取り込み・有効化へ進めなかった。
+    // ユーザーがアプリを開いて待つ本フローでは foreground が正しい。アプリ再起動を
+    // 跨いだ background 再開の永続化は将来の別 PR で扱う（下記の設計コメント参照）。
     ...(options.onProgress
       ? {
           onProgress: (progress: {
