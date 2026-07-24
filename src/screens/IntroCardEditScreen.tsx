@@ -106,7 +106,7 @@ export interface IntroCardEditScreenProps {
   readonly onChangeLocale: (locale: Locale) => void;
   /**
    * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を復活させる。
-   * カード保存前（初回起動時等）もクイズ・診断・モデル管理へ到達できるよう、
+   * カード保存前（初回起動時等）も診断・モデル管理へ到達できるよう、
    * `IntroCardScreen` と同じ導線をここにも持つ（`IntroCardScreen.tsx` 参照）。
    */
   readonly onOpenSettings: () => void;
@@ -754,7 +754,7 @@ export default function IntroCardEditScreen({
           : t.byteUsageLabel(cardUrlByteUsage, QR_ENCODER_MAX_BYTES)}
       </Text>
       {/* Issue 130（Codex 指摘 blocker）: カード保存前（初回起動時等）でも
-          クイズ・診断へ到達できるよう、フォーム内容の末尾に控えめな Settings
+          診断へ到達できるよう、フォーム内容の末尾に控えめな Settings
           リンクを置く（保存ボタン＝ footer とは別の位置にし、footer は
           Save 専用のまま保つ、Issue 118 の footer 契約を崩さない）。 */}
       <SettingsLinkFooter

@@ -21,7 +21,7 @@ function source(): Promise<string> {
  * 未完了のまま会話 Agent を開くと native crash する の 2 件が実機で確認され、
  * 呼び出し元を実機テストできないため、Issue 138 で消費者ビルドに残した唯一の
  * Local Model 導線（`OnDeviceAiSection` / `ModelManagementSection`）も含めて
- * ここから完全に除去した。消費者に残すのは 言語切替 / クイズ / 会話 Agent /
+ * ここから完全に除去した。消費者に残すのは 言語切替 / 会話 Agent /
  * 簡潔な「全データ削除」/ 戻る だけになる。Local Model 管理の実装
  * （`use-local-model-management.ts` 等）はリポジトリに残し、v1.1 で実機テストして
  * 再有効化する。
@@ -137,12 +137,9 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).not.toContain('pendingProviderOperation');
   });
 
-  it('Issue 138（実機 blocker A、DL 完了後フリーズの是正 / v1.0 ADR-0038）: クイズ・会話 Agent・戻るは dataErasure.busy だけを disabled 条件にする（Local Model 管理 UI 自体が無いため busy 連動の過剰 disable も発生し得ない）', async () => {
+  it('Issue 138（実機 blocker A、DL 完了後フリーズの是正 / v1.0 ADR-0038）: 会話 Agent・戻るは dataErasure.busy だけを disabled 条件にする（Local Model 管理 UI 自体が無いため busy 連動の過剰 disable も発生し得ない）', async () => {
     const text = await source();
 
-    expect(text).toContain(
-      'accessibilityHint={t.quizButtonHint}\n        disabled={dataErasure.busy}'
-    );
     expect(text).toContain('disabled={dataErasure.busy || !hasIntroCard}');
     expect(text).toContain(
       '<DataErasureSection dataErasure={dataErasure} locale={locale} t={t} />\n      <ActionButton\n        disabled={dataErasure.busy}\n        label={t.backButton}'
@@ -156,18 +153,6 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).toContain(
       'hasIntroCard\n            ? t.conversationAgentButtonHint\n            : t.conversationAgentButtonDisabledHint'
     );
-  });
-
-  it('Issue 110: クイズボタンは会話 Agent ボタンより前、戻るボタンより前に配置し、onOpenQuiz を呼ぶ', async () => {
-    const text = await source();
-
-    expectInOrder(text, [
-      'accessibilityHint={t.quizButtonHint}',
-      'label={t.quizButton}',
-      'onPress={onOpenQuiz}',
-      'label={t.conversationAgentButton}',
-      'label={t.backButton}',
-    ]);
   });
 
   it('Issue 138（実機 blocker B）: 消費者向けの「全データ削除」導線は既存 useLocalDiagnosticsFlow の erasure 経路をそのまま再利用する', async () => {

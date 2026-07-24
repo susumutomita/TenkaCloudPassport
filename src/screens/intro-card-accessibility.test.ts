@@ -65,24 +65,11 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     ]);
   });
 
-  it('表示画面の QR は encodeIntroCardUrlBestEffort（自己紹介ページ URL、Issue 110 でクイズ進捗ビットマスクを best-effort で相乗り）から生成し vCard 直埋めには依存しない（Issue 84）', async () => {
+  it('表示画面の QR は encodeIntroCardUrl（自己紹介ページ URL）から生成し vCard 直埋めには依存しない（Issue 84）', async () => {
     const text = await source('IntroCardScreen.tsx');
 
-    expect(text).toContain(
-      'const result = encodeIntroCardUrlBestEffort(card, quizProgressHex);'
-    );
-    expect(text).toContain('encodedQr: encodeQr(result.url)');
+    expect(text).toContain('encodeQr(encodeIntroCardUrl(card))');
     expect(text).not.toContain('encodeVCard');
-  });
-
-  it('表示画面は quizProgressIncluded が false（意味のある quizProgressHex が省略された）のときだけ非ブロッキング通知を出す（Issue 130 minor）', async () => {
-    const text = await source('IntroCardScreen.tsx');
-
-    expect(text).toContain(
-      "quizProgressHex !== undefined &&\n      quizProgressHex !== '0' &&\n      !result.quizProgressIncluded;"
-    );
-    expect(text).toContain('{quizProgressOmitted ? (');
-    expect(text).toContain('t.quizProgressOmittedNotice');
   });
 
   it('表示画面は QR を Accessibility Label 付きの View で包む', async () => {
@@ -123,7 +110,7 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     }
   });
 
-  it('表示画面・編集画面のどちらも控えめな Settings リンク（共有 SettingsLinkFooter component）を持ち、クイズ・診断・端末内会話エージェントへの唯一の入口を forward する（Issue 130: #127 が外した導線の復活。Issue 104: jscpd 重複検出の指摘で共有 component へ切り出した）', async () => {
+  it('表示画面・編集画面のどちらも控えめな Settings リンク（共有 SettingsLinkFooter component）を持ち、診断・端末内会話エージェントへの唯一の入口を forward する（Issue 130: #127 が外した導線の復活。Issue 104: jscpd 重複検出の指摘で共有 component へ切り出した）', async () => {
     for (const fileName of ['IntroCardScreen.tsx', 'IntroCardEditScreen.tsx']) {
       const text = await source(fileName);
 

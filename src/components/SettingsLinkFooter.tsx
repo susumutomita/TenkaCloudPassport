@@ -9,7 +9,7 @@ export interface SettingsLinkFooterProps {
 }
 
 /**
- * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を、クイズ・診断・
+ * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を、診断・
  * 端末内会話エージェント（Issue 104）への唯一の入口として複数の画面
  * （`IntroCardScreen` / `IntroCardEditScreen` / `ConversationAgentScreen`）が
  * 共通で持つ、控えめなテキストリンク。3 画面がそれぞれ同じ `Pressable` +

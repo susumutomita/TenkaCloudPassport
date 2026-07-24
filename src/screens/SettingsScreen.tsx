@@ -26,8 +26,6 @@ import { colors, spacing } from '../ui/theme';
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
-  /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く。 */
-  readonly onOpenQuiz: () => void;
   /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く。 */
   readonly onOpenConversationAgent: () => void;
   /**
@@ -147,11 +145,11 @@ function DataErasureSection({
  * 保存済み Local Profile のいずれにも触れない（`docs/design/i18n-and-accessibility.md`
  * の設計判断 1）。
  *
- * Issue 138（実機 blocker A、過剰 disable の是正 / code-reviewer 指摘）: クイズ・
- * 会話 Agent・戻るは `dataErasure.busy`（全データ削除の確定処理中）だけを
- * disabled 条件にする。全データ削除は `resetAllLocalMemory` を介して Quiz 進捗・
- * Passport 等の in-memory state を無条件に消去し `stage` を巻き戻すため、削除
- * 確定中に別画面へ移動できてしまうと予期しないタイミングで現在位置が上書きされる
+ * Issue 138（実機 blocker A、過剰 disable の是正 / code-reviewer 指摘）: 会話
+ * Agent・戻るは `dataErasure.busy`（全データ削除の確定処理中）だけを disabled
+ * 条件にする。全データ削除は `resetAllLocalMemory` を介して Passport 等の
+ * in-memory state を無条件に消去し `stage` を巻き戻すため、削除確定中に別画面へ
+ * 移動できてしまうと予期しないタイミングで現在位置が上書きされる
  * （`LocalDiagnosticsScreen.tsx` が自身の戻るボタンを同じ理由で busy 中 disabled に
  * しているのと同じ配慮）。v1.0（ADR-0038）: 旧・Local Model 操作中フラグは
  * Settings から Local Model 管理 UI 自体を除去したため参照しない。
@@ -159,7 +157,6 @@ function DataErasureSection({
 export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
   onChangeLocale,
-  onOpenQuiz,
   onOpenConversationAgent,
   hasIntroCard,
   onBack,
@@ -186,13 +183,6 @@ export default function SettingsScreen({
           );
         })}
       </View>
-      <ActionButton
-        accessibilityHint={t.quizButtonHint}
-        disabled={dataErasure.busy}
-        label={t.quizButton}
-        onPress={onOpenQuiz}
-        variant="secondary"
-      />
       <ActionButton
         accessibilityHint={
           hasIntroCard

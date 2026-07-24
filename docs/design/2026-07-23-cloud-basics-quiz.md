@@ -1,5 +1,11 @@
 # クラウド基礎クイズと進捗スタンプ（端末内・ビットマスク QR 共有）
 
+> **Superseded**: この設計文書が記述する機能（クラウド基礎クイズ）は、
+> [ADR-0039](../adr/0039-remove-cloud-basics-quiz.md) により機能ごと除去された。
+> owner が実機で試用し、中心導線（自己紹介カード共有）に対して寄与が薄いと
+> 判断したため。以下の内容は実装当時の設計判断の記録として残すが、現在の
+> コードベースには対応する実装が存在しない。
+
 Issue: https://github.com/susumutomita/TenkaCloudPassport/issues/110 （owner の意図が正本）。
 
 ## 目的

@@ -52,9 +52,6 @@ Instagram などの SNS アプリ内ブラウザでは、ファイルの保存�
 自己紹介データは QR コードの URL フラグメントに埋め込まれ、相手のブラウザ内だけで復号されます。
 このデータがサーバーへ送信されることはありません。
 
-■ クラウド基礎クイズ
-四択のクラウド基礎クイズに挑戦できます。進捗（クリア済み設問）は端末内に保存されます。
-
 ■ オンデバイス AI で共通点を見つける（任意）
 設定画面から有効化すると、初対面の相手との会話の共通点を、端末内で動く AI が見つける手助けを
 します。モデルは端末にダウンロードして動作し、内容をサーバーへ送信することはありません。
@@ -83,9 +80,6 @@ in-app browsers inside apps like LINE, X, or Instagram may fail to save the file
 Your intro data lives in the QR code's URL fragment and is decoded entirely inside the other
 person's browser. It is never sent to a server.
 
-- Cloud basics quiz
-Take a short multiple-choice quiz on cloud fundamentals. Your progress is saved on your device.
-
 - Optional on-device AI to find common ground
 Enable it from Settings to let an on-device AI help surface shared conversation themes with
 someone you just met. The model downloads to your device and runs there; nothing is sent to a
@@ -98,16 +92,16 @@ No data collected. No account required. No business card needed. Create your Int
 
 Apple の目安上限はカンマ区切りで合計 100 文字です。
 
-日本語版は次のとおりです（約 58 文字の目安）。
+日本語版は次のとおりです（約 54 文字の目安）。
 
 ```
-名刺,自己紹介,QR,クラウド,オンデバイスAI,プライバシー,オフライン,アカウント不要,交流,人脈,クイズ,無料
+名刺,自己紹介,QR,クラウド,オンデバイスAI,プライバシー,オフライン,アカウント不要,交流,人脈,無料
 ```
 
-English 版は次のとおりです（約 88 文字の目安）。
+English 版は次のとおりです（約 83 文字の目安）。
 
 ```
-business card,QR code,intro,networking,privacy,offline,on-device AI,no account,free,quiz
+business card,QR code,intro,networking,privacy,offline,on-device AI,no account,free
 ```
 
 ## 4. プロモーションテキスト（Promotional Text）
@@ -115,16 +109,16 @@ business card,QR code,intro,networking,privacy,offline,on-device AI,no account,f
 Apple の目安上限は 170 文字です。ASC からアプリ本体を再申請せずに更新できる欄なので、
 season 施策やキャンペーンに応じて owner が自由に書き換えられます。
 
-日本語版は次のとおりです（約 115 文字の目安）。
+日本語版は次のとおりです（約 104 文字の目安）。
 
 ```
-名刺不要、アカウント不要。QR を見せるだけで、相手は標準カメラで自己紹介ページを開けます。連絡先追加は任意。データはサーバーへ送信されません。クラウド基礎クイズや、任意で有効化できる端末内 AI で会話の共通点も見つけられます。
+名刺不要、アカウント不要。QR を見せるだけで、相手は標準カメラで自己紹介ページを開けます。連絡先追加は任意。データはサーバーへ送信されません。任意で有効化できる端末内 AI で会話の共通点も見つけられます。
 ```
 
-English 版は次のとおりです（約 168 文字の目安）。
+English 版は次のとおりです（約 170 文字の目安）。
 
 ```
-No business card, no account. Show a QR — your intro page opens in their camera app. Contact-add is optional. Zero server data. Quiz and optional on-device AI included.
+No business card, no account. Show a QR — your intro page opens in their camera app. Contact-add is optional. Zero server data. Optional on-device AI finds common ground.
 ```
 
 ## 5. URL
@@ -196,11 +190,7 @@ the intro page in that device's browser. If a second camera-equipped device is n
 note that the QR encodes a plain HTTPS URL (https://card.tenkacloud.com/c#<data>), so any
 standard QR reader works. Contact-add inside that page is optional and one tap.
 
-(c) Cloud basics quiz
-Settings > "Try the cloud basics quiz" opens a short multiple-choice quiz. Progress is saved on
-the device only.
-
-(d) Zero data collection
+(c) Zero data collection
 There is no account, no login, no analytics SDK, and no server that receives user data. The
 build's auto-generated iOS Privacy Manifest is expected to declare an empty
 NSPrivacyCollectedDataTypes and NSPrivacyTracking as false; this is verified from a real build

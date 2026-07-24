@@ -15,7 +15,6 @@ import {
   type WebKeyValueStorage,
   WebLocalProfileStorageAdapter,
 } from './web-local-profile-storage';
-import { WebQuizProgressStorageAdapter } from './web-quiz-progress-storage';
 
 const temporaryDirectories = trackTemporaryDirectories();
 
@@ -155,9 +154,6 @@ describe('起動時 Local Data Recovery Gate', () => {
       modelContexts: new LocalModelContextLeaseRegistry(),
       deletionJournal: new WebDeletionJournalAdapter(
         new OneReadFailureWebStorage(files)
-      ),
-      quizStorage: new WebQuizProgressStorageAdapter(
-        new FileBackedWebStorage(temporaryDirectories.create())
       ),
     });
 

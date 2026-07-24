@@ -398,9 +398,6 @@ export interface AppMessages {
     readonly diagnosticsButtonHint: string;
     readonly pilotMeasurementButton: string;
     readonly pilotMeasurementButtonHint: string;
-    /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く導線。 */
-    readonly quizButton: string;
-    readonly quizButtonHint: string;
     /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く導線。 */
     readonly conversationAgentButton: string;
     readonly conversationAgentButtonHint: string;
@@ -469,12 +466,6 @@ export interface AppMessages {
      * すぐ下に明示する。
      */
     readonly introCardExcludedNotice: string;
-    /**
-     * Issue 130（Codex 指摘 blocker）: クイズ進捗（Issue 110）は Intro Card と異なり
-     * 対象に含まれることを明示する（F-167000: 進捗が「全データ削除」後も残り続けた
-     * 不整合の解消）。Intro Card 除外の開示と対になる、対象一覧のすぐ下に置く。
-     */
-    readonly quizIncludedNotice: string;
     readonly confirmDeleteAllButton: string;
     readonly cancelDeleteAllButton: string;
     readonly backButton: string;
@@ -639,63 +630,17 @@ export interface AppMessages {
     readonly cardDescription: string;
     readonly qrAccessibilityLabel: string;
     readonly qrExplanation: string;
-    /**
-     * Issue 130（Codex 指摘 minor）: QR byte 予算超過でクイズ進捗ビットマスク（`q`）が
-     * best-effort で黙って省略された場合だけ表示する非ブロッキング通知。カード本体の
-     * 表示自体は妨げない。
-     */
-    readonly quizProgressOmittedNotice: string;
     readonly editButton: string;
     readonly editButtonHint: string;
     readonly deleteButton: string;
     readonly deleteButtonHint: string;
     /**
      * Issue 130: #127 が Intro Card 画面から外した Settings 導線を、控えめな
-     * リンクとして復活させる（クイズ・診断への唯一の入口）。言語切替はヘッダーの
+     * リンクとして復活させる（診断への唯一の入口）。言語切替はヘッダーの
      * ままなので、ここでは言及しない（Issue 118 と重複させない）。
      */
     readonly settingsButton: string;
     readonly settingsButtonHint: string;
-  };
-  /**
-   * Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）の UI chrome。設問・選択肢・解説
-   * 本文は `src/domain/quiz-catalog.ts` の `{ja, en}` を直接使う（ここには含めない）。
-   */
-  readonly quiz: {
-    readonly eyebrow: string;
-    readonly listTitle: string;
-    readonly listDescription: string;
-    readonly clearedCount: (current: number, total: number) => string;
-    /** Issue 110 code-reviewer 指摘: `isQuizComplete` を実際に使う全問クリア演出。 */
-    readonly allClearedNotice: string;
-    readonly categoryLabels: {
-      readonly iam: string;
-      readonly network: string;
-      readonly storage: string;
-      readonly compute: string;
-      readonly observability: string;
-    };
-    readonly clearedStatusLabel: string;
-    readonly notClearedStatusLabel: string;
-    readonly questionAccessibilityLabel: (
-      prompt: string,
-      cleared: boolean
-    ) => string;
-    readonly backButton: string;
-    readonly backButtonHint: string;
-    readonly questionEyebrow: string;
-    readonly choiceAccessibilityLabel: (
-      index: number,
-      text: string,
-      selected: boolean
-    ) => string;
-    readonly submitButton: string;
-    readonly submitButtonHint: string;
-    readonly correctTitle: string;
-    readonly incorrectTitle: string;
-    readonly explanationLabel: string;
-    readonly backToListButton: string;
-    readonly backToListButtonHint: string;
   };
   /**
    * Issue 104 / ADR-0036: 端末内会話エージェント画面（`ConversationAgentScreen.tsx`）
@@ -1117,9 +1062,6 @@ const ja: AppMessages = {
     pilotMeasurementButton: 'Pilot の匿名 Aggregate',
     pilotMeasurementButtonHint:
       'Process 内 Counter の全項目を Preview し、最低集計単位を満たす場合だけ手動共有できます。',
-    quizButton: 'クラウド基礎クイズに挑戦',
-    quizButtonHint:
-      'クラウド基礎の四択クイズに挑戦し、進捗を端末内に保存します。',
     conversationAgentButton: '端末内会話エージェントを試す',
     conversationAgentButtonHint:
       '相手の自己紹介カードから、会話のきっかけを端末内だけで見つけます。',
@@ -1128,9 +1070,9 @@ const ja: AppMessages = {
     backButton: '戻る',
     eraseAllDataButton: 'この端末のすべてのデータを削除',
     eraseAllDataButtonHint:
-      '自己紹介カード、Local Model、クイズ進捗など、この端末に保存した内容をすべて削除します。取り消せません。',
+      '自己紹介カード、Local Model など、この端末に保存した内容をすべて削除します。取り消せません。',
     eraseAllDataConfirmDescription:
-      'この端末に保存された自己紹介カード、Local Model、クイズ進捗などをすべて削除します。この操作は取り消せません。',
+      'この端末に保存された自己紹介カード、Local Model などをすべて削除します。この操作は取り消せません。',
     eraseAllDataConfirmButton: '削除する',
     eraseAllDataCancelButton: 'キャンセル',
     eraseAllDataRecoveryTitle: '前回の削除が完了していません。',
@@ -1187,8 +1129,6 @@ const ja: AppMessages = {
       `${count} 件、${bytes} bytes を削除します。中断時は次回起動で再開します。`,
     introCardExcludedNotice:
       '自己紹介カードはこの対象に含まれません。削除するにはカード画面の「カードを削除する」を使ってください。',
-    quizIncludedNotice:
-      'クラウド基礎クイズの進捗（クリア済み設問の記録）もこの対象に含まれます。',
     confirmDeleteAllButton: '確認して全削除を実行',
     cancelDeleteAllButton: '全削除をやめる',
     backButton: 'Settings へ戻る',
@@ -1427,47 +1367,13 @@ const ja: AppMessages = {
     qrAccessibilityLabel: '自己紹介カードの QR コード',
     qrExplanation:
       '相手はカメラで読むとブラウザで自己紹介が開きます。連絡先への追加はページ内で相手が選べます。',
-    quizProgressOmittedNotice:
-      'カード内容が多いため、クイズ進捗のスタンプは今回の QR に含まれていません。',
     editButton: '編集する',
     editButtonHint: '自己紹介カードの内容を編集します。',
     deleteButton: 'カードを削除する',
     deleteButtonHint:
       '端末内の自己紹介カードを削除します。この操作は取り消せません。',
     settingsButton: '設定',
-    settingsButtonHint:
-      'クイズ・診断など、自己紹介カード以外の設定を開きます。',
-  },
-  quiz: {
-    eyebrow: 'Cloud Basics Quiz',
-    listTitle: 'クラウド基礎クイズ',
-    listDescription:
-      'クラウドの基礎知識を四択で確認します。正解した設問は端末内にスタンプとして保存され、自己紹介カードの QR に合格数だけが載ります（誤答・解答履歴は載りません）。',
-    clearedCount: (current, total) => `${current} / ${total} 問クリア`,
-    allClearedNotice: '全問クリアしました。おめでとうございます。',
-    categoryLabels: {
-      iam: 'IAM',
-      network: 'ネットワーク',
-      storage: 'ストレージ',
-      compute: 'コンピュート',
-      observability: '可観測性',
-    },
-    clearedStatusLabel: 'クリア済み',
-    notClearedStatusLabel: '未クリア',
-    questionAccessibilityLabel: (prompt, cleared) =>
-      `${prompt}、${cleared ? 'クリア済み' : '未クリア'}`,
-    backButton: '設定に戻る',
-    backButtonHint: 'クイズを終えて設定画面に戻ります。',
-    questionEyebrow: 'Question',
-    choiceAccessibilityLabel: (index, text, selected) =>
-      `選択肢 ${index + 1}、${text}${selected ? '、選択中' : ''}`,
-    submitButton: '回答する',
-    submitButtonHint: '選んだ選択肢で採点します。',
-    correctTitle: '正解',
-    incorrectTitle: '不正解',
-    explanationLabel: '解説',
-    backToListButton: '一覧に戻る',
-    backToListButtonHint: 'クイズの一覧画面に戻ります。',
+    settingsButtonHint: '診断など、自己紹介カード以外の設定を開きます。',
   },
   conversationAgent: {
     eyebrow: '端末内会話エージェント',
@@ -1894,9 +1800,6 @@ const en: AppMessages = {
     pilotMeasurementButton: 'Anonymous Pilot aggregate',
     pilotMeasurementButtonHint:
       'Previews every in-process counter and permits manual sharing only after the minimum aggregation unit.',
-    quizButton: 'Try the cloud basics quiz',
-    quizButtonHint:
-      'Take the cloud basics multiple-choice quiz and save your progress on this device.',
     conversationAgentButton: 'Try the on-device conversation agent',
     conversationAgentButtonHint:
       "Finds a conversation opener from someone's intro card, entirely on this device.",
@@ -1905,9 +1808,9 @@ const en: AppMessages = {
     backButton: 'Back',
     eraseAllDataButton: 'Delete all data on this device',
     eraseAllDataButtonHint:
-      'Deletes everything saved on this device, including your intro card, local model, and quiz progress. This cannot be undone.',
+      'Deletes everything saved on this device, including your intro card and local model. This cannot be undone.',
     eraseAllDataConfirmDescription:
-      'This deletes your intro card, local model, quiz progress, and everything else saved on this device. This cannot be undone.',
+      'This deletes your intro card, local model, and everything else saved on this device. This cannot be undone.',
     eraseAllDataConfirmButton: 'Delete',
     eraseAllDataCancelButton: 'Cancel',
     eraseAllDataRecoveryTitle: 'The previous deletion did not finish.',
@@ -1964,8 +1867,6 @@ const en: AppMessages = {
       `Delete ${count} item(s), ${bytes} bytes. An interrupted deletion resumes at next launch.`,
     introCardExcludedNotice:
       'Your Intro Card is not included in this action. To delete it, use "Delete card" on the card screen.',
-    quizIncludedNotice:
-      'Your cloud basics quiz progress (which questions you have cleared) is included in this action.',
     confirmDeleteAllButton: 'Confirm and delete all',
     cancelDeleteAllButton: 'Cancel full deletion',
     backButton: 'Back to Settings',
@@ -2196,8 +2097,6 @@ const en: AppMessages = {
     qrAccessibilityLabel: 'Intro Card QR code',
     qrExplanation:
       'Scanning with their camera opens your intro in their browser. Adding your contact is a choice they make on that page.',
-    quizProgressOmittedNotice:
-      'Your card content is long, so the quiz progress stamp is not included in this QR code.',
     editButton: 'Edit',
     editButtonHint: 'Edit the contents of your Intro Card.',
     deleteButton: 'Delete card',
@@ -2205,38 +2104,7 @@ const en: AppMessages = {
       'Deletes the Intro Card on this device. This cannot be undone.',
     settingsButton: 'Settings',
     settingsButtonHint:
-      'Opens quiz, diagnostics, and other settings beyond your Intro Card.',
-  },
-  quiz: {
-    eyebrow: 'Cloud Basics Quiz',
-    listTitle: 'Cloud basics quiz',
-    listDescription:
-      'Check your cloud fundamentals with multiple-choice questions. Questions you answer correctly are stamped on this device, and only the cleared count is added to your Intro Card QR (wrong answers and history are never included).',
-    clearedCount: (current, total) => `${current} / ${total} cleared`,
-    allClearedNotice: "You've cleared every question. Congratulations!",
-    categoryLabels: {
-      iam: 'IAM',
-      network: 'Network',
-      storage: 'Storage',
-      compute: 'Compute',
-      observability: 'Observability',
-    },
-    clearedStatusLabel: 'Cleared',
-    notClearedStatusLabel: 'Not cleared',
-    questionAccessibilityLabel: (prompt, cleared) =>
-      `${prompt}, ${cleared ? 'cleared' : 'not cleared'}`,
-    backButton: 'Back to Settings',
-    backButtonHint: 'Finish the quiz and return to Settings.',
-    questionEyebrow: 'Question',
-    choiceAccessibilityLabel: (index, text, selected) =>
-      `Choice ${index + 1}, ${text}${selected ? ', selected' : ''}`,
-    submitButton: 'Submit answer',
-    submitButtonHint: 'Score the selected choice.',
-    correctTitle: 'Correct',
-    incorrectTitle: 'Incorrect',
-    explanationLabel: 'Explanation',
-    backToListButton: 'Back to list',
-    backToListButtonHint: 'Return to the quiz list screen.',
+      'Opens diagnostics and other settings beyond your Intro Card.',
   },
   conversationAgent: {
     eyebrow: 'On-device conversation agent',
