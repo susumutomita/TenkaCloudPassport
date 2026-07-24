@@ -410,6 +410,19 @@ export interface AppMessages {
      */
     readonly conversationAgentButtonDisabledHint: string;
     readonly backButton: string;
+    /**
+     * Issue 138（実機 blocker B）: 診断画面（開発者向け）は `__DEV__` ゲートでは
+     * なく全ビルドから完全に除去する一方、消費者にも「全データ削除」だけは
+     * 簡潔な導線として残す。既存の `useLocalDiagnosticsFlow` の erasure 経路を
+     * そのまま再利用する（`SettingsDataErasureProps` 参照）。
+     */
+    readonly eraseAllDataButton: string;
+    readonly eraseAllDataButtonHint: string;
+    readonly eraseAllDataConfirmDescription: string;
+    readonly eraseAllDataConfirmButton: string;
+    readonly eraseAllDataCancelButton: string;
+    readonly eraseAllDataRecoveryTitle: string;
+    readonly eraseAllDataRetryButton: string;
   };
   readonly pilotMeasurement: {
     readonly title: string;
@@ -728,6 +741,14 @@ export interface AppMessages {
     readonly backButton: string;
     readonly settingsButton: string;
     readonly settingsButtonHint: string;
+    /**
+     * Issue 138（実機 blocker C）: 端末内会話エージェント画面を包む Error
+     * Boundary のフォールバック文言。JS 例外で描画が失敗したときだけ表示する
+     * （native 例外はここでは捕まらない）。「戻る」は既存 `backButton` を
+     * 再利用する。
+     */
+    readonly crashNoticeTitle: string;
+    readonly crashNoticeDescription: string;
   };
 }
 
@@ -1105,6 +1126,15 @@ const ja: AppMessages = {
     conversationAgentButtonDisabledHint:
       '先に自己紹介カードを作成すると開けます。',
     backButton: '戻る',
+    eraseAllDataButton: 'この端末のすべてのデータを削除',
+    eraseAllDataButtonHint:
+      '自己紹介カード、Local Model、クイズ進捗など、この端末に保存した内容をすべて削除します。取り消せません。',
+    eraseAllDataConfirmDescription:
+      'この端末に保存された自己紹介カード、Local Model、クイズ進捗などをすべて削除します。この操作は取り消せません。',
+    eraseAllDataConfirmButton: '削除する',
+    eraseAllDataCancelButton: 'キャンセル',
+    eraseAllDataRecoveryTitle: '前回の削除が完了していません。',
+    eraseAllDataRetryButton: '削除をやり直す',
   },
   pilotMeasurement: {
     title: '個人を追跡せず Pilot を振り返る。',
@@ -1481,6 +1511,9 @@ const ja: AppMessages = {
     backButton: '戻る',
     settingsButton: 'Settings（言語切り替え等）',
     settingsButtonHint: 'Settings 画面に戻ります。',
+    crashNoticeTitle: '問題が発生しました。',
+    crashNoticeDescription:
+      '端末内会話エージェントの表示中に問題が発生したため、この画面を終了しました。内容は保存・送信されていません。',
   },
 };
 
@@ -1870,6 +1903,15 @@ const en: AppMessages = {
     conversationAgentButtonDisabledHint:
       'Create an intro card first to unlock this.',
     backButton: 'Back',
+    eraseAllDataButton: 'Delete all data on this device',
+    eraseAllDataButtonHint:
+      'Deletes everything saved on this device, including your intro card, local model, and quiz progress. This cannot be undone.',
+    eraseAllDataConfirmDescription:
+      'This deletes your intro card, local model, quiz progress, and everything else saved on this device. This cannot be undone.',
+    eraseAllDataConfirmButton: 'Delete',
+    eraseAllDataCancelButton: 'Cancel',
+    eraseAllDataRecoveryTitle: 'The previous deletion did not finish.',
+    eraseAllDataRetryButton: 'Retry deletion',
   },
   pilotMeasurement: {
     title: 'Review the Pilot without tracking people.',
@@ -2238,6 +2280,9 @@ const en: AppMessages = {
     backButton: 'Back',
     settingsButton: 'Settings (language, etc.)',
     settingsButtonHint: 'Returns to the Settings screen.',
+    crashNoticeTitle: 'Something went wrong.',
+    crashNoticeDescription:
+      'The on-device conversation agent hit a problem and this screen was closed. Nothing was saved or sent.',
   },
 };
 

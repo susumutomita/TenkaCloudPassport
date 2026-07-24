@@ -1,4 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
+import type { DiagnosticErrorSignal } from '../app/diagnostic-recovery';
+import { diagnosticRecovery } from '../app/diagnostic-recovery';
 import {
   DEFAULT_LOCALE,
   LOCALE_LABELS,
@@ -9,18 +11,11 @@ import { MESSAGES } from '../app/i18n/messages';
 import type { LocalModelManagementView } from '../app/use-local-model-management';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
-import type {
-  ImportedLocalModel,
-  LocalModelBenchmarkReport,
-  ModelResourceRiskReason,
-} from '../local-agent/local-model-manifest';
 import { colors, spacing } from '../ui/theme';
 
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
-  readonly onOpenDiagnostics: () => void;
-  readonly onOpenPilotMeasurement: () => void;
   /** Issue 110: クラウド基礎クイズ画面（`QuizScreen.tsx`）を開く。 */
   readonly onOpenQuiz: () => void;
   /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く。 */
@@ -33,6 +28,34 @@ interface SettingsScreenProps {
   readonly hasIntroCard: boolean;
   readonly onBack: () => void;
   readonly modelManagement?: LocalModelManagementView;
+  /**
+   * Issue 138（実機 blocker B）: 診断画面（開発者向け Preview・Share・個別削除）は
+   * 消費者ビルドから完全に除去する一方、消費者にも「全データ削除」だけは簡潔な
+   * 導線として残す。既存の `useLocalDiagnosticsFlow`（`LocalDiagnosticsScreen` が
+   * 使うのと同じ Instance）の erasure 経路をそのまま再利用し、新しい削除ロジックは
+   * 作らない。
+   */
+  readonly dataErasure: SettingsDataErasureProps;
+}
+
+export interface SettingsDataErasureProps {
+  readonly busy: boolean;
+  /**
+   * code-reviewer 指摘（high）: `useLocalDiagnosticsFlow` の `retryRecovery`
+   * （= `refresh`）は `recoveryRequired` 中、`busy` ではなく `loading` を
+   * 立てる（`LocalDiagnosticsScreen.tsx` の retryRecoveryButton も
+   * `disabled={loading || busy}` で両方を見ている）。ここでも同じ 2 つの
+   * flag を見ないと、再試行中に連打できてしまう。
+   */
+  readonly loading: boolean;
+  readonly recoveryRequired: boolean;
+  readonly error: DiagnosticErrorSignal | null;
+  readonly deleteAllConfirmationRequested: boolean;
+  readonly requestDeleteAll: () => void;
+  readonly cancelDeleteAll: () => void;
+  readonly confirmDeleteAll: () => Promise<void>;
+  /** `recoveryRequired` のときの再試行。`useLocalDiagnosticsFlow` の `refresh` が同じ役割を持つ。 */
+  readonly retryRecovery: () => Promise<void>;
 }
 
 function readableBytes(sizeBytes: number): string {
@@ -41,201 +64,6 @@ function readableBytes(sizeBytes: number): string {
     return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`;
   }
   return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
-}
-
-function riskLabel(
-  model: ImportedLocalModel,
-  t: (typeof MESSAGES)[Locale]['settings']
-): string {
-  if (model.risk.level === 'supported') return t.riskSupported;
-  if (model.risk.level === 'caution') return t.riskCaution;
-  return t.riskBlocked;
-}
-
-function riskReasonLabel(
-  reason: ModelResourceRiskReason,
-  t: (typeof MESSAGES)[Locale]['settings']
-): string {
-  if (reason === 'memory-ratio-supported') return t.riskReasonSupported;
-  if (reason === 'memory-ratio-caution') return t.riskReasonCaution;
-  if (reason === 'memory-ratio-blocked') return t.riskReasonBlocked;
-  if (reason === 'thermal-pressure') return t.riskReasonThermal;
-  return t.riskReasonMemoryUnavailable;
-}
-
-function riskBasis(
-  model: ImportedLocalModel,
-  t: (typeof MESSAGES)[Locale]['settings']
-): string {
-  return t.riskBasis(
-    readableBytes(model.risk.estimatedWorkingSetBytes),
-    model.risk.effectiveMemoryBytes === null
-      ? t.riskMemoryUnavailable
-      : readableBytes(model.risk.effectiveMemoryBytes),
-    model.risk.ratioPermille === null
-      ? t.riskMemoryUnavailable
-      : `${(model.risk.ratioPermille / 10).toFixed(1)}%`,
-    model.risk.reasons.map((reason) => riskReasonLabel(reason, t)).join(' / ')
-  );
-}
-
-function latestMatchingReport(
-  reports: readonly LocalModelBenchmarkReport[],
-  matches: (report: LocalModelBenchmarkReport) => boolean
-): LocalModelBenchmarkReport | null {
-  for (let index = reports.length - 1; index >= 0; index -= 1) {
-    const report = reports[index];
-    if (report && matches(report)) return report;
-  }
-  return null;
-}
-
-interface LocalModelCardProps {
-  readonly model: ImportedLocalModel;
-  readonly reports: readonly LocalModelBenchmarkReport[];
-  readonly active: boolean;
-  readonly busy: boolean;
-  readonly t: (typeof MESSAGES)[Locale]['settings'];
-  readonly onActivate: (sha256: string) => void;
-  readonly onUnload: () => void;
-  readonly onDelete: (sha256: string) => void;
-}
-
-function LocalModelCard({
-  model,
-  reports,
-  active,
-  busy,
-  t,
-  onActivate,
-  onUnload,
-  onDelete,
-}: LocalModelCardProps) {
-  const latestImport = latestMatchingReport(
-    reports,
-    (report) => report.importDurationMs !== null
-  );
-  const latestExecution = latestMatchingReport(
-    reports,
-    (report) => report.importDurationMs === null
-  );
-  const latestResource = latestExecution ?? latestImport;
-  return (
-    <View style={styles.modelCard}>
-      <Text style={styles.modelTitle}>
-        {t.importedModelSummary(
-          model.originalFileName,
-          readableBytes(model.sizeBytes),
-          model.metadata.architecture,
-          riskLabel(model, t),
-          active
-        )}
-      </Text>
-      <Text style={styles.body}>{riskBasis(model, t)}</Text>
-      {model.risk.level === 'blocked' ? (
-        <Text style={styles.error}>{t.blockedDescription}</Text>
-      ) : null}
-      {latestResource ? (
-        <Text style={styles.body}>
-          {t.benchmarkSummary(
-            reports.length,
-            latestImport?.importDurationMs ?? null,
-            latestExecution?.loadDurationMs ?? null,
-            latestExecution?.firstTokenDurationMs ?? null,
-            latestExecution?.completionDurationMs ?? null,
-            latestResource.peakProcessMemoryBytes === null
-              ? t.riskMemoryUnavailable
-              : readableBytes(latestResource.peakProcessMemoryBytes),
-            latestResource.thermalStateBefore,
-            latestResource.thermalStateAfter,
-            latestResource.batteryDeltaPermille,
-            latestResource.outcome
-          )}
-        </Text>
-      ) : null}
-      {!active ? (
-        <ActionButton
-          disabled={busy}
-          label={
-            model.risk.level === 'blocked'
-              ? t.reassessBlockedModelButton
-              : t.activateModelButton
-          }
-          onPress={() => onActivate(model.sha256)}
-        />
-      ) : (
-        <ActionButton
-          disabled={busy}
-          label={t.unloadModelButton}
-          onPress={onUnload}
-          variant="secondary"
-        />
-      )}
-      <ActionButton
-        disabled={busy}
-        label={t.deleteModelButton}
-        onPress={() => onDelete(model.sha256)}
-        variant="danger"
-      />
-    </View>
-  );
-}
-
-interface LocalModelCandidateCardProps {
-  readonly candidate: NonNullable<LocalModelManagementView['candidate']>;
-  readonly availableStorageBytes: number | null;
-  readonly busy: boolean;
-  readonly importInProgress: boolean;
-  readonly t: (typeof MESSAGES)[Locale]['settings'];
-  readonly onConfirm: () => void;
-  readonly onCancel: () => void;
-  readonly onCancelRunning: () => void;
-}
-
-function LocalModelCandidateCard({
-  candidate,
-  availableStorageBytes,
-  busy,
-  importInProgress,
-  t,
-  onConfirm,
-  onCancel,
-  onCancelRunning,
-}: LocalModelCandidateCardProps) {
-  return (
-    <View style={styles.modelCard}>
-      <Text style={styles.modelTitle}>
-        {t.candidateSummary(candidate.name, readableBytes(candidate.sizeBytes))}
-      </Text>
-      {availableStorageBytes !== null ? (
-        <Text style={styles.body}>
-          {t.candidateAvailableStorage(readableBytes(availableStorageBytes))}
-        </Text>
-      ) : null}
-      <Text style={styles.body}>{t.candidateWarning}</Text>
-      {importInProgress ? (
-        <ActionButton
-          label={t.cancelRunningImportButton}
-          onPress={onCancelRunning}
-          variant="danger"
-        />
-      ) : (
-        <>
-          <ActionButton
-            disabled={busy}
-            label={t.confirmImportButton}
-            onPress={onConfirm}
-          />
-          <ActionButton
-            disabled={busy}
-            label={t.cancelImportButton}
-            onPress={onCancel}
-            variant="secondary"
-          />
-        </>
-      )}
-    </View>
-  );
 }
 
 interface OnDeviceAiSectionProps {
@@ -286,7 +114,9 @@ function OnDeviceAiDownloadingCard({
  * Manifest から導出した `onDeviceAiStatus` と、Hook 側の単一 tag
  * `onDeviceAiFlow`（code-reviewer 指摘・simplify: 「同意待ち」「ダウンロード中」を
  * 独立した 2 boolean にすると二重否定の分岐が必要になっていた）だけで出し分ける。
- * caution/blocked の詳細は下の `LocalModelCard` がそのまま表示する。
+ * Issue 138（実機 blocker B）: 消費者ビルドに残す唯一の Local Model 導線。生の
+ * GGUF 選択・Model 一覧は開発者向けとして完全に除去したため、容量を空けたい
+ * 場合の削除もここ（`onDeviceAiRemoveButton` -> `removeOnDeviceAiModel`）で担保する。
  */
 function OnDeviceAiSection({ modelManagement, t }: OnDeviceAiSectionProps) {
   const source = modelManagement.trustedModelSource;
@@ -376,11 +206,14 @@ interface ModelManagementSectionProps {
 }
 
 /**
- * Issue 110 の code-reviewer 指摘（Cognitive Complexity 上限超過）: `SettingsScreen`
- * 本体に導線ボタンを 1 つ足しただけで上限（15）を超えたため、既に肥大化していた
- * Local Model 管理セクション（複数の条件付き表示を含む）を、`LocalModelCard` /
- * `LocalModelCandidateCard` と同じ「子 Component へ切り出す」方針でここへ抽出する。
- * 呼び出し側は `modelManagement?.available` の真偽だけで出し分ける。
+ * Issue 138（実機 blocker B、owner 実機 TestFlight フィードバック）: 生の GGUF
+ * 選択（`selectModelButton`）・Model 一覧（`LocalModelCard`）・import candidate
+ * カードは開発者向けデバッグ UI であり、消費者ビルドで露出していた。「開発者向け
+ * ツールを消費者に見せない」方針のもと、`__DEV__` ゲートではなく全ビルドから
+ * 完全に除去する（owner がシミュレーターで clean になったことを確認できるように
+ * する）。`OnDeviceAiSection`・busy/error 表示・`cautionAssessment` 確認カード・
+ * `pendingProviderOperation` 確認カードは、Qwen 有効化フロー（消費者が使う唯一の
+ * Local Model 導線）と共有する機構のため維持する。
  */
 function ModelManagementSection({
   modelManagement,
@@ -388,8 +221,6 @@ function ModelManagementSection({
 }: ModelManagementSectionProps) {
   return (
     <View style={styles.modelSection}>
-      <Text style={styles.sectionTitle}>{t.modelSectionTitle}</Text>
-      <Text style={styles.body}>{t.modelDescription}</Text>
       {modelManagement.busy ? (
         <Text accessibilityLiveRegion="polite" style={styles.body}>
           {t.modelBusy}
@@ -401,48 +232,6 @@ function ModelManagementSection({
         </Text>
       ) : null}
       <OnDeviceAiSection modelManagement={modelManagement} t={t} />
-      <ActionButton
-        accessibilityHint={t.selectModelHint}
-        disabled={
-          modelManagement.busy || modelManagement.candidateSelectionBlocked
-        }
-        label={t.selectModelButton}
-        onPress={modelManagement.selectCandidate}
-        variant="secondary"
-      />
-      {modelManagement.candidate ? (
-        <LocalModelCandidateCard
-          availableStorageBytes={modelManagement.candidateAvailableStorageBytes}
-          busy={modelManagement.busy}
-          candidate={modelManagement.candidate}
-          importInProgress={modelManagement.importInProgress}
-          onCancel={modelManagement.cancelCandidate}
-          onCancelRunning={modelManagement.cancelImport}
-          onConfirm={modelManagement.confirmImport}
-          t={t}
-        />
-      ) : null}
-      {modelManagement.manifest?.models.map((model) => {
-        const active =
-          model.sha256 === modelManagement.manifest?.activeModelSha256;
-        const reports =
-          modelManagement.manifest?.benchmarkReports.filter(
-            (report) => report.modelSha256 === model.sha256
-          ) ?? [];
-        return (
-          <LocalModelCard
-            active={active}
-            busy={modelManagement.busy}
-            key={model.sha256}
-            model={model}
-            onActivate={modelManagement.activate}
-            onDelete={modelManagement.deleteModel}
-            onUnload={modelManagement.unload}
-            reports={reports}
-            t={t}
-          />
-        );
-      })}
       {modelManagement.cautionAssessment ? (
         <View style={styles.modelCard}>
           <Text style={styles.modelTitle}>{t.cautionTitle}</Text>
@@ -477,22 +266,105 @@ function ModelManagementSection({
   );
 }
 
+interface DataErasureSectionProps {
+  readonly dataErasure: SettingsDataErasureProps;
+  readonly locale: Locale;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}
+
+/**
+ * Issue 138（実機 blocker B）: 消費者向けの簡潔な「全データ削除」導線。診断画面
+ * 全体（JSON Preview・Share・Lounge 個別終了等）は開発者向けとして除去したが、
+ * 削除だけは消費者にも必要な操作のため、既存 `useLocalDiagnosticsFlow` の
+ * erasure 経路（`requestDeleteAll` / `confirmDeleteAll` / `cancelDeleteAll`）を
+ * そのまま再利用する。`recoveryRequired`（前回の削除が完了しなかった状態）も
+ * 診断画面と同じ Instance を共有するため、消費者導線だけが唯一の到達経路に
+ * なった今、ここで再試行できるようにする。
+ */
+function DataErasureSection({
+  dataErasure,
+  locale,
+  t,
+}: DataErasureSectionProps) {
+  if (dataErasure.recoveryRequired) {
+    const recovery = dataErasure.error
+      ? diagnosticRecovery(dataErasure.error.code, locale)
+      : null;
+    return (
+      <View style={styles.modelCard}>
+        <Text accessibilityRole="alert" style={styles.modelTitle}>
+          {t.eraseAllDataRecoveryTitle}
+        </Text>
+        {recovery ? <Text style={styles.body}>{recovery.title}</Text> : null}
+        <ActionButton
+          disabled={dataErasure.busy || dataErasure.loading}
+          label={t.eraseAllDataRetryButton}
+          onPress={() => void dataErasure.retryRecovery()}
+          variant="danger"
+        />
+      </View>
+    );
+  }
+  if (dataErasure.deleteAllConfirmationRequested) {
+    return (
+      <View style={styles.modelCard}>
+        <Text style={styles.body}>{t.eraseAllDataConfirmDescription}</Text>
+        {dataErasure.error ? (
+          <Text accessibilityLiveRegion="assertive" style={styles.error}>
+            {diagnosticRecovery(dataErasure.error.code, locale).title}
+          </Text>
+        ) : null}
+        <ActionButton
+          disabled={dataErasure.busy}
+          label={t.eraseAllDataConfirmButton}
+          onPress={() => void dataErasure.confirmDeleteAll()}
+          variant="danger"
+        />
+        <ActionButton
+          disabled={dataErasure.busy}
+          label={t.eraseAllDataCancelButton}
+          onPress={dataErasure.cancelDeleteAll}
+          variant="secondary"
+        />
+      </View>
+    );
+  }
+  return (
+    <ActionButton
+      accessibilityHint={t.eraseAllDataButtonHint}
+      disabled={dataErasure.busy}
+      label={t.eraseAllDataButton}
+      onPress={dataErasure.requestDeleteAll}
+      variant="danger"
+    />
+  );
+}
+
 /**
  * Issue 15: 表示言語を切り替える最小の Settings 画面。`onChangeLocale` は `PassportApp.tsx`
  * が保持する `locale` state だけを更新し、進行中の Lounge / Room / Pet Interaction /
  * 保存済み Local Profile のいずれにも触れない（`docs/design/i18n-and-accessibility.md`
  * の設計判断 1）。
+ *
+ * Issue 138（実機 blocker A、過剰 disable の是正 / code-reviewer 指摘）: クイズ・
+ * 会話 Agent・戻るは `modelManagement.busy`（Local Model 操作中）では
+ * disabled にしない（モデル DL 中でも他の消費者操作はできるべき、DL 完了後
+ * フリーズの再発防止）。一方 `dataErasure.busy`（全データ削除の確定処理中）は
+ * 別軸の flag として、これら 3 ボタンを短時間だけ disabled にする。全データ削除は
+ * `resetAllLocalMemory` を介して Quiz 進捗・Passport 等の in-memory state を
+ * 無条件に消去し `stage` を巻き戻すため、削除確定中に別画面へ移動できてしまうと
+ * 予期しないタイミングで現在位置が上書きされる（`LocalDiagnosticsScreen.tsx` が
+ * 自身の戻るボタンを同じ理由で busy 中 disabled にしているのと同じ配慮）。
  */
 export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
   onChangeLocale,
-  onOpenDiagnostics,
-  onOpenPilotMeasurement,
   onOpenQuiz,
   onOpenConversationAgent,
   hasIntroCard,
   onBack,
   modelManagement,
+  dataErasure,
 }: SettingsScreenProps) {
   const t = MESSAGES[locale].settings;
   return (
@@ -519,22 +391,8 @@ export default function SettingsScreen({
         <ModelManagementSection modelManagement={modelManagement} t={t} />
       ) : null}
       <ActionButton
-        accessibilityHint={t.diagnosticsButtonHint}
-        disabled={modelManagement?.busy ?? false}
-        label={t.diagnosticsButton}
-        onPress={onOpenDiagnostics}
-        variant="secondary"
-      />
-      <ActionButton
-        accessibilityHint={t.pilotMeasurementButtonHint}
-        disabled={modelManagement?.busy ?? false}
-        label={t.pilotMeasurementButton}
-        onPress={onOpenPilotMeasurement}
-        variant="secondary"
-      />
-      <ActionButton
         accessibilityHint={t.quizButtonHint}
-        disabled={modelManagement?.busy ?? false}
+        disabled={dataErasure.busy}
         label={t.quizButton}
         onPress={onOpenQuiz}
         variant="secondary"
@@ -545,13 +403,14 @@ export default function SettingsScreen({
             ? t.conversationAgentButtonHint
             : t.conversationAgentButtonDisabledHint
         }
-        disabled={(modelManagement?.busy ?? false) || !hasIntroCard}
+        disabled={dataErasure.busy || !hasIntroCard}
         label={t.conversationAgentButton}
         onPress={onOpenConversationAgent}
         variant="secondary"
       />
+      <DataErasureSection dataErasure={dataErasure} locale={locale} t={t} />
       <ActionButton
-        disabled={modelManagement?.busy ?? false}
+        disabled={dataErasure.busy}
         label={t.backButton}
         onPress={onBack}
         variant="secondary"

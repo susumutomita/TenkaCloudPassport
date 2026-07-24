@@ -111,12 +111,17 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
     );
   });
 
-  it('Settings から Diagnostic 画面へ進み、戻ると元の状態を変更しない', async () => {
+  it('Issue 138（実機 blocker B）: 診断画面への Settings 経由の手動導線は消費者ビルドから完全に除去したが、Stage 自体と起動時 Recovery 経由の到達は残す', async () => {
     const text = await appSource();
 
+    // 診断 Screen・Stage 自体は削除しない（起動時 tombstone recovery が
+    // `diagnosticsFlow.enterRecovery()` 経由で到達する、下の Recovery 系
+    // テスト・`use-local-diagnostics-flow.ts` の `enterRecovery` 参照）。
     expect(text).toContain("'diagnostics'");
-    expect(text).toContain('onOpenDiagnostics={diagnosticsFlow.open}');
     expect(text).toContain('<LocalDiagnosticsScreen');
+    // 消費者 Settings は開発者向け診断・削除詳細画面への手動導線を持たない
+    // （owner 実機フィードバック、`SettingsScreen.tsx` から完全に除去した）。
+    expect(text).not.toContain('onOpenDiagnostics={diagnosticsFlow.open}');
   });
 
   it('Sanitized Report は Preview 後の明示 share からだけ Share Port を 1 回呼ぶ', async () => {

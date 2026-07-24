@@ -113,11 +113,12 @@ describe('Pilot Aggregate Preview 画面の Accessibility 契約', () => {
     expect(source).toContain('disabled={!flow.preview || flow.sharing}');
   });
 
-  it('Settings から Pilot Measurement を開く導線を Diagnostics と分離する', async () => {
+  it('Issue 138（実機 blocker B、owner 実機フィードバック）: 消費者 Settings は Pilot Measurement・診断への開発者向け導線を持たない（デバッグメニュー化の是正）', async () => {
     const source = await settingsSource();
 
-    expect(source).toContain('onOpenPilotMeasurement');
-    expect(source).toContain('t.pilotMeasurementButton');
-    expect(source).toContain('t.diagnosticsButton');
+    expect(source).not.toContain('onOpenPilotMeasurement');
+    expect(source).not.toContain('onOpenDiagnostics');
+    expect(source).not.toContain('t.pilotMeasurementButton');
+    expect(source).not.toContain('t.diagnosticsButton');
   });
 });
