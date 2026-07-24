@@ -214,6 +214,12 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerStatus={providerRuntimeState.status}');
   });
 
+  it('v1.0（ADR-0038、code-reviewer 指摘 medium）: どの Stage・関数からも localModels.provider を読まない（会話 Agent・Pet Interaction が誤って Local Model 経由の Provider を受け取る revert を CI で検知する）', async () => {
+    const text = await source();
+
+    expect(text).not.toContain('localModels.provider');
+  });
+
   it('Issue 18: 進行中の判定を伴う Model 操作は Native Context の解放完了を待つ', async () => {
     const text = await source();
     const teardownBody = functionBody(text, 'waitForActiveProviderTeardown');
@@ -240,7 +246,11 @@ describe('PassportApp の Stage 遷移契約', () => {
     const body = functionBody(text, 'startPetInteraction');
 
     expect(body).toContain('providerRunner');
-    expect(body).toContain('provider: localModels.provider');
+    // v1.0（ADR-0038）: オンデバイス LLM の native crash が実機で確認されたため、
+    // Local Model が有効なら llama.rn 経由になり得た Provider ではなく
+    // `RULES_MODEL_PROVIDER` に固定する（`localModels.provider` を一切読まない
+    // ことは上記の file-level 回帰テストが固定する）。
+    expect(body).toContain('provider: RULES_MODEL_PROVIDER');
     expect(body).toContain('applyAgentModelDecision');
     expect(body).toContain('activeEncounterKeyRef.current !== encounterKey');
     expect(body).toContain('providerTeardownPendingRef.current');
@@ -261,6 +271,15 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(body).toContain('applyAgentModelDecisionBeforeLoungeExpiry');
     expect(body).toContain('outcomeClock');
     expect(text).toContain('providerBusy={providerRunPending}');
+  });
+
+  it('v1.0（ADR-0038）: 会話 Agent（useConversationAgentFlow）へ渡す Provider も RULES_MODEL_PROVIDER に固定し、Local Model 経由の Provider を渡さない', async () => {
+    const text = await source();
+    const callStart = text.indexOf('useConversationAgentFlow({');
+    const callEnd = text.indexOf('});', callStart);
+    const call = text.slice(callStart, callEnd);
+
+    expect(call).toContain('provider: RULES_MODEL_PROVIDER');
   });
 
   it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {
@@ -591,12 +610,13 @@ describe('PassportApp の Stage 遷移契約', () => {
       ]);
     });
 
-    it('実行中 Provider の Context を Settings 自動 reload として再評価しない', async () => {
+    it('v1.0（ADR-0038、/simplify 指摘）: Settings 再訪時の Local Model 自動 reload effect はもう存在しない（表示先の Local Model 管理 UI 自体を除去したため dead work だった）', async () => {
       const text = await source();
 
-      expect(text).toContain(
+      expect(text).not.toContain(
         "if (stage === 'settings' && !providerRunPending)"
       );
+      expect(text).not.toContain('localModels.view.reload()');
     });
 
     it('Issue 118: Settings は配布能力デバッグ表示を受け取らない（distributionCapability prop を渡さない）', async () => {

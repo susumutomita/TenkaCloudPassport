@@ -8422,3 +8422,111 @@ owner が TestFlight 実機で確認した公開 blocker 3 件を修正する。
 - **予防策**: 「消費者向けに隠す」系の要求では、着手前に「誰が・どの Build /
   環境で・どうやって変化を確認するか」を確定してから実装方式（gate か
   除去か）を選ぶ。
+
+### [v1.0: オンデバイス LLM を消費者から無効化・会話 Agent を Rules 固定] - 2026-07-24
+
+#### 目的
+
+owner の実機（TestFlight）検証で確認された 2 件の未解決不具合（Qwen ダウンロードが
+100% で完了せず固まる、未完了のまま会話 Agent を開くと native crash する）を、
+v1.0 のスコープでは Local LLM 呼び出し経路自体を消費者から取り除くことで解消する
+（Option A、owner 決定）。LLM 関連の実装は削除せず、v1.1 で実機テストして
+再有効化する。
+
+#### 制約
+
+- `rm` / `npx` 禁止（`git rm` / `bunx` / `nlx`）。8081 kill 禁止。ios/ node_modules
+  不触。
+- モックデータ・スタブ API 禁止。型エスケープ禁止。
+- LLM コード（`trusted-model-catalog.ts` / `trusted-model-download.ts` /
+  `expo-trusted-model-download.native.ts` / `trusted-model-enablement-controller.ts` /
+  `use-local-model-management.ts` / `llama-agent-model-provider.ts` /
+  `model-safety-boundary.ts` 等）は削除せず残す。
+- production entitlement を付けない。
+- `make before-commit` 100% カバレッジを維持する。
+
+#### タスク
+
+- `SettingsScreen.tsx` から `OnDeviceAiSection` / `ModelManagementSection` /
+  `modelManagement` prop を全ビルドから完全に除去する（`__DEV__` ゲートではない）。
+- `native-agent-model-provider-composition.ts` の `createNativeAgentModelProvider`
+  を、Expo Go / Development Build のどちらでも常に `RULES_MODEL_PROVIDER` を返す
+  よう固定し、`createConfiguredLocalModelCompletionPort` を呼ばないようにする。
+- `PassportApp.tsx` の会話 Agent（`useConversationAgentFlow`）と Pet Interaction
+  （`startPetInteraction`）の両方が使う `provider` を、`localModels.provider`
+  ではなく `RULES_MODEL_PROVIDER` に直接固定する。
+- ダウンロード起動経路が Settings 以外に残っていないか grep で確認する。
+- ADR-0038 に決定を記録し、Plan.md に本セクションを追記する。
+- 影響するテスト（`settings-accessibility.test.ts` /
+  `default-agent-model-provider.test.ts` / `local-agent-integration.test.ts` /
+  `passport-app-stage-flow.test.ts`）を新しい契約に合わせて更新する。
+
+#### 検証手順
+
+- `make before-commit`（architecture-harness、harness_test、
+  release_test_coverage、pre_release_check、dup_check、lint_text、lint、
+  typecheck、app_test、web_export）が exit 0 になることを確認する。
+- code-reviewer subagent によるレビューを通し、指摘を反映する。
+
+#### 進捗ログ
+
+- `SettingsScreen.tsx`: `OnDeviceAiSection` / `OnDeviceAiDownloadingCard` /
+  `ModelManagementSection` / `readableBytes` ヘルパー / `modelManagement` prop を
+  完全に除去した。消費者 Settings は 言語 / クイズ / 会話 Agent /
+  全データ削除 / 戻る だけになった。
+- `native-agent-model-provider-composition.ts`: `createNativeAgentModelProvider`
+  を常に `RULES_MODEL_PROVIDER` を返す実装へ簡素化し、
+  `createConfiguredLocalModelCompletionPort` / `createSafetyBoundLocalModelProvider`
+  の import を除去した（型・引数は v1.1 再有効化に備えてそのまま残す）。
+- `PassportApp.tsx`: 会話 Agent・Pet Interaction 両方の `provider` を
+  `RULES_MODEL_PROVIDER` に固定し、`UtilityStageGate` からも `modelManagement`
+  の中継を除去した。
+- ダウンロード起動経路を grep で確認し、Settings 以外に存在しないことを確認した。
+- `docs/adr/0038-v1-disable-on-device-llm-for-consumers.md` を新設。
+- テスト: `settings-accessibility.test.ts` から削除済み UI 専用テストを外し、
+  Local Model 管理 UI が痕跡ゼロであることを固定するテストを追加。
+  `default-agent-model-provider.test.ts` / `local-agent-integration.test.ts` /
+  `passport-app-stage-flow.test.ts` を新しい契約に合わせて更新し、
+  `local-agent-integration.test.ts` は composition root を経由せず Local Agent
+  Completion Port 本体を直接構成する形へ書き換えて dormant コードの回帰防止を
+  維持した。
+- code-reviewer レビューで、ADR 未作成（blocker）、`localModels.provider` を
+  読まないことを固定する回帰テストの不在（medium）、`agentModelProvider` prop の
+  stale コメント・JSDoc の誤配置（nit）の指摘を受け、ADR 追加・回帰テスト追加・
+  コメント修正で反映した。
+- `make before-commit` が exit 0（1951 テスト、100% カバレッジ、dup_check は
+  baseline 以下）であることを確認した。
+
+#### 振り返り
+
+- **問題**: コード側の実装（`RULES_MODEL_PROVIDER` への固定）を先に進め、
+  コードコメント・テスト名に「ADR-0038」への言及を書きながら、肝心の ADR 本体を
+  実際には作成していなかった。
+- **根本原因**: 「設計判断は ADR に記録する」という作業順序（AGENTS.md
+  「作業順序（厳守）」の 1 番目）を、コードコメントに ADR 番号を書いた時点で
+  「記録した」と錯覚し、実ファイル作成を後回しにした。
+- **予防策**: ADR 番号をコードコメントに書く前に、その ADR ファイル自体を
+  同じ変更の中で先に（または同時に）作成する。コードコメントは「ADR を書いた
+  結果」を指すものであり、「ADR を書く予定」のプレースホルダーにしない。
+
+#### 追記（/simplify 4 並列レビュー後の追加修正、2026-07-24）
+
+- 4 並列レビュー（reuse / simplification / efficiency / altitude）のうち 3 つが
+  独立に同じ論点へ収束した。呼び出し口 2 箇所の固定だけでは
+  `use-local-model-management.ts` の `configureProvider` が今も
+  `management.createProvider(...)`（実際の llama.rn バックの Local LLM
+  Completion Port）を構築しうる、という altitude 指摘。
+- `configureProvider` を v1.0 では常に `fallbackProvider` に固定するよう修正し、
+  未使用になった `activeModel` ヘルパーと `ImportedLocalModel` import を除去した
+  （`use-local-model-management.test.ts` の既存 10 テストは無変更で通過を確認）。
+- 併せて `localModels.view.reload()`（Settings 再訪時の manifest 再読込、表示先が
+  消えたため dead work だった effect）を `PassportApp.tsx` から削除し、
+  `passport-app-stage-flow.test.ts` の冗長な `not.toContain('provider:
+  localModels.provider')` 個別チェック 2 件を file-level の回帰テスト 1 件に
+  集約した。
+- ADR-0038 の Decision / Consequences を、実際に実装した深さ（呼び出し口だけで
+  なく `configureProvider` 自体も固定）に合わせて更新した。
+- follow-up（on-device LLM composition root の再検討）の severity を medium から
+  low へ更新し、残る論点を「manifest 読込が dead work になっている」という
+  効率面だけに絞った。
+- `make before-commit` を再実行し、exit 0（100% カバレッジ）であることを再確認。

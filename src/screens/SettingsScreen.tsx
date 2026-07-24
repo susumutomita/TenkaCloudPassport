@@ -8,11 +8,21 @@ import {
   type Locale,
 } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
-import type { LocalModelManagementView } from '../app/use-local-model-management';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import { colors, spacing } from '../ui/theme';
 
+/**
+ * v1.0（ADR-0038、owner 実機 TestFlight フィードバック）: オンデバイス LLM
+ * （Qwen ダウンロード + llama.rn 推論）は、ダウンロードが 100% で完了せず固まる・
+ * 未完了のまま会話 Agent を開くと native crash する（Error Boundary で捕まらない）
+ * の 2 件が実機で確認され、呼び出し元を実機テストできないため v1.0 では消費者へ
+ * 一切見せない。`modelManagement` prop・Local Model 管理 UI（旧
+ * `OnDeviceAiSection` / `ModelManagementSection`）はこの Props からも下記
+ * `SettingsScreen` 本体からも完全に除去した（`__DEV__` ゲートではなく削除）。
+ * 実装（`use-local-model-management.ts` / `trusted-model-download.ts` 等）は
+ * リポジトリに残し、v1.1 で実機テストして再有効化する。
+ */
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
@@ -27,7 +37,6 @@ interface SettingsScreenProps {
    */
   readonly hasIntroCard: boolean;
   readonly onBack: () => void;
-  readonly modelManagement?: LocalModelManagementView;
   /**
    * Issue 138（実機 blocker B）: 診断画面（開発者向け Preview・Share・個別削除）は
    * 消費者ビルドから完全に除去する一方、消費者にも「全データ削除」だけは簡潔な
@@ -56,214 +65,6 @@ export interface SettingsDataErasureProps {
   readonly confirmDeleteAll: () => Promise<void>;
   /** `recoveryRequired` のときの再試行。`useLocalDiagnosticsFlow` の `refresh` が同じ役割を持つ。 */
   readonly retryRecovery: () => Promise<void>;
-}
-
-function readableBytes(sizeBytes: number): string {
-  if (sizeBytes < 1024 * 1024) return `${Math.ceil(sizeBytes / 1024)} KiB`;
-  if (sizeBytes < 1024 * 1024 * 1024) {
-    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`;
-  }
-  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
-}
-
-interface OnDeviceAiSectionProps {
-  readonly modelManagement: LocalModelManagementView;
-  readonly t: (typeof MESSAGES)[Locale]['settings'];
-}
-
-/** ダウンロード中の進捗表示 + 中止導線だけを切り出した子 Component。 */
-function OnDeviceAiDownloadingCard({
-  modelManagement,
-  source,
-  t,
-}: {
-  readonly modelManagement: LocalModelManagementView;
-  readonly source: NonNullable<LocalModelManagementView['trustedModelSource']>;
-  readonly t: (typeof MESSAGES)[Locale]['settings'];
-}) {
-  const progress = modelManagement.onDeviceAiDownloadProgress;
-  const percent =
-    source.sizeBytes > 0
-      ? Math.min(
-          100,
-          Math.round(((progress?.bytesWritten ?? 0) / source.sizeBytes) * 100)
-        )
-      : 0;
-  return (
-    <>
-      <Text accessibilityLiveRegion="polite" style={styles.body}>
-        {t.onDeviceAiDownloadStatus(
-          readableBytes(progress?.bytesWritten ?? 0),
-          readableBytes(source.sizeBytes),
-          percent
-        )}
-      </Text>
-      <ActionButton
-        label={t.onDeviceAiDownloadCancelButton}
-        onPress={modelManagement.cancelOnDeviceAiDownload}
-        variant="danger"
-      />
-    </>
-  );
-}
-
-/**
- * Follow-up F-FDRGS4: Document Picker を知らない通常ユーザー向けの、
- * Qwen2.5-1.5B 信頼済みダウンロードの単一導線。状態（未取得 / 同意待ち /
- * ダウンロード中 / 仕上げ処理中 / 取得済み）は新しい state を持たず、既存
- * Manifest から導出した `onDeviceAiStatus` と、Hook 側の単一 tag
- * `onDeviceAiFlow`（code-reviewer 指摘・simplify: 「同意待ち」「ダウンロード中」を
- * 独立した 2 boolean にすると二重否定の分岐が必要になっていた）だけで出し分ける。
- * Issue 138（実機 blocker B）: 消費者ビルドに残す唯一の Local Model 導線。生の
- * GGUF 選択・Model 一覧は開発者向けとして完全に除去したため、容量を空けたい
- * 場合の削除もここ（`onDeviceAiRemoveButton` -> `removeOnDeviceAiModel`）で担保する。
- */
-function OnDeviceAiSection({ modelManagement, t }: OnDeviceAiSectionProps) {
-  const source = modelManagement.trustedModelSource;
-  if (!source) return null;
-  const { onDeviceAiFlow, onDeviceAiStatus } = modelManagement;
-
-  return (
-    <View style={styles.modelCard}>
-      <Text style={styles.modelTitle}>{t.onDeviceAiSectionTitle}</Text>
-      {onDeviceAiFlow === 'downloading' ? (
-        <OnDeviceAiDownloadingCard
-          modelManagement={modelManagement}
-          source={source}
-          t={t}
-        />
-      ) : null}
-      {onDeviceAiFlow === 'finalizing' ? (
-        <Text accessibilityLiveRegion="polite" style={styles.body}>
-          {t.onDeviceAiFinalizingStatus}
-        </Text>
-      ) : null}
-      {onDeviceAiFlow === 'consent-pending' ? (
-        <>
-          <Text style={styles.modelTitle}>{t.onDeviceAiConsentTitle}</Text>
-          <Text style={styles.body}>
-            {t.onDeviceAiConsentBody(
-              source.displayName,
-              readableBytes(source.sizeBytes),
-              source.license
-            )}
-          </Text>
-          <ActionButton
-            disabled={modelManagement.busy}
-            label={t.onDeviceAiConsentStartButton}
-            onPress={modelManagement.confirmEnableOnDeviceAiConsent}
-          />
-          <ActionButton
-            disabled={modelManagement.busy}
-            label={t.onDeviceAiConsentCancelButton}
-            onPress={modelManagement.cancelEnableOnDeviceAiConsent}
-            variant="secondary"
-          />
-        </>
-      ) : null}
-      {onDeviceAiFlow === 'idle' && onDeviceAiStatus === 'not-acquired' ? (
-        <>
-          <Text style={styles.body}>
-            {t.onDeviceAiDescription(
-              source.displayName,
-              readableBytes(source.sizeBytes)
-            )}
-          </Text>
-          <ActionButton
-            accessibilityHint={t.onDeviceAiEnableButtonHint}
-            disabled={
-              modelManagement.busy || modelManagement.candidateSelectionBlocked
-            }
-            label={t.onDeviceAiEnableButton}
-            onPress={modelManagement.requestEnableOnDeviceAi}
-          />
-        </>
-      ) : null}
-      {onDeviceAiFlow === 'idle' &&
-      onDeviceAiStatus &&
-      onDeviceAiStatus !== 'not-acquired' ? (
-        <>
-          <Text style={styles.body}>
-            {onDeviceAiStatus === 'active'
-              ? t.onDeviceAiActiveStatus
-              : t.onDeviceAiImportedNotActiveStatus}
-          </Text>
-          <ActionButton
-            disabled={modelManagement.busy}
-            label={t.onDeviceAiRemoveButton}
-            onPress={modelManagement.removeOnDeviceAiModel}
-            variant="danger"
-          />
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-interface ModelManagementSectionProps {
-  readonly modelManagement: LocalModelManagementView;
-  readonly t: (typeof MESSAGES)[Locale]['settings'];
-}
-
-/**
- * Issue 138（実機 blocker B、owner 実機 TestFlight フィードバック）: 生の GGUF
- * 選択（`selectModelButton`）・Model 一覧（`LocalModelCard`）・import candidate
- * カードは開発者向けデバッグ UI であり、消費者ビルドで露出していた。「開発者向け
- * ツールを消費者に見せない」方針のもと、`__DEV__` ゲートではなく全ビルドから
- * 完全に除去する（owner がシミュレーターで clean になったことを確認できるように
- * する）。`OnDeviceAiSection`・busy/error 表示・`cautionAssessment` 確認カード・
- * `pendingProviderOperation` 確認カードは、Qwen 有効化フロー（消費者が使う唯一の
- * Local Model 導線）と共有する機構のため維持する。
- */
-function ModelManagementSection({
-  modelManagement,
-  t,
-}: ModelManagementSectionProps) {
-  return (
-    <View style={styles.modelSection}>
-      {modelManagement.busy ? (
-        <Text accessibilityLiveRegion="polite" style={styles.body}>
-          {t.modelBusy}
-        </Text>
-      ) : null}
-      {modelManagement.errorCode ? (
-        <Text accessibilityLiveRegion="assertive" style={styles.error}>
-          {t.modelError(modelManagement.errorCode)}
-        </Text>
-      ) : null}
-      <OnDeviceAiSection modelManagement={modelManagement} t={t} />
-      {modelManagement.cautionAssessment ? (
-        <View style={styles.modelCard}>
-          <Text style={styles.modelTitle}>{t.cautionTitle}</Text>
-          <Text style={styles.body}>{t.cautionDescription}</Text>
-          <ActionButton
-            disabled={modelManagement.busy}
-            label={t.confirmCautionButton}
-            onPress={modelManagement.confirmCautionActivation}
-            variant="danger"
-          />
-        </View>
-      ) : null}
-      {modelManagement.pendingProviderOperation ? (
-        <View style={styles.modelCard}>
-          <Text style={styles.modelTitle}>{t.providerOperationTitle}</Text>
-          <Text style={styles.body}>{t.providerOperationDescription}</Text>
-          <ActionButton
-            disabled={modelManagement.busy}
-            label={t.confirmProviderOperationButton}
-            onPress={modelManagement.confirmProviderOperation}
-            variant="danger"
-          />
-          <ActionButton
-            disabled={modelManagement.busy}
-            label={t.cancelProviderOperationButton}
-            onPress={modelManagement.cancelProviderOperation}
-            variant="secondary"
-          />
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 interface DataErasureSectionProps {
@@ -347,14 +148,13 @@ function DataErasureSection({
  * の設計判断 1）。
  *
  * Issue 138（実機 blocker A、過剰 disable の是正 / code-reviewer 指摘）: クイズ・
- * 会話 Agent・戻るは `modelManagement.busy`（Local Model 操作中）では
- * disabled にしない（モデル DL 中でも他の消費者操作はできるべき、DL 完了後
- * フリーズの再発防止）。一方 `dataErasure.busy`（全データ削除の確定処理中）は
- * 別軸の flag として、これら 3 ボタンを短時間だけ disabled にする。全データ削除は
- * `resetAllLocalMemory` を介して Quiz 進捗・Passport 等の in-memory state を
- * 無条件に消去し `stage` を巻き戻すため、削除確定中に別画面へ移動できてしまうと
- * 予期しないタイミングで現在位置が上書きされる（`LocalDiagnosticsScreen.tsx` が
- * 自身の戻るボタンを同じ理由で busy 中 disabled にしているのと同じ配慮）。
+ * 会話 Agent・戻るは `dataErasure.busy`（全データ削除の確定処理中）だけを
+ * disabled 条件にする。全データ削除は `resetAllLocalMemory` を介して Quiz 進捗・
+ * Passport 等の in-memory state を無条件に消去し `stage` を巻き戻すため、削除
+ * 確定中に別画面へ移動できてしまうと予期しないタイミングで現在位置が上書きされる
+ * （`LocalDiagnosticsScreen.tsx` が自身の戻るボタンを同じ理由で busy 中 disabled に
+ * しているのと同じ配慮）。v1.0（ADR-0038）: 旧・Local Model 操作中フラグは
+ * Settings から Local Model 管理 UI 自体を除去したため参照しない。
  */
 export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
@@ -363,7 +163,6 @@ export default function SettingsScreen({
   onOpenConversationAgent,
   hasIntroCard,
   onBack,
-  modelManagement,
   dataErasure,
 }: SettingsScreenProps) {
   const t = MESSAGES[locale].settings;
@@ -387,9 +186,6 @@ export default function SettingsScreen({
           );
         })}
       </View>
-      {modelManagement?.available ? (
-        <ModelManagementSection modelManagement={modelManagement} t={t} />
-      ) : null}
       <ActionButton
         accessibilityHint={t.quizButtonHint}
         disabled={dataErasure.busy}
@@ -427,9 +223,6 @@ const styles = StyleSheet.create({
   },
   options: {
     gap: spacing.sm,
-  },
-  modelSection: {
-    gap: spacing.md,
   },
   modelCard: {
     backgroundColor: colors.surface,
