@@ -19,6 +19,7 @@ import {
   type TrustedModelDownloadPort,
   type TrustedModelDownloadProgress,
 } from '../local-agent/trusted-model-download';
+import { createLocalModelOperationLane } from './local-model-management-controller';
 import {
   enableOnDeviceAi,
   mapOnDeviceAiErrorCode,
@@ -451,5 +452,137 @@ describe('オンデバイス AI 失敗の型分類', () => {
       'MANIFEST_READ_FAILED'
     );
     expect(mapOnDeviceAiErrorCode('not an error')).toBe('MANIFEST_READ_FAILED');
+  });
+});
+
+/**
+ * Issue 138（実機 blocker A、DL 完了後フリーズ）: owner が TestFlight 実機で
+ * 「Qwen ダウンロード 100% 到達後、全ボタンが灰色のまま固まる」を報告した。
+ * `use-local-model-management.ts` の `performEnableOnDeviceAi` は
+ * `createLocalModelOperationLane.run()`（`onStart` で busy=true、`onFinish` で
+ * busy=false、`onError` で errorCode 設定）で `enableOnDeviceAi` を包むだけの
+ * 薄い配線であり、hook 本体はこの repo にレンダリング用テスト基盤が無く
+ * 実行できない（`use-local-model-management.test.ts` 冒頭と同じ制約）。
+ * そのため、実際に呼び出されるのと同じ 2 つの実関数
+ * （`createLocalModelOperationLane` と `enableOnDeviceAi`）を実際に組み合わせて
+ * 実行し、verify（Download 内 SHA-256 照合）→ import（copy + digest）→
+ * activate の完了経路が、成功でも各失敗（ここでは Download 後の Digest
+ * 不一致、Resource Blocked）でも busy（`onStart`/`onFinish` の発火）を必ず
+ * true → false へ戻すことを、source-text 検査ではなく実行で固定する
+ * （最重要、`docs/design/2026-07-23-on-device-conversation-agent.md` の
+ * completion path 契約）。
+ */
+describe('オンデバイス AI 有効化を Operation Lane 経由で実行したときの busy 遷移（Issue 138 実機 blocker A）', () => {
+  it('DL 100% -> verify -> import -> activate が成功したとき、busy は true になった後で必ず false へ戻る', async () => {
+    const { dependencies } = createAcquisition();
+    const { lifecycle } = createLifecycle();
+    const busyEvents: boolean[] = [];
+    let finished: (() => void) | undefined;
+    const settled = new Promise<void>((resolve) => {
+      finished = resolve;
+    });
+    const lane = createLocalModelOperationLane({
+      onError: () => undefined,
+      onFinish: () => {
+        busyEvents.push(false);
+        finished?.();
+      },
+      onStart: () => busyEvents.push(true),
+    });
+
+    const started = lane.run(async () => {
+      await enableOnDeviceAi({
+        acquisition: dependencies,
+        source: SOURCE,
+        lifecycle,
+        consented: true,
+        signal: new AbortController().signal,
+        refresh: async () => undefined,
+        setCautionAssessment: () => undefined,
+      });
+    });
+
+    expect(started).toBe(true);
+    expect(lane.isPending()).toBeTrue();
+    await settled;
+    expect(lane.isPending()).toBeFalse();
+    expect(busyEvents).toEqual([true, false]);
+  });
+
+  it('DL 後の SHA-256 照合失敗（INTEGRITY_MISMATCH）でも busy は true になった後で必ず false へ戻り、Rules を含む既存 Provider 状態は変更されない', async () => {
+    const { dependencies } = createAcquisition({
+      resultDigest: 'f'.repeat(64),
+    });
+    const { lifecycle, events } = createLifecycle();
+    const busyEvents: boolean[] = [];
+    const errorCodes: string[] = [];
+    let finished: (() => void) | undefined;
+    const settled = new Promise<void>((resolve) => {
+      finished = resolve;
+    });
+    const lane = createLocalModelOperationLane({
+      onError: (caught) => errorCodes.push(mapOnDeviceAiErrorCode(caught)),
+      onFinish: () => {
+        busyEvents.push(false);
+        finished?.();
+      },
+      onStart: () => busyEvents.push(true),
+    });
+
+    const started = lane.run(async () => {
+      await enableOnDeviceAi({
+        acquisition: dependencies,
+        source: SOURCE,
+        lifecycle,
+        consented: true,
+        signal: new AbortController().signal,
+        refresh: async () => undefined,
+        setCautionAssessment: () => undefined,
+      });
+    });
+
+    expect(started).toBe(true);
+    await settled;
+    expect(busyEvents).toEqual([true, false]);
+    expect(errorCodes).toEqual(['INTEGRITY_MISMATCH']);
+    // import/activate まで進んでいない（activate されていない = 既存
+    // Provider 状態、Rules または既存 Local Model のまま）ことを確認する。
+    expect(events).toEqual([]);
+  });
+
+  it('Resource Risk が blocked（activate 直前で拒否）でも busy は true になった後で必ず false へ戻る', async () => {
+    const { dependencies } = createAcquisition();
+    const { lifecycle } = createLifecycle({ riskLevel: 'blocked' });
+    const busyEvents: boolean[] = [];
+    const errorCodes: string[] = [];
+    let finished: (() => void) | undefined;
+    const settled = new Promise<void>((resolve) => {
+      finished = resolve;
+    });
+    const lane = createLocalModelOperationLane({
+      onError: (caught) => errorCodes.push(mapOnDeviceAiErrorCode(caught)),
+      onFinish: () => {
+        busyEvents.push(false);
+        finished?.();
+      },
+      onStart: () => busyEvents.push(true),
+    });
+
+    const started = lane.run(async () => {
+      await enableOnDeviceAi({
+        acquisition: dependencies,
+        source: SOURCE,
+        lifecycle,
+        consented: true,
+        signal: new AbortController().signal,
+        refresh: async () => undefined,
+        setCautionAssessment: () => undefined,
+      });
+    });
+
+    expect(started).toBe(true);
+    await settled;
+    expect(busyEvents).toEqual([true, false]);
+    expect(errorCodes).toEqual(['RESOURCE_BLOCKED']);
   });
 });

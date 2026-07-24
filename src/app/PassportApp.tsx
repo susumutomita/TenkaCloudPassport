@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import {
   type AgentModelInput,
   type AgentModelProvider,
@@ -661,25 +662,49 @@ function UtilityStageGate({
     );
   }
   if (stage === 'conversation-agent') {
+    // Issue 138（実機 blocker C、会話 Agent 起動クラッシュ）: JS 例外で
+    // アプリ全体（他 Stage・Navigation）まで巻き込まないよう、この Stage
+    // だけを Error Boundary で包む。native 側の crash はここでは防げない
+    // （`ErrorBoundary.tsx` 冒頭コメント参照）。
     return (
-      <ConversationAgentScreen
-        {...conversationAgent}
-        locale={locale}
-        onChangeLocale={onChangeLocale}
-      />
+      <ErrorBoundary
+        messages={{
+          title: MESSAGES[locale].conversationAgent.crashNoticeTitle,
+          description:
+            MESSAGES[locale].conversationAgent.crashNoticeDescription,
+          backButtonLabel: MESSAGES[locale].conversationAgent.backButton,
+        }}
+        onRecover={conversationAgent.onBack}
+      >
+        <ConversationAgentScreen
+          {...conversationAgent}
+          locale={locale}
+          onChangeLocale={onChangeLocale}
+        />
+      </ErrorBoundary>
     );
   }
   if (stage === 'settings') {
     return (
       <SettingsScreen
+        dataErasure={{
+          busy: diagnosticsFlow.busy,
+          cancelDeleteAll: diagnosticsFlow.cancelDeleteAll,
+          confirmDeleteAll: diagnosticsFlow.confirmDeleteAll,
+          deleteAllConfirmationRequested:
+            diagnosticsFlow.deleteAllConfirmationRequested,
+          error: diagnosticsFlow.error,
+          loading: diagnosticsFlow.loading,
+          recoveryRequired: diagnosticsFlow.recoveryRequired,
+          requestDeleteAll: diagnosticsFlow.requestDeleteAll,
+          retryRecovery: diagnosticsFlow.refresh,
+        }}
         hasIntroCard={hasIntroCard}
         locale={locale}
         modelManagement={modelManagement}
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
         onOpenConversationAgent={onOpenConversationAgent}
-        onOpenDiagnostics={diagnosticsFlow.open}
-        onOpenPilotMeasurement={pilotMeasurementFlow.open}
         onOpenQuiz={onOpenQuiz}
       />
     );
