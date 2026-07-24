@@ -6,7 +6,6 @@ import {
   IntroCardError,
   resolveCatalogThemeIds,
 } from '../domain/intro-card';
-import { QUIZ_PROGRESS_HEX_MAX_LENGTH } from '../domain/quiz-progress-code';
 import { QR_ENCODER_MAX_BYTES } from '../qr/encoder';
 import {
   arrayValue,
@@ -53,11 +52,6 @@ interface IntroCardUrlPayload {
   readonly e?: string;
   readonly p?: string;
   /**
-   * Issue 110 / ADR-0035: クイズ進捗ビットマスク（16 進文字列）。既存 QR との後方互換を
-   * 保つため、`undefined` または全問未合格（'0'）なら省略する（`buildPayload` 参照）。
-   */
-  readonly q?: string;
-  /**
    * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマ ID
    * （`IntroCard.themeIds`、最大 `INTRO_CARD_MAX_THEMES` 件）。`themeIds` が
    * `undefined` または空のカードは、この key 自体を省略する（`buildPayload`
@@ -67,11 +61,10 @@ interface IntroCardUrlPayload {
 }
 
 /**
- * `decodePayload`（Intro Card だけを返す）と `decodeIntroCardUrlFragmentQuizProgressHex`
- * （`q` だけを取り出す）の両方が同じ許可 key 集合を使う。1 箇所にまとめて drift を防ぐ。
+ * `decodePayload`（Intro Card を返す）が使う許可 key 集合。1 箇所にまとめて drift を防ぐ。
  * Issue 130（Codex 指摘 major）: `scripts/intro-card-viewer.test.ts` の allowlist 検査が
  * ビューアの hardcode 文字列を見るだけでこの正本と比較していなかったため export する
- * （`scripts/intro-card-viewer-decoder-parity.test.ts` がこの正本と両デコーダの実行結果を
+ * （`scripts/intro-card-viewer-decoder-parity.test.ts` がこの正本とビューアの実行結果を
  * 突き合わせる）。
  */
 export const REQUIRED_PAYLOAD_KEYS = ['v', 'n'] as const;
@@ -82,32 +75,8 @@ export const OPTIONAL_PAYLOAD_KEYS = [
   'l',
   'e',
   'p',
-  'q',
   'm',
 ] as const;
-
-const QUIZ_PROGRESS_HEX_PATTERN = /^[0-9a-f]+$/i;
-
-/**
- * `q` は他のフィールドと同じ all-or-nothing 契約に従う。16 進以外の文字・桁数超過は
- * fragment 全体を fail-closed で拒否する（`src/domain/quiz-progress-code.ts` の
- * `decodeQuizProgressHex` と同じ検証基準）。
- */
-function validateQuizProgressHex(
-  value: unknown,
-  path: string
-): string | undefined {
-  if (value === undefined) return undefined;
-  if (
-    typeof value !== 'string' ||
-    value.length === 0 ||
-    value.length > QUIZ_PROGRESS_HEX_MAX_LENGTH ||
-    !QUIZ_PROGRESS_HEX_PATTERN.test(value)
-  ) {
-    throw shareUrlError(`${path} の形式が正しくありません。`);
-  }
-  return value;
-}
 
 const BASE64URL_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -209,16 +178,9 @@ function optionalThemeIdsField(
 }
 
 /**
- * デコードした payload を `createIntroCard` へ通すことで、`IntroCard` の妥当性
- * ルール（文字数上限・URL 形式・メール形式など）を domain 側 1 か所だけに保つ
- * （`src/domain/intro-card.ts` の `withIntroCardOptionalFields` と同じ、
- * `exactOptionalPropertyTypes` 下で undefined key を作らない組み立て方）。
- */
-/**
  * `$.introCardUrlPayload` として strict 検証した record を返す。`decodePayload`
- * （IntroCard を返す）と `decodeIntroCardUrlFragmentQuizProgressHex`（`q` だけを返す）の
- * 両方から呼ぶ共通の入口。`q` はどちらの呼び出しでも同じ基準で検証し、不正なら
- * fragment 全体を拒否する（all-or-nothing 契約、ADR-0035）。
+ * （IntroCard を返す）が呼ぶ入口。不正なら fragment 全体を拒否する
+ * （all-or-nothing 契約）。
  */
 function strictPayloadRecord(parsed: unknown): {
   readonly v: unknown;
@@ -229,7 +191,6 @@ function strictPayloadRecord(parsed: unknown): {
   readonly l?: unknown;
   readonly e?: unknown;
   readonly p?: unknown;
-  readonly q?: unknown;
   readonly m?: unknown;
 } {
   const path = '$.introCardUrlPayload';
@@ -240,17 +201,8 @@ function strictPayloadRecord(parsed: unknown): {
     OPTIONAL_PAYLOAD_KEYS
   );
   assertLiteral(record.v, INTRO_CARD_URL_PAYLOAD_VERSION, `${path}.v`);
-  // `q` の妥当性はここで確定させる（結果は呼び出し側が使うかどうかを選べる）。不正なら
-  // 他のフィールドと同じ fail-closed 契約でここで throw する。
-  validateQuizProgressHex(record.q, `${path}.q`);
-  // Issue 104 PR #132（Codex 指摘 major）: `m`（会話テーマ）も
-  // `decodeIntroCardUrlFragmentQuizProgressHex` 経由（`decodePayload` を経ない
-  // q-only decoder）の呼び出しで見落とされないよう、ここで形状に加えて
-  // 件数・カタログ実在・重複まで確定させる（all-or-nothing 契約、`q` と同じ
-  // 理由）。full decoder（`decodePayload` → `createIntroCard`）は独立に同じ
-  // `resolveCatalogThemeIds` を再度通すため、二重にはなるが同じ関数・同じ
-  // 値であり drift しない（q-only decoder が full decoder と異なる基準に
-  // なることを構造的に防ぐための意図的な重複）。
+  // Issue 104 / ADR-0036: `m`（会話テーマ）は形状に加えて件数・カタログ実在・
+  // 重複まで、decode 経路の入口であるここで確定させる（all-or-nothing 契約）。
   const themeIds = optionalThemeIdsField(record.m, `${path}.m`);
   if (themeIds !== undefined) resolveCatalogThemeIds(themeIds);
   return record;
@@ -323,41 +275,7 @@ export function decodeIntroCardUrlFragment(fragment: string): IntroCard {
   return asShareUrlResult(() => decodePayload(record));
 }
 
-/**
- * Issue 110 / ADR-0035: fragment から進捗ビットマスク（`q`）だけを取り出す。カードと
- * 同じ全体（base64url + JSON + schema）を検証するため、`q` が不正なら
- * `decodeIntroCardUrlFragment` と同様に fragment 全体を拒否する。`q` が省略されている
- * （全問未合格、または旧 QR）場合は `undefined` を返す。
- */
-export function decodeIntroCardUrlFragmentQuizProgressHex(
-  fragment: string
-): string | undefined {
-  const record = parseIntroCardUrlFragmentPayload(fragment);
-  return validateQuizProgressHex(record.q, '$.introCardUrlPayload.q');
-}
-
-/**
- * `quizProgressHex` が `undefined` または `'0'`（全問未合格）なら `q` キー自体を省略する。
- * これにより、クイズ進捗を一切持たない既存の QR は 1 byte も変化しない（後方互換、
- * ADR-0035）。呼び出し側が誤って `'0'` を渡しても、ここで防御的に省略する。
- */
-/**
- * Issue 130（Codex 指摘 minor）: `encodeIntroCardUrl` 系はすべて export された公開
- * 関数であり、呼び出し側が `quizProgressHex` に空文字・`'-1'`・`'zz'`（16 進以外）・
- * 32 文字超などを渡すと、埋め込み自体は成功するのに自分自身の decode 側
- * （`validateQuizProgressHex`、上記）が同じ値を fail-closed で拒否する自己矛盾した
- * URL を生成できてしまう。decode 側と同じ検証関数を encode 側でも通し、埋め込む前に
- * 弾く（正規化: 16 進は大文字・小文字を区別しない対称な検証のため、大文字小文字の
- * 変換は不要。`encodeQuizProgressHex`（`quiz-progress-code.ts`）は常に小文字を返す）。
- */
-function buildPayload(
-  card: IntroCard,
-  quizProgressHex: string | undefined
-): IntroCardUrlPayload {
-  const validatedQuizProgressHex = validateQuizProgressHex(
-    quizProgressHex,
-    '$.introCardUrlPayload.q'
-  );
+function buildPayload(card: IntroCard): IntroCardUrlPayload {
   return {
     v: INTRO_CARD_URL_PAYLOAD_VERSION,
     n: card.name,
@@ -367,10 +285,6 @@ function buildPayload(
     ...(card.links === undefined ? {} : { l: card.links }),
     ...(card.email === undefined ? {} : { e: card.email }),
     ...(card.phone === undefined ? {} : { p: card.phone }),
-    ...(validatedQuizProgressHex === undefined ||
-    validatedQuizProgressHex === '0'
-      ? {}
-      : { q: validatedQuizProgressHex }),
     // Issue 104 PR #132（Codex 指摘 major）: `createIntroCard` を経由しない
     // 手組みの `IntroCard`（`themeIds: []`）を渡された場合、`m: []` を出力すると
     // 自身の decoder（配列の最小要素数 1 を要求）がその出力を拒否する自己矛盾
@@ -382,11 +296,8 @@ function buildPayload(
   };
 }
 
-function buildUrl(
-  card: IntroCard,
-  quizProgressHex: string | undefined
-): string {
-  const json = JSON.stringify(buildPayload(card, quizProgressHex));
+function buildUrl(card: IntroCard): string {
+  const json = JSON.stringify(buildPayload(card));
   const fragment = encodeBase64Url(new TextEncoder().encode(json));
   return `${INTRO_CARD_VIEWER_URL}#${fragment}`;
 }
@@ -408,10 +319,7 @@ function fieldBreakdownEntry(
   return `${label} ${byteLength(JSON.stringify(value))} byte`;
 }
 
-function urlTooLargeError(
-  card: IntroCard,
-  quizProgressHex: string | undefined
-): IntroCardError {
+function urlTooLargeError(card: IntroCard): IntroCardError {
   const breakdown = [
     fieldBreakdownEntry('n', card.name),
     fieldBreakdownEntry('t', card.title),
@@ -420,10 +328,6 @@ function urlTooLargeError(
     fieldBreakdownEntry('l', card.links),
     fieldBreakdownEntry('e', card.email),
     fieldBreakdownEntry('p', card.phone),
-    fieldBreakdownEntry(
-      'q',
-      quizProgressHex === '0' ? undefined : quizProgressHex
-    ),
     fieldBreakdownEntry('m', card.themeIds),
   ]
     .filter((entry): entry is string => entry !== null)
@@ -434,19 +338,10 @@ function urlTooLargeError(
   );
 }
 
-/**
- * `quizProgressHex` は Issue 110 / ADR-0035 のクイズ進捗ビットマスク（省略可）。
- * カード本体の byte 予算検証は変えず、`q` を含めた URL 全体が上限を超えたら
- * `CARD_TOO_LARGE` を投げる（`q` だけを落として黙って通す挙動が必要な画面は
- * `encodeIntroCardUrlBestEffort` を使う）。
- */
-export function encodeIntroCardUrl(
-  card: IntroCard,
-  quizProgressHex?: string
-): string {
-  const url = buildUrl(card, quizProgressHex);
+export function encodeIntroCardUrl(card: IntroCard): string {
+  const url = buildUrl(card);
   if (byteLength(url) > QR_ENCODER_MAX_BYTES) {
-    throw urlTooLargeError(card, quizProgressHex);
+    throw urlTooLargeError(card);
   }
   return url;
 }
@@ -456,50 +351,6 @@ export function encodeIntroCardUrl(
  * 例外を投げず、入力中の draft がどれだけ 1,367 byte 予算に近いかをそのまま返す
  * （`vcard.ts` の `vCardByteLength` と同じ流儀）。
  */
-export function introCardUrlByteLength(
-  card: IntroCard,
-  quizProgressHex?: string
-): number {
-  return byteLength(buildUrl(card, quizProgressHex));
-}
-
-export interface IntroCardUrlBestEffortResult {
-  readonly url: string;
-  /**
-   * Issue 130（Codex 指摘 minor）: 呼び出し側が意味のある `quizProgressHex`
-   * （`undefined`・`'0'` 以外）を渡したにもかかわらず、QR byte 予算超過のため
-   * `q` を黙って省略した場合だけ `false` になる。呼び出し側はこれを見て、
-   * サイレントな省略を非ブロッキング通知として利用者に可視化できる
-   * （`IntroCardScreen.tsx` 参照）。`quizProgressHex` を渡さない・`'0'` を渡した
-   * 場合はそもそも省略ではないため `true` のままにする。
-   */
-  readonly quizProgressIncluded: boolean;
-}
-
-/**
- * Issue 110 / ADR-0035: カード本体（氏名・連絡先等）の表示を、進捗スタンプという
- * 付加情報の都合で失敗させないための優先順位付け。`quizProgressHex` を含めると
- * QR byte 予算（1,367 byte）を超過する場合だけ `q` を黙って省略し、カード本体のみの
- * URL を返す。カード本体だけで既に上限を超える場合は、通常どおり `CARD_TOO_LARGE` を
- * 投げる（`q` の有無に関わらずカードそのものが収まらない状況までは救えない）。
- */
-export function encodeIntroCardUrlBestEffort(
-  card: IntroCard,
-  quizProgressHex?: string
-): IntroCardUrlBestEffortResult {
-  try {
-    return {
-      url: encodeIntroCardUrl(card, quizProgressHex),
-      quizProgressIncluded: true,
-    };
-  } catch (error: unknown) {
-    if (
-      error instanceof IntroCardError &&
-      error.code === 'CARD_TOO_LARGE' &&
-      quizProgressHex !== undefined
-    ) {
-      return { url: encodeIntroCardUrl(card), quizProgressIncluded: false };
-    }
-    throw error;
-  }
+export function introCardUrlByteLength(card: IntroCard): number {
+  return byteLength(buildUrl(card));
 }

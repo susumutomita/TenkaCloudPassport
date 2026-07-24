@@ -8530,3 +8530,127 @@ v1.0 のスコープでは Local LLM 呼び出し経路自体を消費者から�
   low へ更新し、残る論点を「manifest 読込が dead work になっている」という
   効率面だけに絞った。
 - `make before-commit` を再実行し、exit 0（100% カバレッジ）であることを再確認。
+
+### [クラウド基礎クイズの機能除去] - 2026-07-25
+
+#### 目的
+
+owner が実機・試用の結果、クラウド基礎クイズ（Issue 110 / PR #130 / ADR-0035）が
+自己紹介カード共有という中心導線に対して寄与が薄いと判断した。クイズ機能を
+コード・QR payload・ドキュメント導線から機能ごと完全に除去する。会話 Agent の
+`m`（themeIds、Issue 104 / ADR-0036）は無関係のため一切変更しない。
+
+#### 制約
+
+- `git rm`（`rm` 禁止）・`npx` 禁止（`bunx`/`nlx`）・モック/スタブ禁止・型エスケープ禁止。
+- ADR は不変。ADR-0035 は残したまま、新しい ADR（0039）で Supersede する。
+- 既存の非クイズ QR は `q` キー除去後も byte 単位で完全に一致すること。
+- `make before-commit` が exit 0（100% カバレッジ）であること。
+
+#### タスク
+
+1. クイズのドメイン・Provider・画面・テストを `git rm`（13 ファイル）。
+2. `App.tsx` / `PassportApp.tsx` / `SettingsScreen.tsx` / `messages.ts` からクイズ
+   stage・導線・メッセージキーを削除。
+3. `intro-card-url.ts` の `q` キー（encoder/decoder/best-effort）を除去し、
+   `site/c/index.html` のビューア側 `q` デコード・スタンプ表示を除去。
+4. `local-data-control.ts` の全データ削除 transaction からクイズ進捗を除去。
+5. 追従テスト（`intro-card-url.test.ts` / `intro-card-viewer.test.ts` /
+   `intro-card-viewer-decoder-parity.test.ts` / `local-data-control.test.ts` /
+   `passport-app-stage-flow.test.ts` / `intro-card-app-wiring.test.ts` /
+   `settings-accessibility.test.ts` / `intro-card-accessibility.test.ts` /
+   `startup-local-recovery.test.ts` / `touch-target.test.ts`）を更新。
+6. ADR-0039 を新設し ADR-0035 を Supersede、design 文書へ Superseded バナー追加、
+   `docs/release/app-store-submission.md` のクイズ言及を除去。
+7. `make before-commit` を通す。
+
+#### 検証手順
+
+```bash
+grep -rn "quiz\|Quiz\|QUIZ" src site scripts App.tsx  # ヒットゼロを確認
+bun test src/protocol/intro-card-url.test.ts scripts/intro-card-viewer.test.ts \
+  scripts/intro-card-viewer-decoder-parity.test.ts
+make before-commit
+```
+
+#### 進捗ログ
+
+- quiz-catalog / quiz-progress / quiz-progress-code / quiz-progress-storage
+  （3 Adapter）/ QuizScreen とそれぞれのテスト、計 13 ファイルを `git rm` した。
+- `App.tsx`: `createDefaultQuizProgressStorage` の import・変数・
+  `createLocalDataControl` / `PassportApp` への配線を削除。
+- `PassportApp.tsx`: `quiz` stage（`SetupStage` union・`UTILITY_STAGES`）、
+  `quizProgress` state・ref・startup effect・persistence effect、
+  `resetQuizProgressInMemory`、`openQuiz` / `closeQuiz` / `handleQuizQuestionCorrect`、
+  `quizProgressHex` memo、`UtilityStageGate` / `IntroCardStageGate` への配線を
+  すべて削除した。
+- `SettingsScreen.tsx`: 「クラウド基礎クイズに挑戦」ボタン（`onOpenQuiz` prop・
+  `quizButton` / `quizButtonHint`）を削除。
+- `messages.ts`: `settings.quizButton*` / `diagnostics.quizIncludedNotice` /
+  `introCard.quizProgressOmittedNotice` / `quiz` interface 全体（JA/EN 値含む）を
+  削除し、`eraseAllDataButtonHint` 等の「クイズ進捗」への言及も削除した。
+- `intro-card-url.ts`: `IntroCardUrlPayload.q`、`OPTIONAL_PAYLOAD_KEYS` の `'q'`、
+  `validateQuizProgressHex`、`decodeIntroCardUrlFragmentQuizProgressHex`、
+  `encodeIntroCardUrlBestEffort` / `IntroCardUrlBestEffortResult`（`q` 専用の
+  best-effort 機構で他に用途が無いため関数ごと削除）を除去し、
+  `encodeIntroCardUrl` / `introCardUrlByteLength` から `quizProgressHex` 引数を
+  外した。`m`（themeIds）は変更していない。
+- `IntroCardScreen.tsx`: `encodeIntroCardUrlBestEffort(card, quizProgressHex)` を
+  `encodeIntroCardUrl(card)` に置き換え、`quizProgressOmitted` 通知 UI を削除。
+- `site/c/index.html`: `.quiz-stamp` 系 CSS・HTML、`QUIZ_QUESTION_COUNT` /
+  `QUIZ_PROGRESS_HEX_MAX_LENGTH` 定数、`validatedQuizProgressHex` /
+  `quizStampCells` / `renderQuizStamp` を除去し、`KNOWN_PAYLOAD_KEYS` から
+  `'q'` を外した。
+- `local-data-control.ts`: `LocalDataPreview.quizProgressCount`、
+  `LocalDataControlDependencies.quizStorage`、`removeCommittedData` の quiz
+  storage 削除・再検証を除去。`LocalDiagnosticsScreen.tsx` の
+  `quizIncludedNotice` 表示も削除。
+- テスト追従: `intro-card-url.test.ts`（`q` 専用 describe ブロック・テスト削除、
+  `m` の q-only decoder 経由 parity テストは full decoder 側の既存カバレッジと
+  重複するため削除）、`intro-card-viewer.test.ts` / `-decoder-parity.test.ts`
+  （`q` 関連 fixture・assertion を除去し、`m`/allowlist 関連は維持）、
+  `local-data-control.test.ts`（`newQuizStorage` ヘルパー・
+  `DeleteRetainingQuizProgressStorage`・全 `quizStorage` 引数を除去）、
+  `passport-app-stage-flow.test.ts` / `intro-card-app-wiring.test.ts` /
+  `settings-accessibility.test.ts` / `intro-card-accessibility.test.ts` /
+  `startup-local-recovery.test.ts` / `touch-target.test.ts` を更新した。
+- `docs/adr/0039-remove-cloud-basics-quiz.md` を新設し ADR-0035 を明示的に
+  Supersede。`docs/design/2026-07-23-cloud-basics-quiz.md` に Superseded
+  バナーを追加（削除はしない）。`docs/release/app-store-submission.md` の
+  App Store 説明文・キーワード・プロモーションテキスト・App Review Notes から
+  クイズ言及を除去し、レター番号を振り直した。
+- worktree に `node_modules` が無く（isolated worktree のため）
+  `dup_check`（jscpd 実行）が最初 fail した。`make install` で解消（jscpd
+  バイナリが `node_modules/.bin/` に入り、以後 dup_check は baseline 以下）。
+- `bun test`（全体）で 2 件の実失敗を検出し修正した。
+  1. `passport-app-stage-flow.test.ts`: 起動時 effect の destructure が
+     配列分割代入からインライン単一行（`quizProgress` 変数除去に伴う整形）に
+     変わり、期待していたインデント（10 spaces）が実際は 8 spaces になった
+     ため、期待文字列のインデントを実装に合わせて修正。
+  2. `intro-card-app-wiring.test.ts`: `savedLocale` が配列の最後の要素に
+     なり末尾カンマが付かなくなったため、`'savedLocale,'` を `'savedLocale'`
+     に修正。
+- `bun biome check .` が編集した 3 ファイル（`scripts/intro-card-viewer.test.ts`
+  / `passport-app-stage-flow.test.ts` / `intro-card-accessibility.test.ts`）の
+  formatter 差分（削除ブロックの余分な空行・改行位置）を検出し、
+  `bun biome check --write` で自動修正した。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`: Error 0 /
+  Warning 0。
+- `make before-commit`: exit 0（1441 テスト、100% カバレッジ、dup_check は
+  baseline 以下、lint は既存の `scripts/android-release-identity.ts` の
+  pre-existing warning/info のみで error 0、typecheck・web export 成功）。
+
+#### 振り返り
+
+- **問題**: なし（今のところ致命的な問題は発生していない。以下は作業中に
+  意識した設計判断）。
+- **根本原因/設計判断**: `q` キーの q-only decoder（`decodeIntroCardUrlFragmentQuizProgressHex`）
+  経由で `m` の妥当性を検証していたテストが 3 件あったが、これらは
+  full decoder（`decodeIntroCardUrlFragment`）経由でも同一の入力・同一の
+  期待値がすでにテストされていたため、q-only decoder 削除に伴い単純に削除した
+  （リホームすると重複テストになるため）。
+- **予防策**: 複数の decode 経路（q-only / full）が同じ検証ロジックを共有する
+  設計は、経路が 1 つに統合された後に「parity テスト」が構造的に無意味化する
+  ことを踏まえ、今後同様の「A 経由でも B と同じ挙動」を固定するテストを書く際は、
+  どちらか一方の経路が消えた場合の扱い（重複排除 or 独立した価値の有無）を
+  コメントで明示しておく。

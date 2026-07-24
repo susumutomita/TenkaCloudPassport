@@ -89,10 +89,9 @@ export type IntroCardField =
  * `INVALID_SHARE_URL`（Issue 84）は同じ理由で `src/protocol/intro-card-url.ts` の
  * `decodeIntroCardUrlFragment` が、QR フラグメントを Intro Card として復元できない
  * 場合（base64url 不正・JSON 不正・version 不一致・スキーマ不一致）に投げる。
- * Issue 104 PR #132: `decodeIntroCardUrlFragmentQuizProgressHex`（`q` だけを
- * 取り出す q-only decoder）も同じ `strictPayloadRecord` を経由するため、`m`
- * （会話テーマ）がカタログ未登録・重複の場合は `resolveCatalogThemeIds` 由来の
- * `INVALID_THEME_IDS` をそのまま投げる（`INVALID_SHARE_URL` へ丸めない）。
+ * Issue 104 PR #132: `m`（会話テーマ）がカタログ未登録・重複の場合は
+ * `resolveCatalogThemeIds` 由来の `INVALID_THEME_IDS` をそのまま投げる
+ * （`INVALID_SHARE_URL` へ丸めない）。
  */
 export class IntroCardError extends Error {
   readonly code: IntroCardErrorCode;

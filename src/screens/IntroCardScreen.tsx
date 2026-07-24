@@ -7,7 +7,7 @@ import AppScreen from '../components/AppScreen';
 import RealQrView from '../components/RealQrView';
 import SettingsLinkFooter from '../components/SettingsLinkFooter';
 import type { IntroCard } from '../domain/intro-card';
-import { encodeIntroCardUrlBestEffort } from '../protocol/intro-card-url';
+import { encodeIntroCardUrl } from '../protocol/intro-card-url';
 import { encodeQr } from '../qr/encoder';
 import { colors, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
@@ -21,19 +21,14 @@ export interface IntroCardScreenProps {
    * 保存成功・空状態等の他の Notice はこの画面の関心事ではないため含めない。
    */
   readonly deleteError: string | null;
-  /**
-   * Issue 110 / ADR-0035: クイズ進捗ビットマスク（16 進文字列）。省略・`'0'`
-   * （全問未合格）なら QR に `q` を含めない（既存 QR と完全に同じ byte 数、後方互換）。
-   */
-  readonly quizProgressHex?: string;
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
   /**
    * Issue 130（Codex 指摘 blocker）: #127 が外した Settings 導線を復活させる。
-   * クイズ（Issue 110）・診断（Diagnostics）・モデル管理は Settings 配下にしか
-   * ないため、この導線が無いと通常フローから到達できなくなっていた。
+   * 診断（Diagnostics）・モデル管理は Settings 配下にしかないため、この導線が
+   * 無いと通常フローから到達できなくなっていた。
    */
   readonly onOpenSettings: () => void;
 }
@@ -46,14 +41,11 @@ export interface IntroCardScreenProps {
  * 選べる（読んだら即座に連絡先へ追加されることはない）。保存済みの `IntroCard` から
  * 毎回 URL を再生成して実 QR を描く（`IntroCardEditScreen` の保存時点で
  * `encodeIntroCardUrl` を通した card だけがここへ渡るため、1,367 byte 超過は
- * 発生しない前提で `useMemo` の中で直接呼ぶ）。Issue 110: `quizProgressHex` は
- * `encodeIntroCardUrlBestEffort` 経由で乗せる（`q` を含めると上限を超える場合だけ
- * 黙って省略し、カード本体の表示は失敗させない）。
+ * 発生しない前提で `useMemo` の中で直接呼ぶ）。
  */
 export default function IntroCardScreen({
   card,
   deleteError,
-  quizProgressHex,
   locale = DEFAULT_LOCALE,
   onChangeLocale,
   onEdit,
@@ -61,21 +53,7 @@ export default function IntroCardScreen({
   onOpenSettings,
 }: IntroCardScreenProps) {
   const t = MESSAGES[locale].introCard;
-  /**
-   * Issue 130（Codex 指摘 minor）: `encodeIntroCardUrlBestEffort` が返す
-   * `quizProgressIncluded` から、意味のある `quizProgressHex`（`undefined`・`'0'`
-   * 以外）を渡したのに QR byte 予算超過で `q` が黙って省略されたかどうかを判定する。
-   * 省略時はカード本体の表示自体は失敗させず、非ブロッキングの Notice だけで
-   * 利用者へ可視化する（サイレントな省略のまま気づかれないことを防ぐ）。
-   */
-  const { encodedQr, quizProgressOmitted } = useMemo(() => {
-    const result = encodeIntroCardUrlBestEffort(card, quizProgressHex);
-    const omitted =
-      quizProgressHex !== undefined &&
-      quizProgressHex !== '0' &&
-      !result.quizProgressIncluded;
-    return { encodedQr: encodeQr(result.url), quizProgressOmitted: omitted };
-  }, [card, quizProgressHex]);
+  const encodedQr = useMemo(() => encodeQr(encodeIntroCardUrl(card)), [card]);
 
   return (
     <AppScreen
@@ -97,14 +75,6 @@ export default function IntroCardScreen({
         <RealQrView matrix={encodedQr.matrix} />
       </View>
       <Text style={styles.qrExplanation}>{t.qrExplanation}</Text>
-      {quizProgressOmitted ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          style={styles.quizProgressOmittedNotice}
-        >
-          {t.quizProgressOmittedNotice}
-        </Text>
-      ) : null}
       <IntroCardPreview
         email={card.email}
         links={card.links}
@@ -120,7 +90,7 @@ export default function IntroCardScreen({
         onPress={onEdit}
       />
       {/* Issue 130（Codex 指摘 blocker）: #127 が「余計な導線を増やさない」意図で
-          外した Settings 導線を、クイズ・診断への唯一の入口として復活させる。
+          外した Settings 導線を、診断への唯一の入口として復活させる。
           編集ボタンより目立たせず、削除より上（削除は最も控えめな位置を保つ、
           直下コメント参照）に置く控えめなテキストリンクにする。タップ領域は
           削除リンクと同じく WCAG 2.5.5 相当の 44pt を維持する。 */}
@@ -173,13 +143,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
-    textAlign: 'center',
-  },
-  quizProgressOmittedNotice: {
-    color: colors.muted,
-    fontSize: 13,
-    fontStyle: 'italic',
-    lineHeight: 19,
     textAlign: 'center',
   },
   deleteLink: {

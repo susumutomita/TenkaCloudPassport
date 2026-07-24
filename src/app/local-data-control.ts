@@ -6,10 +6,6 @@ import type {
   LocalProfileStoragePort,
   LocalProfileStorageUsage,
 } from './local-profile-storage';
-import type {
-  QuizProgressStoragePort,
-  QuizProgressStorageUsage,
-} from './quiz-progress-storage';
 
 export interface LocalModelInstallation {
   readonly architecture: DiagnosticModelArchitecture;
@@ -194,13 +190,6 @@ export interface LocalDataPreview {
   readonly profileCount: number;
   readonly settingsCount: 0;
   readonly modelCount: number;
-  /**
-   * Issue 130（Codex 指摘 blocker）: クイズ進捗（Issue 110）を「全データ削除」の
-   * tombstone 保護つき削除 transaction（ADR-0020 の all-resource モデル）へ含める。
-   * Intro Card 同様 `0 | 1` の存在フラグとして扱う（クリア済み設問数そのものは
-   * Diagnostic Report の禁止情報の粒度に踏み込まない、ADR-0020 の schema 方針）。
-   */
-  readonly quizProgressCount: 0 | 1;
   readonly totalBytes: number;
   readonly model: LocalModelInstallation | null;
 }
@@ -239,21 +228,17 @@ interface LocalDataControlDependencies {
   readonly modelStorage: LocalModelStoragePort;
   readonly modelContexts: LocalModelContextLeaseRegistry;
   readonly deletionJournal: LocalDeletionJournalPort;
-  /** Issue 130: クイズ進捗（Issue 110）を全削除 transaction の対象へ含める。 */
-  readonly quizStorage: QuizProgressStoragePort;
 }
 
 function previewFrom(
   profile: LocalProfileStorageUsage,
-  model: LocalModelInstallation | null,
-  quiz: QuizProgressStorageUsage
+  model: LocalModelInstallation | null
 ): LocalDataPreview {
   return {
     profileCount: profile.count,
     settingsCount: 0,
     modelCount: model?.count ?? 0,
-    quizProgressCount: quiz.count,
-    totalBytes: profile.bytes + (model?.sizeBytes ?? 0) + quiz.bytes,
+    totalBytes: profile.bytes + (model?.sizeBytes ?? 0),
     model,
   };
 }
@@ -267,7 +252,6 @@ export function createLocalDataControl({
   modelStorage,
   modelContexts,
   deletionJournal,
-  quizStorage,
 }: LocalDataControlDependencies): LocalDataControl {
   let committedDeletionLease: LocalDataExclusiveLease | null = null;
 
@@ -275,8 +259,7 @@ export function createLocalDataControl({
     try {
       const profile = await profileStorage.inspect();
       const model = await modelStorage.inspect();
-      const quiz = await quizStorage.inspect();
-      return previewFrom(profile, model, quiz);
+      return previewFrom(profile, model);
     } catch {
       throw storageFailure();
     }
@@ -323,13 +306,8 @@ export function createLocalDataControl({
     try {
       await profileStorage.remove();
       await modelStorage.remove();
-      await quizStorage.remove();
       const remaining = await preview();
-      if (
-        remaining.profileCount !== 0 ||
-        remaining.model !== null ||
-        remaining.quizProgressCount !== 0
-      ) {
+      if (remaining.profileCount !== 0 || remaining.model !== null) {
         throw new Error('remaining local data');
       }
       await deletionJournal.clear();

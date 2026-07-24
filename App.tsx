@@ -8,7 +8,6 @@ import { createDefaultLocalDeletionJournal } from './src/app/default-local-delet
 import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
 import { createDefaultLocalePreferenceStorage } from './src/app/default-locale-preference-storage';
-import { createDefaultQuizProgressStorage } from './src/app/default-quiz-progress-storage';
 import {
   createLocalDataControl,
   DeletionCoordinatedLocalProfileStorageAdapter,
@@ -25,7 +24,6 @@ const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
   localDeletionJournal
 );
 const introCardStorage = createDefaultIntroCardStorage();
-const quizProgressStorage = createDefaultQuizProgressStorage();
 const backupSharePort = createDefaultBackupSharePort();
 const initialLocalePort = createDefaultInitialLocalePort();
 const localePreferenceStorage = createDefaultLocalePreferenceStorage();
@@ -38,7 +36,6 @@ const localDataControl = createLocalDataControl({
     localModelComposition?.modelStorage ?? new NoLocalModelStorageAdapter(),
   modelContexts: localDataLeases,
   deletionJournal: localDeletionJournal,
-  quizStorage: quizProgressStorage,
 });
 
 export default function App() {
@@ -56,7 +53,6 @@ export default function App() {
         introCardStorage={introCardStorage}
         initialLocalePort={initialLocalePort}
         localePreferenceStorage={localePreferenceStorage}
-        quizProgressStorage={quizProgressStorage}
       />
     </>
   );

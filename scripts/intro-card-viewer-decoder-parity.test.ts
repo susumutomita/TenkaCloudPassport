@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { createIntroCard } from '../src/domain/intro-card';
 import {
   decodeIntroCardUrlFragment,
-  decodeIntroCardUrlFragmentQuizProgressHex,
   encodeIntroCardUrl,
 } from '../src/protocol/intro-card-url';
 
@@ -63,14 +62,12 @@ interface DecodeAttempt {
   readonly links?: readonly string[];
   readonly email?: string;
   readonly phone?: string;
-  readonly quizProgressHex?: string;
   readonly themeIds?: readonly string[];
 }
 
 function decodeWithTypeScript(fragment: string): DecodeAttempt {
   try {
     const card = decodeIntroCardUrlFragment(fragment);
-    const quizProgressHex = decodeIntroCardUrlFragmentQuizProgressHex(fragment);
     return {
       ok: true,
       name: card.name,
@@ -80,7 +77,6 @@ function decodeWithTypeScript(fragment: string): DecodeAttempt {
       links: card.links,
       email: card.email,
       phone: card.phone,
-      quizProgressHex,
       themeIds: card.themeIds,
     };
   } catch {
@@ -103,7 +99,6 @@ function decodeWithViewer(
     links: card.links as readonly string[] | undefined,
     email: card.email as string | undefined,
     phone: card.phone as string | undefined,
-    quizProgressHex: card.stamp as string | undefined,
     themeIds: card.themeIds as readonly string[] | undefined,
   };
 }
@@ -128,23 +123,18 @@ function buildFixtures(): readonly Fixture[] {
 
   return [
     {
-      name: '本体の encodeIntroCardUrl が生成した最小 fragment（q なし）',
+      name: '本体の encodeIntroCardUrl が生成した最小 fragment',
       fragment: new URL(encodeIntroCardUrl(minimalCard)).hash.slice(1),
       expectValid: true,
     },
     {
-      name: '本体の encodeIntroCardUrl が生成した全項目 + q 付き fragment',
-      fragment: new URL(encodeIntroCardUrl(fullCard, 'f')).hash.slice(1),
+      name: '本体の encodeIntroCardUrl が生成した全項目 fragment',
+      fragment: new URL(encodeIntroCardUrl(fullCard)).hash.slice(1),
       expectValid: true,
     },
     {
       name: '手組み最小 payload（name のみ）',
       fragment: fragmentFromPayload({ v: 1, n: 'Alice' }),
-      expectValid: true,
-    },
-    {
-      name: 'q が全ビット分の長い 16 進文字列',
-      fragment: fragmentFromPayload({ v: 1, n: 'Bob', q: 'ffff' }),
       expectValid: true,
     },
     {
@@ -203,18 +193,8 @@ function buildFixtures(): readonly Fixture[] {
       expectValid: false,
     },
     {
-      name: 'q が 16 進以外の文字を含む',
-      fragment: fragmentFromPayload({ v: 1, n: 'Eve', q: 'zz' }),
-      expectValid: false,
-    },
-    {
-      name: 'q が空文字',
-      fragment: fragmentFromPayload({ v: 1, n: 'Eve', q: '' }),
-      expectValid: false,
-    },
-    {
-      name: 'q が上限（32 文字）を超える',
-      fragment: fragmentFromPayload({ v: 1, n: 'Eve', q: 'f'.repeat(33) }),
+      name: '未知の key（旧 q キー）を含む payload は unknown key として拒否する',
+      fragment: fragmentFromPayload({ v: 1, n: 'Eve', q: 'ffff' }),
       expectValid: false,
     },
     {
@@ -330,7 +310,6 @@ describe('intro-card-url の本体デコーダとビューアデコーダの par
       expect(viewerResult.links).toEqual(tsResult.links);
       expect(viewerResult.email).toBe(tsResult.email);
       expect(viewerResult.phone).toBe(tsResult.phone);
-      expect(viewerResult.quizProgressHex).toBe(tsResult.quizProgressHex);
       expect(viewerResult.themeIds).toEqual(tsResult.themeIds);
     }
   });

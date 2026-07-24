@@ -69,15 +69,11 @@ describe('自己紹介カードピボット Step 1（Issue 79）のメインフ�
       // Issue 111: 保存済みの明示言語選択も同じ Promise.all へ束ね、Profile /
       // Intro Card と同じコミットで反映する。
       'localePreferenceStorage.load().catch(() => null)',
-      // Issue 110: クイズ進捗も同じ Promise.all へ束ね、読込失敗時は空の進捗へ
-      // 握り潰し独自の Notice は出さない。
-      'quizProgressStorage.load().catch(() => EMPTY_QUIZ_PROGRESS)',
       ']).then(',
       'result,',
       'introCardLoad,',
       'loadedDraft,',
-      'savedLocale,',
-      'loadedQuizProgress,',
+      'savedLocale',
       // Issue 111 major fix（Codex Finding 1）: effective locale を先に確定してから
       // Intro Card Notice を組み立てる（`introCardStorage.load()` と
       // `localePreferenceStorage.load()` のどちらが先に解決するかに依存しない）。
@@ -87,25 +83,10 @@ describe('自己紹介カードピボット Step 1（Issue 79）のメインフ�
       'setIntroCard(introCardOutcome.card)',
       'setIntroCardNotice(introCardOutcome.notice)',
       'applyIntroCardDraftFields(loadedDraft)',
-      'setQuizProgress(loadedQuizProgress)',
       'setIntroCardDraftHydrated(true)',
       "result.kind === 'recovery-failed'",
       'applyStartupRecoveryResultRef.current(result)',
     ]);
-  });
-
-  it('起動時 effect は Intro Card 同様、クイズ進捗の読込失敗も握り潰し独自の Notice を出さない（Issue 110）', async () => {
-    const text = await source();
-    const effectStart = text.indexOf('void Promise.all([');
-    const effectBody = text.slice(
-      effectStart,
-      text.indexOf('return () => {', effectStart)
-    );
-
-    expect(effectBody).toContain(
-      'quizProgressStorage.load().catch(() => EMPTY_QUIZ_PROGRESS)'
-    );
-    expect(effectBody).not.toContain('setQuizProgressNotice');
   });
 
   it('起動時の Intro Card Notice は effective locale が確定した後にだけ組み立てる（Codex Finding 1: 保存済み選好の反映前に locale 依存の起動通知を作らない）', async () => {
@@ -243,7 +224,7 @@ describe('自己紹介カードピボット Step 1（Issue 79）のメインフ�
     ]);
   });
 
-  it('ProfileHomeGate から IntroCardStageGate へ言語切替・編集・削除・Settings 導線を渡す（Issue 130: #127 が外した Settings 導線をクイズ・診断への唯一の入口として復活）', async () => {
+  it('ProfileHomeGate から IntroCardStageGate へ言語切替・編集・削除・Settings 導線を渡す（Issue 130: #127 が外した Settings 導線を診断への唯一の入口として復活）', async () => {
     const text = await source();
     const gateCallStart = text.indexOf('<IntroCardStageGate');
     const gateCallEnd = text.indexOf('/>', gateCallStart);
