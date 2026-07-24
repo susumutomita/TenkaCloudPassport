@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'bun:test';
-import type { AgentModelInput } from '../domain/agent-model-provider';
+import {
+  type AgentModelInput,
+  type AgentModelProvider,
+  RULES_MODEL_PROVIDER,
+} from '../domain/agent-model-provider';
 import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
+import {
+  createConfiguredLocalModelCompletionPort,
+  type LocalModelEnvironment,
+} from '../local-agent/configured-agent-model-provider';
 import type {
   LlamaContextPort,
+  LlamaModuleLoader,
   LlamaModulePort,
+  LocalModelExecutionLeasePort,
 } from '../local-agent/llama-agent-model-provider';
+import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
 import { materializeAgentModelOutcome } from './agent-model-live-outcome';
 import {
   createAgentProviderSessionRunner,
@@ -14,7 +25,34 @@ import {
   LocalDataAccessBlockedError,
   LocalModelContextLeaseRegistry,
 } from './local-data-control';
-import { createNativeAgentModelProvider } from './native-agent-model-provider-composition';
+
+/**
+ * v1.0（ADR-0038）: `createNativeAgentModelProvider`（composition root）は
+ * オンデバイス LLM の native crash が実機で確認されたため常に
+ * `RULES_MODEL_PROVIDER` を返すよう固定した（`default-agent-model-provider.test.ts`
+ * 参照）。このファイルは composition root を経由せず、v1.1 再有効化に備えて
+ * dormant のまま残す Local Agent Completion Port 本体
+ * （`configured-agent-model-provider.ts` / `llama-agent-model-provider.ts` /
+ * `model-safety-boundary.ts`）を直接構成して回帰を防止し続ける。旧
+ * `createNativeAgentModelProvider` の Development Build 分岐と全く同じ組み立て
+ * ロジックをここへそのまま持ち込む。
+ */
+function createLocalAgentProvider(
+  environment: LocalModelEnvironment,
+  loadModule: LlamaModuleLoader,
+  executionLeases: LocalModelExecutionLeasePort = new LocalModelContextLeaseRegistry(
+    false
+  )
+): AgentModelProvider {
+  const completionPort = createConfiguredLocalModelCompletionPort(
+    environment,
+    loadModule,
+    executionLeases
+  );
+  return completionPort
+    ? createSafetyBoundLocalModelProvider(completionPort)
+    : RULES_MODEL_PROVIDER;
+}
 
 const INPUT: AgentModelInput = {
   ownerPassport: passport(['open-source']),
@@ -52,10 +90,7 @@ function moduleWithContext(context: LlamaContextPort): LlamaModulePort {
   return { initLlama: async () => context };
 }
 
-async function runProvider(
-  encounterKey: string,
-  provider: ReturnType<typeof createNativeAgentModelProvider>
-) {
+async function runProvider(encounterKey: string, provider: AgentModelProvider) {
   return createAgentProviderSessionRunner().run({
     state: INITIAL_PROVIDER_RUNTIME_STATE,
     encounterKey,
@@ -64,27 +99,10 @@ async function runProvider(
   });
 }
 
-function createDevelopmentBuildProvider(
-  environment: Parameters<
-    typeof createNativeAgentModelProvider
-  >[0]['environment'],
-  loadModule: Parameters<
-    typeof createNativeAgentModelProvider
-  >[0]['loadModule'],
-  modelContexts = new LocalModelContextLeaseRegistry(false)
-) {
-  return createNativeAgentModelProvider({
-    runningInExpoGo: false,
-    environment,
-    loadModule,
-    modelContexts,
-  });
-}
-
-describe('Development Build Local Agent の統合 Matrix', () => {
+describe('Local Agent Completion Port の統合 Matrix（v1.1 再有効化までの回帰防止、ADR-0038）', () => {
   it('Model 未設定は Native Module を読まず Rules Bridge まで完走する', async () => {
     let moduleLoads = 0;
-    const provider = createDevelopmentBuildProvider({}, async () => {
+    const provider = createLocalAgentProvider({}, async () => {
       moduleLoads += 1;
       return moduleWithContext(new CompletedContext('{}'));
     });
@@ -103,13 +121,10 @@ describe('Development Build Local Agent の統合 Matrix', () => {
 
   it('Model Load 失敗は内容を反射せず Rules Bridge へ 1 回だけ切り替える', async () => {
     let moduleLoads = 0;
-    const provider = createDevelopmentBuildProvider(
-      MODEL_ENVIRONMENT,
-      async () => {
-        moduleLoads += 1;
-        throw new Error('invalid model or OOM');
-      }
-    );
+    const provider = createLocalAgentProvider(MODEL_ENVIRONMENT, async () => {
+      moduleLoads += 1;
+      throw new Error('invalid model or OOM');
+    });
 
     const result = await runProvider('integration-load-failure', provider);
     const outcome = materializeAgentModelOutcome(
@@ -128,7 +143,7 @@ describe('Development Build Local Agent の統合 Matrix', () => {
       '{"kind":"bridge","evidenceIds":["topic:open-source"]}'
     );
     const modelContexts = new LocalModelContextLeaseRegistry(false);
-    const provider = createDevelopmentBuildProvider(
+    const provider = createLocalAgentProvider(
       MODEL_ENVIRONMENT,
       async () => moduleWithContext(context),
       modelContexts
@@ -170,9 +185,8 @@ describe('Development Build Local Agent の統合 Matrix', () => {
         releaseCalls += 1;
       },
     };
-    const provider = createDevelopmentBuildProvider(
-      MODEL_ENVIRONMENT,
-      async () => moduleWithContext(context)
+    const provider = createLocalAgentProvider(MODEL_ENVIRONMENT, async () =>
+      moduleWithContext(context)
     );
     const runner = createAgentProviderSessionRunner();
     const pending = runner.run({
@@ -200,7 +214,7 @@ describe('Development Build Local Agent の統合 Matrix', () => {
       context.releaseCalls += 1;
       throw new Error('native release failed');
     };
-    const provider = createDevelopmentBuildProvider(
+    const provider = createLocalAgentProvider(
       MODEL_ENVIRONMENT,
       async () => {
         initializations += 1;
@@ -237,7 +251,7 @@ describe('Development Build Local Agent の統合 Matrix', () => {
   it('削除 Recovery Lock 中は Context を開始せず Rules へ切り替える', async () => {
     let initializations = 0;
     const recoveryLockedContexts = new LocalModelContextLeaseRegistry();
-    const provider = createDevelopmentBuildProvider(
+    const provider = createLocalAgentProvider(
       MODEL_ENVIRONMENT,
       async () => {
         initializations += 1;

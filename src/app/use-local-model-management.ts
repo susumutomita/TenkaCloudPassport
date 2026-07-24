@@ -3,10 +3,7 @@ import {
   type AgentModelProvider,
   AgentModelProviderError,
 } from '../domain/agent-model-provider';
-import type {
-  ImportedLocalModel,
-  LocalModelManifest,
-} from '../local-agent/local-model-manifest';
+import type { LocalModelManifest } from '../local-agent/local-model-manifest';
 import type {
   ActivationAssessment,
   ModelImportCandidate,
@@ -112,14 +109,6 @@ function errorCode(error: unknown): OnDeviceAiErrorCode {
   return mapOnDeviceAiErrorCode(error);
 }
 
-function activeModel(manifest: LocalModelManifest): ImportedLocalModel | null {
-  return (
-    manifest.models.find(
-      (model) => model.sha256 === manifest.activeModelSha256
-    ) ?? null
-  );
-}
-
 /** React state は候補 URI を manifest へ混ぜず、Owner 操作後だけ lifecycle を進める。 */
 export function useLocalModelManagement(input: UseLocalModelManagementInput): {
   readonly provider: AgentModelProvider;
@@ -177,18 +166,27 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
     );
   }, []);
 
+  /**
+   * v1.0（ADR-0038、code-reviewer 指摘 medium）: 永続化済み manifest に
+   * `activeModelSha256` があっても（例: 過去のビルドで on-device AI を
+   * 有効化済みだった端末が本ビルドへ更新した場合）、`management.createProvider(...)`
+   * （実際の llama.rn バックの Local LLM Completion Port）を構築しない。
+   * オンデバイス LLM のダウンロード停止・未完了起動時の native crash が実機で
+   * 確認され、呼び出し元を実機テストできないため、v1.0 では常に `fallbackProvider`
+   * （呼び出し元が注入する Rules Provider）に固定する。呼び出し口（`PassportApp.tsx`
+   * の会話 Agent・Pet Interaction）を Rules に固定するだけでなく、この
+   * Composition の中心でも同じ保証をかけることで、将来 3 つ目の呼び出し箇所が
+   * 増えても同じ crash が再発しない。v1.1 で実機テストして再有効化するときは、
+   * manifest の active な Model を探して `management.createProvider(...)` を
+   * 呼ぶ実装へ戻すだけでよい。呼び出し口（`refresh` / 起動時 effect）は
+   * 読み込んだ manifest をそのまま渡し続ける（v1.1 復元時に呼び出し側を
+   * 変えずに済むようにするため）。
+   */
   const configureProvider = useCallback(
-    (loaded: LocalModelManifest): void => {
-      const active = activeModel(loaded);
-      setProvider(
-        active && management
-          ? management.createProvider(active, () =>
-              setError('BENCHMARK_WRITE_FAILED')
-            )
-          : fallbackProvider
-      );
+    (_loaded: LocalModelManifest): void => {
+      setProvider(fallbackProvider);
     },
-    [fallbackProvider, management]
+    [fallbackProvider]
   );
 
   const refresh = useCallback(async (): Promise<void> => {

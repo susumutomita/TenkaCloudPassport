@@ -182,10 +182,7 @@ import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
 } from './use-local-diagnostics-flow';
-import {
-  type LocalModelManagementView,
-  useLocalModelManagement,
-} from './use-local-model-management';
+import { useLocalModelManagement } from './use-local-model-management';
 import {
   type PilotMeasurementFlow,
   usePilotMeasurementFlow,
@@ -202,7 +199,10 @@ interface PassportAppProps {
   readonly initialLocalePort: InitialLocalePort;
   /** Issue 111: 明示切替（Settings / ヘッダートグル）の永続化先。 */
   readonly localePreferenceStorage: LocalePreferenceStoragePort;
-  /** Web / Expo Go / Model 未設定では Rules、Development Build では Local を注入する。 */
+  /**
+   * v1.0（ADR-0038）: `createDefaultAgentModelProvider` 経由でも常に
+   * `RULES_MODEL_PROVIDER` になる（Native も含め、オンデバイス LLM は無効化した）。
+   */
   readonly agentModelProvider?: AgentModelProvider;
   /** Development Build だけが app-private GGUF lifecycle を注入する。 */
   readonly localModelManagement?: LocalModelManagementPort | null;
@@ -591,7 +591,6 @@ interface UtilityStageGateProps {
   readonly hasLounge: boolean;
   readonly hasProfile: boolean;
   readonly locale: Locale;
-  readonly modelManagement: LocalModelManagementView;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onCloseSettings: () => void;
   /**
@@ -624,7 +623,6 @@ function UtilityStageGate({
   hasLounge,
   hasProfile,
   locale,
-  modelManagement,
   onChangeLocale,
   onCloseSettings,
   quizProgress,
@@ -701,7 +699,6 @@ function UtilityStageGate({
         }}
         hasIntroCard={hasIntroCard}
         locale={locale}
-        modelManagement={modelManagement}
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
         onOpenConversationAgent={onOpenConversationAgent}
@@ -1165,6 +1162,12 @@ export default function PassportApp({
       false
     ).catch(() => undefined);
   }, [providerRunner, trackProviderTeardown]);
+  // v1.0（ADR-0038、/simplify 指摘）: `localModels.view` は Settings から
+  // Local Model 管理 UI を除去したため、どこからも読まれなくなった。以前は
+  // Settings 再訪時に Local Model の manifest を再読込して表示を最新化する
+  // effect があったが、表示先自体が無いため、その effect ごと削除した
+  // （`localModels.invalidateAfterExternalPurge` / `isMutationPending()` は
+  // 全データ削除の lease 調整に引き続き使うため、hook 自体は維持する）。
   const localModels = useLocalModelManagement({
     management: localModelManagement,
     mutationLeases: localModelMutationLeases,
@@ -1173,12 +1176,6 @@ export default function PassportApp({
     hasActiveProviderRun: providerRunPending,
     ready: !restoring,
   });
-
-  useEffect(() => {
-    if (stage === 'settings' && !providerRunPending) {
-      localModels.view.reload();
-    }
-  }, [localModels.view.reload, providerRunPending, stage]);
 
   useEffect(() => {
     return () => {
@@ -1203,13 +1200,18 @@ export default function PassportApp({
     onOpen: () => setStage('pilot-measurement'),
     onClose: () => setStage('settings'),
   });
-  // Issue 104 / ADR-0036: 端末内会話エージェント。`providerRunner`・
-  // `localModels.provider` は Pet Interaction と同じ共有 instance をそのまま渡す。
+  // Issue 104 / ADR-0036: 端末内会話エージェント。`providerRunner` は Pet
+  // Interaction と同じ共有 instance をそのまま渡す。v1.0（ADR-0038）: Provider は
+  // `useLocalModelManagement` が返す state（Local Model が有効なら llama.rn 経由に
+  // なり得た）ではなく `RULES_MODEL_PROVIDER` に固定する。オンデバイス LLM の
+  // ダウンロード停止・未完了起動時の native crash が実機で確認され、呼び出し元を
+  // 実機テストできないため、v1.0 では会話 Agent が Local LLM Completion Port に
+  // 一切触れないことを呼び出し口で直接保証する（v1.1 で実機テストして再有効化する）。
   const conversationAgentFlow = useConversationAgentFlow({
     locale,
     qrScannerPort,
     providerRunner,
-    provider: localModels.provider,
+    provider: RULES_MODEL_PROVIDER,
     onNavigateToConversationAgent: () => setStage('conversation-agent'),
     onNavigateToSettings: () => setStage('settings'),
   });
@@ -2207,6 +2209,9 @@ export default function PassportApp({
    * 「会話の糸を探す」操作 1 回で共通 Model Provider を実行する。検証済み Bridge は
    * そのまま Retired Lounge へ、保守的な no-signal は既存の bounded Rules Discovery と
    * Owner Question へ渡す。Runner が二重 Tap、Deadline、Fallback-once を所有する。
+   * v1.0（ADR-0038）: Provider は `useLocalModelManagement` が返す state では
+   * なく `RULES_MODEL_PROVIDER` に固定する（会話 Agent と同じ理由、上記
+   * `conversationAgentFlow` 配線のコメント参照）。
    */
   function startPetInteraction(): void {
     if (lounge?.status !== 'active') return;
@@ -2234,7 +2239,7 @@ export default function PassportApp({
       .run({
         state: INITIAL_PROVIDER_RUNTIME_STATE,
         encounterKey,
-        provider: localModels.provider,
+        provider: RULES_MODEL_PROVIDER,
         input,
         onStateChange(state) {
           if (
@@ -2458,7 +2463,6 @@ export default function PassportApp({
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}
-        modelManagement={localModels.view}
         onAnswerQuizQuestionCorrect={handleQuizQuestionCorrect}
         onChangeLocale={handleChangeLocale}
         onCloseQuiz={closeQuiz}

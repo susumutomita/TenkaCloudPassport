@@ -14,9 +14,17 @@ function source(): Promise<string> {
  * 選択・Model 一覧・import candidate カード・診断ボタン・Pilot Measurement
  * ボタンは開発者向けデバッグ UI であり、消費者ビルドでも露出していた
  * （「Settings がデバッグメニュー化している」）。これらは `__DEV__` ゲートでは
- * なく全ビルドから完全に除去し、消費者に残すのは 言語切替 /
- * `OnDeviceAiSection`（Qwen 有効化）/ クイズ / 会話 Agent / 簡潔な
- * 「全データ削除」/ 戻る だけにする。
+ * なく全ビルドから完全に除去した。
+ *
+ * v1.0（ADR-0038、owner 実機 TestFlight フィードバック）: オンデバイス LLM
+ * （Qwen ダウンロード + llama.rn 推論）は、ダウンロードが 100% で完了せず固まる・
+ * 未完了のまま会話 Agent を開くと native crash する の 2 件が実機で確認され、
+ * 呼び出し元を実機テストできないため、Issue 138 で消費者ビルドに残した唯一の
+ * Local Model 導線（`OnDeviceAiSection` / `ModelManagementSection`）も含めて
+ * ここから完全に除去した。消費者に残すのは 言語切替 / クイズ / 会話 Agent /
+ * 簡潔な「全データ削除」/ 戻る だけになる。Local Model 管理の実装
+ * （`use-local-model-management.ts` 等）はリポジトリに残し、v1.1 で実機テストして
+ * 再有効化する。
  */
 describe('Settings 画面（言語切り替え）の Accessibility 契約', () => {
   it('説明、言語セクション、選択肢、戻るボタンの順に配置する（Issue 118: 配布能力デバッグ表示は削除済み）', async () => {
@@ -101,32 +109,35 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).not.toContain('pilotMeasurementButton');
   });
 
-  it('Issue 138（実機 blocker A、DL 完了後フリーズの是正）: クイズ・会話 Agent・戻るは Local Model 操作中（busy）では disabled にしない（モデル DL 中でも他の消費者操作はできる）', async () => {
+  it('v1.0（ADR-0038）: Settings は Local Model 管理・オンデバイス AI 有効化の導線を一切持たない（`modelManagement` prop・`OnDeviceAiSection`・`ModelManagementSection` を完全に除去した）', async () => {
     const text = await source();
-    const quizButtonStart = text.indexOf(
-      'accessibilityHint={t.quizButtonHint}'
-    );
-    const quizButtonEnd = text.indexOf('/>', quizButtonStart);
-    const quizButtonBlock = text.slice(quizButtonStart, quizButtonEnd);
-    expect(quizButtonBlock).not.toContain('modelManagement');
 
-    const backButtonStart = text.indexOf('label={t.backButton}');
-    const backButtonBlockStart = text.lastIndexOf(
-      '<ActionButton',
-      backButtonStart
-    );
-    const backButtonBlock = text.slice(
-      backButtonBlockStart,
-      text.indexOf('/>', backButtonStart)
-    );
-    expect(backButtonBlock).not.toContain('modelManagement');
-    // busy に連動した過剰 disable（旧: `modelManagement?.busy ?? false`）が
-    // 3 ボタンのどこにも残っていないことを固定する。
-    expect(text).not.toContain('modelManagement?.busy');
-    expect(text).not.toContain('modelManagement.busy ?? false');
+    // 除去した理由のコメントでの言及（バッククォート付きの識別子名）は許容し、
+    // 実際の prop 宣言・destructure・JSX での使用だけが無いことを固定する。
+    expect(text).not.toContain('readonly modelManagement');
+    expect(text).not.toContain('modelManagement?:');
+    expect(text).not.toContain('modelManagement,');
+    expect(text).not.toContain('modelManagement={');
+    expect(text).not.toContain('modelManagement?.');
+    expect(text).not.toContain('modelManagement.busy');
+    expect(text).not.toContain('import type { LocalModelManagementView }');
+    expect(text).not.toContain('function OnDeviceAiSection(');
+    expect(text).not.toContain('function OnDeviceAiDownloadingCard(');
+    expect(text).not.toContain('function ModelManagementSection(');
+    expect(text).not.toContain('function readableBytes(');
+    expect(text).not.toContain('onDeviceAiFlow');
+    expect(text).not.toContain('onDeviceAiStatus');
+    expect(text).not.toContain('trustedModelSource');
+    expect(text).not.toContain('requestEnableOnDeviceAi');
+    expect(text).not.toContain('confirmEnableOnDeviceAiConsent');
+    expect(text).not.toContain('cancelEnableOnDeviceAiConsent');
+    expect(text).not.toContain('cancelOnDeviceAiDownload');
+    expect(text).not.toContain('removeOnDeviceAiModel');
+    expect(text).not.toContain('cautionAssessment');
+    expect(text).not.toContain('pendingProviderOperation');
   });
 
-  it('code-reviewer 指摘（Issue 138）: クイズ・会話 Agent・戻るは、全データ削除の確定処理中（dataErasure.busy）だけは disabled にする（resetAllLocalMemory による予期しない Stage 巻き戻しを避ける、`LocalDiagnosticsScreen` 自身の戻るボタンと同じ配慮）', async () => {
+  it('Issue 138（実機 blocker A、DL 完了後フリーズの是正 / v1.0 ADR-0038）: クイズ・会話 Agent・戻るは dataErasure.busy だけを disabled 条件にする（Local Model 管理 UI 自体が無いため busy 連動の過剰 disable も発生し得ない）', async () => {
     const text = await source();
 
     expect(text).toContain(
@@ -138,135 +149,13 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     );
   });
 
-  it('major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は会話エージェントの入口を disabled にする。Issue 138（過剰 disable の是正）: modelManagement.busy では disabled にしない', async () => {
+  it('major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は会話エージェントの入口を disabled にする', async () => {
     const text = await source();
 
     expect(text).toContain('disabled={dataErasure.busy || !hasIntroCard}');
-    // busy に連動した過剰 disable（旧: `(modelManagement?.busy ?? false) ||
-    // !hasIntroCard`）が残っていないことを固定する。
-    expect(text).not.toContain('modelManagement?.busy');
     expect(text).toContain(
       'hasIntroCard\n            ? t.conversationAgentButtonHint\n            : t.conversationAgentButtonDisabledHint'
     );
-  });
-
-  it('Follow-up F-FDRGS4: オンデバイス AI 導線は未取得時に明示同意ボタンだけを出す（Issue 138: 消費者ビルドに残る唯一の Local Model 導線）', async () => {
-    const text = await source();
-
-    expect(text).toContain(
-      "onDeviceAiFlow === 'idle' && onDeviceAiStatus === 'not-acquired'"
-    );
-    expectInOrder(text, [
-      't.onDeviceAiDescription(',
-      'accessibilityHint={t.onDeviceAiEnableButtonHint}',
-      'label={t.onDeviceAiEnableButton}',
-      'onPress={modelManagement.requestEnableOnDeviceAi}',
-    ]);
-  });
-
-  it('Follow-up F-FDRGS4: ダウンロード前に Model 名・Size・ライセンス・同意確認を表示し、同意後だけダウンロードを開始する', async () => {
-    const text = await source();
-
-    expectInOrder(text, [
-      "onDeviceAiFlow === 'consent-pending'",
-      't.onDeviceAiConsentTitle',
-      't.onDeviceAiConsentBody(',
-      'source.displayName',
-      'source.license',
-      'label={t.onDeviceAiConsentStartButton}',
-      'onPress={modelManagement.confirmEnableOnDeviceAiConsent}',
-      'label={t.onDeviceAiConsentCancelButton}',
-      'onPress={modelManagement.cancelEnableOnDeviceAiConsent}',
-    ]);
-  });
-
-  it('Follow-up F-FDRGS4: ダウンロード中は進捗を Live Region で読み上げ、中止できる', async () => {
-    const text = await source();
-
-    // `OnDeviceAiDownloadingCard` は `OnDeviceAiSection` から呼ばれる子
-    // Component として先に定義されるため、ファイル内の出現順は
-    // 「進捗表示 -> 呼び出し側の分岐」になる。子 Component 内部の並び順と、
-    // 親からの呼び出し条件をそれぞれ固定する。
-    expectInOrder(text, [
-      't.onDeviceAiDownloadStatus(',
-      'label={t.onDeviceAiDownloadCancelButton}',
-      'onPress={modelManagement.cancelOnDeviceAiDownload}',
-    ]);
-    expect(text).toContain(
-      '<Text accessibilityLiveRegion="polite" style={styles.body}>\n        {t.onDeviceAiDownloadStatus('
-    );
-    expectInOrder(text, [
-      "onDeviceAiFlow === 'downloading'",
-      '<OnDeviceAiDownloadingCard',
-    ]);
-  });
-
-  it('Follow-up F-FDRGS4（code-reviewer 指摘、Cancel の実効性）: import/activate 中は Cancel を出さず仕上げ処理中であることだけを案内する', async () => {
-    const text = await source();
-
-    expectInOrder(text, [
-      "onDeviceAiFlow === 'finalizing'",
-      't.onDeviceAiFinalizingStatus',
-    ]);
-    expect(text).toContain(
-      '<Text accessibilityLiveRegion="polite" style={styles.body}>\n          {t.onDeviceAiFinalizingStatus}'
-    );
-    // 'finalizing' の分岐だけを切り出し、Cancel ボタンを含まないことを固定する。
-    const finalizingStart = text.indexOf("onDeviceAiFlow === 'finalizing'");
-    const consentStart = text.indexOf(
-      "onDeviceAiFlow === 'consent-pending'",
-      finalizingStart
-    );
-    const finalizingBlock = text.slice(finalizingStart, consentStart);
-    expect(finalizingBlock).not.toContain('onDeviceAiDownloadCancelButton');
-  });
-
-  it('Follow-up F-FDRGS4: 取得済みは使用中/未使用を示し、無効化(削除)は既存 deleteModel 経路（removeOnDeviceAiModel）へ委譲する（Issue 138: 消費者が容量を空けたい場合の唯一の削除導線）', async () => {
-    const text = await source();
-
-    expect(text).toContain(
-      "onDeviceAiFlow === 'idle' &&\n      onDeviceAiStatus &&\n      onDeviceAiStatus !== 'not-acquired'"
-    );
-    expectInOrder(text, [
-      "onDeviceAiStatus === 'active'\n              ? t.onDeviceAiActiveStatus\n              : t.onDeviceAiImportedNotActiveStatus",
-      'label={t.onDeviceAiRemoveButton}',
-      'onPress={modelManagement.removeOnDeviceAiModel}',
-    ]);
-  });
-
-  it('Issue 18 / Issue 138: 長時間処理と Error を Live Region で読み上げ、Local Model 操作（同意・削除・注意確認・判定終了確認）だけに disabled 状態を付ける', async () => {
-    const text = await source();
-
-    expect(text).toContain('accessibilityLiveRegion="polite"');
-    expect(text).toContain('accessibilityLiveRegion="assertive"');
-    expect(text).toContain('disabled={modelManagement.busy}');
-    expect(text).toContain('modelManagement.candidateSelectionBlocked');
-  });
-
-  it('Issue 18: 進行中の Local Model 判定を終える操作は影響を説明してから Confirm / Cancel を提示する（Qwen 有効化と共有する機構、Issue 138 でも維持）', async () => {
-    const text = await source();
-
-    expectInOrder(text, [
-      'modelManagement.pendingProviderOperation',
-      't.providerOperationTitle',
-      't.providerOperationDescription',
-      't.confirmProviderOperationButton',
-      'modelManagement.confirmProviderOperation',
-      't.cancelProviderOperationButton',
-      'modelManagement.cancelProviderOperation',
-    ]);
-  });
-
-  it('Issue 18: Resource Risk が caution のときは確認カードを表示する（Qwen 有効化と共有する機構、Issue 138 でも維持）', async () => {
-    const text = await source();
-
-    expectInOrder(text, [
-      'modelManagement.cautionAssessment',
-      't.cautionTitle',
-      't.cautionDescription',
-      't.confirmCautionButton',
-      'modelManagement.confirmCautionActivation',
-    ]);
   });
 
   it('Issue 110: クイズボタンは会話 Agent ボタンより前、戻るボタンより前に配置し、onOpenQuiz を呼ぶ', async () => {
@@ -279,18 +168,6 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
       'label={t.conversationAgentButton}',
       'label={t.backButton}',
     ]);
-  });
-
-  it('Follow-up F-FDRGS4（code-reviewer 指摘）: Expo Go / Web は modelManagement.available の分岐で ModelManagementSection ごと表示せず、OnDeviceAiSection の source null 分岐は将来の構成差分に備えた防御的な二重チェックである', async () => {
-    const text = await source();
-
-    // 実際の Expo Go / Web 除外は呼び出し側（modelManagement?.available）が担う。
-    expect(text).toContain(
-      'modelManagement?.available ? (\n        <ModelManagementSection'
-    );
-    // trustedModelSource は現状 native の唯一の実装で必ず設定されるため
-    // 到達しないが、将来 source を持たない構成が増えたときのための防御。
-    expect(text).toContain('if (!source) return null;');
   });
 
   it('Issue 138（実機 blocker B）: 消費者向けの「全データ削除」導線は既存 useLocalDiagnosticsFlow の erasure 経路をそのまま再利用する', async () => {
