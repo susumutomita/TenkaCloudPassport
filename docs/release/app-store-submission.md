@@ -52,10 +52,10 @@ Instagram などの SNS アプリ内ブラウザでは、ファイルの保存�
 自己紹介データは QR コードの URL フラグメントに埋め込まれ、相手のブラウザ内だけで復号されます。
 このデータがサーバーへ送信されることはありません。
 
-■ オンデバイス AI で共通点を見つける（任意）
-設定画面から有効化すると、初対面の相手との会話の共通点を、端末内で動く AI が見つける手助けを
-します。モデルは端末にダウンロードして動作し、内容をサーバーへ送信することはありません。
-有効化は完全に任意で、ダウンロード前に同意画面が表示されます。
+■ 端末内で会話の共通点を見つける（任意）
+相手の自己紹介ページを取り込むと、確認済みの会話テーマの中から共通点と最初の質問を端末内だけで
+見つけます。相手の情報は端末のメモリにだけ保持し、終了すると消えます。サーバーへ送信することは
+なく、オフラインでも動作します。モデルのダウンロードやアカウントは不要です。
 
 データを預からない、アカウントを作らない、名刺を用意しない。まずは自分の自己紹介カードを
 作ってみてください。
@@ -80,10 +80,11 @@ in-app browsers inside apps like LINE, X, or Instagram may fail to save the file
 Your intro data lives in the QR code's URL fragment and is decoded entirely inside the other
 person's browser. It is never sent to a server.
 
-- Optional on-device AI to find common ground
-Enable it from Settings to let an on-device AI help surface shared conversation themes with
-someone you just met. The model downloads to your device and runs there; nothing is sent to a
-server. Enabling it is entirely optional, and a consent screen appears before any download starts.
+- Optional on-device way to find common ground
+Import the other person's intro page and the app finds shared conversation topics and a first
+question from a pre-reviewed theme catalog, entirely on your device. Their info stays only in your
+device's memory and is cleared when you exit. Nothing is sent to a server, it works offline, and
+no model download or account is needed.
 
 No data collected. No account required. No business card needed. Create your Intro Card and try it.
 ```
@@ -92,16 +93,16 @@ No data collected. No account required. No business card needed. Create your Int
 
 Apple の目安上限はカンマ区切りで合計 100 文字です。
 
-日本語版は次のとおりです（約 54 文字の目安）。
+日本語版は次のとおりです（約 52 文字の目安）。
 
 ```
-名刺,自己紹介,QR,クラウド,オンデバイスAI,プライバシー,オフライン,アカウント不要,交流,人脈,無料
+名刺,自己紹介,QR,クラウド,会話,共通点,プライバシー,オフライン,アカウント不要,交流,人脈,無料
 ```
 
 English 版は次のとおりです（約 83 文字の目安）。
 
 ```
-business card,QR code,intro,networking,privacy,offline,on-device AI,no account,free
+business card,QR code,intro,networking,privacy,offline,conversation,no account,free
 ```
 
 ## 4. プロモーションテキスト（Promotional Text）
@@ -109,16 +110,16 @@ business card,QR code,intro,networking,privacy,offline,on-device AI,no account,f
 Apple の目安上限は 170 文字です。ASC からアプリ本体を再申請せずに更新できる欄なので、
 season 施策やキャンペーンに応じて owner が自由に書き換えられます。
 
-日本語版は次のとおりです（約 104 文字の目安）。
+日本語版は次のとおりです（約 101 文字の目安）。
 
 ```
-名刺不要、アカウント不要。QR を見せるだけで、相手は標準カメラで自己紹介ページを開けます。連絡先追加は任意。データはサーバーへ送信されません。任意で有効化できる端末内 AI で会話の共通点も見つけられます。
+名刺不要、アカウント不要。QR を見せるだけで、相手は標準カメラで自己紹介ページを開けます。連絡先追加は任意。データはサーバーへ送信されません。相手カードを取り込めば、端末内だけで会話の共通点も見つけられます。
 ```
 
-English 版は次のとおりです（約 170 文字の目安）。
+English 版は次のとおりです（約 168 文字の目安）。
 
 ```
-No business card, no account. Show a QR — your intro page opens in their camera app. Contact-add is optional. Zero server data. Optional on-device AI finds common ground.
+No business card, no account. Show a QR — your intro page opens in their camera app. Contact-add is optional. Zero server data. Find common ground on-device, fully offline.
 ```
 
 ## 5. URL
@@ -172,16 +173,17 @@ ASC へ貼り付けます。
 ```
 This app is free, requires no account, and does not run any server that receives user data.
 
-(a) Optional on-device AI
-An on-device AI feature is OFF by default. Enabling it (Settings > On-device AI) downloads a
-~1.1 GB open model (Qwen2.5-1.5B-Instruct, Q4_K_M quantization, Apache-2.0 license) to the device.
-A consent screen shows the exact size and license and requires an explicit tap before any
-download starts. After download, all inference runs on-device; nothing is sent to a server.
-You can test this single-handed, on one device, without a second phone or a real QR scan:
-open the Conversation Agent screen (reachable from Settings after enabling on-device AI, or via
-Rules fallback without it) and tap "Try with a sample" ("サンプルで試す"). This injects a fixed
-sample counterpart card (fictional name, no real person) so you can see the agent surface shared
-conversation themes end to end, on one device, offline.
+(a) On-device conversation agent (no model download)
+The app includes an on-device conversation agent that finds common ground between two intro cards.
+In this version it runs fully offline with no model download, no account, and no network: it
+selects a shared conversation topic and a first question from a fixed, pre-reviewed catalog of
+theme IDs shipped inside the app. The counterpart's info is held only in device memory and is
+cleared on exit; nothing is sent to a server.
+You can test this single-handed, on one device, without a second phone or a real QR scan: open the
+conversation agent (Settings > "Try the on-device conversation agent") and tap "Try with a sample"
+("サンプルで試す"). This injects a fixed sample counterpart card (fictional name, no real person)
+so you can see the agent surface a shared conversation theme end to end, on one device, offline and
+instantly.
 
 (b) QR intro flow
 Create an Intro Card (name is the only required field) from the first screen, then tap to show
@@ -201,14 +203,15 @@ storage of the user's own Intro Card, fully offline QR generation from that stor
 (optionally) on-device AI inference — none of this depends on network access or a server-hosted
 backend.
 
-Guidelines 1.1 / 1.2 (user-generated / AI-generated content): the on-device AI's task is narrowly
-scoped to selecting among a fixed, pre-reviewed catalog of conversation-theme IDs shipped inside
-the app (see docs/adr/0036-on-device-conversation-agent.md in the source repository); it does not
-generate open-ended free text shown to users, and it never reveals another person's private data
-beyond the themes they explicitly chose to include on their own card. Because there is no
-open-ended AI-generated text surface today, the app does not yet have a dedicated in-app
-report/flag flow for AI output; if a future release adds open-ended generation, such a flow would
-need to be added at that time.
+Guidelines 1.1 / 1.2 (user-generated / AI-generated content): the on-device agent is deterministic
+and narrowly scoped to selecting among a fixed, pre-reviewed catalog of conversation-theme IDs
+shipped inside the app (see docs/adr/0036-on-device-conversation-agent.md; the optional on-device
+LLM path is disabled in this version, see docs/adr/0038-v1-disable-on-device-llm-for-consumers.md).
+It does not generate open-ended free text shown to users, and it never reveals another person's
+private data beyond the themes they explicitly chose to include on their own card. Because there is
+no open-ended AI-generated text surface today, the app does not yet have a dedicated in-app
+report/flag flow; if a future release adds open-ended generation, such a flow would need to be
+added at that time.
 ```
 
 ## 8. 年齢レーティング・カテゴリ
@@ -249,17 +252,18 @@ owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC 
       届いていることを確認し、実機（自分の端末、可能なら友人の端末も）で一通り操作確認する。
 - [ ] 上記すべてが揃った状態で Submit for Review する。
 
-### Bonsai 実機テストと preview entitlement（別項、v1.0.0 の Submit 自体には不要）
+### 端末内 LLM と preview entitlement（別項、v1.0.0 の Submit 自体には不要）
 
-`app.json` の `llama.rn` plugin は `entitlementsProfile: ["preview"]` のみを持ち、production
-（App Store へ提出する Build）には entitlement を適用しません。v1.0.0 が採用する Native
-デフォルトモデル（Qwen2.5-1.5B-Instruct、Q4_K_M）は entitlement なしでも Resource Risk
-`supported` に収まる設計目標であるため、**production entitlement の復元は v1.0.0 の Submit を
-妨げません**。
+v1.0.0 の会話エージェントは端末内の確認済みテーマカタログから共通点を計算する Rules 方式で
+動作し、LLM モデルのダウンロードや同梱はしません（根拠 [ADR-0038](../adr/0038-v1-disable-on-device-llm-for-consumers.md)）。
+したがって production（App Store へ提出する Build）にモデルや追加 entitlement は不要で、Submit を
+妨げる要素はありません。
 
-より大きなモデル（例えば検討中の Bonsai 系列）を preview Build で実機テストしたい場合は、
-Apple Developer Portal 側の capability 有効化と Provisioning Profile の再生成という別の owner
-作業が必要です。手順と根拠は
+`app.json` の `llama.rn` plugin は `entitlementsProfile: ["preview"]` のみを持ち、production Build
+には entitlement を適用しません。端末内 LLM（Qwen2.5-1.5B-Instruct や検討中の Bonsai 系列）は
+v1.1 で preview Build の実機ループを経て再導入する計画で、その実機テストには Apple Developer
+Portal 側の capability 有効化と Provisioning Profile の再生成という別の owner 作業が必要です。
+手順と根拠は
 [`llama-provider-development-build.md`](../design/llama-provider-development-build.md) の
 該当節と [Issue 104 設計文書](../design/2026-07-23-on-device-conversation-agent.md) の
 「モデルライフサイクル・entitlement・プライバシー・審査戦略」節を正本とします。
