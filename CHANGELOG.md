@@ -7,6 +7,25 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
+## [1.1.0] - 2026-07-25
+
+会話エージェントを実際に使える形にした Release です。
+
+### Added
+
+- 会話エージェントの「QR 再スキャン」で実カメラを開き、対面の相手が表示している自己紹介ページの QR を読み取れるようにした。これまでの読取経路は単一端末デモ用の in-process 実装だけで、対面の相手のカードは取り込めなかった（ADR-0042）。
+- 自己紹介カードの自由記述（肩書き・所属・自己紹介文）を端末内モデルへ渡し、カタログの会話テーマが一致しない相手でも共通点を提示できるようにした。モデルは自分の言葉を書けず、両者の文から根拠になった箇所をそのまま引用する。表示前に引用が入力文に実在することを照合し、確認できないものは表示せず Rules の結果へ倒す（ADR-0043）。
+- Settings のオンデバイス AI 有効化 UI を復元し、消費者がモデルを入手できるようにした。
+
+### Changed
+
+- 端末内 LLM を会話エージェントに限って再有効化した。ADR-0038 が v1.0 の暫定措置として置いていた Provider の Rules 固定を ADR-0043 が supersede する。Pet Interaction（Lounge）は自由記述を持たないため Rules のままとした。
+- `NSCameraUsageDescription` を追加した。マイクと `RECORD_AUDIO` は要求しない。
+
+### Known limitations
+
+- ADR-0038 が記録した実機不具合 2 件（モデルのダウンロードが 100 パーセントで固まる、未完了状態で会話エージェントを開くと native crash する）の再発有無は実機で未確認である。
+
 ## [1.0.0] - Unreleased
 
 App Store（TestFlight 経由の Native 配布）向けの初回 Release です。Public OSS Alpha の

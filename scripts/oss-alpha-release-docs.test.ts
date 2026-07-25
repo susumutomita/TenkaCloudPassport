@@ -464,8 +464,10 @@ describe('Issue 29: Release Gate と Version の一致契約', () => {
     ).json();
     const version = Reflect.get(packageMetadata, 'version');
     expect(version).toBe('0.1.0-alpha.1');
+    // Platform App Version は Source Candidate（package.json）とは別系統で、
+    // TestFlight / App Store へ出すマーケティングバージョンを指す。
     expect(Reflect.get(Reflect.get(appMetadata, 'expo'), 'version')).toBe(
-      '1.0.0'
+      '1.1.0'
     );
 
     for (const relativePath of [

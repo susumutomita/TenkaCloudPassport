@@ -1,6 +1,6 @@
-# App Store 申請メタデータ（v1.0.0）
+# App Store 申請メタデータ（v1.1.0）
 
-本書は TenkaCloud Passport v1.0.0 を App Store Connect（ASC）へ申請するための、owner がそのまま
+本書は TenkaCloud Passport v1.1.0 を App Store Connect（ASC）へ申請するための、owner がそのまま
 コピーして使えるメタデータ一式です。誇張を避け、実装済みの範囲だけを事実として記述します
 （fail-closed）。文字数上限は Apple の一般的な既知の値を目安として付しますが、最終的な上限と
 入力欄の実際の文字数は申請時に ASC の画面上で確認してください。
@@ -160,10 +160,16 @@ owner は Submit 前に一度 prebuild または EAS Build を実行し、生成
 
 ### 権限（Info.plist）
 
-`app.json` の `ios.infoPlist` には `ITSAppUsesNonExemptEncryption: false` のみが定義されています。
-カメラ・マイク・位置情報・連絡先などの usage description は定義していません。これは意図的です。
-QR コードの表示にカメラは不要であり、QR を読み取るのは相手の端末の標準カメラアプリです
-（本アプリ自身はカメラを要求しません）。
+`app.json` の `ios.infoPlist` には `ITSAppUsesNonExemptEncryption: false` が定義されています。
+
+v1.1.0 から `NSCameraUsageDescription` が加わります。会話エージェントが対面の相手の自己紹介
+ページ QR を読み取るために、`expo-camera` の config plugin 経由でカメラ用途文言を宣言します
+（根拠 [ADR-0042](../adr/0042-real-camera-qr-capture-port.md)）。自分の QR を表示するだけなら
+従来どおりカメラは不要で、相手が標準カメラアプリで読む経路も変わりません。
+
+マイク・位置情報・連絡先の usage description は定義していません。これは意図的です。
+`expo-camera` の plugin 設定で `microphonePermission: false` と `recordAudioAndroid: false` を
+明示し、カメラ以外の権限を要求しない構成にしています。
 
 ## 7. App Review Notes（審査官向け）
 
@@ -173,12 +179,21 @@ ASC へ貼り付けます。
 ```
 This app is free, requires no account, and does not run any server that receives user data.
 
-(a) On-device conversation agent (no model download)
+(a) On-device conversation agent (optional model download)
 The app includes an on-device conversation agent that finds common ground between two intro cards.
-In this version it runs fully offline with no model download, no account, and no network: it
-selects a shared conversation topic and a first question from a fixed, pre-reviewed catalog of
-theme IDs shipped inside the app. The counterpart's info is held only in device memory and is
-cleared on exit; nothing is sent to a server.
+By default it runs fully offline with no model download, no account, and no network: it selects a
+shared conversation topic and a first question from a fixed, pre-reviewed catalog of theme IDs
+shipped inside the app.
+A user may optionally enable an on-device language model from Settings, which downloads a model
+file to the device. No model is bundled in the binary, the download never starts without an
+explicit opt-in, and the model runs entirely on the device with no network calls at inference time.
+When enabled, the model may additionally point out an overlap between the two intro-card free-text
+descriptions, but it cannot write its own words: it may only return substrings copied verbatim from
+those two texts, and the app rejects any quote it cannot find character-for-character in the
+corresponding input before anything is displayed. Every displayed sentence comes from a fixed
+template owned by the app.
+The counterpart's info is held only in device memory and is cleared on exit; nothing is sent to a
+server.
 You can test this single-handed, on one device, without a second phone or a real QR scan: open the
 conversation agent (Settings > "Try the on-device conversation agent") and tap "Try with a sample"
 ("サンプルで試す"). This injects a fixed sample counterpart card (fictional name, no real person)
@@ -203,10 +218,16 @@ storage of the user's own Intro Card, fully offline QR generation from that stor
 (optionally) on-device AI inference — none of this depends on network access or a server-hosted
 backend.
 
-Guidelines 1.1 / 1.2 (user-generated / AI-generated content): the on-device agent is deterministic
-and narrowly scoped to selecting among a fixed, pre-reviewed catalog of conversation-theme IDs
-shipped inside the app (see docs/adr/0036-on-device-conversation-agent.md; the optional on-device
-LLM path is disabled in this version, see docs/adr/0038-v1-disable-on-device-llm-for-consumers.md).
+Guidelines 1.1 / 1.2 (user-generated / AI-generated content): the on-device agent runs entirely on
+the device and never sends data off it. It works in two modes. By default it selects among a fixed,
+pre-reviewed catalog of conversation-theme IDs shipped inside the app
+(see docs/adr/0036-on-device-conversation-agent.md). If the user explicitly opts in and downloads a
+local language model from Settings, the model may additionally point out an overlap between the two
+intro-card free-text descriptions. Even then the model cannot write its own words: it may only
+return substrings copied verbatim from the two texts, and the app rejects and discards any quote it
+cannot find character-for-character in the corresponding input before anything is displayed
+(see docs/adr/0043-grounded-quote-bridge-and-local-llm-reenablement.md). All displayed sentences
+come from fixed templates owned by the app.
 It does not generate open-ended free text shown to users, and it never reveals another person's
 private data beyond the themes they explicitly chose to include on their own card. Because there is
 no open-ended AI-generated text surface today, the app does not yet have a dedicated in-app
@@ -252,17 +273,20 @@ owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC 
       届いていることを確認し、実機（自分の端末、可能なら友人の端末も）で一通り操作確認する。
 - [ ] 上記すべてが揃った状態で Submit for Review する。
 
-### 端末内 LLM と preview entitlement（別項、v1.0.0 の Submit 自体には不要）
+### 端末内 LLM と preview entitlement
 
-v1.0.0 の会話エージェントは端末内の確認済みテーマカタログから共通点を計算する Rules 方式で
-動作し、LLM モデルのダウンロードや同梱はしません（根拠 [ADR-0038](../adr/0038-v1-disable-on-device-llm-for-consumers.md)）。
-したがって production（App Store へ提出する Build）にモデルや追加 entitlement は不要で、Submit を
-妨げる要素はありません。
+v1.1.0 で会話エージェントの端末内 LLM を再有効化しました（根拠
+[ADR-0043](../adr/0043-grounded-quote-bridge-and-local-llm-reenablement.md)。ADR-0038 が
+v1.0 の暫定措置として置いていた Provider の Rules 固定を supersede します）。
+
+モデルはアプリに同梱せず、利用者が Settings で明示的に有効化したときにだけダウンロードします。
+モデルを入れていない端末では従来どおり Rules 方式で動作します。したがって production
+（App Store へ提出する Build）にモデルを同梱する必要はありません。
 
 `app.json` の `llama.rn` plugin は `entitlementsProfile: ["preview"]` のみを持ち、production Build
-には entitlement を適用しません。端末内 LLM（Qwen2.5-1.5B-Instruct や検討中の Bonsai 系列）は
-v1.1 で preview Build の実機ループを経て再導入する計画で、その実機テストには Apple Developer
-Portal 側の capability 有効化と Provisioning Profile の再生成という別の owner 作業が必要です。
+には extended memory entitlement を適用しません。この entitlement を要する実機テストには Apple
+Developer Portal 側の capability 有効化と Provisioning Profile の再生成という別の owner 作業が
+必要です。
 手順と根拠は
 [`llama-provider-development-build.md`](../design/llama-provider-development-build.md) の
 該当節と [Issue 104 設計文書](../design/2026-07-23-on-device-conversation-agent.md) の
@@ -270,13 +294,13 @@ Portal 側の capability 有効化と Provisioning Profile の再生成という
 
 ## 10. TestFlight ビルドの起動方法
 
-バージョンタグ `v1.0.0` を push すると、`.github/workflows/ios-release.yml`（`ios-release`
+バージョンタグ `v1.1.0` を push すると、`.github/workflows/ios-release.yml`（`ios-release`
 ワークフロー）が起動し、EAS の production プロファイルで Build から Submit（TestFlight への
 提出）までを非対話で実行します。owner が行う操作は以下だけです。
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 タグ push 後の運用（実行結果の確認、失敗時の再実行手順、`ios.buildNumber` は
