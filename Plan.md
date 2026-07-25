@@ -8982,3 +8982,45 @@ ADR-0043 で端末内モデルが実際に共通点を見つけられるよう�
   機能が残る構造になっていた。
 - **予防策**: 機能を無効化するときは、実体と導線のどちらを止めたかを ADR に明記し、
   再有効化時にどちらも戻す必要があるかを判断できるようにする。
+
+### v1.1.0 を TestFlight へ配信する - 2026-07-25
+
+#### 目的
+
+PR 148 / 149 / 150 で入った 3 つの変更（実カメラ QR 読取、引用による共通点提示、
+Settings のオンデバイス AI 有効化 UI）を v1.1.0 として TestFlight へ届け、実機でしか
+確認できない項目を owner が検証できる状態にする。
+
+#### 制約
+
+- App Store Connect へ渡すメタデータが実装と食い違ったまま提出しない。
+- `ios.buildNumber` は EAS の `appVersionSource: "remote"` に任せ、手で書き換えない。
+
+#### タスク
+
+1. `app.json` の `expo.version` を 1.1.0 へ上げる。
+2. `docs/release/app-store-submission.md` の事実誤りを直す。
+3. タグ `v1.1.0` を push し、`ios-release` ワークフローの結果を確認する。
+
+#### 検証手順
+
+- `bun run typecheck` / `lint` / `bun test src --coverage` / `architecture-harness`。
+- タグ push 後、GitHub Actions の `ios-release` 実行結果。
+- TestFlight に届いた Build での実機確認（owner）。
+
+#### 進捗ログ
+
+- 2026-07-25: 申請メタデータを読み直したところ、v1.0.0 時点の記述が 2 か所で実装と
+  食い違っていることを見つけた。1 つはカメラ権限で「本アプリ自身はカメラを要求しません」
+  と書いてあるが PR 148 で `NSCameraUsageDescription` が加わっている。もう 1 つは審査官向け
+  Notes の「no model download」で、PR 149 / 150 でオンデバイス LLM のダウンロードが
+  可能になっている。どちらも Apple へ渡す文面のため、配信前に修正した。
+
+#### 振り返り
+
+- **問題**: 機能を入れる PR の中では、App Store 申請メタデータの記述が古くなることに
+  気付けなかった。3 つの PR すべてで見落としていた。
+- **根本原因**: 申請メタデータは `docs/release/` にあり、機能実装で触るファイル群と
+  離れている。権限や AI の振る舞いを変えても、そこへ波及することが機械的に検出されない。
+- **予防策**: `app.json` の `ios.infoPlist` / `plugins` を変更する PR と、Provider の
+  合成を変更する PR では、`docs/release/app-store-submission.md` の該当節を確認する。
