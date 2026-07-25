@@ -109,32 +109,29 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).not.toContain('pilotMeasurementButton');
   });
 
-  it('v1.0（ADR-0038）: Settings は Local Model 管理・オンデバイス AI 有効化の導線を一切持たない（`modelManagement` prop・`OnDeviceAiSection`・`ModelManagementSection` を完全に除去した）', async () => {
+  it('ADR-0043: Settings から Local Model の有効化・進捗・削除へ到達できる', async () => {
     const text = await source();
 
-    // 除去した理由のコメントでの言及（バッククォート付きの識別子名）は許容し、
-    // 実際の prop 宣言・destructure・JSX での使用だけが無いことを固定する。
-    expect(text).not.toContain('readonly modelManagement');
-    expect(text).not.toContain('modelManagement?:');
-    expect(text).not.toContain('modelManagement,');
-    expect(text).not.toContain('modelManagement={');
-    expect(text).not.toContain('modelManagement?.');
-    expect(text).not.toContain('modelManagement.busy');
-    expect(text).not.toContain('import type { LocalModelManagementView }');
-    expect(text).not.toContain('function OnDeviceAiSection(');
-    expect(text).not.toContain('function OnDeviceAiDownloadingCard(');
-    expect(text).not.toContain('function ModelManagementSection(');
-    expect(text).not.toContain('function readableBytes(');
-    expect(text).not.toContain('onDeviceAiFlow');
-    expect(text).not.toContain('onDeviceAiStatus');
-    expect(text).not.toContain('trustedModelSource');
-    expect(text).not.toContain('requestEnableOnDeviceAi');
-    expect(text).not.toContain('confirmEnableOnDeviceAiConsent');
-    expect(text).not.toContain('cancelEnableOnDeviceAiConsent');
-    expect(text).not.toContain('cancelOnDeviceAiDownload');
-    expect(text).not.toContain('removeOnDeviceAiModel');
-    expect(text).not.toContain('cautionAssessment');
-    expect(text).not.toContain('pendingProviderOperation');
+    // ADR-0038 が除去した消費者導線を戻す。端末内モデルが共通点を見つけられる
+    // ようになった以上、Model を入手する導線が無ければ機能へ到達できない。
+    expect(text).toContain(
+      'readonly modelManagement?: LocalModelManagementView'
+    );
+    expect(text).toContain('function OnDeviceAiSection(');
+    expect(text).toContain('function OnDeviceAiDownloadingCard(');
+    expect(text).toContain('function ModelManagementSection(');
+    expect(text).toContain('requestEnableOnDeviceAi');
+    expect(text).toContain('confirmEnableOnDeviceAiConsent');
+    expect(text).toContain('cancelEnableOnDeviceAiConsent');
+    expect(text).toContain('cancelOnDeviceAiDownload');
+    expect(text).toContain('removeOnDeviceAiModel');
+  });
+
+  it('ADR-0043: Local Model を扱えない Platform では管理 UI を描画しない', async () => {
+    const text = await source();
+
+    // Expo Go / Web は `available` が false になり、Settings に何も増えない。
+    expect(text).toContain('modelManagement?.available ? (');
   });
 
   it('Issue 138（実機 blocker A、DL 完了後フリーズの是正 / v1.0 ADR-0038）: 会話 Agent・戻るは dataErasure.busy だけを disabled 条件にする（Local Model 管理 UI 自体が無いため busy 連動の過剰 disable も発生し得ない）', async () => {

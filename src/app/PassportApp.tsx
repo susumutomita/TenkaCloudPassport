@@ -176,7 +176,10 @@ import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
 } from './use-local-diagnostics-flow';
-import { useLocalModelManagement } from './use-local-model-management';
+import {
+  type LocalModelManagementView,
+  useLocalModelManagement,
+} from './use-local-model-management';
 import {
   type PilotMeasurementFlow,
   usePilotMeasurementFlow,
@@ -591,6 +594,8 @@ interface UtilityStageGateProps {
    * （自己紹介カード、`introCard !== null`）。
    */
   readonly hasIntroCard: boolean;
+  /** ADR-0043: Settings へ戻した Local Model 管理 UI の状態と操作。 */
+  readonly modelManagement: LocalModelManagementView;
 }
 
 function UtilityStageGate({
@@ -606,6 +611,7 @@ function UtilityStageGate({
   conversationAgent,
   cameraQrCapturePort,
   hasIntroCard,
+  modelManagement,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
     return (
@@ -668,6 +674,7 @@ function UtilityStageGate({
         }}
         hasIntroCard={hasIntroCard}
         locale={locale}
+        modelManagement={modelManagement}
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
         onOpenConversationAgent={onOpenConversationAgent}
@@ -1127,6 +1134,14 @@ export default function PassportApp({
     hasActiveProviderRun: providerRunPending,
     ready: !restoring,
   });
+
+  // ADR-0043: Settings を開いたときに manifest を読み直し、ダウンロード完了や
+  // 外部削除を UI へ反映する。実行中の Provider があるときは待つ。
+  useEffect(() => {
+    if (stage === 'settings' && !providerRunPending) {
+      localModels.view.reload();
+    }
+  }, [localModels.view.reload, providerRunPending, stage]);
 
   useEffect(() => {
     return () => {
@@ -2333,6 +2348,7 @@ export default function PassportApp({
         }}
         diagnosticsFlow={diagnosticsFlow}
         hasIntroCard={introCard !== null}
+        modelManagement={localModels.view}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}
