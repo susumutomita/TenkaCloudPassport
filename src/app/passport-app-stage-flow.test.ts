@@ -616,13 +616,13 @@ describe('PassportApp の Stage 遷移契約', () => {
       ]);
     });
 
-    it('v1.0（ADR-0038、/simplify 指摘）: Settings 再訪時の Local Model 自動 reload effect はもう存在しない（表示先の Local Model 管理 UI 自体を除去したため dead work だった）', async () => {
+    it('ADR-0043: Settings を開き直したとき、実行中の Provider が無ければ manifest を読み直す', async () => {
       const text = await source();
 
-      expect(text).not.toContain(
+      expect(text).toContain(
         "if (stage === 'settings' && !providerRunPending)"
       );
-      expect(text).not.toContain('localModels.view.reload()');
+      expect(text).toContain('localModels.view.reload()');
     });
 
     it('Issue 118: Settings は配布能力デバッグ表示を受け取らない（distributionCapability prop を渡さない）', async () => {

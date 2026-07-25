@@ -8,6 +8,7 @@ import {
   type Locale,
 } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
+import type { LocalModelManagementView } from '../app/use-local-model-management';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import { colors, spacing } from '../ui/theme';
@@ -34,6 +35,13 @@ interface SettingsScreenProps {
    * （session が作れず intake 導線が no-op になる画面を開かせない）。
    */
   readonly hasIntroCard: boolean;
+  /**
+   * ADR-0043（Issue 147）: ADR-0038 が除去した Local Model 管理 UI を戻す。
+   * 端末内モデルが実際に共通点を見つけられるようになった以上、消費者が Model を
+   * 入手する導線が無ければ機能へ到達できない。`available` が false の Platform
+   * （Expo Go / Web）では従来どおり何も表示しない。
+   */
+  readonly modelManagement?: LocalModelManagementView;
   readonly onBack: () => void;
   /**
    * Issue 138（実機 blocker B）: 診断画面（開発者向け Preview・Share・個別削除）は
@@ -65,6 +73,213 @@ export interface SettingsDataErasureProps {
   readonly retryRecovery: () => Promise<void>;
 }
 
+function readableBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024 * 1024) return `${Math.ceil(sizeBytes / 1024)} KiB`;
+  if (sizeBytes < 1024 * 1024 * 1024) {
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MiB`;
+  }
+  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
+}
+
+interface OnDeviceAiSectionProps {
+  readonly modelManagement: LocalModelManagementView;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}
+
+/** ダウンロード中の進捗表示 + 中止導線だけを切り出した子 Component。 */
+function OnDeviceAiDownloadingCard({
+  modelManagement,
+  source,
+  t,
+}: {
+  readonly modelManagement: LocalModelManagementView;
+  readonly source: NonNullable<LocalModelManagementView['trustedModelSource']>;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}) {
+  const progress = modelManagement.onDeviceAiDownloadProgress;
+  const percent =
+    source.sizeBytes > 0
+      ? Math.min(
+          100,
+          Math.round(((progress?.bytesWritten ?? 0) / source.sizeBytes) * 100)
+        )
+      : 0;
+  return (
+    <>
+      <Text accessibilityLiveRegion="polite" style={styles.body}>
+        {t.onDeviceAiDownloadStatus(
+          readableBytes(progress?.bytesWritten ?? 0),
+          readableBytes(source.sizeBytes),
+          percent
+        )}
+      </Text>
+      <ActionButton
+        label={t.onDeviceAiDownloadCancelButton}
+        onPress={modelManagement.cancelOnDeviceAiDownload}
+        variant="danger"
+      />
+    </>
+  );
+}
+
+/**
+ * Follow-up F-FDRGS4: Document Picker を知らない通常ユーザー向けの、
+ * Qwen2.5-1.5B 信頼済みダウンロードの単一導線。状態（未取得 / 同意待ち /
+ * ダウンロード中 / 仕上げ処理中 / 取得済み）は新しい state を持たず、既存
+ * Manifest から導出した `onDeviceAiStatus` と、Hook 側の単一 tag
+ * `onDeviceAiFlow`（code-reviewer 指摘・simplify: 「同意待ち」「ダウンロード中」を
+ * 独立した 2 boolean にすると二重否定の分岐が必要になっていた）だけで出し分ける。
+ * Issue 138（実機 blocker B）: 消費者ビルドに残す唯一の Local Model 導線。生の
+ * GGUF 選択・Model 一覧は開発者向けとして完全に除去したため、容量を空けたい
+ * 場合の削除もここ（`onDeviceAiRemoveButton` -> `removeOnDeviceAiModel`）で担保する。
+ */
+function OnDeviceAiSection({ modelManagement, t }: OnDeviceAiSectionProps) {
+  const source = modelManagement.trustedModelSource;
+  if (!source) return null;
+  const { onDeviceAiFlow, onDeviceAiStatus } = modelManagement;
+
+  return (
+    <View style={styles.modelCard}>
+      <Text style={styles.modelTitle}>{t.onDeviceAiSectionTitle}</Text>
+      {onDeviceAiFlow === 'downloading' ? (
+        <OnDeviceAiDownloadingCard
+          modelManagement={modelManagement}
+          source={source}
+          t={t}
+        />
+      ) : null}
+      {onDeviceAiFlow === 'finalizing' ? (
+        <Text accessibilityLiveRegion="polite" style={styles.body}>
+          {t.onDeviceAiFinalizingStatus}
+        </Text>
+      ) : null}
+      {onDeviceAiFlow === 'consent-pending' ? (
+        <>
+          <Text style={styles.modelTitle}>{t.onDeviceAiConsentTitle}</Text>
+          <Text style={styles.body}>
+            {t.onDeviceAiConsentBody(
+              source.displayName,
+              readableBytes(source.sizeBytes),
+              source.license
+            )}
+          </Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.onDeviceAiConsentStartButton}
+            onPress={modelManagement.confirmEnableOnDeviceAiConsent}
+          />
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.onDeviceAiConsentCancelButton}
+            onPress={modelManagement.cancelEnableOnDeviceAiConsent}
+            variant="secondary"
+          />
+        </>
+      ) : null}
+      {onDeviceAiFlow === 'idle' && onDeviceAiStatus === 'not-acquired' ? (
+        <>
+          <Text style={styles.body}>
+            {t.onDeviceAiDescription(
+              source.displayName,
+              readableBytes(source.sizeBytes)
+            )}
+          </Text>
+          <ActionButton
+            accessibilityHint={t.onDeviceAiEnableButtonHint}
+            disabled={
+              modelManagement.busy || modelManagement.candidateSelectionBlocked
+            }
+            label={t.onDeviceAiEnableButton}
+            onPress={modelManagement.requestEnableOnDeviceAi}
+          />
+        </>
+      ) : null}
+      {onDeviceAiFlow === 'idle' &&
+      onDeviceAiStatus &&
+      onDeviceAiStatus !== 'not-acquired' ? (
+        <>
+          <Text style={styles.body}>
+            {onDeviceAiStatus === 'active'
+              ? t.onDeviceAiActiveStatus
+              : t.onDeviceAiImportedNotActiveStatus}
+          </Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.onDeviceAiRemoveButton}
+            onPress={modelManagement.removeOnDeviceAiModel}
+            variant="danger"
+          />
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+interface ModelManagementSectionProps {
+  readonly modelManagement: LocalModelManagementView;
+  readonly t: (typeof MESSAGES)[Locale]['settings'];
+}
+
+/**
+ * Issue 138（実機 blocker B、owner 実機 TestFlight フィードバック）: 生の GGUF
+ * 選択（`selectModelButton`）・Model 一覧（`LocalModelCard`）・import candidate
+ * カードは開発者向けデバッグ UI であり、消費者ビルドで露出していた。「開発者向け
+ * ツールを消費者に見せない」方針のもと、`__DEV__` ゲートではなく全ビルドから
+ * 完全に除去する（owner がシミュレーターで clean になったことを確認できるように
+ * する）。`OnDeviceAiSection`・busy/error 表示・`cautionAssessment` 確認カード・
+ * `pendingProviderOperation` 確認カードは、Qwen 有効化フロー（消費者が使う唯一の
+ * Local Model 導線）と共有する機構のため維持する。
+ */
+function ModelManagementSection({
+  modelManagement,
+  t,
+}: ModelManagementSectionProps) {
+  return (
+    <View style={styles.modelSection}>
+      {modelManagement.busy ? (
+        <Text accessibilityLiveRegion="polite" style={styles.body}>
+          {t.modelBusy}
+        </Text>
+      ) : null}
+      {modelManagement.errorCode ? (
+        <Text accessibilityLiveRegion="assertive" style={styles.error}>
+          {t.modelError(modelManagement.errorCode)}
+        </Text>
+      ) : null}
+      <OnDeviceAiSection modelManagement={modelManagement} t={t} />
+      {modelManagement.cautionAssessment ? (
+        <View style={styles.modelCard}>
+          <Text style={styles.modelTitle}>{t.cautionTitle}</Text>
+          <Text style={styles.body}>{t.cautionDescription}</Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.confirmCautionButton}
+            onPress={modelManagement.confirmCautionActivation}
+            variant="danger"
+          />
+        </View>
+      ) : null}
+      {modelManagement.pendingProviderOperation ? (
+        <View style={styles.modelCard}>
+          <Text style={styles.modelTitle}>{t.providerOperationTitle}</Text>
+          <Text style={styles.body}>{t.providerOperationDescription}</Text>
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.confirmProviderOperationButton}
+            onPress={modelManagement.confirmProviderOperation}
+            variant="danger"
+          />
+          <ActionButton
+            disabled={modelManagement.busy}
+            label={t.cancelProviderOperationButton}
+            onPress={modelManagement.cancelProviderOperation}
+            variant="secondary"
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
 interface DataErasureSectionProps {
   readonly dataErasure: SettingsDataErasureProps;
   readonly locale: Locale;
@@ -159,6 +374,7 @@ export default function SettingsScreen({
   onChangeLocale,
   onOpenConversationAgent,
   hasIntroCard,
+  modelManagement,
   onBack,
   dataErasure,
 }: SettingsScreenProps) {
@@ -183,6 +399,9 @@ export default function SettingsScreen({
           );
         })}
       </View>
+      {modelManagement?.available ? (
+        <ModelManagementSection modelManagement={modelManagement} t={t} />
+      ) : null}
       <ActionButton
         accessibilityHint={
           hasIntroCard
@@ -206,6 +425,9 @@ export default function SettingsScreen({
 }
 
 const styles = StyleSheet.create({
+  modelSection: {
+    gap: spacing.md,
+  },
   sectionTitle: {
     color: colors.ink,
     fontSize: 18,

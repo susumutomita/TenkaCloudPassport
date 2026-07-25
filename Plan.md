@@ -8933,3 +8933,52 @@ Development Build（iOS Simulator, iPhone 17 Pro）で会話エージェント�
 - **予防策**: 「渡さない」「表示しない」という制限を受入基準に書くときは、その制限が
   守っている具体的な危険（端末外への送信なのか、幻覚なのか）を併記する。危険の側が
   変わったときに、制限だけが理由不明のまま残らないようにする。
+
+### Settings のオンデバイス AI 有効化 UI を戻す（Issue 147 の残り） - 2026-07-25
+
+#### 目的
+
+ADR-0043 で端末内モデルが実際に共通点を見つけられるようになったが、ADR-0038 が
+除去した Settings の Local Model 管理 UI が無いままで、消費者が Model を入手する
+導線が存在しなかった。機能へ到達できる状態にする。
+
+#### 制約
+
+- Expo Go / Web など Local Model を扱えない Platform では何も表示しない。
+- Model 管理の busy 状態が、会話エージェントや戻るを過剰に disable しない
+  （Issue 138 の実機 blocker A の是正を壊さない）。
+- カバレッジ 100％を維持する。
+
+#### タスク
+
+1. `SettingsScreen.tsx` へ `OnDeviceAiSection` / `OnDeviceAiDownloadingCard` /
+   `ModelManagementSection` と `modelManagement` prop を戻す。
+2. `PassportApp.tsx` の `UtilityStageGate` が `localModels.view` を中継する。
+3. Settings 再訪時に manifest を読み直す effect を戻す。
+4. ADR-0038 の除去を固定していたテスト 2 件を、復元後の契約へ書き換える。
+
+#### 検証手順
+
+- `bun test src --coverage`: 1524 pass、100％維持。
+- `bun run typecheck` / `lint` / `architecture-harness` / `check-duplication` /
+  `build:web`。
+- Owner による実機確認（Settings からダウンロードを開始し、完了後に会話
+  エージェントが端末内モデルで動くこと。ADR-0038 が記録したダウンロードの
+  ハングと native crash が再発しないこと）。
+
+#### 進捗ログ
+
+- 2026-07-25: i18n の `onDeviceAi*` キーは ADR-0038 でも削除されておらず残って
+  いたため、UI 側の復元だけで済むことを確認した。
+- 2026-07-25: 除去前の実装（`4d5f3dd^`）から該当セクションを取り出して現行
+  ファイルへ差し戻し、`modelManagement` の prop 経路と Settings 再訪時の reload
+  effect を戻した。全ゲート通過を確認した。
+
+#### 振り返り
+
+- **問題**: ADR-0043 の PR だけでは、消費者から見て何も変わらない状態だった。
+- **根本原因**: 機能の実体（Provider と契約）と、そこへ到達する導線（Settings の
+  ダウンロード UI）が別の ADR で別々に無効化されており、片方だけ戻すと到達不能な
+  機能が残る構造になっていた。
+- **予防策**: 機能を無効化するときは、実体と導線のどちらを止めたかを ADR に明記し、
+  再有効化時にどちらも戻す必要があるかを判断できるようにする。
