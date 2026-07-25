@@ -52,6 +52,28 @@ export function introCardToConversationPassport(
   };
 }
 
+/**
+ * Issue 147: 自己紹介カードの自由記述を、端末内モデルへ渡す 1 人分のテキストへまとめる。
+ *
+ * ここまでの実装は `themeIds`（カタログ checkbox、最大 3 件）しかモデルへ渡しておらず、
+ * 「エージェントが共通点を探す」と言いながら実体は checkbox の共通集合だった。肩書き・
+ * 所属・自己紹介文は、まさに人が共通点を見つける手掛かりであり、これを渡さない限り
+ * モデルに読む材料が無い。氏名・メール・電話・リンクは共通点の根拠にする必要が無く、
+ * 渡す理由も無いため含めない。
+ *
+ * 区切りは制御文字を使わない（`model-safety-boundary.ts` の Unicode 検査が制御文字を
+ * 拒否するため、改行では渡せない）。
+ */
+const PROFILE_TEXT_SEPARATOR = ' / ';
+
+export function introCardProfileText(card: IntroCard): string | undefined {
+  const parts = [card.title, card.organization, card.selfIntro]
+    .map((part) => part?.trim())
+    .filter((part): part is string => part !== undefined && part.length > 0);
+  if (parts.length === 0) return undefined;
+  return parts.join(PROFILE_TEXT_SEPARATOR);
+}
+
 function toBridgeSelectionParticipant(participant: {
   readonly participantId: ParticipantId;
   readonly introCard: IntroCard;
@@ -135,10 +157,17 @@ export function buildConversationAgentModelInput(
     (candidate) => candidate.participantId === peerId
   );
   if (peer === undefined) return null;
+  const ownerProfileText = introCardProfileText(session.self.introCard);
+  const encounteredProfileText = introCardProfileText(peer.introCard);
   return {
     ownerPassport: introCardToConversationPassport(session.self.introCard),
     encounteredPassport: introCardToConversationPassport(peer.introCard),
     ...(language === undefined ? {} : { language }),
+    // Issue 147: 片方でも自由記述が無ければ引用の照合が成立しないため、両方揃った
+    // ときだけ渡す（`model-safety-boundary.ts` も同じ条件で grounded-bridge を出す）。
+    ...(ownerProfileText !== undefined && encounteredProfileText !== undefined
+      ? { ownerProfileText, encounteredProfileText }
+      : {}),
     deadlineAtWallClockMs,
   };
 }

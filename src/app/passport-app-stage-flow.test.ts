@@ -214,10 +214,15 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerStatus={providerRuntimeState.status}');
   });
 
-  it('v1.0（ADR-0038、code-reviewer 指摘 medium）: どの Stage・関数からも localModels.provider を読まない（会話 Agent・Pet Interaction が誤って Local Model 経由の Provider を受け取る revert を CI で検知する）', async () => {
+  it('ADR-0043: Local Model 経由の Provider を受け取るのは会話 Agent だけで、Pet Interaction は Rules に固定したままにする', async () => {
     const text = await source();
+    const petInteractionBody = functionBody(text, 'startPetInteraction');
 
-    expect(text).not.toContain('localModels.provider');
+    // 匿名の Public Passport しか共有しない Lounge には自由記述が無く、モデルが
+    // 読む材料が無い。実行経路を増やす利益が無いため Rules のままにする。
+    expect(petInteractionBody).not.toContain('localModels.provider');
+    expect(petInteractionBody).toContain('provider: RULES_MODEL_PROVIDER');
+    expect(text).toContain('provider: localModels.provider');
   });
 
   it('Issue 18: 進行中の判定を伴う Model 操作は Native Context の解放完了を待つ', async () => {
@@ -273,13 +278,14 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerBusy={providerRunPending}');
   });
 
-  it('v1.0（ADR-0038）: 会話 Agent（useConversationAgentFlow）へ渡す Provider も RULES_MODEL_PROVIDER に固定し、Local Model 経由の Provider を渡さない', async () => {
+  it('ADR-0043: 会話 Agent へは localModels.provider を渡し、Model を持つ端末では端末内モデルが動く', async () => {
     const text = await source();
     const callStart = text.indexOf('useConversationAgentFlow({');
     const callEnd = text.indexOf('});', callStart);
     const call = text.slice(callStart, callEnd);
 
-    expect(call).toContain('provider: RULES_MODEL_PROVIDER');
+    expect(call).toContain('provider: localModels.provider');
+    expect(call).not.toContain('provider: RULES_MODEL_PROVIDER');
   });
 
   it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {

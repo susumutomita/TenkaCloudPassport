@@ -8,6 +8,7 @@ import {
   validateAgentModelProviderOutput,
 } from '../domain/agent-model-provider';
 import { publicPassportWithClues } from '../domain/domain-test-kit';
+import { AGENT_MODEL_PROFILE_TEXT_MAX_CHARS } from '../domain/grounded-quote-bridge';
 import type { PublicPassport } from '../domain/passport';
 import {
   createLocalModelRequest,
@@ -554,5 +555,108 @@ describe('Untrusted Model Output と Fallback-once', () => {
     expect(completionCalls).toBe(1);
     expect(observedRequests).toHaveLength(1);
     expect(observedRequests[0]).not.toContain(attack);
+  });
+});
+
+describe('自己紹介の自由記述を渡すときの境界（Issue 147）', () => {
+  const OWNER_TEXT = '週末は近所の低山を歩いています。';
+  const PEER_TEXT = 'アウトドア全般が好きで、最近はキャンプに行きます。';
+
+  function inputWithProfileTexts(
+    ownerProfileText: unknown,
+    encounteredProfileText: unknown = PEER_TEXT
+  ): unknown {
+    return {
+      ...inputWithPassports(OWNER_PASSPORT),
+      ownerProfileText,
+      encounteredProfileText,
+    };
+  }
+
+  it('両者の自由記述が揃うと、引用による共通点提示を Schema の選択肢に加える', () => {
+    const request = createLocalModelRequest({
+      ...inputWithPassports(OWNER_PASSPORT),
+      ownerProfileText: OWNER_TEXT,
+      encounteredProfileText: PEER_TEXT,
+    });
+
+    expect(JSON.stringify(request.responseFormat.schema)).toContain(
+      'grounded-bridge'
+    );
+    expect(request.messages[1].content).toContain(OWNER_TEXT);
+    expect(request.messages[0].content).toContain('character-for-character');
+  });
+
+  it('片方しか自由記述が無ければ、引用の照合ができないので選択肢に加えない', () => {
+    const request = createLocalModelRequest({
+      ...inputWithPassports(OWNER_PASSPORT),
+      ownerProfileText: OWNER_TEXT,
+    });
+
+    expect(JSON.stringify(request.responseFormat.schema)).not.toContain(
+      'grounded-bridge'
+    );
+    expect(request.messages[1].content).not.toContain(OWNER_TEXT);
+  });
+
+  it('自由記述が無い従来どおりの Input でも Schema は成立する', () => {
+    const request = createLocalModelRequest(inputWithPassports(OWNER_PASSPORT));
+
+    expect(JSON.stringify(request.responseFormat.schema)).not.toContain(
+      'grounded-bridge'
+    );
+  });
+
+  it('文字列でない自由記述を拒否する', () => {
+    expect(
+      inputErrorFrom(() =>
+        createLocalModelRequestFromJson(
+          JSON.stringify(inputWithProfileTexts(42))
+        )
+      ).reason
+    ).toBe('INVALID_SHAPE');
+  });
+
+  it('空文字の自由記述を拒否する', () => {
+    expect(
+      inputErrorFrom(() =>
+        createLocalModelRequestFromJson(
+          JSON.stringify(inputWithProfileTexts(''))
+        )
+      ).reason
+    ).toBe('INVALID_SHAPE');
+  });
+
+  it('上限を超える自由記述は、無言で切り詰めず拒否する', () => {
+    expect(
+      inputErrorFrom(() =>
+        createLocalModelRequestFromJson(
+          JSON.stringify(
+            inputWithProfileTexts(
+              'あ'.repeat(AGENT_MODEL_PROFILE_TEXT_MAX_CHARS + 1)
+            )
+          )
+        )
+      ).reason
+    ).toBe('INVALID_SHAPE');
+  });
+
+  it('制御文字を含む自由記述は、JSON 事前検査の時点で拒否する', () => {
+    expect(
+      inputErrorFrom(() =>
+        createLocalModelRequestFromJson(
+          JSON.stringify(inputWithProfileTexts('低山 を歩く'))
+        )
+      ).reason
+    ).toBe('UNICODE_CONTROL');
+  });
+
+  it('上限ちょうどの自由記述は通す', () => {
+    const exact = 'あ'.repeat(AGENT_MODEL_PROFILE_TEXT_MAX_CHARS);
+    const request = createLocalModelRequestFromJson(
+      JSON.stringify(inputWithProfileTexts(exact, exact))
+    );
+
+    expect(request.messages[1].content).toContain(exact);
   });
 });

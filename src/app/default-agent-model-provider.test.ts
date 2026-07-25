@@ -30,10 +30,7 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(loader).toContain("await import('llama.rn')");
   });
 
-  it('v1.0（ADR-0038）: Model 設定・Expo Go / Development Build のどちらでも常に Rules Provider を返し、Native Module を一切読まない', async () => {
-    const composition = await source(
-      'native-agent-model-provider-composition.ts'
-    );
+  it('ADR-0043: Expo Go は Rules、Development Build は設定済み Local Model を選び、選定時点では Native Module を読まない', async () => {
     const environment = {
       modelPath: 'file:///data/model.gguf',
       nCtx: '2048',
@@ -62,18 +59,20 @@ describe('AgentModelProvider の Platform Composition', () => {
       modelContexts,
     });
 
+    const withoutModel = createNativeAgentModelProvider({
+      runningInExpoGo: false,
+      environment: {},
+      loadModule,
+      modelContexts,
+    });
+
     expect(expoGo.kind).toBe('rules');
-    expect(developmentBuild.kind).toBe('rules');
+    expect(developmentBuild.kind).toBe('local-agent');
+    expect(withoutModel.kind).toBe('rules');
+    // Provider の選定は Model File を開かない。Native Module を読むのは
+    // 実際に `provide()` が呼ばれたときだけで、そこでの失敗は
+    // `runProviderOnce` の Fallback-once が Rules へ倒す。
     expect(moduleLoads).toBe(0);
-    // オンデバイス LLM のダウンロード停止・未完了起動時の native crash が実機で
-    // 確認され（owner TestFlight フィードバック）、呼び出し元を実機テストできない
-    // ため、v1.0 では composition 自体が Local LLM Completion Port を構築しない
-    // （除去した理由のコメントでの言及は許容し、実際の呼び出しだけが無いことを
-    // 固定する）。
-    expect(composition).not.toContain(
-      'createConfiguredLocalModelCompletionPort('
-    );
-    expect(composition).not.toContain('createSafetyBoundLocalModelProvider(');
   });
 
   it('App Composition Root は Platform Provider を PassportApp へ明示的に渡す（Issue 118: distributionCapability は SettingsScreen が使わなくなり App Composition からも外した）', async () => {

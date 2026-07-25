@@ -11,6 +11,7 @@ import {
   type LanguageCode,
 } from './clue-catalog';
 import { confidenceFromEvidence } from './evidence-confidence';
+import { verifyGroundedQuoteBridge } from './grounded-quote-bridge';
 import type { OwnerAnswerValue } from './match-evidence';
 import type { ConfirmedClue, PublicPassport } from './passport';
 import { findFirstSharedConfirmedClue } from './shared-clue-match';
@@ -36,6 +37,15 @@ export interface AgentModelInput {
   readonly ownerAnswer?: ConsentedOwnerAnswer;
   readonly language?: LanguageCode;
   readonly deadlineAtWallClockMs: number;
+  /**
+   * Issue 147: 自己紹介カードの自由記述（`selfIntro` / `title` / `organization` を
+   * 連結した 1 人分のテキスト）。カタログ checkbox の一致では届かない共通点を
+   * 端末内モデルが見つけるための材料であり、この 2 つが揃っているときだけ
+   * `grounded-bridge`（引用による根拠提示）が成立しうる。Lounge の 2 者間 Live
+   * 経路（`PublicPassport` だけを共有する匿名の経路）は渡さない。
+   */
+  readonly ownerProfileText?: string;
+  readonly encounteredProfileText?: string;
 }
 
 export interface SharedTopicEvidence {
@@ -90,7 +100,26 @@ export type AgentModelProviderOutput =
       readonly kind: 'bridge';
       readonly evidenceIds: readonly string[];
     }
+  /**
+   * Issue 147: 自己紹介の自由記述から見つけた共通点。モデルは自分の言葉を書けず、
+   * 根拠になった箇所を両者の文からそのまま抜き出すことだけができる。表示に使う
+   * 断片が入力文の部分文字列であることを `verifyGroundedQuoteBridge` が照合するため、
+   * 事実の創作が構造的に起きない（`grounded-quote-bridge.ts` 冒頭参照）。
+   */
+  | {
+      readonly kind: 'grounded-bridge';
+      readonly ownerQuote: string;
+      readonly peerQuote: string;
+    }
   | { readonly kind: 'no-signal' };
+
+/**
+ * `grounded-bridge` が使う Evidence ID。Rules が導出する Evidence ID
+ * （`topic:` / `complement:` / `language:` / `owner-confirmed:`）とは名前空間が
+ * 重ならない固定値にし、`materializeAgentModelOutcome`（Lounge の Wire 経路）が
+ * 誤って既存 Evidence と取り違えないようにする。
+ */
+export const GROUNDED_QUOTE_EVIDENCE_ID = 'grounded-quote';
 
 export type AgentModelFailureCode =
   | 'TIMEOUT'
@@ -424,6 +453,27 @@ export function buildAgentModelDecisionFromEvidence(
   };
 }
 
+/**
+ * Issue 147: 検証済みの 2 引用から表示文を組み立てる。文そのものはここが持つ固定
+ * テンプレートで、可変部は入力文にそのまま存在することを確認済みの断片だけである。
+ * モデルの生成文は表示にも Log にも一切現れない（`evidenceNarrative` と同じ原則）。
+ */
+function groundedQuoteNarrative(
+  ownerQuote: string,
+  peerQuote: string,
+  language: LanguageCode
+): { readonly reason: string; readonly opener: string } {
+  return language === 'en'
+    ? {
+        reason: `Your intro mentions "${ownerQuote}", and theirs mentions "${peerQuote}".`,
+        opener: `Try asking about "${peerQuote}".`,
+      }
+    : {
+        reason: `あなたの自己紹介の「${ownerQuote}」と、相手の「${peerQuote}」が重なっています。`,
+        opener: `「${peerQuote}」について聞いてみましょう。`,
+      };
+}
+
 function providerOutputSchemaError(message: string): never {
   throw new AgentModelProviderError(
     'SCHEMA_ERROR',
@@ -455,6 +505,47 @@ function assertExactProviderFields(
 }
 
 /**
+ * Issue 147: `grounded-bridge` 出力を検証済み Decision へ昇格する。引用が対応する
+ * 自己紹介文に実在しなければ型付き失敗にし、呼び出し側（`runProviderOnce` の
+ * Fallback-once）が Rules へ倒す。
+ */
+function validateGroundedBridgeOutput(
+  input: AgentModelInput,
+  fields: ReadonlyMap<string, unknown>
+): AgentModelDecision {
+  assertExactProviderFields(fields, ['kind', 'ownerQuote', 'peerQuote']);
+  const verified = verifyGroundedQuoteBridge({
+    ...(input.ownerProfileText === undefined
+      ? {}
+      : { ownerProfileText: input.ownerProfileText }),
+    ...(input.encounteredProfileText === undefined
+      ? {}
+      : { encounteredProfileText: input.encounteredProfileText }),
+    ownerQuote: fields.get('ownerQuote'),
+    peerQuote: fields.get('peerQuote'),
+  });
+  if (verified === null) {
+    return providerOutputSchemaError(
+      '引用が自己紹介文の中に見つからないため、共通点の根拠にできません。'
+    );
+  }
+  const narrative = groundedQuoteNarrative(
+    verified.ownerQuote,
+    verified.peerQuote,
+    input.language ?? DEFAULT_AGENT_MODEL_LANGUAGE
+  );
+  return {
+    kind: 'bridge',
+    reason: narrative.reason,
+    opener: narrative.opener,
+    evidenceIds: [GROUNDED_QUOTE_EVIDENCE_ID],
+    // 自由記述から見つけた 1 件の重なりは、Owner が明示同意した手掛かりや
+    // Offer/Need の相互補完ほど強い根拠ではないため `possible` に留める。
+    confidence: 'possible',
+  };
+}
+
+/**
  * Rules / Local Agent 共通の Runtime Validator。Provider が返した `evidenceIds` を Input から
  * 再導出できる Evidence と照合し、Domain が管理する固定文だけを `AgentModelDecision` として
  * 返す。Model の自由記述を表示・Log・Error Message へ反射しない。
@@ -468,9 +559,12 @@ export function validateAgentModelProviderOutput(
     assertExactProviderFields(fields, ['kind']);
     return { kind: 'no-signal' };
   }
+  if (fields.get('kind') === 'grounded-bridge') {
+    return validateGroundedBridgeOutput(input, fields);
+  }
   if (fields.get('kind') !== 'bridge') {
     return providerOutputSchemaError(
-      'kind は bridge または no-signal である必要があります。'
+      'kind は bridge、grounded-bridge、no-signal のいずれかである必要があります。'
     );
   }
   assertExactProviderFields(fields, ['kind', 'evidenceIds']);
