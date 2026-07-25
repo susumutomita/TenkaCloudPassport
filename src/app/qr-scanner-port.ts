@@ -16,7 +16,16 @@ export interface QrScannerPort {
   scan(): Promise<string>;
 }
 
-export type QrScanErrorCode = 'PERMISSION_NOT_GRANTED' | 'NOTHING_TO_SCAN';
+export type QrScanErrorCode =
+  | 'PERMISSION_NOT_GRANTED'
+  | 'NOTHING_TO_SCAN'
+  /**
+   * Issue 146: 実カメラ読取（`camera-qr-capture.ts`）を利用者が自分で
+   * 取り消した。失敗ではなく意図した中断のため、呼び出し側は Error 文言を
+   * 表示しない（`conversation-agent-flow-controller.ts` の
+   * `conversationAgentScanErrorMessage` が null を返す）。
+   */
+  | 'SCAN_CANCELLED';
 
 export class QrScanError extends Error {
   readonly code: QrScanErrorCode;

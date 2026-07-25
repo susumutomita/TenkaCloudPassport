@@ -42,6 +42,7 @@ function qrScanMessages(
   return {
     PERMISSION_NOT_GRANTED: messages.qrErrorNotice.permissionNotGranted,
     NOTHING_TO_SCAN: messages.qrErrorNotice.nothingToScan,
+    SCAN_CANCELLED: messages.qrErrorNotice.scanCancelled,
   };
 }
 

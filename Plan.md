@@ -8802,3 +8802,76 @@ N 者間 UI を実装する。
   2 つの意味が混ざっており、呼び出し側が前者だけを想定して `no-signal` へ倒していた。
 - **予防策**: 戻り値 `null` が複数の意味を持つ関数は、呼び出し側で分岐を書かず、
   意味ごとに分けた判別可能な型（今回の `ConversationAgentStartPlan`）へ変換してから扱う。
+
+### 会話エージェントの QR 再スキャンを実カメラで成立させる（Issue 146） - 2026-07-25
+
+#### 目的
+
+Development Build（iOS Simulator, iPhone 17 Pro）で会話エージェントの
+「QR 再スキャン」を押しても相手の自己紹介カードを取り込めない不具合を直す。
+原因は実カメラの読取実装がアプリに存在しないことで、`QrScannerPort` の実装は
+単一端末デモ用の in-process stub（`createInProcessQrScannerPort`）1 種類しかない。
+`publish()` されるのは Lounge Invite の QR Payload だけのため、会話エージェントの
+再スキャンは `NOTHING_TO_SCAN` か `INVALID_SHARE_URL` のどちらかで必ず失敗する。
+
+#### 制約
+
+- Lounge の単一端末フロー（Host Invite から Guest Scan まで 1 台で完走できる、
+  審査官が単独で確認するための導線）を壊さない。
+- Screen と Domain はカメラパッケージを直接 import しない
+  （`qr-scanner-port.ts` の architect guidance）。
+- 権限の 5 状態は既存の `CameraPermissionState` と `camera-permission-notice.ts`
+  の文言へ合流させ、会話エージェント専用の権限文言を新設しない。
+- Web / Expo Go / `bun test` を壊さず、カバレッジ 100％を維持する。
+- 黙って何も起きない no-op を作らない。カメラが無い経路も理由を表示して失敗する。
+
+#### タスク
+
+1. `expo-camera` を追加する（SDK 57 に合わせて `~57.0.3`）。
+2. Platform 非依存の `CameraQrCapturePort`（`src/app/camera-qr-capture.ts`）を
+   新設し、権限導出と待機の状態機械を純粋な実装として `bun test` で固定する。
+3. `default-camera-qr-capture.ts`（Web / Bun Test、hardware-unavailable 固定）と
+   `.native.ts`（`expo-camera` 注入）へ Platform 分割する。
+4. `CameraQrCaptureOverlay.native.tsx`（Modal + `CameraView`）と、何も描画しない
+   Web 版を追加する。
+5. 会話エージェントの `onScanPeer` を `capture()` 経由へ差し替え、取り消しと
+   権限拒否の文言判断を `conversationAgentScanErrorMessage` へ集約する。
+6. ADR-0042 に「in-process Port を差し替えず 2 つの Port を併存させる」判断を残す。
+
+#### 検証手順
+
+- `bun test src --coverage`: 1476 pass、100％カバレッジ維持。
+- `bun scripts/architecture-harness.ts`: Error 0 / Warning 0。
+- `bun run typecheck` / `bun scripts/check-duplication.ts`。
+- Owner による Development Build の再ビルド（`bunx expo run:ios`）と、2 台または
+  自己紹介ページを表示した別画面での実読取確認。`.native.ts` / `.native.tsx` は
+  `bun test` では実行されずカバレッジにも現れないため、実カメラ経路の確認は
+  本 Repository では完結しない。
+
+#### 進捗ログ
+
+- 2026-07-25: 実機ログ（`Cannot find native module 'ExpoCrypto'`）の原因が
+  PR 143 で追加した Native Module に対して Development Build が古いことだと特定し、
+  再ビルドで解消したことを owner が確認した。
+- 2026-07-25: 続けて報告された「QR 再スキャンが動かない」を調査し、`QrScannerPort`
+  の唯一の実装が in-process stub であること、`publish()` の呼び出し口が Lounge
+  Host Invite だけであることをコードで確認した。実カメラ走査は
+  `docs/design/qr-invite-and-ready-flow.md` の Known follow-ups に未実装として
+  残っていた。
+- 2026-07-25: in-process Port を差し替える案は単一端末デモを壊し、`scan()` の中で
+  publish の有無により経路を切り替える案は暗黙のフォールバックになるため、
+  どちらも採らず専用 Port の併存を選んだ（ADR-0042）。
+- 2026-07-25: `camera-qr-capture.ts` の状態機械を 19 件のテストで固定し、
+  カバレッジ 100％のまま `bun test src`（1476 pass）を通した。
+
+#### 振り返り
+
+- **問題**: 会話エージェントの取り込み導線（Step A）は、実カメラ adapter が未実装で
+  あることを前提にしないまま「QR 再スキャン」ボタンだけを露出させていた。
+- **根本原因**: Port の抽象があると「実装は後から差し替えられる」ように見えるが、
+  この Port の唯一の実装は単一端末デモ専用で、外部から QR が入ってくる経路が
+  そもそも存在しなかった。抽象の存在と、その裏に実体があることは別である。
+- **予防策**: Port を再利用して新しい画面へ導線を出すときは、その Port の既存
+  実装が新しい呼び出し口の要求（今回は「アプリ外から来る QR を読む」）を満たすかを
+  実装まで辿って確認する。満たさない場合は、導線を出す前に実装を用意するか、
+  導線自体を出さない。

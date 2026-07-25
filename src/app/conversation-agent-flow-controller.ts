@@ -7,6 +7,10 @@ import {
 } from '../domain/conversation-agent-evidence';
 import type { ConversationSession } from '../domain/conversation-session';
 import type { IntroCard } from '../domain/intro-card';
+import type { Locale } from './i18n/locale';
+import { qrFlowErrorMessage } from './qr-error-notice';
+import { QrScanError } from './qr-scanner-port';
+import { readableError } from './readable-error';
 
 /**
  * Issue 104 PR #132（Codex 指摘 major）: `use-conversation-agent-flow.ts` の
@@ -79,6 +83,33 @@ export async function resolveScannedPeer(
   } catch (error: unknown) {
     input.onError(error);
   }
+}
+
+export interface ConversationAgentScanErrorInput {
+  readonly error: unknown;
+  readonly locale: Locale;
+  /** QR 読取層の型付き Error ではない場合（Card の decode 失敗等）の既定文言。 */
+  readonly fallbackMessage: string;
+}
+
+/**
+ * Issue 146: 実カメラ読取（`camera-qr-capture.ts`）の失敗を、画面に出す文言へ
+ * 正規化する。`null` は「何も表示しない」を意味する。
+ *
+ * 利用者が自分で読み取りをやめた `SCAN_CANCELLED` は失敗ではなく意図した中断で
+ * あり、Error 文言を出すと「操作したのにエラーが出た」という誤解になるため
+ * 表示しない。それ以外の QR 読取 Error（権限が無い・カメラが無い）は、既存の
+ * `qrFlowErrorMessage` が持つ locale 対応の文言をそのまま使い、会話エージェント
+ * 専用の文言を新設しない（Lounge 側と同じ Error に別の文言を作らない）。
+ */
+export function conversationAgentScanErrorMessage(
+  input: ConversationAgentScanErrorInput
+): string | null {
+  if (input.error instanceof QrScanError) {
+    if (input.error.code === 'SCAN_CANCELLED') return null;
+    return qrFlowErrorMessage(input.error, input.locale);
+  }
+  return readableError(input.error, input.fallbackMessage);
 }
 
 export interface ResolveConversationAgentRunInput<TRunResult> {

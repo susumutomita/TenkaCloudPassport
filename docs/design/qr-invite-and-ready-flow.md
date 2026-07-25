@@ -255,8 +255,12 @@ renderer / scanner に差し替えるときの受け入れ基準を、Issue 66 �
 ## Known follow-ups
 
 - Room の定員を 2 名超へ拡張する場合は、N 者間の Bridge 選定ロジックを別 Issue で設計する。
-- 実カメラでの QR 走査（`expo-camera` 等を用いた Development Build 専用 adapter）は
-  M3 で `QrScannerPort` の別実装として追加する。
+- 実カメラでの QR 走査は、会話エージェントの取り込み経路についてのみ Issue 146 で
+  実装済みである。`QrScannerPort` を差し替えるのではなく、`expo-camera` を使う
+  専用の `CameraQrCapturePort`（`src/app/camera-qr-capture.ts`）を新設し、本書が
+  扱う Lounge Invite の単一端末フローは in-process Port のまま残した。理由と
+  却下した代替案は [ADR-0042](../adr/0042-real-camera-qr-capture-port.md) を参照する。
+  Lounge の Guest Scan を 2 台の端末で成立させるかどうかは、引き続き未決である。
 - バックアップ / Settings 画面自体は本 Issue 時点でまだ実装されておらず、Camera 権限拒否時の
   案内文言はそれらの画面の存在を前提にしている。画面自体の実装は別 Issue で追う。
 - Invite payload が 504 byte 予算を超過する件（`hostDiscoveryHint` / `requiredCapabilities`

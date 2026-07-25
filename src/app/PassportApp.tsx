@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
+import CameraQrCaptureOverlay from '../components/CameraQrCaptureOverlay';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import {
   type AgentModelInput,
@@ -102,6 +103,8 @@ import {
   pilotProviderRunFromOutcome,
 } from './agent-provider-session';
 import type { BackupSharePort } from './backup-share-port';
+import type { CameraQrCapturePort } from './camera-qr-capture';
+import { createDefaultCameraQrCapturePort } from './default-camera-qr-capture';
 import type { DiagnosticErrorSignal } from './diagnostic-recovery';
 import type { DiagnosticTransportState } from './diagnostic-report';
 import type { Locale } from './i18n/locale';
@@ -580,6 +583,8 @@ interface UtilityStageGateProps {
    */
   readonly onOpenConversationAgent: () => void;
   readonly conversationAgent: ConversationAgentBranchProps;
+  /** Issue 146: 会話エージェントの「QR 再スキャン」が開く実カメラ Preview の Port。 */
+  readonly cameraQrCapturePort: CameraQrCapturePort;
   /**
    * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 会話エージェントの Settings
    * 入口を disabled にするための判定。Pet Profile の `hasProfile` とは別の値
@@ -599,6 +604,7 @@ function UtilityStageGate({
   onCloseSettings,
   onOpenConversationAgent,
   conversationAgent,
+  cameraQrCapturePort,
   hasIntroCard,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
@@ -636,6 +642,12 @@ function UtilityStageGate({
           locale={locale}
           onChangeLocale={onChangeLocale}
         />
+        {/*
+          Issue 146: 実カメラの Preview は Modal で画面全体を覆うため、Screen の
+          レイアウトへは影響しない。Stage をこの Overlay ごと Error Boundary の
+          中に置き、カメラ側の JS 例外でも他 Stage を巻き込まないようにする。
+        */}
+        <CameraQrCaptureOverlay locale={locale} port={cameraQrCapturePort} />
       </ErrorBoundary>
     );
   }
@@ -789,6 +801,13 @@ export default function PassportApp({
   // Port を個別の初期状態で構成して検証する。
   const [qrScannerPort] = useState(() =>
     createInProcessQrScannerPort('granted')
+  );
+  // Issue 146: 会話エージェントは対面の相手端末に表示された QR を読む必要があり、
+  // 単一端末デモ用の in-process Port（publish した文字列を返すだけ）では成立しない。
+  // 実カメラの読取だけをこの Port が担い、Lounge Invite の単一端末フローは
+  // 従来どおり上の `qrScannerPort` を使い続ける（2 つの Port は責務が異なる）。
+  const [cameraQrCapturePort] = useState(() =>
+    createDefaultCameraQrCapturePort()
   );
   const [restoring, setRestoring] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1141,7 +1160,7 @@ export default function PassportApp({
   // 一切触れないことを呼び出し口で直接保証する（v1.1 で実機テストして再有効化する）。
   const conversationAgentFlow = useConversationAgentFlow({
     locale,
-    qrScannerPort,
+    cameraQrCapturePort,
     providerRunner,
     provider: RULES_MODEL_PROVIDER,
     onNavigateToConversationAgent: () => setStage('conversation-agent'),
@@ -2285,6 +2304,7 @@ export default function PassportApp({
   if (UTILITY_STAGES.has(stage)) {
     return (
       <UtilityStageGate
+        cameraQrCapturePort={cameraQrCapturePort}
         conversationAgent={{
           canAddPeer: conversationAgentFlow.canAddPeer,
           errorMessage: conversationAgentFlow.errorMessage,
