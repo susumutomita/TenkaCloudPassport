@@ -32,12 +32,12 @@ export default function CameraQrCaptureOverlay({
     () => port.status
   );
   const t = MESSAGES[locale].cameraQrCapture;
+  // `visible={false}` の Modal が children を保持するかは Platform 実装の詳細に
+  // 依るため、そこへカメラの停止を任せない。capturing 以外では Component ごと
+  // 描画しないことで、`CameraView` の unmount とカメラの解放を保証する。
+  if (status !== 'capturing') return null;
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={port.cancel}
-      visible={status === 'capturing'}
-    >
+    <Modal animationType="slide" onRequestClose={port.cancel} visible>
       <View style={styles.container}>
         <CameraView
           barcodeScannerSettings={{ barcodeTypes: ['qr'] }}

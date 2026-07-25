@@ -36,8 +36,16 @@ describe('CameraQrCaptureOverlay（実カメラ Preview）のソース契約', (
 
     expect(text).toContain('useSyncExternalStore');
     expect(text).toContain('port.subscribe');
-    expect(text).toContain("visible={status === 'capturing'}");
     expect(text).not.toContain('useState');
+  });
+
+  it('capturing 以外では Component ごと描画せず、CameraView を unmount する', async () => {
+    const text = await nativeSource();
+    const guardIndex = text.indexOf("if (status !== 'capturing') return null;");
+    const cameraIndex = text.indexOf('<CameraView');
+
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(cameraIndex).toBeGreaterThan(guardIndex);
   });
 
   it('取り消し導線を明示ボタンと Android の戻る操作の両方へつなぐ', async () => {
