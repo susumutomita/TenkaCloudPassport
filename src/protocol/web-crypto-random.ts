@@ -1,9 +1,12 @@
+import { assertValidRandomByteLength } from './random-byte-length-guard';
+
+/**
+ * Bun Test / Web Build は Web Crypto (`globalThis.crypto`) をそのまま使う。
+ * Native Build（Expo Go・Development Build・本番ビルドすべて）は Hermes に
+ * Web Crypto が実装されていないため `web-crypto-random.native.ts` へ差し替える。
+ */
 export function webCryptoRandomBytes(length: number): Uint8Array {
-  if (!Number.isSafeInteger(length) || length < 1 || length > 65_536) {
-    throw new RangeError(
-      'Web Crypto の乱数長は 1 以上 65536 以下にしてください。'
-    );
-  }
+  assertValidRandomByteLength(length);
   const bytes = new Uint8Array(length);
   globalThis.crypto.getRandomValues(bytes);
   return bytes;

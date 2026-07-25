@@ -8654,3 +8654,105 @@ make before-commit
   ことを踏まえ、今後同様の「A 経由でも B と同じ挙動」を固定するテストを書く際は、
   どちらか一方の経路が消えた場合の扱い（重複排除 or 独立した価値の有無）を
   コメントで明示しておく。
+
+### [実機クラッシュ修正] 会話 Agent 起動時の Native 乱数源欠落（Web Crypto 未実装） - 2026-07-25
+
+#### 目的
+
+実機で確定した「会話 Agent を開くとクラッシュする」不具合を修正する。原因は
+`webCryptoRandomBytes`（`web-crypto-random.ts`）が `globalThis.crypto.getRandomValues`
+を直接呼ぶが、Hermes（React Native の JS engine）には Web Crypto API が実装され
+ておらず `globalThis.crypto` が `undefined` になること。`open()`
+（`use-conversation-agent-flow.ts`）→ `createParticipantId`
+（`session-identifiers.ts`）→ `validatedRandomBytes` の経路で同期例外が
+発生し、イベントハンドラ内のため PR #139 の Error Boundary では捕捉できない。
+
+#### 制約
+
+- `webCryptoRandomBytes` を使う全経路（Lounge / Pet / 会話 Agent の Session ID
+  発行）が同じ契約（引数検証、戻り値の型、エラー種別）で動き続けること。
+- 乱数品質を弱めない（`Math.random` 等へフォールバックしない）。
+- `bun test`（Bun、非 Native runtime）のカバレッジ 100% を維持する。
+- `rm` / `npx` 禁止、`git add` は明示ファイルのみ、8081 kill 禁止、`ios/` を
+  手編集しない。
+
+#### タスク
+
+1. `expo-crypto` を `bunx expo install expo-crypto -- --ignore-scripts` で追加。
+2. `web-crypto-random.ts`（base、Web / Bun Test 用）はそのまま維持し、
+   `web-crypto-random.native.ts`（Native Build 用、`expo-crypto` の
+   `getRandomValues` を使用）を新設して Platform 分割する。
+3. `docs/evidence/nearby-transport-static-screening.json` の
+   `packageJsonSha256` / `bunLockSha256` を新しい `package.json` / `bun.lock`
+   に合わせて再計算する。
+4. ADR-0040 で採用判断（`expo-crypto` 採用理由、`getRandomValues` を選び
+   `getRandomBytes` を選ばなかった理由、Platform 分割した理由）を記録する。
+5. 品質ゲートを通す。
+
+#### 検証手順
+
+- `bun test src --coverage`: 既存の `session-identifiers.test.ts` 経由の
+  `webCryptoRandomBytes` テストが変更なしで通ることを確認する。
+- `bun test scripts/nearby-transport-static-screening.test.ts`: baseline 更新後に
+  `package.json` / `bun.lock` の実 SHA-256 と一致することを確認する。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- Owner による実機 / Development Build のフル再ビルドと会話 Agent 起動確認
+  （`web-crypto-random.native.ts` は `bun test` では実行されず Coverage Report
+  にも現れないため、Native 固有コードパスの確認は本 Repository では完結しない）。
+
+#### 進捗ログ
+
+- 2026-07-25: 実機スタックトレースの原因箇所（`web-crypto-random.ts` の
+  `globalThis.crypto.getRandomValues` 直呼び）を確認し、依存に crypto polyfill
+  が無いことを確認した。
+- 2026-07-25: `expo-crypto` の API を Context7 経由で公式 Docs を確認し、
+  `getRandomBytes` / `getRandomBytesAsync` が `0〜1024` byte 上限を持つのに対し
+  `getRandomValues` に上限が無いこと、Web 実装が内部で
+  `globalThis.crypto.getRandomValues` へ委譲することを確認した。
+- 2026-07-25: `expo-crypto` を単純に import して `bun run` すると
+  `Cannot find package 'react-native' from .../expo-modules-core/.../requireNativeModule.ts`
+  で即座に例外になることを実測し、単純差し替えではなく Platform 分割
+  （`web-crypto-random.native.ts` 新設）が必須と判断した。既存の
+  `default-agent-model-provider.ts` / `.native.ts` / `.web.ts` の 3 分割 idiom と
+  `bun test --coverage` の Baseline（`.native.ts` は Coverage Report に現れない）
+  で既存の Trade-off が確立済みであることも確認した。
+- 2026-07-25: `web-crypto-random.native.ts` を新設し、`docs/adr/0040-native-secure-random-expo-crypto.md`
+  に採用判断を記録した。`docs/evidence/nearby-transport-static-screening.json`
+  の baseline SHA-256 を `shasum -a 256 package.json bun.lock` で再計算し更新した。
+- 2026-07-25: `bun test src --coverage`（1441 pass、100% カバレッジ、
+  `web-crypto-random.native.ts` は Coverage Report に非出現で既存 idiom と一致）、
+  `bun test scripts/nearby-transport-static-screening.test.ts`（15 pass）、
+  `bun scripts/check-duplication.ts`（新規重複なし、baseline 更新不要）を確認した。
+
+#### 振り返り
+
+- **問題**: 依頼文が想定していた「`globalThis.crypto.getRandomValues` 呼び出し
+  1 行を `expo-crypto` に置き換えるだけ」という単純差し替えでは `bun test` が
+  壊れることが実測で判明した。
+- **根本原因**: `expo-crypto` の既定 entry point は `expo-modules-core` の
+  `requireNativeModule` を呼ぶ Native 実装で、Metro の Platform 拡張子解決
+  （`.native.js` / `.web.js`）を前提にしている。`bun test` は Metro を使わない
+  plain Node 解決のため、Platform 分割なしで `expo-crypto` を直接 import すると
+  Bun Test 環境では即座に落ちる。
+- **予防策**: Expo 公式 SDK の Native Module を新規採用するときは、まず
+ `bun run` で単体 import を試し Bun Test 環境で動くかを確認してから実装方針
+ （単純差し替え可否 / Platform 分割の要否）を決める。既存の `.native.ts` idiom
+ （Coverage Report に現れない前提で Native 固有コードは実機確認に委ねる）が
+ 使える場面かどうかも合わせて判断する。
+
+#### 追記: code-reviewer 指摘の解消 - 2026-07-25
+
+- `code-reviewer` subagent へ diff レビューを依頼した。Blocking 指摘は無かったが、
+  non-blocking で「`web-crypto-random.ts` と `web-crypto-random.native.ts` が
+  境界値検証（1〜65536、`RangeError` メッセージ）を独立に持つと、片方だけ
+  変更したとき drift が検出できない（`jscpd` の `minLines: 5` では 5 行の
+  重複ブロックが clone 検出されない）」との指摘を受けた。
+- `src/protocol/random-byte-length-guard.ts`（`assertValidRandomByteLength`）を
+  新設し、既存の `device-resource-telemetry.native.ts` /
+  `device-resource-snapshot.ts` の「Platform 非依存の検証ロジックは共有
+  module へ抽出する」idiom に合わせて両ファイルから import する形に修正した。
+  ADR-0040 の該当セクションも実装に合わせて更新した。
+- `bun test src --coverage`（1441 pass、100% カバレッジ維持）、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`（Error 0）、
+  `make before-commit`（exit 0）で再検証した。
