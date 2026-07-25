@@ -10,9 +10,11 @@ import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 
 /**
- * Issue 104 / ADR-0036: 端末内会話エージェント（Step A、2 者間）の画面。相手の
+ * Issue 104 / ADR-0036 + ADR-0041: 端末内会話エージェントの画面。相手の
  * 自己紹介ページ URL を QR 再スキャン・手動貼り付け・サンプルカードのいずれかで
- * 取り込み、共通点・最初の質問を表示する。相手カードはこの画面（Screen）と
+ * 取り込み、共通点・最初の質問を表示する。Step B では
+ * `MAX_BRIDGE_SELECTION_PARTICIPANTS` までの相手を一覧で保持し、全ペアを
+ * 端末内で比較した結果として選ばれた 1 組を相手名とともに提示する。相手カードはこの画面（Screen）と
  * それを保持する `ConversationSession`（`PassportApp.tsx` の state）以外の
  * どこにも渡らず、ディスクへは一切書き込まれない（`docs/adr/0036-on-device-conversation-agent.md`）。
  */
@@ -25,6 +27,8 @@ export interface ConversationAgentPeerView {
 export interface ConversationAgentScreenProps {
   readonly hasSelfIntroCard: boolean;
   readonly peers: readonly ConversationAgentPeerView[];
+  /** 参加者上限に未達か。`false` のとき取り込み導線を隠し、満席である旨だけを伝える。 */
+  readonly canAddPeer: boolean;
   readonly pasteInput: string;
   readonly errorMessage: string | null;
   readonly result: ConversationAgentResultState;
@@ -44,6 +48,7 @@ export interface ConversationAgentScreenProps {
 function IntakeSection({
   pasteInput,
   errorMessage,
+  hasPeers,
   t,
   onChangePasteInput,
   onSubmitPasteInput,
@@ -52,6 +57,8 @@ function IntakeSection({
 }: {
   readonly pasteInput: string;
   readonly errorMessage: string | null;
+  /** 既に 1 名以上取り込み済みか。導入文を「未受信」から「さらに追加」へ切り替える。 */
+  readonly hasPeers: boolean;
   readonly t: (typeof MESSAGES)[Locale]['conversationAgent'];
   readonly onChangePasteInput: (value: string) => void;
   readonly onSubmitPasteInput: () => void;
@@ -61,7 +68,9 @@ function IntakeSection({
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{t.peerSectionTitle}</Text>
-      <Text style={styles.hint}>{t.noPeerNotice}</Text>
+      <Text style={styles.hint}>
+        {hasPeers ? t.addMorePeerNotice : t.noPeerNotice}
+      </Text>
       <ActionButton
         accessibilityHint={t.scanButtonHint}
         label={t.scanButton}
@@ -138,6 +147,14 @@ function ResultSection({
       accessibilityRole="summary"
       style={styles.notice}
     >
+      {result.partnerNames.length > 0 ? (
+        <>
+          <Text style={styles.noticeTitle}>{t.bridgePartnerTitle}</Text>
+          <Text style={styles.noticeText}>
+            {result.partnerNames.join(', ')}
+          </Text>
+        </>
+      ) : null}
       <Text style={styles.noticeTitle}>{t.bridgeReasonTitle}</Text>
       <Text style={styles.noticeText}>{result.reason}</Text>
       <Text style={styles.noticeTitle}>{t.bridgeOpenerTitle}</Text>
@@ -146,9 +163,40 @@ function ResultSection({
   );
 }
 
+function ParticipantsSection({
+  peers,
+  t,
+  onRemovePeer,
+}: {
+  readonly peers: readonly ConversationAgentPeerView[];
+  readonly t: (typeof MESSAGES)[Locale]['conversationAgent'];
+  readonly onRemovePeer: (participantId: ParticipantId) => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{t.participantsSectionTitle}</Text>
+      {peers.map((peer) => (
+        <View key={peer.participantId} style={styles.peerRow}>
+          <Text style={styles.label}>{t.peerLabel(peer.name)}</Text>
+          <Pressable
+            accessibilityHint={t.removePeerButtonHint}
+            accessibilityLabel={t.removePeerButtonLabel(peer.name)}
+            accessibilityRole="button"
+            onPress={() => onRemovePeer(peer.participantId)}
+            style={styles.removeButton}
+          >
+            <Text style={styles.removeButtonGlyph}>×</Text>
+          </Pressable>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function ConversationAgentScreen({
   hasSelfIntroCard,
   peers,
+  canAddPeer,
   pasteInput,
   errorMessage,
   result,
@@ -165,7 +213,7 @@ export default function ConversationAgentScreen({
   onChangeLocale,
 }: ConversationAgentScreenProps) {
   const t = MESSAGES[locale].conversationAgent;
-  const peer = peers[0];
+  const hasPeers = peers.length > 0;
 
   return (
     <AppScreen
@@ -181,46 +229,48 @@ export default function ConversationAgentScreen({
         </View>
       )}
       {hasSelfIntroCard ? (
-        peer ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t.peerSectionTitle}</Text>
-            <View style={styles.peerRow}>
-              <Text style={styles.label}>{t.peerLabel(peer.name)}</Text>
-              <Pressable
-                accessibilityHint={t.removePeerButtonHint}
-                accessibilityLabel={t.removePeerButtonLabel(peer.name)}
-                accessibilityRole="button"
-                onPress={() => onRemovePeer(peer.participantId)}
-                style={styles.removeButton}
-              >
-                <Text style={styles.removeButtonGlyph}>×</Text>
-              </Pressable>
+        <>
+          {hasPeers ? (
+            <ParticipantsSection
+              onRemovePeer={onRemovePeer}
+              peers={peers}
+              t={t}
+            />
+          ) : null}
+          {canAddPeer ? (
+            <IntakeSection
+              errorMessage={errorMessage}
+              hasPeers={hasPeers}
+              onChangePasteInput={onChangePasteInput}
+              onScanPeer={onScanPeer}
+              onSubmitPasteInput={onSubmitPasteInput}
+              onUseSampleCard={onUseSampleCard}
+              pasteInput={pasteInput}
+              t={t}
+            />
+          ) : (
+            <View accessibilityRole="summary" style={styles.notice}>
+              <Text style={styles.noticeText}>{t.sessionFullNotice}</Text>
             </View>
-            <ActionButton
-              accessibilityHint={t.startButtonHint}
-              disabled={result.kind === 'running'}
-              label={t.startButton}
-              onPress={onStart}
-            />
-            <ActionButton
-              accessibilityHint={t.resetButtonHint}
-              label={t.resetButton}
-              onPress={onReset}
-              variant="secondary"
-            />
-            <ResultSection result={result} t={t} />
-          </View>
-        ) : (
-          <IntakeSection
-            errorMessage={errorMessage}
-            onChangePasteInput={onChangePasteInput}
-            onScanPeer={onScanPeer}
-            onSubmitPasteInput={onSubmitPasteInput}
-            onUseSampleCard={onUseSampleCard}
-            pasteInput={pasteInput}
-            t={t}
-          />
-        )
+          )}
+          {hasPeers ? (
+            <View style={styles.section}>
+              <ActionButton
+                accessibilityHint={t.startButtonHint}
+                disabled={result.kind === 'running'}
+                label={t.startButton}
+                onPress={onStart}
+              />
+              <ActionButton
+                accessibilityHint={t.resetButtonHint}
+                label={t.resetButton}
+                onPress={onReset}
+                variant="secondary"
+              />
+              <ResultSection result={result} t={t} />
+            </View>
+          ) : null}
+        </>
       ) : (
         // major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成
         // （`hasSelfIntroCard === false`）のときは session が無く、scan/paste/

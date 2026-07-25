@@ -8756,3 +8756,49 @@ make before-commit
 - `bun test src --coverage`（1441 pass、100% カバレッジ維持）、
   `bun scripts/architecture-harness.ts --staged --fail-on=error`（Error 0）、
   `make before-commit`（exit 0）で再検証した。
+
+### 端末内会話エージェント Step B（N 者間の全ペア評価） - 2026-07-25
+
+目的: Issue 104 の受入基準「複数参加者の全ペアを端末内で評価し、最も根拠の強い
+1 組へ会話理由と最初の質問を提示する」を満たす。Step A（2 者間）で保留していた
+N 者間 UI を実装する。
+
+制約:
+
+- Domain の Fairness Rule・Confidence 判定・2 者間 Provider Contract は変更しない。
+- 参加者上限は `MAX_BRIDGE_SELECTION_PARTICIPANTS` を唯一の正本にし、新しい上限を作らない。
+- 受信カードは従来どおり永続化しない（Storage Port を持たない `ConversationSession` のまま）。
+- この repo は React render harness を持たないため、判断は純関数へ切り出して実行テストする。
+
+タスク:
+
+- [x] ADR-0041 を書き、Step A の 2 者間 UI 制限を supersede する。
+- [x] `conversationBridgePartnerNames` を追加し、選ばれた組を名前で示せるようにする。
+- [x] `planConversationAgentStart` へ `onStart` の 3 分岐を切り出す。
+- [x] `addPeer` の 2 人目拒否を外し、上限超過は `SESSION_FULL` で理由を表示する。
+- [x] 画面を全件リスト表示 + 1 名ずつ削除 + 満席通知へ作り替える。
+- [x] i18n（ja / en）へ Step B の文言を追加する。
+- [x] Accessibility 契約テスト・Domain テスト・分岐テストを追加する。
+
+検証手順:
+
+- `bun run typecheck`
+- `bun test src --coverage`
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`
+- `make before-commit`
+
+進捗ログ:
+
+- Domain は最初から N 者間を扱えたため、変更は UI と配線に閉じた。
+- 3 名が 1 つの Bridge へ統合される経路が `no-signal` へ落ちていた欠陥を発見し、
+  Rules の Reason / Opener をそのまま提示する経路として実装した。
+
+振り返り:
+
+- **問題**: Step A の実装は、根拠が存在するのに「共通点が見つかりませんでした」と
+  表示する状態だった。
+- **根本原因**: `buildConversationAgentModelInput` が返す `null` に
+  「Contract 不整合（防御）」と「3 名統合（正常だが 2 者間 Contract 対象外）」の
+  2 つの意味が混ざっており、呼び出し側が前者だけを想定して `no-signal` へ倒していた。
+- **予防策**: 戻り値 `null` が複数の意味を持つ関数は、呼び出し側で分岐を書かず、
+  意味ごとに分けた判別可能な型（今回の `ConversationAgentStartPlan`）へ変換してから扱う。

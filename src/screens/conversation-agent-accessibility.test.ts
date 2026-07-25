@@ -103,11 +103,50 @@ describe('端末内会話エージェント画面の Accessibility 契約', () =
 
     expectInOrder(text, [
       'hasSelfIntroCard ? (',
-      'peer ? (',
+      '<ParticipantsSection',
       '<IntakeSection',
       'accessibilityHint={t.selfCardMissingCtaButtonHint}',
       'label={t.selfCardMissingCtaButton}',
       'onPress={onBack}',
+    ]);
+  });
+
+  it('Step B: 取り込んだ相手を全件リスト表示し、1 名ずつ削除ボタンを持つ', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      'function ParticipantsSection',
+      'peers.map((peer) => (',
+      'key={peer.participantId}',
+      'onPress={() => onRemovePeer(peer.participantId)}',
+    ]);
+  });
+
+  it('Step B: 参加者上限に達したら取り込み導線を隠し、満席である旨を summary role で伝える', async () => {
+    const text = await source();
+
+    // `accessibilityRole="summary" style={styles.notice}` は ResultSection の
+    // running 通知が先に持つため、ファイル全体の出現順では順序を固定できない。
+    // 満席分岐だけを切り出してから、その中の順序を検査する。
+    const fullBranch = text.slice(text.indexOf('canAddPeer ? ('));
+
+    expectInOrder(fullBranch, [
+      '<IntakeSection',
+      ') : (',
+      'accessibilityRole="summary" style={styles.notice}',
+      '{t.sessionFullNotice}',
+    ]);
+  });
+
+  it('Step B: 全ペア比較で選ばれた相手名を、共通点・最初の質問より先に読み上げる', async () => {
+    const text = await source();
+
+    expectInOrder(text, [
+      'result.partnerNames.length > 0 ? (',
+      '{t.bridgePartnerTitle}',
+      "{result.partnerNames.join(', ')}",
+      '{t.bridgeReasonTitle}',
+      '{t.bridgeOpenerTitle}',
     ]);
   });
 

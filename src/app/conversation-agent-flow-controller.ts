@@ -1,3 +1,11 @@
+import type { AgentModelInput } from '../domain/agent-model-provider';
+import type { LanguageCode } from '../domain/clue-catalog';
+import {
+  buildConversationAgentModelInput,
+  conversationBridgePartnerNames,
+  selectConversationBridge,
+} from '../domain/conversation-agent-evidence';
+import type { ConversationSession } from '../domain/conversation-session';
 import type { IntroCard } from '../domain/intro-card';
 
 /**
@@ -100,4 +108,69 @@ export async function resolveConversationAgentRun<TRunResult>(
     if (input.activeRunKeyRef.current !== input.encounterKey) return;
     input.onError(error);
   }
+}
+
+export interface ConversationAgentStartPlanInput {
+  readonly session: ConversationSession;
+  readonly deadlineAtWallClockMs: number;
+  readonly language: LanguageCode;
+}
+
+/**
+ * Step B（Issue 104 受入基準「複数参加者の全ペアを端末内で評価し、最も根拠の強い
+ * 1 組へ会話理由と最初の質問を提示する」）: `onStart` が行う 3 分岐の判断だけを
+ * hook から切り出した純関数。分岐は次の 3 つで、どれを選ぶかが Step B の肝になる。
+ *
+ * - `no-signal`: どのペアにも Evidence が無い。
+ * - `rules-bridge`: Bridge が 3 名以上へ統合された。2 者間専用の `AgentModelInput`
+ *   は組み立てられないため、ADR-0036 のとおり Rules が計算済みの Reason / Opener を
+ *   そのまま提示する（Step A ではこの経路を no-signal へ落としていた）。
+ * - `provider-run`: 自分 + 相手 1 名の Bridge。既存 2 者間 Provider Contract を回す。
+ */
+export type ConversationAgentStartPlan =
+  | { readonly kind: 'no-signal' }
+  | {
+      readonly kind: 'rules-bridge';
+      readonly reason: string;
+      readonly opener: string;
+      readonly partnerNames: readonly string[];
+    }
+  | {
+      readonly kind: 'provider-run';
+      readonly encounterKey: string;
+      readonly input: AgentModelInput;
+      readonly partnerNames: readonly string[];
+    };
+
+export function planConversationAgentStart({
+  session,
+  deadlineAtWallClockMs,
+  language,
+}: ConversationAgentStartPlanInput): ConversationAgentStartPlan {
+  const bridgeResult = selectConversationBridge(session);
+  if (bridgeResult.kind === 'no-signal') return { kind: 'no-signal' };
+  const bridge = bridgeResult.bridge;
+  const partnerNames = conversationBridgePartnerNames(session, bridge);
+  const input = buildConversationAgentModelInput(
+    session,
+    bridge,
+    deadlineAtWallClockMs,
+    language
+  );
+  if (input === null) {
+    return {
+      kind: 'rules-bridge',
+      reason: bridge.reason,
+      opener: bridge.opener,
+      partnerNames,
+    };
+  }
+  return {
+    kind: 'provider-run',
+    encounterKey: `conversation-agent:${[...bridge.participantIds]
+      .sort()
+      .join('|')}`,
+    input,
+    partnerNames,
+  };
 }

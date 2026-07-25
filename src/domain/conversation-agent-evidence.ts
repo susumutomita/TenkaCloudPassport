@@ -83,6 +83,29 @@ export function selectConversationBridge(
 }
 
 /**
+ * Step B（Issue 104 受入基準「最も根拠の強い 1 組へ会話理由と最初の質問を提示する」）:
+ * 選定済み Bridge のうち自分以外の参加者の表示名を `participantIds` の順で返す。
+ * 参加者が 3 名以上いるセッションでは「誰と誰の組が選ばれたか」が画面から
+ * 読み取れないと結果が使えないため、UI はこの名前を Reason / Opener と併記する。
+ * `session.peers` に存在しない ID（Bridge と session の不整合）は名前を作れないため
+ * 除外する（`buildConversationAgentModelInput` の同種の防御と同じ扱い）。
+ */
+export function conversationBridgePartnerNames(
+  session: ConversationSession,
+  bridge: SelectedBridge
+): readonly string[] {
+  return bridge.participantIds
+    .filter((participantId) => participantId !== session.self.participantId)
+    .map(
+      (participantId) =>
+        session.peers.find(
+          (candidate) => candidate.participantId === participantId
+        )?.introCard.name
+    )
+    .filter((name): name is string => name !== undefined);
+}
+
+/**
  * 選定済みの Bridge から、既存の 2 者間 `AgentModelProvider` Contract
  * （`AgentModelInput` / `createAgentProviderSessionRunner`）へそのまま渡せる
  * 入力を組み立てる。

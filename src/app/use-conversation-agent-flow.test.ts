@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'bun:test';
+import {
+  addConversationSessionPeer,
+  type ConversationSessionParticipant,
+  createConversationSession,
+} from '../domain/conversation-session';
 import { createIntroCard, type IntroCard } from '../domain/intro-card';
 import {
   performConversationAgentCleanup,
+  planConversationAgentStart,
   resolveConversationAgentRun,
   resolveScannedPeer,
 } from './conversation-agent-flow-controller';
@@ -231,5 +237,140 @@ describe('resolveConversationAgentRun（major: 遅延完了破棄）', () => {
 
     expect(harness.errors).toEqual([]);
     expect(harness.successes).toEqual([]);
+  });
+});
+
+describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選ぶ 3 分岐）', () => {
+  function participant<Id extends string>(
+    id: Id,
+    name: string,
+    themeIds: readonly string[] = []
+  ): ConversationSessionParticipant {
+    return {
+      participantId: `ptc_${id}`,
+      introCard: createIntroCard({
+        name,
+        ...(themeIds.length > 0 ? { themeIds } : {}),
+      }),
+    };
+  }
+
+  const DEADLINE_MS = 60_000;
+
+  it('どのペアにも根拠が無い場合、no-signal を返す', () => {
+    const session = addConversationSessionPeer(
+      createConversationSession(participant('self', '田中太郎')),
+      participant('peer', '鈴木花子')
+    );
+
+    expect(
+      planConversationAgentStart({
+        session,
+        deadlineAtWallClockMs: DEADLINE_MS,
+        language: 'ja',
+      })
+    ).toEqual({ kind: 'no-signal' });
+  });
+
+  it('自分 + 相手 1 名の Bridge は provider-run を返し、encounterKey を participantId の昇順で組み立てる', () => {
+    const session = addConversationSessionPeer(
+      createConversationSession(
+        participant('self', '田中太郎', ['open-source'])
+      ),
+      participant('peer', '鈴木花子', ['open-source'])
+    );
+
+    const plan = planConversationAgentStart({
+      session,
+      deadlineAtWallClockMs: DEADLINE_MS,
+      language: 'ja',
+    });
+
+    expect(plan.kind).toBe('provider-run');
+    if (plan.kind === 'provider-run') {
+      expect(plan.encounterKey).toBe('conversation-agent:ptc_peer|ptc_self');
+      expect(plan.partnerNames).toEqual(['鈴木花子']);
+      expect(plan.input.deadlineAtWallClockMs).toBe(DEADLINE_MS);
+      expect(plan.input.language).toBe('ja');
+    }
+  });
+
+  it('3 名以上が 1 つの Bridge へ統合された場合、Rules が計算済みの Reason / Opener をそのまま返す（no-signal へ落とさない）', () => {
+    const session = addConversationSessionPeer(
+      addConversationSessionPeer(
+        createConversationSession(
+          participant('self', '田中太郎', ['open-source'])
+        ),
+        participant('peerA', '鈴木花子', ['open-source'])
+      ),
+      participant('peerB', '佐藤次郎', ['open-source'])
+    );
+
+    const plan = planConversationAgentStart({
+      session,
+      deadlineAtWallClockMs: DEADLINE_MS,
+      language: 'ja',
+    });
+
+    expect(plan.kind).toBe('rules-bridge');
+    if (plan.kind === 'rules-bridge') {
+      expect(plan.reason).toContain('オープンソース');
+      expect(plan.opener).toContain('オープンソース');
+      expect(plan.partnerNames).toEqual(['鈴木花子', '佐藤次郎']);
+    }
+  });
+
+  it('根拠を持たない相手が混ざっていても、根拠のある 1 組だけを選んで Provider へ渡す', () => {
+    const session = addConversationSessionPeer(
+      addConversationSessionPeer(
+        createConversationSession(
+          participant('self', '田中太郎', ['open-source'])
+        ),
+        participant('peerA', '鈴木花子', ['open-source'])
+      ),
+      participant('peerB', '根拠なしの人')
+    );
+
+    const plan = planConversationAgentStart({
+      session,
+      deadlineAtWallClockMs: DEADLINE_MS,
+      language: 'ja',
+    });
+
+    expect(plan.kind).toBe('provider-run');
+    if (plan.kind === 'provider-run') {
+      expect(plan.partnerNames).toEqual(['鈴木花子']);
+      expect(plan.encounterKey).toBe('conversation-agent:ptc_peerA|ptc_self');
+    }
+  });
+
+  it('相互補完と共通点の両方が成立する 3 名は 1 つの Bridge へ統合され、根拠の強い相互補完が先頭に来る', () => {
+    const session = addConversationSessionPeer(
+      addConversationSessionPeer(
+        createConversationSession(
+          participant('self', '田中太郎', [
+            'open-source',
+            'information-security',
+          ])
+        ),
+        participant('peerA', '共通点だけの人', ['open-source'])
+      ),
+      participant('peerB', '補完関係の人', ['product-design'])
+    );
+
+    const plan = planConversationAgentStart({
+      session,
+      deadlineAtWallClockMs: DEADLINE_MS,
+      language: 'ja',
+    });
+
+    expect(plan.kind).toBe('rules-bridge');
+    if (plan.kind === 'rules-bridge') {
+      expect(plan.reason.indexOf('情報セキュリティ')).toBeLessThan(
+        plan.reason.indexOf('オープンソース')
+      );
+      expect(plan.opener).toContain('情報セキュリティ');
+      expect(plan.partnerNames).toEqual(['共通点だけの人', '補完関係の人']);
+    }
   });
 });

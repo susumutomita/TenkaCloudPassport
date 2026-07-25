@@ -660,6 +660,10 @@ export interface AppMessages {
     readonly selfCardMissingCtaButton: string;
     readonly selfCardMissingCtaButtonHint: string;
     readonly peerSectionTitle: string;
+    readonly participantsSectionTitle: string;
+    readonly addMorePeerNotice: string;
+    readonly sessionFullNotice: string;
+    readonly bridgePartnerTitle: string;
     readonly noPeerNotice: string;
     readonly scanButton: string;
     readonly scanButtonHint: string;
@@ -1386,6 +1390,12 @@ const ja: AppMessages = {
     selfCardMissingCtaButtonHint:
       '設定画面へ戻ります。自己紹介カードを作成すると、この機能を使えます。',
     peerSectionTitle: '相手のカード',
+    participantsSectionTitle: '取り込んだ相手',
+    addMorePeerNotice:
+      'さらに相手を取り込むと、全ペアを端末内で比較し、最も根拠の強い 1 組だけを提示します。',
+    sessionFullNotice:
+      '参加者が上限に達しました。別の相手を試すには、どれかのカードを外してください。',
+    bridgePartnerTitle: '選ばれた相手',
     noPeerNotice:
       'まだ相手のカードを受信していません。QR を再スキャンするか、URL を貼り付けてください。',
     scanButton: 'QR を再スキャン',
@@ -2117,6 +2127,12 @@ const en: AppMessages = {
     selfCardMissingCtaButtonHint:
       'Returns to Settings. Creating an intro card unlocks this feature.',
     peerSectionTitle: 'Their card',
+    participantsSectionTitle: 'People you have added',
+    addMorePeerNotice:
+      'Add more people and this compares every pair on-device, then presents only the single best-supported pair.',
+    sessionFullNotice:
+      'This session is full. Remove one of the cards to try someone else.',
+    bridgePartnerTitle: 'Chosen partner',
     noPeerNotice:
       'You have not received their card yet. Re-scan the QR code or paste the URL.',
     scanButton: 'Re-scan QR code',
