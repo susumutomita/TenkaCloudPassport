@@ -2286,6 +2286,7 @@ export default function PassportApp({
     return (
       <UtilityStageGate
         conversationAgent={{
+          canAddPeer: conversationAgentFlow.canAddPeer,
           errorMessage: conversationAgentFlow.errorMessage,
           hasSelfIntroCard: conversationAgentFlow.hasSelfIntroCard,
           onBack: conversationAgentFlow.close,

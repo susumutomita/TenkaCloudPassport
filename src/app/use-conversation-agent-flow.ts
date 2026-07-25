@@ -1,9 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AgentModelProvider } from '../domain/agent-model-provider';
-import {
-  buildConversationAgentModelInput,
-  selectConversationBridge,
-} from '../domain/conversation-agent-evidence';
+import { MAX_BRIDGE_SELECTION_PARTICIPANTS } from '../domain/bridge-selection';
 import {
   addConversationSessionPeer,
   type ConversationSession,
@@ -31,6 +28,7 @@ import {
 } from './conversation-agent-flow';
 import {
   performConversationAgentCleanup,
+  planConversationAgentStart,
   resolveConversationAgentRun,
   resolveScannedPeer,
 } from './conversation-agent-flow-controller';
@@ -61,6 +59,11 @@ export interface UseConversationAgentFlowInput {
 export interface ConversationAgentFlow {
   readonly hasSelfIntroCard: boolean;
   readonly peers: readonly ConversationAgentPeerView[];
+  /**
+   * Step B: `MAX_BRIDGE_SELECTION_PARTICIPANTS`（自分を含む）に達していないか。
+   * 画面はこれが `false` のとき取り込み導線を隠し、満席である旨だけを伝える。
+   */
+  readonly canAddPeer: boolean;
   readonly pasteInput: string;
   readonly errorMessage: string | null;
   readonly result: ConversationAgentResultState;
@@ -159,15 +162,13 @@ export function useConversationAgentFlow({
     (card: IntroCard): void => {
       setSession((current) => {
         if (!current) return current;
-        // code-reviewer 指摘（blocker）: Step A は自分 + 相手 1 名限定の UI
-        // であり、画面（`ConversationAgentScreen.tsx`）は相手が 1 名でも
-        // 入ると取り込み導線（スキャン・貼り付け・サンプル）自体を隠す。
-        // だが `onScanPeer` の Promise は非同期で、解決前に貼り付け/サンプルが
-        // 先に成立すると、後から解決した scan がこのガード無しでは見えない
-        // 2 人目を静かに追加してしまう（`onRemovePeer` は `peers[0]` の ID しか
-        // 渡せないため、その 2 人目は個別に消せなくなる）。既に 1 名いる場合は
-        // 追加を拒否する。
-        if (current.peers.length > 0) return current;
+        // Step B（Issue 104 受入基準「複数参加者の全ペアを端末内で評価する」）:
+        // Step A の「相手 1 名で取り込み導線を隠す」制限を外し、
+        // `MAX_BRIDGE_SELECTION_PARTICIPANTS` までの参加者を受け入れる。
+        // PR #132 の blocker（見えない 2 人目が個別に消せなくなる）は、
+        // 画面が `peers` を全件リスト表示し 1 名ずつ `onRemovePeer` を持つように
+        // なったことで解消している。上限超過は下の `addConversationSessionPeer`
+        // が `SESSION_FULL` を投げ、静かに落とさず理由を表示する。
         try {
           const next = addConversationSessionPeer(current, {
             participantId: createParticipantId(webCryptoRandomBytes),
@@ -266,37 +267,35 @@ export function useConversationAgentFlow({
   const onStart = useCallback((): void => {
     if (!session) return;
     if (result.kind === 'running') return;
-    const bridgeResult = selectConversationBridge(session);
-    if (bridgeResult.kind === 'no-signal') {
-      setResult({ kind: 'no-signal' });
-      return;
-    }
-    const input = buildConversationAgentModelInput(
+    const plan = planConversationAgentStart({
       session,
-      bridgeResult.bridge,
-      Date.now() + INTERACTION_DEADLINE_MS,
-      locale
-    );
-    if (!input) {
+      deadlineAtWallClockMs: Date.now() + INTERACTION_DEADLINE_MS,
+      language: locale,
+    });
+    if (plan.kind === 'no-signal') {
       setResult({ kind: 'no-signal' });
       return;
     }
-    const encounterKey = `conversation-agent:${[
-      ...bridgeResult.bridge.participantIds,
-    ]
-      .sort()
-      .join('|')}`;
-    runKeyRef.current = encounterKey;
+    if (plan.kind === 'rules-bridge') {
+      setResult({
+        kind: 'bridge',
+        reason: plan.reason,
+        opener: plan.opener,
+        partnerNames: plan.partnerNames,
+      });
+      return;
+    }
+    runKeyRef.current = plan.encounterKey;
     setResult({ kind: 'running' });
     void resolveConversationAgentRun({
       activeRunKeyRef: runKeyRef,
-      encounterKey,
+      encounterKey: plan.encounterKey,
       run: () =>
         providerRunner.run({
           state: INITIAL_PROVIDER_RUNTIME_STATE,
-          encounterKey,
+          encounterKey: plan.encounterKey,
           provider,
-          input,
+          input: plan.input,
         }),
       onSuccess: (runResult) => {
         const decision = runResult.outcome.decision;
@@ -306,6 +305,7 @@ export function useConversationAgentFlow({
                 kind: 'bridge',
                 reason: decision.reason,
                 opener: decision.opener,
+                partnerNames: plan.partnerNames,
               }
             : { kind: 'no-signal' }
         );
@@ -325,6 +325,9 @@ export function useConversationAgentFlow({
       name: peer.introCard.name,
       participantId: peer.participantId,
     })),
+    canAddPeer:
+      session !== null &&
+      session.peers.length + 1 < MAX_BRIDGE_SELECTION_PARTICIPANTS,
     pasteInput,
     errorMessage,
     result,

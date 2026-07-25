@@ -17,6 +17,13 @@ export type ConversationAgentResultState =
       readonly kind: 'bridge';
       readonly reason: string;
       readonly opener: string;
+      /**
+       * Step B（Issue 104 受入基準）: 3 名以上のセッションでは「全ペアを評価した
+       * 結果どの 1 組が選ばれたか」が分からないと結果を使えない。自分以外の
+       * Bridge 参加者の表示名を持ち、画面が Reason / Opener と併記する。
+       * 2 者間セッションでも常に 1 件入る。
+       */
+      readonly partnerNames: readonly string[];
     }
   | { readonly kind: 'error'; readonly message: string };
 

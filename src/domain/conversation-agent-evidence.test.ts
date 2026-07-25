@@ -4,6 +4,7 @@ import { CATALOG_VERSION } from './clue-catalog';
 import {
   buildConversationAgentModelInput,
   CONVERSATION_AGENT_PLACEHOLDER_PET_NAME,
+  conversationBridgePartnerNames,
   introCardToConversationPassport,
   selectConversationBridge,
 } from './conversation-agent-evidence';
@@ -260,5 +261,49 @@ describe('buildConversationAgentModelInput', () => {
     expect(
       buildConversationAgentModelInput(session, mismatchedBridge, 1_000)
     ).toBeNull();
+  });
+});
+
+describe('conversationBridgePartnerNames（Step B: 選ばれた 1 組を名前で示す）', () => {
+  it('自分を除いた bridge 参加者の表示名を participantIds の順で返す', () => {
+    const session = addConversationSessionPeer(
+      addConversationSessionPeer(
+        createConversationSession(
+          participant('self', '田中太郎', ['open-source'])
+        ),
+        participant('peerA', '鈴木花子', ['open-source'])
+      ),
+      participant('peerB', '佐藤次郎', ['accessibility'])
+    );
+    const bridge: SelectedBridge = {
+      participantIds: ['ptc_peerB', 'ptc_self', 'ptc_peerA'] as ParticipantId[],
+      reason: 'テスト用',
+      opener: 'テスト用',
+      evidenceIds: ['topic:open-source:ptc_peerA:ptc_self'],
+      confidence: 'possible',
+    };
+
+    expect(conversationBridgePartnerNames(session, bridge)).toEqual([
+      '佐藤次郎',
+      '鈴木花子',
+    ]);
+  });
+
+  it('session に存在しない participantId は名前を作れないため除外する', () => {
+    const session = addConversationSessionPeer(
+      createConversationSession(
+        participant('self', '田中太郎', ['open-source'])
+      ),
+      participant('peer', '鈴木花子', ['open-source'])
+    );
+    const bridge: SelectedBridge = {
+      participantIds: ['ptc_self', 'ptc_ghost'] as ParticipantId[],
+      reason: 'テスト用',
+      opener: 'テスト用',
+      evidenceIds: ['topic:open-source:ptc_ghost:ptc_self'],
+      confidence: 'possible',
+    };
+
+    expect(conversationBridgePartnerNames(session, bridge)).toEqual([]);
   });
 });
