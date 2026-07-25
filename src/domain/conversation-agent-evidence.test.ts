@@ -5,6 +5,7 @@ import {
   buildConversationAgentModelInput,
   CONVERSATION_AGENT_PLACEHOLDER_PET_NAME,
   conversationBridgePartnerNames,
+  introCardProfileText,
   introCardToConversationPassport,
   selectConversationBridge,
 } from './conversation-agent-evidence';
@@ -305,5 +306,42 @@ describe('conversationBridgePartnerNames（Step B: 選ばれた 1 組を名前�
     };
 
     expect(conversationBridgePartnerNames(session, bridge)).toEqual([]);
+  });
+});
+
+describe('introCardProfileText（Issue 147: モデルへ渡す自由記述の組み立て）', () => {
+  it('肩書き・所属・自己紹介文をこの順で 1 本のテキストにまとめる', () => {
+    const text = introCardProfileText(
+      createIntroCard({
+        name: '山田',
+        title: 'Platform Engineer',
+        organization: 'Tenka Inc.',
+        selfIntro: '週末は低山を歩いています。',
+      })
+    );
+
+    expect(text).toBe(
+      'Platform Engineer / Tenka Inc. / 週末は低山を歩いています。'
+    );
+  });
+
+  it('埋まっている欄だけを連結する', () => {
+    const text = introCardProfileText(
+      createIntroCard({ name: '山田', selfIntro: '低山が好きです。' })
+    );
+
+    expect(text).toBe('低山が好きです。');
+  });
+
+  it('自由記述がどれも無ければ undefined を返し、モデルへ空文字を渡さない', () => {
+    expect(
+      introCardProfileText(createIntroCard({ name: '山田' }))
+    ).toBeUndefined();
+  });
+
+  it('空白だけの欄は中身が無いものとして扱う', () => {
+    expect(
+      introCardProfileText(createIntroCard({ name: '山田', selfIntro: '   ' }))
+    ).toBeUndefined();
   });
 });

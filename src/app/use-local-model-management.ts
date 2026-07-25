@@ -3,7 +3,10 @@ import {
   type AgentModelProvider,
   AgentModelProviderError,
 } from '../domain/agent-model-provider';
-import type { LocalModelManifest } from '../local-agent/local-model-manifest';
+import type {
+  ImportedLocalModel,
+  LocalModelManifest,
+} from '../local-agent/local-model-manifest';
 import type {
   ActivationAssessment,
   ModelImportCandidate,
@@ -102,6 +105,18 @@ type PendingProviderOperation =
   | { readonly kind: 'delete'; readonly sha256: string }
   | { readonly kind: 'enable-on-device-ai' };
 
+/**
+ * manifest 上で「今使う Model」に指定されているものを返す。`models` へ載るのは
+ * 検証済みの Model だけなので、ここで見つかることが実体の存在と一致する。
+ */
+function activeModel(manifest: LocalModelManifest): ImportedLocalModel | null {
+  return (
+    manifest.models.find(
+      (model) => model.sha256 === manifest.activeModelSha256
+    ) ?? null
+  );
+}
+
 function errorCode(error: unknown): OnDeviceAiErrorCode {
   if (error instanceof AgentModelProviderError && error.nativeLaneQuarantined) {
     return 'NATIVE_CONTEXT_UNAVAILABLE';
@@ -167,26 +182,25 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
   }, []);
 
   /**
-   * v1.0（ADR-0038、code-reviewer 指摘 medium）: 永続化済み manifest に
-   * `activeModelSha256` があっても（例: 過去のビルドで on-device AI を
-   * 有効化済みだった端末が本ビルドへ更新した場合）、`management.createProvider(...)`
-   * （実際の llama.rn バックの Local LLM Completion Port）を構築しない。
-   * オンデバイス LLM のダウンロード停止・未完了起動時の native crash が実機で
-   * 確認され、呼び出し元を実機テストできないため、v1.0 では常に `fallbackProvider`
-   * （呼び出し元が注入する Rules Provider）に固定する。呼び出し口（`PassportApp.tsx`
-   * の会話 Agent・Pet Interaction）を Rules に固定するだけでなく、この
-   * Composition の中心でも同じ保証をかけることで、将来 3 つ目の呼び出し箇所が
-   * 増えても同じ crash が再発しない。v1.1 で実機テストして再有効化するときは、
-   * manifest の active な Model を探して `management.createProvider(...)` を
-   * 呼ぶ実装へ戻すだけでよい。呼び出し口（`refresh` / 起動時 effect）は
-   * 読み込んだ manifest をそのまま渡し続ける（v1.1 復元時に呼び出し側を
-   * 変えずに済むようにするため）。
+   * ADR-0043（Issue 147）: ADR-0038 が v1.0 の暫定措置として `fallbackProvider`
+   * 固定にしていた箇所を戻す。`manifest.models` へ載るのは sha256 と GGUF
+   * metadata の検証を通った Model だけで、ダウンロードが途中で終わった File は
+   * ここまで来ない。したがって `activeModelSha256` と一致する Model がある、
+   * という条件がそのまま「使える Model が実際に存在する」ことを意味する。
+   * 実行時の Load Error は `runProviderOnce` の Fallback-once が Rules へ倒す。
    */
   const configureProvider = useCallback(
-    (_loaded: LocalModelManifest): void => {
-      setProvider(fallbackProvider);
+    (loaded: LocalModelManifest): void => {
+      const active = activeModel(loaded);
+      setProvider(
+        active && management
+          ? management.createProvider(active, () =>
+              setError('BENCHMARK_WRITE_FAILED')
+            )
+          : fallbackProvider
+      );
     },
-    [fallbackProvider]
+    [fallbackProvider, management]
   );
 
   const refresh = useCallback(async (): Promise<void> => {

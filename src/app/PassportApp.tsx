@@ -1152,17 +1152,17 @@ export default function PassportApp({
     onClose: () => setStage('settings'),
   });
   // Issue 104 / ADR-0036: 端末内会話エージェント。`providerRunner` は Pet
-  // Interaction と同じ共有 instance をそのまま渡す。v1.0（ADR-0038）: Provider は
-  // `useLocalModelManagement` が返す state（Local Model が有効なら llama.rn 経由に
-  // なり得た）ではなく `RULES_MODEL_PROVIDER` に固定する。オンデバイス LLM の
-  // ダウンロード停止・未完了起動時の native crash が実機で確認され、呼び出し元を
-  // 実機テストできないため、v1.0 では会話 Agent が Local LLM Completion Port に
-  // 一切触れないことを呼び出し口で直接保証する（v1.1 で実機テストして再有効化する）。
+  // Interaction と同じ共有 instance をそのまま渡す。ADR-0043（Issue 147）:
+  // ADR-0038 が Rules 固定にしていたこの 1 か所を戻す。自己紹介カードの自由記述を
+  // 読んで共通点を見つけるのがこの機能の目的であり、Rules 固定のままでは
+  // カタログ checkbox の共通集合しか出せないため。Model を持たない端末では
+  // `localModels.provider` がそのまま Rules になり、実行時失敗も
+  // `runProviderOnce` の Fallback-once が Rules へ倒す。
   const conversationAgentFlow = useConversationAgentFlow({
     locale,
     cameraQrCapturePort,
     providerRunner,
-    provider: RULES_MODEL_PROVIDER,
+    provider: localModels.provider,
     onNavigateToConversationAgent: () => setStage('conversation-agent'),
     onNavigateToSettings: () => setStage('settings'),
   });

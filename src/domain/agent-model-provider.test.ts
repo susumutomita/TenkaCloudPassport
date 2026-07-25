@@ -419,6 +419,99 @@ describe('Provider Output Runtime Schema: Provider は既知 Evidence だけを�
   });
 });
 
+describe('grounded-bridge: 自己紹介の自由記述から見つけた共通点（Issue 147）', () => {
+  const input: AgentModelInput = {
+    ownerPassport: passport(['open-source'], []),
+    encounteredPassport: passport(['accessibility'], []),
+    language: 'ja',
+    deadlineAtWallClockMs: 45_000,
+    ownerProfileText: '週末は近所の低山を歩いています。',
+    encounteredProfileText:
+      'アウトドア全般が好きで、最近はキャンプに行きます。',
+  };
+
+  it('checkbox の一致が 1 件も無くても、引用が実在すれば Bridge を返す', () => {
+    const decision = validateAgentModelProviderOutput(input, {
+      kind: 'grounded-bridge',
+      ownerQuote: '低山を歩いています',
+      peerQuote: 'アウトドア全般が好き',
+    });
+
+    expect(decision).toEqual({
+      kind: 'bridge',
+      confidence: 'possible',
+      evidenceIds: ['grounded-quote'],
+      reason:
+        'あなたの自己紹介の「低山を歩いています」と、相手の「アウトドア全般が好き」が重なっています。',
+      opener: '「アウトドア全般が好き」について聞いてみましょう。',
+    });
+  });
+
+  it('en では同じ引用で英語の固定文になる', () => {
+    const decision = validateAgentModelProviderOutput(
+      { ...input, language: 'en' },
+      {
+        kind: 'grounded-bridge',
+        ownerQuote: '低山を歩いています',
+        peerQuote: 'アウトドア全般が好き',
+      }
+    );
+
+    expect(decision).toEqual({
+      kind: 'bridge',
+      confidence: 'possible',
+      evidenceIds: ['grounded-quote'],
+      reason:
+        'Your intro mentions "低山を歩いています", and theirs mentions "アウトドア全般が好き".',
+      opener: 'Try asking about "アウトドア全般が好き".',
+    });
+  });
+
+  it('入力文に無い引用は、モデルの創作として型付き失敗にする', () => {
+    expect(() =>
+      validateAgentModelProviderOutput(input, {
+        kind: 'grounded-bridge',
+        ownerQuote: '登山サークルの代表をしています',
+        peerQuote: 'アウトドア全般が好き',
+      })
+    ).toThrow('引用が自己紹介文の中に見つからないため');
+  });
+
+  it('自己紹介文が渡っていない Input では grounded-bridge を受け付けない', () => {
+    const withoutText: AgentModelInput = {
+      ownerPassport: passport(['open-source'], []),
+      encounteredPassport: passport(['accessibility'], []),
+      language: 'ja',
+      deadlineAtWallClockMs: 45_000,
+    };
+
+    expect(() =>
+      validateAgentModelProviderOutput(withoutText, {
+        kind: 'grounded-bridge',
+        ownerQuote: '低山を歩いています',
+        peerQuote: 'アウトドア全般が好き',
+      })
+    ).toThrow('引用が自己紹介文の中に見つからないため');
+  });
+
+  it('引用以外の Field を足した Output は Schema 境界で拒否する', () => {
+    expect(() =>
+      validateAgentModelProviderOutput(input, {
+        kind: 'grounded-bridge',
+        ownerQuote: '低山を歩いています',
+        peerQuote: 'アウトドア全般が好き',
+        note: 'モデルの自由記述',
+      })
+    ).toThrow('許可 Field は');
+  });
+
+  it('未知の kind は 3 種類の許可 kind を示して拒否する', () => {
+    expect(() =>
+      validateAgentModelProviderOutput(input, { kind: 'free-text' })
+    ).toThrow('kind は bridge、grounded-bridge、no-signal');
+  });
+});
+
 describe('Platform 非依存: react / react-native / expo に依存しない純 TypeScript の Contract Test', () => {
   it('agent-model-provider.ts のソーステキストは Platform package を import しない', async () => {
     const text = await Bun.file(
