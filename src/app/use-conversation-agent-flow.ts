@@ -20,6 +20,7 @@ import {
   type AgentProviderSessionRunner,
   INITIAL_PROVIDER_RUNTIME_STATE,
 } from './agent-provider-session';
+import type { CameraQrCapturePort } from './camera-qr-capture';
 import {
   CONVERSATION_AGENT_SAMPLE_PEER_CARD,
   type ConversationAgentResultState,
@@ -27,6 +28,7 @@ import {
   INITIAL_CONVERSATION_AGENT_RESULT,
 } from './conversation-agent-flow';
 import {
+  conversationAgentScanErrorMessage,
   performConversationAgentCleanup,
   planConversationAgentStart,
   resolveConversationAgentRun,
@@ -34,7 +36,6 @@ import {
 } from './conversation-agent-flow-controller';
 import type { Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
-import type { QrScannerPort } from './qr-scanner-port';
 import { readableError } from './readable-error';
 
 /**
@@ -47,7 +48,13 @@ import { readableError } from './readable-error';
  */
 export interface UseConversationAgentFlowInput {
   readonly locale: Locale;
-  readonly qrScannerPort: QrScannerPort;
+  /**
+   * Issue 146: 対面の相手端末に表示された QR を実カメラで読み取る Port。
+   * 単一端末デモ用の in-process `QrScannerPort` では相手のカードを取り込めない
+   * （`publish()` された Lounge Invite しか返らない）ため、この画面は
+   * `CameraQrCapturePort` を使う。
+   */
+  readonly cameraQrCapturePort: CameraQrCapturePort;
   readonly providerRunner: AgentProviderSessionRunner;
   readonly provider: AgentModelProvider;
   /** Settings 画面から本機能へ遷移する（stage 遷移自体は呼び出し側が持つ）。 */
@@ -82,7 +89,7 @@ export interface ConversationAgentFlow {
 
 export function useConversationAgentFlow({
   locale,
-  qrScannerPort,
+  cameraQrCapturePort,
   providerRunner,
   provider,
   onNavigateToConversationAgent,
@@ -128,11 +135,15 @@ export function useConversationAgentFlow({
   }, [providerRunner]);
 
   const resetTransientState = useCallback((): void => {
+    // Issue 146: 画面を離れる・やり直す経路で Camera Preview を開いたままにしない。
+    // 待機中でなければ no-op で、待機中なら SCAN_CANCELLED として決着する
+    // （その完了は上の世代キーが stale として捨てる）。
+    cameraQrCapturePort.cancel();
     setPasteInput('');
     setErrorMessage(null);
     setResult(INITIAL_CONVERSATION_AGENT_RESULT);
     forgetActiveRun();
-  }, [forgetActiveRun]);
+  }, [cameraQrCapturePort, forgetActiveRun]);
 
   const open = useCallback(
     (introCard: IntroCard | null): void => {
@@ -204,29 +215,31 @@ export function useConversationAgentFlow({
   }, [addPeer, locale, pasteInput]);
 
   /**
-   * 既存の `qrScannerPort`（Lounge Invite と同じ M1 in-process Port）をそのまま
-   * 再利用する。将来 M3 が実カメラへ差し替えても、この呼び出し（Port の
-   * `scan()` を呼び、生文字列を渡すだけ）は変えずに済む
-   * （`qr-scanner-port.ts` の architect guidance と同じ原則）。
+   * Issue 146: 実カメラを開いて相手の QR を 1 件読み取る。Port の `capture()` を
+   * 呼び、生文字列を受け取るだけという呼び出しの形は従来どおりで、この画面は
+   * カメラパッケージを直接 import しない（`qr-scanner-port.ts` の architect
+   * guidance と同じ原則）。取り消し・権限拒否の文言化は
+   * `conversationAgentScanErrorMessage` が一元的に判断する。
    */
   const onScanPeer = useCallback((): void => {
     const generationAtStart = scanGenerationRef.current;
     void resolveScannedPeer({
       scanGenerationRef,
       generationAtStart,
-      scan: () => qrScannerPort.scan(),
+      scan: () => cameraQrCapturePort.capture(),
       decode: decodeConversationAgentPeerCard,
       addPeer,
       onError: (error) => {
         setErrorMessage(
-          readableError(
+          conversationAgentScanErrorMessage({
             error,
-            MESSAGES[locale].conversationAgent.runErrorMessage
-          )
+            locale,
+            fallbackMessage: MESSAGES[locale].conversationAgent.runErrorMessage,
+          })
         );
       },
     });
-  }, [addPeer, locale, qrScannerPort]);
+  }, [addPeer, cameraQrCapturePort, locale]);
 
   /** 設計文書「審査官が単独で試せる審査戦略」: QR・URL 往復を経ないテスト専用の内部経路。 */
   const onUseSampleCard = useCallback((): void => {

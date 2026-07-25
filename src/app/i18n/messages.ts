@@ -540,6 +540,16 @@ export interface AppMessages {
     readonly hardwareUnavailableTitle: string;
     readonly hardwareUnavailableMessage: string;
   };
+  /**
+   * Issue 146: 実カメラで相手の QR を読み取る間だけ全画面に出す Overlay の文言。
+   * 権限そのものの案内は `cameraPermissionNotice` が持ち、ここでは重複させない。
+   */
+  readonly cameraQrCapture: {
+    readonly title: string;
+    readonly hint: string;
+    readonly cancelButton: string;
+    readonly cancelButtonHint: string;
+  };
   readonly qrErrorNotice: {
     readonly notPassportQr: string;
     readonly invalidPrefix: string;
@@ -555,6 +565,7 @@ export interface AppMessages {
     readonly invalidParticipantCount: string;
     readonly permissionNotGranted: string;
     readonly nothingToScan: string;
+    readonly scanCancelled: string;
     readonly genericFailure: string;
     /** Issue 15: 元は `PassportApp.tsx` に直書きされていた 2 件の Guest Scan 固有 Error。 */
     readonly notLoungeInviteQr: string;
@@ -1257,6 +1268,12 @@ const ja: AppMessages = {
     hardwareUnavailableTitle: 'この端末にはカメラがありません。',
     hardwareUnavailableMessage: 'QR の読み取りはこの端末で利用できません。',
   },
+  cameraQrCapture: {
+    title: '相手の QR を読み取ります。',
+    hint: '相手の自己紹介ページの QR を枠の中に入れてください。読み取った内容は端末の中だけで扱います。',
+    cancelButton: '読み取りをやめる',
+    cancelButtonHint: 'カメラを閉じて前の画面へ戻ります。',
+  },
   qrErrorNotice: {
     notPassportQr: 'これは TenkaCloud Passport の QR ではありません。',
     invalidPrefix: 'QR の形式（Prefix）が正しくありません。',
@@ -1277,6 +1294,7 @@ const ja: AppMessages = {
       'カメラの利用が許可されていないため QR を読み取れません。',
     nothingToScan:
       '読み取れる QR がありません。Host の画面を確認してください。',
+    scanCancelled: 'QR の読み取りを取り消しました。',
     genericFailure: '読み取りに失敗しました。もう一度実行してください。',
     notLoungeInviteQr:
       'この QR は Lounge Invite ではありません。Host の Invite QR を読み取ってください。',
@@ -1999,6 +2017,12 @@ const en: AppMessages = {
     hardwareUnavailableTitle: 'This device has no camera.',
     hardwareUnavailableMessage: 'Scanning a QR is unavailable on this device.',
   },
+  cameraQrCapture: {
+    title: 'Scanning their QR.',
+    hint: 'Point the frame at the QR on their intro card page. What you scan stays on this device.',
+    cancelButton: 'Stop scanning',
+    cancelButtonHint: 'Closes the camera and returns to the previous screen.',
+  },
   qrErrorNotice: {
     notPassportQr: 'This is not a TenkaCloud Passport QR.',
     invalidPrefix: 'The QR format (prefix) is not valid.',
@@ -2018,6 +2042,7 @@ const en: AppMessages = {
     permissionNotGranted:
       'Camera access is not granted, so the QR cannot be scanned.',
     nothingToScan: 'There is no QR to scan. Please check the Host’s screen.',
+    scanCancelled: 'You cancelled the QR scan.',
     genericFailure: 'The scan failed. Please try again.',
     notLoungeInviteQr:
       'This QR is not a Lounge Invite. Scan the Host’s Invite QR instead.',

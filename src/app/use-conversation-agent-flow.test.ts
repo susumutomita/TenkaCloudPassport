@@ -6,11 +6,14 @@ import {
 } from '../domain/conversation-session';
 import { createIntroCard, type IntroCard } from '../domain/intro-card';
 import {
+  conversationAgentScanErrorMessage,
   performConversationAgentCleanup,
   planConversationAgentStart,
   resolveConversationAgentRun,
   resolveScannedPeer,
 } from './conversation-agent-flow-controller';
+import { MESSAGES } from './i18n/messages';
+import { QrScanError } from './qr-scanner-port';
 
 /**
  * Issue 104 PR #132（Codex 指摘 major）: `use-conversation-agent-flow.ts` の
@@ -158,6 +161,57 @@ interface RunHarness {
 function runHarness(): RunHarness {
   return { runKeyRef: { current: null }, successes: [], errors: [] };
 }
+
+describe('conversationAgentScanErrorMessage（Issue 146: 実カメラ読取の失敗表示）', () => {
+  const fallbackMessage = '取り込みに失敗しました。';
+
+  it('利用者が読み取りをやめた場合は何も表示しない', () => {
+    const message = conversationAgentScanErrorMessage({
+      error: new QrScanError('SCAN_CANCELLED', 'cancelled'),
+      locale: 'ja',
+      fallbackMessage,
+    });
+
+    expect(message).toBeNull();
+  });
+
+  it('権限が無い場合は locale 対応の既存文言を使う', () => {
+    expect(
+      conversationAgentScanErrorMessage({
+        error: new QrScanError('PERMISSION_NOT_GRANTED', 'denied'),
+        locale: 'ja',
+        fallbackMessage,
+      })
+    ).toBe(MESSAGES.ja.qrErrorNotice.permissionNotGranted);
+    expect(
+      conversationAgentScanErrorMessage({
+        error: new QrScanError('PERMISSION_NOT_GRANTED', 'denied'),
+        locale: 'en',
+        fallbackMessage,
+      })
+    ).toBe(MESSAGES.en.qrErrorNotice.permissionNotGranted);
+  });
+
+  it('QR 読取層以外の Error はその message を表示する', () => {
+    const message = conversationAgentScanErrorMessage({
+      error: new Error('カードを読み取れませんでした。'),
+      locale: 'ja',
+      fallbackMessage,
+    });
+
+    expect(message).toBe('カードを読み取れませんでした。');
+  });
+
+  it('Error ではない値は既定文言へ落とす', () => {
+    const message = conversationAgentScanErrorMessage({
+      error: 'not an error',
+      locale: 'ja',
+      fallbackMessage,
+    });
+
+    expect(message).toBe(fallbackMessage);
+  });
+});
 
 describe('resolveConversationAgentRun（major: 遅延完了破棄）', () => {
   it('Provider 実行が成功し key が一致していれば onSuccess を呼ぶ', async () => {
