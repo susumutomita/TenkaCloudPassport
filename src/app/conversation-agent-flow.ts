@@ -52,8 +52,22 @@ export function decodeConversationAgentPeerCard(raw: string): IntroCard {
  * 固定サンプル。実在人物の氏名・連絡先は使わない（審査メモにも明記する）。
  * QR 生成・URL 往復を経ず、`ConversationSession` へ直接注入するテスト専用の
  * 内部経路からだけ使う（画面から直接 import せず、この 1 か所を正本にする）。
+ *
+ * 自由記述（title・selfIntro）を持たせる理由（ADR-0043、owner 実機で観測）:
+ * grounded-quote 経路は両者の自由記述が揃ったときだけ発火する。サンプルが
+ * themeIds だけだと、owner がテーマを合わせない限り必ず no-signal になり、
+ * 端末内 LLM の引用提示をサンプルで実演できなかった。本文は架空の内容で、
+ * 話題の幅（趣味・仕事・学び）を持たせて owner 側の自己紹介文と意味的に
+ * 重なりやすくする。引用は本文の部分文字列としてそのまま画面に出るため、
+ * URL・メールアドレス・長い数字列は含めない（テストで契約として固定）。
  */
 export const CONVERSATION_AGENT_SAMPLE_PEER_CARD: IntroCard = createIntroCard({
   name: 'Sample Explorer',
+  title: 'フィールドリサーチャー',
+  selfIntro:
+    '週末は近くの低い山を歩いて、自然の中で考えごとをするのが好きです。' +
+    'ふだんはクラウド基盤の運用を担当していて、オープンソースのツールを日常的に使っています。' +
+    '最近はアクセシビリティの勉強会に顔を出して、誰にでも使いやすい画面の作り方を学んでいます。' +
+    '淹れたてのコーヒーと、地域の小さなイベントに出かけることも楽しみにしています。',
   themeIds: ['open-source', 'accessibility', 'cloud-infrastructure'],
 });

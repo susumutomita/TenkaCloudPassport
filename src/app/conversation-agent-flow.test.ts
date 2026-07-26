@@ -50,6 +50,30 @@ describe('CONVERSATION_AGENT_SAMPLE_PEER_CARD', () => {
       CONVERSATION_AGENT_SAMPLE_PEER_CARD.themeIds?.length
     ).toBeGreaterThan(0);
   });
+
+  it('自由記述（title・selfIntro）を持ち、引用グラウンディング経路を単独で実演できる', () => {
+    // ADR-0043: grounded-quote 経路は両者の自由記述が揃ったときだけ発火する。
+    // サンプルが themeIds だけだと、owner がテーマを合わせない限り必ず
+    // no-signal になり、端末内 LLM の引用提示をサンプルで実演できない
+    // （owner 実機で観測した実挙動）。サンプル側の自由記述を契約として固定する。
+    expect(CONVERSATION_AGENT_SAMPLE_PEER_CARD.title?.length).toBeGreaterThan(
+      0
+    );
+    expect(
+      CONVERSATION_AGENT_SAMPLE_PEER_CARD.selfIntro?.length
+    ).toBeGreaterThan(0);
+  });
+
+  it('自由記述に連絡先類（URL・メール・長い数字列）を含まない', () => {
+    // 引用は自由記述の部分文字列としてそのまま画面に出るため、サンプル本文にも
+    // grounded-quote-bridge の禁止パターンと同じ制約を掛けておく。
+    const text = `${CONVERSATION_AGENT_SAMPLE_PEER_CARD.title ?? ''} ${
+      CONVERSATION_AGENT_SAMPLE_PEER_CARD.selfIntro ?? ''
+    }`;
+    expect(text).not.toMatch(/https?:\/\//);
+    expect(text).not.toMatch(/@/);
+    expect(text).not.toMatch(/\d{7,}/);
+  });
 });
 
 describe('INITIAL_CONVERSATION_AGENT_RESULT', () => {
