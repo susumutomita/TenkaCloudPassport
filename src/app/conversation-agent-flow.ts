@@ -1,5 +1,6 @@
 import { createIntroCard, type IntroCard } from '../domain/intro-card';
 import { decodeIntroCardUrlFragment } from '../protocol/intro-card-url';
+import type { ConversationExampleViewState } from './conversation-example-flow';
 
 /**
  * Issue 104 / ADR-0036: 端末内会話エージェント（Step A）の画面が必要とする、
@@ -8,6 +9,12 @@ import { decodeIntroCardUrlFragment } from '../protocol/intro-card-url';
  * へ通し、`AgentModelInput` の組み立ては `src/domain/conversation-agent-evidence.ts`
  * にそのまま任せる（重複実装しない）。
  */
+
+export interface ConversationExampleResultView {
+  readonly state: ConversationExampleViewState;
+  readonly onGenerate: () => void;
+  readonly onCancel: () => void;
+}
 
 export type ConversationAgentResultState =
   | { readonly kind: 'idle' }
@@ -27,9 +34,25 @@ export type ConversationAgentResultState =
     }
   | { readonly kind: 'error'; readonly message: string };
 
+export type ConversationAgentPresentedResultState =
+  | Exclude<ConversationAgentResultState, { readonly kind: 'bridge' }>
+  | (Extract<ConversationAgentResultState, { readonly kind: 'bridge' }> & {
+      readonly conversationExample: ConversationExampleResultView;
+    });
+
 export const INITIAL_CONVERSATION_AGENT_RESULT: ConversationAgentResultState = {
   kind: 'idle',
 };
+
+/** Hook が持つ Bridge 本体と会話例状態を、画面へ渡す 1 つの View Model に合成する。 */
+export function presentConversationAgentResult(
+  result: ConversationAgentResultState,
+  conversationExample: ConversationExampleResultView
+): ConversationAgentPresentedResultState {
+  return result.kind === 'bridge'
+    ? { ...result, conversationExample }
+    : result;
+}
 
 /**
  * QR 再スキャン（`QrScannerPort.scan()` の生文字列）・手動貼り付けのどちらから
