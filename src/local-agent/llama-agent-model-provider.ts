@@ -1,4 +1,11 @@
-import { AgentModelProviderError } from '../domain/agent-model-provider';
+import {
+  AgentModelProviderError,
+  type AgentModelProviderOptions,
+} from '../domain/agent-model-provider';
+import type {
+  ConversationExampleCompletionPort,
+  ConversationExampleModelRequest,
+} from './conversation-example-generator';
 import type { LocalModelConfiguration } from './local-model-configuration';
 import type {
   ModelBenchmarkRecorder,
@@ -85,14 +92,17 @@ export interface LocalModelExecutionLeasePort {
   acquire(): LocalModelExecutionLease;
 }
 
+type LlamaModelRequest = LocalModelRequest | ConversationExampleModelRequest;
+
 function completionParameters(
-  request: LocalModelRequest,
+  request: LlamaModelRequest,
   configuration: LocalModelConfiguration
 ): LlamaCompletionParameters {
+  const generation = 'generation' in request ? request.generation : undefined;
   return {
     messages: request.messages.map(({ role, content }) => ({ role, content })),
-    n_predict: configuration.nPredict,
-    temperature: 0,
+    n_predict: generation?.nPredict ?? configuration.nPredict,
+    temperature: generation?.temperature ?? 0,
     add_generation_prompt: true,
     response_format: {
       type: 'json_schema',
@@ -227,7 +237,7 @@ function observeCompletionCancellation(
 
 async function completeContext(
   context: LlamaContextPort,
-  request: LocalModelRequest,
+  request: LlamaModelRequest,
   configuration: LocalModelConfiguration,
   signal: AbortSignal | undefined,
   benchmark: ModelBenchmarkSession | null
@@ -260,7 +270,7 @@ type CompletionAttempt =
 
 async function captureCompletion(
   context: LlamaContextPort,
-  request: LocalModelRequest,
+  request: LlamaModelRequest,
   configuration: LocalModelConfiguration,
   signal: AbortSignal | undefined,
   benchmark: ModelBenchmarkSession | null
@@ -304,7 +314,7 @@ async function finishBenchmark(
 }
 
 async function executeLlamaProvider(
-  request: LocalModelRequest,
+  request: LlamaModelRequest,
   configuration: LocalModelConfiguration,
   loadModule: LlamaModuleLoader,
   executionLeases: LocalModelExecutionLeasePort,
@@ -355,16 +365,16 @@ async function executeLlamaProvider(
 
 /**
  * 1 Encounter に 1 Context を作る Native Adapter。Native 値は unknown のまま JSON 境界へ渡し、
- * 共通 Evidence Validator は `attemptProvider` が必ず適用する。
+ * 共通 Evidence Validator / 会話例 Parser は各 feature 境界が必ず適用する。
  */
 export function createLlamaCompletionPort(
   configuration: LocalModelConfiguration,
   loadModule: LlamaModuleLoader,
   executionLeases: LocalModelExecutionLeasePort,
   recorder?: ModelBenchmarkRecorder
-): LocalModelCompletionPort {
+): LocalModelCompletionPort & ConversationExampleCompletionPort {
   return {
-    complete(request, options) {
+    complete(request: LlamaModelRequest, options?: AgentModelProviderOptions) {
       return executeLlamaProvider(
         request,
         configuration,
