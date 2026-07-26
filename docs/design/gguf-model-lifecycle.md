@@ -118,6 +118,17 @@ Manifest を parse した直後に、各 Model の `privateUri` を `LocalModelF
 Crash 後に残った `.incoming.gguf` は次回 Manifest load 時に削除する。既存 Model と同じ SHA-256 または同名 File は
 暗黙に再利用・上書きせず、`DUPLICATE_MODEL` / `NAME_CONFLICT` とする。
 
+### 信頼済み Model 取得の仕上げフェーズは signal を渡さない（ADR-0046）
+
+上記の transaction（手動 GGUF import、file picker 経由）は Owner の明示 Cancel と画面 unmount のどちらでも
+`AbortSignal` 経由で中断できることが前提であり、その挙動は変えない。一方、Settings の「オンデバイス AI を
+有効化」（`trusted-model-enablement-controller.ts` の `enableOnDeviceAi`）はダウンロード完了後、同じ
+`importCandidate` を signal 無しで呼ぶ。ダウンロードが 100％ 完了した時点で `onDownloadComplete` callback を
+発火し、以降の import 本体（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と activate は構造的に
+中断不能なフェーズへ入る。呼び出し元（`use-local-model-management.ts`）はこの callback で
+`onDeviceAiFlow` を `'finalizing'` にし、Cancel 導線を隠す。画面遷移・unmount・全データ削除のどれが起きても
+この仕上げフェーズは完了まで進む。詳細な根拠と状態機械は [ADR-0046](../adr/0046-trusted-model-finalize-phase-survives-navigation.md) を参照。
+
 ## Resource Risk
 
 デフォルト Context は 2,048 token とし、推定 working set を次で求める。

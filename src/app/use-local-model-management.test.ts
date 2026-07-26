@@ -455,6 +455,50 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
     );
   });
 
+  it('ADR-0046（実機 blocker、Issue 152）: オンデバイス AI の仕上げフェーズは onDownloadComplete で ref を切り離してから finalizing へ遷移し、完了後は無条件に idle へ戻す', async () => {
+    const text = await source();
+    const enableStart = text.indexOf('const performEnableOnDeviceAi');
+    const enableEnd = text.indexOf('const confirmEnableOnDeviceAiConsent');
+    const enableBody = text.slice(enableStart, enableEnd);
+
+    // ダウンロード完了直後（import 開始前）に ref を切り離してから 'finalizing'
+    // へ遷移する。これにより cancelOnDeviceAiDownload() と unmount cleanup の
+    // どちらが後から `.abort()` を呼んでも、この操作には何も起こらない。
+    // ref を切り離す判断（同一 controller のときだけ null 化）は
+    // `detachController` の 1 か所にまとめ、`onDownloadComplete`・`finally`
+    // 両方から呼ぶ（/simplify 指摘、複製の解消）。
+    expectInOrder(enableBody, [
+      'const controller = new AbortController()',
+      'const detachController = (): void => {',
+      'if (trustedModelControllerRef.current === controller) {',
+      'trustedModelControllerRef.current = null;',
+      'onDownloadComplete: () => {',
+      'detachController();',
+      "setOnDeviceAiFlow('finalizing');",
+    ]);
+    // 完了（成功・失敗いずれも）後は無条件に idle へ戻す。onDownloadComplete が
+    // 既に ref を null 化していても、`detachController` は同一 controller
+    // ガードで no-op になるだけで、後続の setState は無条件に実行される
+    // 必要がある（そうしないと成功後も画面が 'finalizing' のまま固まる）。
+    const finallyBody = enableBody.slice(enableBody.indexOf('} finally {'));
+    expectInOrder(finallyBody, [
+      '} finally {',
+      'detachController();',
+      "setOnDeviceAiFlow('idle');",
+      'setOnDeviceAiDownloadProgress(null);',
+    ]);
+    // efficiency 指摘（/simplify）: 'finalizing' 表示（SettingsScreen.tsx）は
+    // progress を読まないため、clear は完了時（finally）の 1 回だけでよい。
+    // onDownloadComplete 側では呼ばない（重複排除）。
+    const onDownloadCompleteBody = enableBody.slice(
+      enableBody.indexOf('onDownloadComplete: () => {'),
+      enableBody.indexOf('refresh,\n            setCautionAssessment,')
+    );
+    expect(onDownloadCompleteBody).not.toContain(
+      'setOnDeviceAiDownloadProgress'
+    );
+  });
+
   it('初回 load も単一 operation lane に入り、候補変更は古い Import 確認 intent を失効する', async () => {
     const text = await source();
     const initialLoad = text.slice(

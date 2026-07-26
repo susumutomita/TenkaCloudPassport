@@ -49,15 +49,18 @@ export interface EnableOnDeviceAiInput {
   readonly consented: boolean;
   readonly onProgress?: (progress: TrustedModelDownloadProgress) => void;
   /**
-   * code-reviewer 指摘（Cancel ボタンの実効性、2 回目のレビューで修正）:
-   * `assessActivation`/`activate` は `AbortSignal` を受け取らず中断できない
-   * 区間だが、直前の `importLocalModelCandidate` は `signal` を渡しており、
-   * copy・digest の各チェックポイントで実際に中断できる。呼び出し元
-   *（Settings 画面）が Cancel 導線を隠すタイミングを、中断可能な import 完了
-   * 直後・中断不能な activate 開始直前へ正確に合わせられるよう、import 成功
-   * 直後に一度だけ呼ぶ（ダウンロード完了直後ではない）。
+   * ADR-0046（実機 blocker、Issue 152）: `acquireTrustedModel`（ダウンロード）が
+   * 成功した直後、`importCandidate` を呼ぶ**前**に一度だけ呼ぶ。この callback
+   * 以降、import 本体（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と
+   * activate は呼び出し元の `signal` を一切受け取らず、構造的に中断不能になる
+   * （下記 `importLocalModelCandidate` 呼び出しに signal を渡さない実装を参照）。
+   * 呼び出し元（Settings 画面）はこれを使って Cancel 導線を隠し、
+   * 仕上げ専用の状態表示へ切り替える。旧 `onBeforeActivation`（activate 直前に
+   * 発火し、import 本体はまだ `'downloading'` 扱いだった）は、画面 unmount や
+   * Cancel が import 本体を中断できてしまう窓を残していたため、発火点を
+   * ダウンロード完了直後まで早めた。
    */
-  readonly onBeforeActivation?: () => void;
+  readonly onDownloadComplete?: () => void;
   readonly refresh: () => Promise<void>;
   readonly setCautionAssessment: (
     assessment: ActivationAssessment | null
@@ -79,6 +82,16 @@ export interface EnableOnDeviceAiInput {
  * 同じ Model が 2 か所（一時領域 + private storage）に残り、容量を恒久的に
  * 二重消費する。import・activate の成否を問わず一時領域を掃除する
  *（削除失敗は握りつぶし、元の型付き失敗を上書きしない）。
+ *
+ * ADR-0046（実機 blocker、Issue 152）: ダウンロード（`acquireTrustedModel`）は
+ * 呼び出し元の `signal` で中断できるが、`onDownloadComplete` 発火後の
+ * import 本体（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と activate
+ * は `signal` を一切受け取らない（`importLocalModelCandidate` へ渡さない）。
+ * `assessActivation`/`activate` は元々 signal を持たないため、この 2 つを
+ * 合わせて「ダウンロード完了後は構造的に中断不能」という契約になる。
+ * 呼び出し元がどの経路（Cancel ボタン・画面 unmount・全データ削除）で
+ * `signal` の元になった `AbortController` を abort しても、この時点から先は
+ * 何の効果も持たない。
  */
 export async function enableOnDeviceAi(
   input: EnableOnDeviceAiInput
@@ -89,14 +102,17 @@ export async function enableOnDeviceAi(
     ...(input.onProgress ? { onProgress: input.onProgress } : {}),
   });
   try {
+    // code-reviewer 指摘（minor）: 一時領域の掃除（`finally`）は import・activate の
+    // 成否を問わず必ず行う契約（上記 doc comment）のため、呼び出し元供給の
+    // `onDownloadComplete` もこの `try` の内側で呼ぶ。呼び出し元がここで
+    // 同期的に throw しても、一時 File の掃除は必ず走る。
+    input.onDownloadComplete?.();
     const imported = await importLocalModelCandidate({
       lifecycle: input.lifecycle,
       candidate: acquired,
-      signal: input.signal,
       refresh: input.refresh,
       onImported: () => undefined,
     });
-    input.onBeforeActivation?.();
     await performLocalModelActivation({
       lifecycle: input.lifecycle,
       sha256: imported.sha256,

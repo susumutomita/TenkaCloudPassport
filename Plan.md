@@ -9118,3 +9118,171 @@ Manifest 読込時に self-heal する案を採用した。詳細・代替案・
   意図的に作って検証する。今回のように実機の実データ（stale なコンテナ UUID を含む
   privateUri）を fixture にそのまま使うと、この種の環境依存 bug を机上のテストでも
   再現しやすい。
+
+### Local Model 仕上げフェーズが画面遷移で中断される（Issue 152 公開 blocker） - 2026-07-26
+
+#### 目的
+
+owner が iOS Simulator で信頼済みモデル（Qwen2.5-1.5B-Instruct Q4_K_M、1.04GiB）を
+取得したとき、DL 完了後に `.incoming.gguf` だけが残り manifest が書かれず未有効化の
+まま止まる公開 blocker（バグ A）と、DL 100% 到達後も「ダウンロード中」表示のまま
+仕上げ処理へ切り替わらない表示 blocker（バグ B）を直す。
+
+#### 制約
+
+- `rm` / `npx` 禁止（`git rm` / `bunx` / `nlx`）。ios/、node_modules は触らない。
+  8081 kill 禁止。
+- モックデータ・スタブ API 禁止。`trusted-model-enablement-controller.test.ts` の
+  既存流儀（実挙動を持つ手書き Fake）に合わせる。
+- 型エスケープ（`as any` / `as unknown as` / `@ts-*`）禁止。空 catch 禁止。
+- カバレッジ 100% 維持。日本語 BDD。TDD（Red → Green → Refactor）。
+- 実行テスト必須（source-text 検査で代替しない）: 仕上げフェーズ進行中の
+  unmount 相当 abort が仕上げを中断しないこと、download/finalize の状態遷移が
+  正しい順序で起きること。
+
+#### 設計判断
+
+`enableOnDeviceAi`（`src/app/trusted-model-enablement-controller.ts`）が
+ダウンロードと仕上げ（import 本体 + activate）を単一の `AbortSignal` で連結して
+いたため、`use-local-model-management.ts` の unmount cleanup・Cancel ボタン・
+全データ削除のどれが `trustedModelControllerRef.current?.abort()` を呼んでも、
+まだ `'downloading'` 表示のまま進行していた import 本体（copy・SHA-256 照合・
+GGUF 検証・manifest 書き込み）を中断できてしまっていた。UI の `onDeviceAiFlow`
+が `'finalizing'`（Cancel 非表示、messages.ts の `onDeviceAiFinalizingStatus`）へ
+切り替わるタイミングが `activate` 直前と遅すぎたことが根本原因である。
+
+代替案として (1) unmount effect 自体をフラグでスキップする案、(2) ref の中身を
+never-abort な controller に差し替える案を検討したが、どちらも「呼び出し元の
+ref 管理に依存する」弱い保証になる。`enableOnDeviceAi` 自身がダウンロード完了後は
+signal を import/activate へ一切渡さないという関数境界での保証（採用）にすることで、
+呼び出し元の実装ミスに対しても頑健にした。詳細・代替案・エッジケース・状態機械は
+[ADR-0046](./docs/adr/0046-trusted-model-finalize-phase-survives-navigation.md) と
+[GGUF Import 設計](./docs/design/gguf-model-lifecycle.md) の追記節を正本とする。
+
+孤立した `.incoming.gguf` から再ダウンロードせず検証・import を再開する最適化
+（A2）は、既存の `reconcilePrivateFiles` / `deleteIncomingQuietly` が既に
+孤立 File を必ず削除するため storage 破損リスクは無く、今回の blocker 修正の
+scope 外として follow-up F-GJDNGT（`.claude/state/follow-ups.jsonl`）に
+記録した（再ダウンロードの手間だけが残る）。
+
+#### タスク
+
+1. `docs/adr/0046-...md` と `Plan.md`（本節）を先に書く。
+2. `trusted-model-enablement-controller.test.ts` に Red テストを追加する
+   （`onDownloadComplete` の発火順序、仕上げフェーズ突入後の abort 免疫）。
+3. `enableOnDeviceAi` を実装し、`onBeforeActivation` を `onDownloadComplete` へ
+   置き換えて発火点をダウンロード直後へ移す。`importLocalModelCandidate` へは
+   signal を渡さない。
+4. `local-model-management-controller.ts` の `ImportLocalModelCandidateInput.signal`
+   を optional にする（手動 import 経路の挙動は変えない）。
+5. `use-local-model-management.ts` の `performEnableOnDeviceAi` を更新し、
+   `onDownloadComplete` で ref を切り離してから `onDeviceAiFlow` を
+   `'finalizing'` にする。
+6. `use-local-model-management.test.ts` の配線テストを更新する。
+7. 品質ゲートを全通しし、follow-up（A2）を記録し、PR を作成する（マージはしない。
+   owner の実機再ビルド確認待ち）。
+
+#### 検証手順
+
+- `bun test src --coverage`（カバレッジ 100% 維持を確認）。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- owner による実機再ビルドでの最終確認（DL 完了直後に仕上げ表示へ切り替わり、
+  Settings ⇄ 会話エージェント間を行き来しても有効化が完了すること）。
+
+#### 進捗ログ
+
+- 2026-07-26: コードを読み、`enableOnDeviceAi` が単一 signal でダウンロードと
+  仕上げを連結していること、`onBeforeActivation` の発火点が `activate` 直前と
+  遅すぎることを特定した。ADR-0046 と本節を書いた。
+- 2026-07-26: TDD で `trusted-model-enablement-controller.test.ts` に Red
+  テストを 2 件追加した。1 件はダウンロード完了直後の `onDownloadComplete`
+  発火順序、もう 1 件は仕上げフェーズ突入後に signal を abort しても
+  import・activate が中断されないこと（`onProgress` の最終通知内で abort し、
+  Fake の `importCandidate` は abort 済み signal を受け取ったら実 `runImport`
+  と同じく `IMPORT_CANCELLED` を投げるようにして、revert すると red に戻る
+  ことを確認した）。`enableOnDeviceAi` を実装し `onBeforeActivation` を
+  `onDownloadComplete` へ置き換え、発火点をダウンロード直後へ移し、以降
+  `importLocalModelCandidate` へ signal を渡さないようにした。
+  `ImportLocalModelCandidateInput.signal` を optional にし、
+  `use-local-model-management.ts` の `performEnableOnDeviceAi` で
+  `onDownloadComplete` を使って ref を早期に切り離すよう配線した。
+  `finally` 節は ref ガードの外で無条件に `idle`/progress clear するよう
+  再構成した（ref が既に null 化されていると旧構成のままではガードが
+  false になり `finalizing` のまま固まるため）。21/21 テスト green、
+  `bun test src --coverage` は 1539 件 green・100% coverage、typecheck・
+  `make before-commit` を確認した。
+- 2026-07-26: `code-reviewer` subagent と `/simplify` の 4 観点並列レビュー、
+  独立した `/security-review` を実施した。security-review は「delete-all が
+  仕上げフェーズを中断できなくなる」懸念を提起したが、`App.tsx` で
+  `mutationLeases` と `deleteAll()` の排他 lease（`LocalModelContextLeaseRegistry`）
+  が同一 instance であることを確認し、そもそも仕上げフェーズ実行中は
+  delete-all 自体が `LocalDataAccessBlockedError` で弾かれ両者は競合し得ない
+  ため懸念は無いと判断した。code-reviewer 指摘（major）: follow-up の
+  記録が ADR/Plan.md の記述に対して実体を伴っていなかったため、
+  `/follow-up add` で実際に記録し（F-GJDNGT）、ADR・本節の文言を実体に
+  揃えた。code-reviewer 指摘（minor）: `onDownloadComplete` が
+  `try`/`finally` の外で呼ばれ、同期 throw 時に一時 File 掃除の契約から
+  外れる窓があったため `try` の内側へ移した。/simplify 指摘（simplification・
+  efficiency・重複、3 角度で同一箇所を指摘）: `trustedModelControllerRef` の
+  切り離しガードが `onDownloadComplete`・`finally` の 2 箇所に複製されて
+  いたため `detachController` へ集約し、`onDeviceAiDownloadProgress` の
+  clear が `onDownloadComplete`・`finally` の 2 箇所で重複していたため
+  `finally` の 1 回だけに絞った。test 側も `expectInOrder` ベースへ揃え、
+  ソース側の正確な空白依存の複数行 `toContain` を無くした。全修正後も
+  1539 件 green・100% coverage、typecheck・`make before-commit` green を
+  再確認した。
+- 2026-07-26: PR 156 作成後、advisor 経由の指摘で ADR-0046 の Context の
+  因果主張を修正した。「abort が `.incoming.gguf` 孤立を引き起こした」という
+  当初の推測は、観測事実（`modelBusy` と `'downloading'` 100％ 表示の両方が
+  観測時点でまだ出ていた = operation が settle していなかった。abort 経由の
+  失敗なら `runImport` の catch 節が `deleteIncomingQuietly` で孤立 File を
+  削除するはず）と整合しないと判明した。ADR-0046 の Context を「コードから
+  検証済みの欠陥（Cancel が import 本体を通じて生き続けていたこと、バグ B）」
+  と「観測結果と整合しない当初の未検証の推測（abort が今回の孤立の直接原因、
+  バグ A の因果部分）」に分け、Consequences に「仕上げが native 呼び出し内で
+  stall した場合の逃げ道が無い」という残存リスクを追記した。バグ A の修正
+  自体（signal を仕上げフェーズへ渡さない設計）は独立した価値があるコードの
+  hardening として維持し、PR 本文もこの区別に揃えた。
+
+#### 振り返り
+
+- **問題**: `enableOnDeviceAi` の `onBeforeActivation` callback は
+  「activate 直前」という命名どおりの場所で発火していたが、その手前の
+  import 本体（copy・SHA-256 照合・GGUF 検証・manifest 書き込み、1 GiB 級の
+  File で実時間がかかる区間）がまだ `'downloading'` 扱いのまま Cancel 可能
+  だった、という事実は誰も明示的にテストしていなかった。
+- **根本原因**: 「Cancel ボタンの実効性」は過去に 2 回 code-reviewer 指摘で
+  修正されているが（`trusted-model-enablement-controller.ts` の JSDoc
+  参照）、いずれも import 呼び出しに signal を渡す・渡さないという
+  「配線」の議論に留まり、「そのフェーズの間 UI がどの状態を表示している
+  か」という UI 側の状態遷移タイミングとセットで検証していなかった。
+  結果、import 本体を通じて「表示は downloading・実体は事実上 cancel 不能」
+  という不整合を UI 側のテストでも Controller 側のテストでも検出できな
+  かった。
+- **予防策**: Cancel・中止・キャンセル導線を扱う修正では、「signal が
+  実際に効くか」だけでなく「その区間で UI が正しい状態を表示しているか」
+  をセットで固定する。本 PR では `onDownloadComplete` の発火順序（download
+  完了直後・import 開始前）と、その後の abort が無効であることの両方を
+  同じ実行テストで確認する形にし、次に同種の callback を追加する変更でも
+  同じ観点が漏れないようにした。
+- **問題（2 件目）**: owner の実機報告（1 つの root cause 節）を、検証しないまま
+  ADR の Context に「abort が孤立 File を引き起こした」という単一の因果関係
+  として書いた。owner の報告自体には `modelBusy` が同時に出ていたという事実も
+  含まれていたが、この事実が abort 完了後の状態（`busy: false`）と矛盾する
+  ことに気付かず、そのまま ADR へ転記した。
+- **根本原因（2 件目）**: 観測された複数の事実（`modelBusy` 表示・
+  `'downloading'` 100％ 表示・`.incoming.gguf` 残存＋manifest 無し）を、
+  「どの実装コードパスがそれぞれの事実を作るか」まで遡って個別に検証せず、
+  最初に浮かんだ一つの筋書き（abort → `IMPORT_CANCELLED`）に全部を当てはめた。
+  `runImport` の catch 節が abort 時に孤立 File を削除する契約になっている
+  ことは自分でコードを読んで把握していたが、その事実が当初の筋書きと矛盾する
+  ことをその場で書き留めず、次の作業へ進んでしまった（advisor 呼び出しで
+  指摘されて初めて気付いた）。
+- **予防策（2 件目）**: 根本原因を書くときは、観測された事実を 1 つずつ「この
+  実装のどの分岐がこの事実を作るか」までコードで裏取りし、矛盾する事実が
+  1 つでも出たら（今回の `modelBusy` と `deleteIncomingQuietly` の 2 つ）
+  その場で筋書きを疑う。ADR の Context は「コードから検証済みの事実」と
+  「観測結果からの推測」を項として分けて書き、両者を混ぜない。この区別を
+  怠ると、直さなくても症状が再現しなくなった別の原因（今回は Bug B の
+  タイミング修正）を、証明されていない別の原因（abort）の手柄にしてしまう。
