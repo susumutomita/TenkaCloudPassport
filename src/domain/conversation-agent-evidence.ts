@@ -27,8 +27,14 @@ import type { ParticipantId } from './session-identifiers';
  * （`evidenceNarrative`・`buildAgentModelDecisionFromEvidence` はどちらも
  * `petName` を読まないため、表示・Model への漏洩は無い）。
  */
-export const CONVERSATION_AGENT_PLACEHOLDER_PET_NAME =
-  'conversation-agent-participant';
+/**
+ * Issue 152（実機で観測した公開 blocker）: この値は `PET_NAME_MAX_LENGTH`（24）
+ * 以内でなければならない。旧値 'conversation-agent-participant'（30 文字）は
+ * `model-safety-boundary.ts` の入力検証（`parsePublicPassport`）を必ず
+ * INVALID_SHAPE で落とし、会話 Agent の入力が LLM へ一度も到達できなかった。
+ * 上限内であることは `conversation-agent-evidence.test.ts` が契約として固定する。
+ */
+export const CONVERSATION_AGENT_PLACEHOLDER_PET_NAME = 'conversation-agent';
 
 /**
  * `IntroCard.themeIds`（会話テーマ、最大 3 件）を `PublicPassport.clues`
