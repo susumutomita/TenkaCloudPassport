@@ -7,7 +7,7 @@ name: ci
 # - Minimal permissions following principle of least privilege
 
 permissions:
-  contents: write
+  contents: read
   packages: read
   actions: read
 
@@ -61,45 +61,8 @@ jobs:
       - name: Expo Native compatibility
         run: bun run expo:check
 
-      # Issue 155 one-shot branch-local formatter. This temporary step is removed
-      # immediately after the generated commit lands.
-      - name: Apply and commit Biome formatting
-        if: >-
-          (github.event_name == 'push' && github.ref_name == 'agent/155-conversation-example') ||
-          (github.event_name == 'pull_request' && github.head_ref == 'agent/155-conversation-example')
-        env:
-          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          bun biome check --write .
-          if git diff --quiet; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "style: apply Biome formatting for Issue 155"
-          git push origin "HEAD:${TARGET_BRANCH}"
-
-      - name: Architecture harness
-        run: make architecture_harness ARCHITECTURE_HARNESS_ARGS=--fail-on=error
-      - name: Harness tests
-        run: make harness_test
-      - name: Release coverage tests
-        run: make release_test_coverage
-      - name: Pre-release check
-        run: make pre_release_check
-      - name: Duplication check
-        run: make dup_check
-      - name: Text lint
-        run: make lint_text
-      - name: Biome lint
-        run: make lint
-      - name: Typecheck
-        run: make typecheck
-      - name: App tests and coverage
-        run: make app_test
-      - name: Web export
-        run: make web_export
+      - name: Run quality gates
+        run: make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error
 
       # knip デッドコード検出は報告のみ (ADR-0012)。knip は「この PR で増えた分」ではなく
       # 「現時点の全量」しか出せないため、gate にすると既存負債で新規 PR が落ちて
