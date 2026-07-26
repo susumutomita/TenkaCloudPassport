@@ -60,12 +60,12 @@ function verifiedPromptText(
   field: string,
   maximumLength: number
 ): string {
+  if (!isSingleLineText(value) || containsForbiddenTextUnicode(value)) {
+    return invalidInput(`${field} に表示できない文字が含まれています。`);
+  }
   const normalized = value.trim();
   if (normalized.length === 0 || normalized.length > maximumLength) {
     return invalidInput(`${field} の文字数が範囲外です。`);
-  }
-  if (!isSingleLineText(normalized) || containsForbiddenTextUnicode(normalized)) {
-    return invalidInput(`${field} に表示できない文字が含まれています。`);
   }
   if (containsContactLikeText(normalized)) {
     return invalidInput(`${field} に連絡先らしい内容が含まれています。`);
@@ -77,7 +77,11 @@ function optionalProfileText(
   value: string | undefined,
   field: string
 ): string | undefined {
-  if (value === undefined || value.trim().length === 0) return undefined;
+  if (value === undefined) return undefined;
+  if (!isSingleLineText(value) || containsForbiddenTextUnicode(value)) {
+    return invalidInput(`${field} に表示できない文字が含まれています。`);
+  }
+  if (value.trim().length === 0) return undefined;
   return verifiedPromptText(value, field, AGENT_MODEL_PROFILE_TEXT_MAX_CHARS);
 }
 
