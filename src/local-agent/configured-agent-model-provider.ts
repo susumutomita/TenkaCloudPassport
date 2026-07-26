@@ -1,4 +1,7 @@
 import { AgentModelProviderError } from '../domain/agent-model-provider';
+import type {
+  ConversationExampleCompletionPort,
+} from './conversation-example-generator';
 import {
   createLlamaCompletionPort,
   type LlamaModuleLoader,
@@ -24,7 +27,10 @@ const DEFAULT_N_CTX = '2048';
 const DEFAULT_N_GPU_LAYERS = '99';
 const DEFAULT_N_PREDICT = '96';
 
-function unavailableCompletionPort(): LocalModelCompletionPort {
+type ConfiguredCompletionPort = LocalModelCompletionPort &
+  ConversationExampleCompletionPort;
+
+function unavailableCompletionPort(): ConfiguredCompletionPort {
   return {
     complete() {
       throw new AgentModelProviderError(
@@ -40,7 +46,7 @@ export function createConfiguredLocalModelCompletionPort(
   environment: LocalModelEnvironment,
   loadModule: LlamaModuleLoader,
   executionLeases: LocalModelExecutionLeasePort
-): LocalModelCompletionPort | undefined {
+): ConfiguredCompletionPort | undefined {
   if (
     environment.modelPath === undefined ||
     environment.modelPath.length === 0
