@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  type ConversationExampleInput,
   ConversationExampleError,
+  type ConversationExampleInput,
 } from './conversation-example';
 import {
   buildConversationExamplePrompt,

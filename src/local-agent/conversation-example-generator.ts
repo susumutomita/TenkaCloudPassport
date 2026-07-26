@@ -3,9 +3,9 @@ import {
   type AgentModelProviderOptions,
 } from '../domain/agent-model-provider';
 import {
-  parseConversationExample,
   type ConversationExampleGenerator,
   type ConversationExampleInput,
+  parseConversationExample,
 } from '../domain/conversation-example';
 import { buildConversationExamplePrompt } from '../domain/conversation-example-prompt';
 import type { LocalModelMessage } from './model-safety-boundary';

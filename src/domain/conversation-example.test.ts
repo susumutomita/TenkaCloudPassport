@@ -5,7 +5,10 @@ import {
 } from './conversation-example';
 
 function validExample(turnCount = 4): {
-  readonly turns: readonly { readonly speaker: string; readonly text: string }[];
+  readonly turns: readonly {
+    readonly speaker: string;
+    readonly text: string;
+  }[];
 } {
   return {
     turns: Array.from({ length: turnCount }, (_, index) => ({

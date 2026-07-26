@@ -1,7 +1,5 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type {
-  ConversationAgentPresentedResultState,
-} from '../app/conversation-agent-flow';
+import type { ConversationAgentPresentedResultState } from '../app/conversation-agent-flow';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';

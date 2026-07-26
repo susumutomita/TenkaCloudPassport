@@ -85,7 +85,9 @@ function optionalProfileText(
   return verifiedPromptText(value, field, AGENT_MODEL_PROFILE_TEXT_MAX_CHARS);
 }
 
-function systemPromptFor(language: ConversationExampleInput['language']): string {
+function systemPromptFor(
+  language: ConversationExampleInput['language']
+): string {
   const outputLanguage =
     language === 'ja'
       ? 'Write every turn in natural Japanese.'

@@ -1,7 +1,5 @@
 import { AgentModelProviderError } from '../domain/agent-model-provider';
-import type {
-  ConversationExampleCompletionPort,
-} from './conversation-example-generator';
+import type { ConversationExampleCompletionPort } from './conversation-example-generator';
 import {
   createLlamaCompletionPort,
   type LlamaModuleLoader,

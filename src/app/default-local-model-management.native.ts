@@ -1,11 +1,11 @@
 import { isRunningInExpoGo } from 'expo';
+import { createConversationExampleGenerator } from '../local-agent/conversation-example-generator';
 import { createDeviceResourceTelemetry } from '../local-agent/device-resource-telemetry.native';
 import {
   createExpoModelFileStore,
   pickGgufImportCandidate,
 } from '../local-agent/expo-model-file-store.native';
 import { createExpoTrustedModelDownloadPort } from '../local-agent/expo-trusted-model-download.native';
-import { createConversationExampleGenerator } from '../local-agent/conversation-example-generator';
 import {
   createLlamaCompletionPort,
   type LocalModelExecutionLeasePort,

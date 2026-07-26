@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { AgentModelProviderOptions } from '../domain/agent-model-provider';
 import {
-  type ConversationExampleInput,
   ConversationExampleError,
+  type ConversationExampleInput,
 } from '../domain/conversation-example';
 import {
   CONVERSATION_EXAMPLE_N_PREDICT,
@@ -100,9 +100,8 @@ describe('createConversationExampleGenerator', () => {
 
   it('Completion 中に Abort された場合は返却値を表示用へ昇格させない', async () => {
     const controller = new AbortController();
-    const port = new RecordingConversationCompletionPort(
-      VALID_OUTPUT,
-      () => controller.abort()
+    const port = new RecordingConversationCompletionPort(VALID_OUTPUT, () =>
+      controller.abort()
     );
     const generator = createConversationExampleGenerator(port);
 
