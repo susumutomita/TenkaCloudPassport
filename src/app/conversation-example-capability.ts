@@ -1,4 +1,7 @@
-import type { AgentModelProvider } from '../domain/agent-model-provider';
+import {
+  type AgentModelProvider,
+  RULES_MODEL_PROVIDER,
+} from '../domain/agent-model-provider';
 import type { ConversationExampleGenerator } from '../domain/conversation-example';
 
 /**
@@ -11,7 +14,7 @@ const GENERATORS = new WeakMap<object, ConversationExampleGenerator>();
 export function registerConversationExampleGenerator<
   Provider extends AgentModelProvider,
 >(provider: Provider, generator: ConversationExampleGenerator): Provider {
-  if (provider.kind !== 'local-agent') {
+  if (provider === RULES_MODEL_PROVIDER) {
     throw new TypeError('Rules Provider へ会話例 Generator は登録できません。');
   }
   GENERATORS.set(provider, generator);
