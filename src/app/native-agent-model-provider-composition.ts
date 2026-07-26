@@ -6,11 +6,13 @@ import {
   createConfiguredLocalModelCompletionPort,
   type LocalModelEnvironment,
 } from '../local-agent/configured-agent-model-provider';
+import { createConversationExampleGenerator } from '../local-agent/conversation-example-generator';
 import type {
   LlamaModuleLoader,
   LocalModelExecutionLeasePort,
 } from '../local-agent/llama-agent-model-provider';
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
+import { registerConversationExampleGenerator } from './conversation-example-capability';
 
 export interface NativeAgentModelProviderComposition {
   readonly runningInExpoGo: boolean;
@@ -39,7 +41,10 @@ export function createNativeAgentModelProvider(
     composition.loadModule,
     composition.modelContexts
   );
-  return completionPort
-    ? createSafetyBoundLocalModelProvider(completionPort)
-    : RULES_MODEL_PROVIDER;
+  if (!completionPort) return RULES_MODEL_PROVIDER;
+  const provider = createSafetyBoundLocalModelProvider(completionPort);
+  return registerConversationExampleGenerator(
+    provider,
+    createConversationExampleGenerator(completionPort)
+  );
 }
