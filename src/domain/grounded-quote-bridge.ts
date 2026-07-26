@@ -1,3 +1,8 @@
+import {
+  containsContactLikeText,
+  containsForbiddenTextUnicode,
+} from './text-content-guards';
+
 /**
  * Issue 147: 端末内モデルが「共通点を見つけた」と言うとき、その根拠を検証可能にする層。
  *
@@ -27,22 +32,6 @@ export const AGENT_MODEL_QUOTE_MAX_CHARS = 40;
  */
 export const AGENT_MODEL_PROFILE_TEXT_MAX_CHARS = 420;
 
-/**
- * 表示してよい断片から除く連絡先の形。自己紹介文にメールアドレスや URL を書いている
- * 人はいるが、それらは自己紹介カードの該当欄が持つべき情報であり、共通点の根拠として
- * 別の場所へ再掲する理由が無い。入力文に存在していても引用としては拒否する。
- * 数字の並びは、電話番号として意味を持つ長さ（7 桁以上の連続）だけを対象にし、
- * 西暦や件数のような短い数字は通す。
- */
-const CONTACT_LIKE_PATTERNS: readonly RegExp[] = [
-  /[^\s@]+@[^\s@]+\.[^\s@]+/u,
-  /(?:https?:\/\/|www\.)\S+/iu,
-  /\d[\d\s()+-]{5,}\d/u,
-];
-
-const FORBIDDEN_QUOTE_UNICODE =
-  /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
-
 export interface GroundedQuoteBridgeInput {
   /** 自分の自己紹介文。未設定なら引用の根拠を確かめられない。 */
   readonly ownerProfileText?: string | undefined;
@@ -67,10 +56,8 @@ function verifyQuote(
   const trimmed = quote.trim();
   if (trimmed.length === 0) return null;
   if (trimmed.length > AGENT_MODEL_QUOTE_MAX_CHARS) return null;
-  if (FORBIDDEN_QUOTE_UNICODE.test(trimmed)) return null;
-  if (CONTACT_LIKE_PATTERNS.some((pattern) => pattern.test(trimmed))) {
-    return null;
-  }
+  if (containsForbiddenTextUnicode(trimmed)) return null;
+  if (containsContactLikeText(trimmed)) return null;
   return profileText.includes(trimmed) ? trimmed : null;
 }
 
