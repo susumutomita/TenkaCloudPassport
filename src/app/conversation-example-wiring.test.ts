@@ -31,8 +31,9 @@ describe('AI 会話例の一気通貫配線（Issue 155）', () => {
     const text = await hookSource();
 
     expectInOrder(text, [
-      'useConversationExample(',
+      'const conversationExampleGenerator =',
       'conversationExampleGeneratorForProvider(provider)',
+      'useConversationExample(conversationExampleGenerator)',
       'presentConversationAgentResult(result, {',
       'state: conversationExampleState',
       'onGenerate: generateConversationExample',
@@ -46,7 +47,7 @@ describe('AI 会話例の一気通貫配線（Issue 155）', () => {
     expectInOrder(text, [
       "decision.kind !== 'bridge'",
       "outcome.settledBy === 'primary'",
-      "outcome.providerKind === 'local-agent'",
+      'conversationExampleGenerator !== null',
       'prepareConversationExample({',
       'bridgeReason: decision.reason',
       'bridgeOpener: decision.opener',
