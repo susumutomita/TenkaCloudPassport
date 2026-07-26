@@ -830,20 +830,26 @@ async function resourceSnapshot(
   }
 }
 
+/**
+ * 起動時のフル SHA-256 再計算を廃止した（ADR-0047、Issue 152）。以前はここで
+ * 毎起動 `digestPrivateFile` を呼び、active Model（最大 1.04 GiB 級）全体を
+ * 純 TypeScript 実装（`sha256.ts`）で再ハッシュしていたため、Hermes 上で数分〜
+ * 十数分かかり Settings が「Local Model の端末内処理を実行中です」のまま固まる
+ * 公開 blocker になっていた。File 整合性の存在＋Size 照合は `ensureLoaded` が
+ * この関数を呼ぶ直前に `assertManifestFilesPresent` で既に全 Model（active を
+ * 含む）に対して行っており、不一致・欠落があれば `MANIFEST_READ_FAILED` として
+ * load 全体を拒否する（fail-safe はそちらが担う）。したがってこの関数の責務は
+ * 「現在の Resource Risk を再評価し、blocked / caution なら active を解除する」
+ * ことだけで、File の digest には関与しない。同じ Size のまま内容だけが破損した
+ * ケースはここでは検出できなくなるが、そのリスクと起動のたびのフル hash の
+ * コストの比較は ADR-0047 を正本とする。
+ */
 async function verifyActiveModelAtLoad(
-  fileStore: LocalModelFileStore,
   telemetry: DeviceResourceTelemetry,
   loaded: LocalModelManifest
 ): Promise<LocalModelManifest> {
   if (loaded.activeModelSha256 === null) return loaded;
   const active = findModel(loaded, loaded.activeModelSha256);
-  let digestMatches = false;
-  try {
-    digestMatches =
-      (await digestPrivateFile(fileStore, active.privateUri)) === active.sha256;
-  } catch {
-    digestMatches = false;
-  }
   const snapshot = await resourceSnapshot(telemetry);
   const currentRisk = evaluateModelResourceRisk(
     resourceRiskInputFrom(snapshot, active.sizeBytes, active.configuration.nCtx)
@@ -855,8 +861,7 @@ async function verifyActiveModelAtLoad(
   );
   return {
     ...withCurrentRisk,
-    activeModelSha256:
-      digestMatches && currentRisk.level === 'supported' ? active.sha256 : null,
+    activeModelSha256: currentRisk.level === 'supported' ? active.sha256 : null,
   };
 }
 
@@ -883,11 +888,7 @@ export function createLocalModelLifecycle(
     const loaded = await readManifest(fileStore);
     await reconcilePrivateStore(fileStore, loaded);
     await assertManifestFilesPresent(fileStore, loaded);
-    const verified = await verifyActiveModelAtLoad(
-      fileStore,
-      telemetry,
-      loaded
-    );
+    const verified = await verifyActiveModelAtLoad(telemetry, loaded);
     if (verified !== loaded) await writeManifest(fileStore, verified);
     manifest = verified;
     return verified;

@@ -9286,3 +9286,125 @@ scope 外として follow-up F-GJDNGT（`.claude/state/follow-ups.jsonl`）に
   「観測結果からの推測」を項として分けて書き、両者を混ぜない。この区別を
   怠ると、直さなくても症状が再現しなくなった別の原因（今回は Bug B の
   タイミング修正）を、証明されていない別の原因（abort）の手柄にしてしまう。
+
+### 起動時の Local Model 再ハッシュを Size 照合へ変更する（Issue 152 公開 blocker） - 2026-07-26
+
+#### 目的
+
+Qwen2.5-1.5B（1.04 GiB）を取り込み・有効化済みの端末で App を起動すると、Settings が
+「Local Model の端末内処理を実行中です」のビジー状態のまま 9 分以上経過しても解除されない
+公開 blocker を直す。原因は `model-lifecycle.ts` の `verifyActiveModelAtLoad` が、
+`load()` のたびに active Model 全体（最大 1.04 GiB）を純 TypeScript SHA-256（`sha256.ts`）で
+再計算していたことである。Hermes 上では 1 GiB 級 File のハッシュに数分〜十数分かかる。
+
+#### 制約
+
+- `rm` / `npx` 禁止。ios/、node_modules は触らない。8081 kill 禁止。
+- 別 Issue を並行実装しているエージェントが `conversation-agent-flow-controller.ts`・
+  `conversation-agent-evidence.ts`・`i18n/messages.ts` を編集中のため、それらには触れない。
+  作業は `origin/main` から切った worktree（`.claude/worktrees/fix-load-time-size-check`、
+  branch `fix/load-time-size-check`）に隔離し、並行編集中の dirty tree とは分離した。
+- モックデータ・スタブ API 禁止。型エスケープ禁止。空 catch 禁止。カバレッジ 100% 維持。
+  TDD（Red → Green）。日本語 BDD。
+
+#### 設計判断
+
+当初の依頼は「`verifyActiveModelAtLoad` の digest 照合を `fileStore.modelFileInfo` の
+存在＋Size 厳密一致へ置き換える」だったが、コードを読むと `ensureLoaded()` は
+`verifyActiveModelAtLoad` を呼ぶ直前に `assertManifestFilesPresent()` で Manifest 上の
+全 Model（active を含む）の存在＋Size を既に検証しており、不一致は `MANIFEST_READ_FAILED`
+として load 全体を拒否している（`model-lifecycle.test.ts` の `missing` シナリオが実証済み）。
+同じチェックを `verifyActiveModelAtLoad` 内に複製すると、実行経路上どうやっても到達しない
+分岐（前段の gate が既に弾いているため）になり、カバレッジ 100% 維持の要求と
+`/simplify` の重複排除方針の両方に反する。
+
+advisor との壁打ちで「digest 比較を削除し、Resource Risk 再評価だけを残す」方針に収束した。
+存在＋Size の fail-safe は `assertManifestFilesPresent()` に一本化されたままにし、
+`verifyActiveModelAtLoad` は「現在の端末 Resource Risk を再評価し、blocked / caution なら
+active を解除する」責務だけに絞る。詳細・代替案（background hash・native hash への移行、
+共に不採用）・受け入れる trade-off（Size 不変のまま内容だけ破損したケースは起動時に
+検出できなくなる）は [ADR-0047](./docs/adr/0047-load-time-size-check-instead-of-digest.md) と
+[GGUF Import 設計](./docs/design/gguf-model-lifecycle.md) の追記節を正本とする。
+Import 時（`runImport`）・Activate 時（`assess` → `assertModelIntegrity`）のフル SHA-256 検証は
+変更しない。`assertModelIntegrity` は `assessActivation` / `activate` からしか呼ばれず、
+起動のたびに走る配線になっていないことをコードで確認した。
+
+#### タスク
+
+1. `origin/main` から worktree と branch `fix/load-time-size-check` を作成する。
+2. TDD で `model-lifecycle.test.ts` を先に Red にする。`verifyActiveModelAtLoad` から digest 検証を
+   外した後の期待値へテストを書き換え、`openSha256SourceCalls` カウンタを test double に追加する。
+3. `verifyActiveModelAtLoad` から `digestPrivateFile` 呼び出しと `fileStore` 引数を削除し、
+   Resource Risk 再評価だけを残す。呼び出し元も合わせて更新する。
+4. `docs/design/gguf-model-lifecycle.md` の起動時検証の記述を更新する。
+5. ADR-0047 を新規作成する。
+6. 品質ゲートを全通しし、PR を作成する（マージはしない。owner がレビュー・ゲート確認する）。
+
+#### 検証手順
+
+- `bun test src --coverage`（カバレッジ 100% 維持を確認）。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- `/review`・`/security-review`・`/simplify`。
+- owner による実機再ビルドでの最終確認（DL 済み Model を有効化した端末で起動が数分〜十数分
+  ブロックされなくなること）。
+
+#### 進捗ログ
+
+- 2026-07-26: owner の実機観測（9 分超のビジー）とコード上の原因（`verifyActiveModelAtLoad` の
+  毎起動フル digest 再計算）を確認した。`origin/main` から worktree
+  `.claude/worktrees/fix-load-time-size-check` を作成し、並行編集中の別ブランチの dirty tree から
+  隔離した。
+- 2026-07-26: advisor との壁打ちで、依頼どおりに `fileStore.modelFileInfo` を
+  `verifyActiveModelAtLoad` 内へ追加すると `assertManifestFilesPresent()` の既存 gate と重複し
+  到達不能な分岐になることを指摘され、digest 比較を削除するだけの設計へ変更した。
+- 2026-07-26: TDD で `model-lifecycle.test.ts` を先に更新した。`PrivateModelStore` に
+  `openSha256SourceCalls` カウンタを追加し、(a) 有効化済み Model の `load()` では digest 計算が
+  増えないこと、(b) Size が一致すれば内容が変化していても再起動時に active を維持すること
+  （起動時フル hash 廃止で受け入れる trade-off の直接証跡）、(c) caution・blocked では引き続き
+  active を解除すること、(d) import・activate 経路は従来どおり digest を計算することを確認する
+  形にテストを書き換えた。実機 fixture を使った self-heal テスト（Issue 152、ADR-0045）も、
+  Size 一致により active が維持される新しい期待値へ更新した。`sourceOpenFailure` シナリオは
+  import path の既存テスト（COPY 失敗系）で既にカバー済みのため、load 側の loop からは削除した。
+  更新後、期待どおり 3 件が Red になったことを確認した。
+- 2026-07-26: `verifyActiveModelAtLoad` から `digestPrivateFile` 呼び出しと `fileStore` 引数を削除し、
+  Resource Risk 再評価だけを残す実装へ変更した。呼び出し元（`ensureLoaded`）も更新した。
+  全 29 件 green を確認後、`bun test src --coverage` で 1543 件 green・100% coverage を確認した。
+  `docs/design/gguf-model-lifecycle.md` の起動時検証の記述と ADR-0047 を追記した。
+
+#### 振り返り
+
+- **問題**: 依頼された修正内容（`verifyActiveModelAtLoad` に `fileStore.modelFileInfo` の
+  存在＋Size チェックを追加する）は、コードを読むまでは自然に見えたが、実際には既存コードに
+  同じチェックが 1 行前（`assertManifestFilesPresent`）に既にあり、額面どおり実装すると
+  死んだ分岐を作るところだった。
+- **根本原因**: 依頼側は `verifyActiveModelAtLoad` 単体のコードは読んでいたが、それを呼ぶ
+  `ensureLoaded()` の呼び出し順序と、直前に呼ばれる `assertManifestFilesPresent()` の責務までは
+  読み切れていなかった。関数単体でなく呼び出し元の直前直後まで読まないと、「この関数が本当に
+  何を追加で守っているか」は分からない。
+- **予防策**: 「関数 X に検証 Y を足す」という依頼を受けたときは、実装前に X の呼び出し元を
+  遡り、Y と同等の検証が既に別の場所で行われていないかを確認する。今回のように既存の gate が
+  より厳格な形（fail-safe ではなく hard fail）で同じ保証を提供している場合は、依頼の文言どおり
+  実装するのではなく、実態に合わせて依頼の意図（起動時のフルハッシュを無くす）だけを満たす
+  最小の変更に絞り、その乖離を ADR・Plan.md・PR 本文に明記する。
+
+#### 補足: 品質ゲートのツール制約
+
+`/review`・`/security-review` の Skill は、このセッションが開始した元の working
+directory（並行エージェントが `fix/model-run-without-rules-bridge` を dirty のまま
+編集中）に固定されており、`cd` で切り替えた worktree
+（`.claude/worktrees/fix-load-time-size-check`）を認識しなかった（`/security-review`
+実行時、`git status` の出力が並行エージェントの branch を指していた）。`/simplify` も
+同様の制約を持つと判断し、誤って並行エージェントの未コミット変更を編集するリスクを
+避けるため実行しなかった。
+
+代わりに次の 3 つで代替した。(a) `code-reviewer` subagent へ worktree の絶対 Path を
+明示して diff review を委譲した（blocker 無し、advisor の設計判断を裏付けた）。(b)
+security review は自ら基準（SQLi・XSS・認証・crypto・injection・情報露出の各観点）で
+検討した。本 diff は純 TypeScript の in-memory 関数から digest 計算を 1 箇所削除する
+だけで、外部入力・ネットワーク・新しい crypto を一切扱わない。concrete な攻撃経路を
+持つ High / Medium 相当の指摘は無いと判断した。唯一検討したのは「同一 Size の破損
+検出を失う」という整合性の後退だが、これは ADR-0047 が明示的に受け入れる trade-off
+であり、攻撃者が端末を掌握している場合は再ハッシュでも防げないため新規の攻撃面では
+ない。(c) `/simplify` 相当は、advisor の指摘どおり重複ロジックを追加せず削除に留めた
+設計そのものが simplification であることを diff の再読で確認した。
