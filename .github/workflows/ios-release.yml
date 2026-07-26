@@ -24,7 +24,8 @@ name: ios-release
 #   minimum package age ゲート対象にする必要がない (対象にすると SDK パッチ整合直後の
 #   正当な新パッチ版が誤検知でブロックされる。過去 2 回の実障害を参照)。
 # - Safe Chain は eas-cli の global install (新規パッケージ取得) の直前に通し、その保護に scope を絞る
-# - permissions は contents: read のみ (GITHUB_TOKEN を使う操作がないため)
+# - workflow 既定の permissions は read のまま据え置き、Release 作成に要る書き込み権限は
+#   job 側でだけ与える (GITHUB_TOKEN を使う操作は Release 作成の 1 ステップだけ)
 # - EXPO_TOKEN Secret が未設定なら fail ではなく明示 skip する
 #   (Secrets 投入前に owner の他の push で CI が赤くならないようにするため)
 
@@ -44,6 +45,9 @@ concurrency:
 jobs:
   build-and-submit:
     runs-on: ubuntu-latest
+    permissions:
+      # GitHub Release の作成にだけ必要。checkout は read で足りる。
+      contents: write
     steps:
       - name: Check required secrets
         id: check-secrets
@@ -99,3 +103,39 @@ jobs:
           CI: "true"
           EAS_BUILD_NO_EXPO_GO_WARNING: "true"
         run: bun run build:ios:testflight
+
+      # Build と Submit が通った後にだけ Release を作る。先に作ると「Release はあるが
+      # TestFlight にビルドが無い」状態が生まれ、Release が配信の証跡にならない。
+      # workflow_dispatch を branch 指定で回した場合はタグが無いため作らない。
+      # 既存 Release は上書きしない (source-release.yml と同じ方針)。タグを打ち直さず
+      # workflow_dispatch で再実行する運用があるため、二重作成ではなく skip にする。
+      - name: Create GitHub Release for the tag
+        if: >-
+          steps.check-secrets.outputs.expo_token_present == 'true' &&
+          github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $RELEASE_TAG already exists. Leaving it untouched."
+            exit 0
+          fi
+          # CHANGELOG.md から該当バージョンの節だけを抜き出して Release Notes にする。
+          # 見つからない場合は空のまま作らず、CHANGELOG の更新漏れとして fail させる。
+          version="${RELEASE_TAG#v}"
+          awk -v version="$version" '
+            $0 == "## [" version "]" || index($0, "## [" version "] ") == 1 { capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no section for $version. Add it before tagging." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            --verify-tag \
+            --title "TenkaCloud Passport $RELEASE_TAG" \
+            --notes-file release-notes.md
