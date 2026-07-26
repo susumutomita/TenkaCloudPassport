@@ -7,7 +7,6 @@ import {
 import {
   arrayValue,
   assertOneOf,
-  SchemaValidationError,
   strictRecord,
   stringValue,
 } from '../protocol/validation';
@@ -71,12 +70,77 @@ function invalidOutput(message: string): never {
   throw new ConversationExampleError('INVALID_OUTPUT', message);
 }
 
+/** JSON.parse 由来の data property だけを許し、Getter や Symbol field を拒否する。 */
+function strictDataRecord<const Keys extends readonly string[]>(
+  value: unknown,
+  path: string,
+  keys: Keys
+): { [Key in Keys[number]]: unknown } {
+  const record = strictRecord(value, path, keys);
+  const objectValue = value as object;
+  const ownKeys = Reflect.ownKeys(objectValue);
+  if (
+    ownKeys.length !== keys.length ||
+    ownKeys.some(
+      (key) =>
+        typeof key !== 'string' ||
+        !keys.some((candidate) => candidate === key)
+    )
+  ) {
+    return invalidOutput('会話例に未知の Field は指定できません。');
+  }
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
+    if (
+      descriptor === undefined ||
+      !descriptor.enumerable ||
+      !Object.hasOwn(descriptor, 'value')
+    ) {
+      return invalidOutput('会話例には通常の JSON Field だけを指定できます。');
+    }
+  }
+  return record;
+}
+
+/** Array subclass、疎な配列、Accessor、追加 field を一括で拒否する。 */
+function strictTurnsArray(value: unknown): readonly unknown[] {
+  const turns = arrayValue(
+    value,
+    '$.turns',
+    CONVERSATION_EXAMPLE_MIN_TURNS,
+    CONVERSATION_EXAMPLE_MAX_TURNS
+  );
+  if (Object.getPrototypeOf(turns) !== Array.prototype) {
+    return invalidOutput('会話例の turns は通常の JSON Array である必要があります。');
+  }
+  const allowedKeys = new Set<string>(['length']);
+  for (let index = 0; index < turns.length; index += 1) {
+    allowedKeys.add(String(index));
+  }
+  for (const key of Reflect.ownKeys(turns)) {
+    if (typeof key !== 'string' || !allowedKeys.has(key)) {
+      return invalidOutput('会話例の turns に追加 Field は指定できません。');
+    }
+  }
+  for (let index = 0; index < turns.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(turns, String(index));
+    if (
+      descriptor === undefined ||
+      !descriptor.enumerable ||
+      !Object.hasOwn(descriptor, 'value')
+    ) {
+      return invalidOutput('会話例の turns は疎でない JSON Array が必要です。');
+    }
+  }
+  return turns;
+}
+
 function parseTurn(
   value: unknown,
   index: number
 ): ConversationExampleTurn {
   const path = `$.turns[${index}]`;
-  const record = strictRecord(value, path, ['speaker', 'text'] as const);
+  const record = strictDataRecord(value, path, ['speaker', 'text'] as const);
   const speaker = assertOneOf(
     record.speaker,
     CONVERSATION_EXAMPLE_SPEAKERS,
@@ -88,16 +152,17 @@ function parseTurn(
     return invalidOutput('会話例は owner 開始で交互に話す必要があります。');
   }
 
-  const text = stringValue(
+  const rawText = stringValue(
     record.text,
     `${path}.text`,
     CONVERSATION_EXAMPLE_TURN_MAX_CHARS
-  ).trim();
+  );
+  if (!isSingleLineText(rawText) || containsForbiddenTextUnicode(rawText)) {
+    return invalidOutput('会話例の本文に表示できない文字が含まれています。');
+  }
+  const text = rawText.trim();
   if (text.length === 0) {
     return invalidOutput('会話例の本文は空にできません。');
-  }
-  if (!isSingleLineText(text) || containsForbiddenTextUnicode(text)) {
-    return invalidOutput('会話例の本文に表示できない文字が含まれています。');
   }
   if (containsContactLikeText(text)) {
     return invalidOutput('会話例の本文に連絡先らしい内容が含まれています。');
@@ -105,32 +170,25 @@ function parseTurn(
   return { speaker, text };
 }
 
-function parseConversationExampleUnchecked(value: unknown): ConversationExample {
-  const record = strictRecord(value, '$', ['turns'] as const);
-  const turns = arrayValue(
-    record.turns,
-    '$.turns',
-    CONVERSATION_EXAMPLE_MIN_TURNS,
-    CONVERSATION_EXAMPLE_MAX_TURNS
-  );
-  return { turns: turns.map(parseTurn) };
+function parseConversationExampleUnchecked(
+  value: unknown
+): ConversationExample {
+  const record = strictDataRecord(value, '$', ['turns'] as const);
+  return { turns: strictTurnsArray(record.turns).map(parseTurn) };
 }
 
 /**
  * Native 境界から来る unknown を、追加 field も許さない fail-closed contract で検証する。
- * 共通 Schema Validator の詳細は UI へ漏らさず、この機能専用の閉じた Error へ正規化する。
+ * 詳細な Validator Error は UI へ漏らさず、この機能専用の閉じた Error へ正規化する。
  */
 export function parseConversationExample(value: unknown): ConversationExample {
   try {
     return parseConversationExampleUnchecked(value);
   } catch (error: unknown) {
     if (error instanceof ConversationExampleError) throw error;
-    if (error instanceof SchemaValidationError) {
-      throw new ConversationExampleError(
-        'INVALID_OUTPUT',
-        '会話例の構造化 Output を安全に検証できませんでした。'
-      );
-    }
-    throw error;
+    throw new ConversationExampleError(
+      'INVALID_OUTPUT',
+      '会話例の構造化 Output を安全に検証できませんでした。'
+    );
   }
 }
