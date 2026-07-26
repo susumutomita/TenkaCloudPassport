@@ -9576,11 +9576,22 @@ selfIntro を足しても themeIds が不一致のままだと plan.kind が no-
   script を書き換えて回避する案は `--no-verify` と同じ「品質ゲートを弱める」
   行為だと判断し不採用にした）。Monitor でこの worktree の消滅を待つ試みも、
   PR 162 が既に open（＝その agent の作業は完了済みで worktree が自然に消える
-  保証が無い）と分かった時点で中断した。結果、8 ファイルは staged のまま
-  commit 未実施・push 未実施・PR 未作成で作業を終える。呼び出し元に 2 つの
-  unblock 経路（`biome.json` に `"!**/.claude/worktrees"` を承認の上で追加する、
-  または `git worktree remove .claude/worktrees/fix-load-time-size-check` で
-  PR 162 の worktree を片付ける）を提示する。
+  保証が無い）と分かった時点で中断し、advisor と相談のうえ Monitor を止めて
+  未コミット状態のまま報告する方針に切り替えた。
+- 2026-07-27（追記）: 報告直前に `git worktree list` を取り直したところ、
+  `.claude/worktrees/fix-load-time-size-check` が消え、同じコミット
+  （`489d7f9`）を指す worktree が `/private/tmp/.../scratchpad/wt-162` へ
+  移動していた（他 agent 側が自分の worktree を repo 外へ再配置したと見られる。
+  自分は一切操作していない）。結果 `.claude/` 配下の nested biome.json 衝突が
+  解消し、`bun run lint` / `make before-commit` が exit 0 になることを確認した
+  （`bun run lint` 単独では、本 PR の diff と無関係な既存ファイル
+  `scripts/android-release-identity.ts` 等に warning/info が計 88 件出たが、
+  biome の error は 0 件で exit code は 0 のまま）。`biome.json` は結局未編集の
+  まま、通常どおり `git commit`（Husky pre-commit 込みで green）→
+  `git push -u origin fix/model-run-without-rules-bridge` → `gh pr create` まで
+  完了した。PR: https://github.com/susumutomita/TenkaCloudPassport/pull/163
+  （マージはしていない）。follow-up F-RC4GY4・F-STFBTW はどちらも実際には
+  修正していないため open のまま残す。
 
 #### 振り返り
 
