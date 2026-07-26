@@ -7,37 +7,57 @@
 ## Context
 
 owner の iOS Simulator（実機相当の Development Build）で、信頼済みモデル（Qwen2.5-1.5B-Instruct
-Q4_K_M、1.04GiB）の取得が次の状態で止まった。
+Q4_K_M、1.04GiB）の取得中に、次の 3 つを同時に観測した。
 
+- Settings のモデルカードが「ダウンロード中: 1.04 GiB / 1.04 GiB (100％)」＋「ダウンロードを中止する」を表示したまま。
+- 画面上部に `modelBusy`（`operationLaneRef` の `busy` が `true` の間だけ表示）も出ていた。
 - `Documents/local-models/` に `.incoming.gguf`（DL 完了サイズと一致）だけが残り、
-  `manifest.v1.json` が無い（import が `writeManifest` まで到達していない）。
-- UI は「ダウンロード中: 1.04 GiB / 1.04 GiB (100％)」＋「ダウンロードを中止する」を
-  表示したまま固まっていた。
+  `manifest.v1.json` が無かった（import が `writeManifest` まで到達していない）。
+
+### コードから検証済みの欠陥
 
 `enableOnDeviceAi`（`src/app/trusted-model-enablement-controller.ts`）は
 「ダウンロード（`acquireTrustedModel`）→ import（private storage へ copy + SHA-256
 照合 + GGUF 検証 + manifest 書き込み、`model-lifecycle.ts` の `runImport`）→
-activate」を 1 つの `AbortSignal` で連結していた。呼び出し側の
-`use-local-model-management.ts` は、この signal の `AbortController` を
-`trustedModelControllerRef` に保持し、(1) 明示 Cancel ボタン
-（`cancelOnDeviceAiDownload`）、(2) component unmount 時の cleanup effect
-（`trustedModelControllerRef.current?.abort()`）、(3) 全データ削除後の
-`invalidateAfterExternalPurge` の 3 経路すべてから `.abort()` を呼べる状態にしていた。
+activate」を 1 つの `AbortSignal` で連結していた。UI 状態（`onDeviceAiFlow`）が
+`'downloading'`（Cancel 導線あり）から `'finalizing'`（`messages.ts` の
+`onDeviceAiFinalizingStatus`、Cancel 導線なし）へ切り替わるタイミングは、旧実装では
+`activate` 直前（`onBeforeActivation` callback）だった。つまり import 本体（copy・
+SHA-256 照合・GGUF metadata 検証・manifest 書き込み、1 GiB 級の File で実時間が
+かかる）は、ダウンロード完了後も丸ごと `'downloading'` 状態のまま進行した。Cancel
+ボタンは表示され続けた。`use-local-model-management.ts` が `trustedModelControllerRef`
+に保持する `AbortController` は、(1) 明示 Cancel ボタン（`cancelOnDeviceAiDownload`）、
+(2) component unmount 時の cleanup effect、(3) 全データ削除後の
+`invalidateAfterExternalPurge` の 3 経路すべてから `.abort()` を呼べる状態のままだった。
+「この処理は中止できません」と謳う区間が、実際には Cancel 可能なまま進んでいた。
+これはコードから検証済みの欠陥である。
 
-UI 状態（`onDeviceAiFlow`）が `'downloading'`（Cancel 導線あり）から
-`'finalizing'`（`messages.ts` の `onDeviceAiFinalizingStatus`、Cancel 導線なし）へ
-切り替わるタイミングは、旧実装では `activate` 直前（`onBeforeActivation` callback）だった。
-つまり import 本体（copy・SHA-256 照合・GGUF metadata 検証・manifest 書き込み、1 GiB 級の
-File で実時間がかかる）は、ダウンロード完了後も丸ごと `'downloading'` 状態のまま進行した。
-Cancel ボタンは表示され続け、signal も実際に abort 可能なままだった。
+### 観測結果と整合しない、当初の未検証の推測
 
-この期間中（unmount・Cancel・全データ削除のいずれか）に abort が 1 度でも呼ばれると、
-`model-lifecycle.ts` の `assertImportNotCancelled` が `IMPORT_CANCELLED` を投げる。
-`runImport` の catch 節は `.incoming.gguf` を削除しようと試みるが、manifest はまだ
-書かれておらず import 自体は失敗として扱われる。実機で観測した「`.incoming.gguf` は
-残るが manifest が無い」状態は、この import 中断の最中（`deleteIncomingQuietly` の
-削除試行前後、または呼び出し元 Promise チェインが実行を続けられない状況）に起きたと
-考えられる。
+当初はこの Cancel 可能な窓のどこかで abort が呼ばれ、`model-lifecycle.ts` の
+`assertImportNotCancelled` が `IMPORT_CANCELLED` を投げたことが `.incoming.gguf`
+孤立の直接原因だと推測したが、これは観測事実と整合しない。abort が実際に発生して
+いれば、`operationLaneRef` の `run()` は reject する。`onError` が `errorCode` を
+設定し、`onFinish` が `busy` を `false` に戻す。hook の `finally` も
+`onDeviceAiFlow` を `'idle'` に戻す。owner はエラー表示を見て「ダウンロード中」
+カードは消えていたはずである。しかし実際には逆に、`modelBusy`（`busy === true`）と
+「ダウンロード中 100％」カードの両方が観測時点でまだ表示されていた。これは operation
+がまだ settle していなかった（実行中、または途中で進行が止まっていた）ことを意味し、
+「abort 経由の型付き失敗が既に発生していた」という説とは矛盾する。
+加えて `runImport` の catch 節は abort 時に `.incoming.gguf` を
+`deleteIncomingQuietly` で削除しようと試みるため、abort が実際に起きていれば孤立
+File は残らないはずである。
+
+観測された 3 事実（`busy` のまま・`'downloading'` 表示のまま・`.incoming.gguf`
+残存＋manifest 無し）は、「import 本体がまだ進行中、または `digestPrivateFile` /
+`loadLlamaModelInfo` のような native 呼び出しの中で settle せず止まっていた」という
+説明で過不足なく説明できる。この場合 abort は一切関与しない。したがって本 ADR は
+「abort が今回観測された孤立 File を実際に引き起こした」とは主張しない。一方、
+「`'downloading'` 表示のまま Cancel が生き続け、import 本体を実際に中断できてしまう」
+という欠陥自体はコードから検証済みであり、これを閉じることには abort が今回の原因で
+あったかどうかに関わらず独立した価値がある。以下の Decision は、観測された症状
+そのもの（表示と実態の不一致、Bug B）を直す修正と、将来 abort が発生した場合に
+備える hardening（Bug A）の 2 つで構成される。
 
 ## Decision
 
@@ -105,6 +125,16 @@ idle -> consent-pending -> downloading（cancellable、生きた AbortController
   code-reviewer 指摘が activate 単独では直したが import 本体は直っていなかった）も
   同時に解消する。ダウンロード完了の瞬間に Cancel が消え、仕上げ専用メッセージへ
   切り替わる。
+- **Bad**: 仕上げフェーズが（native 呼び出し内の stall 等の理由で）実際に長時間
+  settle しなかった場合、この変更後は逃げ道が無い。`busy` は `true` のまま、
+  `operationLaneRef.isPending()` も `true` のままなので `run()` は他の Model
+  mutation をすべて拒否し続け、UI も「この処理は中止できません」と表示し続ける。
+  Context で述べたとおり、実機症状の原因が abort ではなく finalize 自体の stall
+  だった可能性がある以上、本 ADR の変更だけではその再発を防げない。再発した場合、
+  今回と違い `'finalizing'` 表示（Cancel 非表示）のまま長時間戻らないことで「import
+  本体が stall している」と判別できるようになる（本 ADR 適用前は `'downloading'`
+  表示のまま止まっていたため、Cancel が効かない区間なのかダウンロード自体が遅いのか
+  区別できなかった）。
 - **Bad / Follow-up**: 本 ADR は「仕上げが中断されない」ことだけを保証し、
   それ以前の版で既に孤立した `.incoming.gguf` から再開する最適化（sha256 が
   一致すれば再ダウンロードせず検証・import から再開する）は含まない。孤立した

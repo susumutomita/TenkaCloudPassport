@@ -9232,6 +9232,18 @@ scope 外として follow-up F-GJDNGT（`.claude/state/follow-ups.jsonl`）に
   ソース側の正確な空白依存の複数行 `toContain` を無くした。全修正後も
   1539 件 green・100% coverage、typecheck・`make before-commit` green を
   再確認した。
+- 2026-07-26: PR 156 作成後、advisor 経由の指摘で ADR-0046 の Context の
+  因果主張を修正した。「abort が `.incoming.gguf` 孤立を引き起こした」という
+  当初の推測は、観測事実（`modelBusy` と `'downloading'` 100％ 表示の両方が
+  観測時点でまだ出ていた = operation が settle していなかった。abort 経由の
+  失敗なら `runImport` の catch 節が `deleteIncomingQuietly` で孤立 File を
+  削除するはず）と整合しないと判明した。ADR-0046 の Context を「コードから
+  検証済みの欠陥（Cancel が import 本体を通じて生き続けていたこと、バグ B）」
+  と「観測結果と整合しない当初の未検証の推測（abort が今回の孤立の直接原因、
+  バグ A の因果部分）」に分け、Consequences に「仕上げが native 呼び出し内で
+  stall した場合の逃げ道が無い」という残存リスクを追記した。バグ A の修正
+  自体（signal を仕上げフェーズへ渡さない設計）は独立した価値があるコードの
+  hardening として維持し、PR 本文もこの区別に揃えた。
 
 #### 振り返り
 
@@ -9254,3 +9266,23 @@ scope 外として follow-up F-GJDNGT（`.claude/state/follow-ups.jsonl`）に
   完了直後・import 開始前）と、その後の abort が無効であることの両方を
   同じ実行テストで確認する形にし、次に同種の callback を追加する変更でも
   同じ観点が漏れないようにした。
+- **問題（2 件目）**: owner の実機報告（1 つの root cause 節）を、検証しないまま
+  ADR の Context に「abort が孤立 File を引き起こした」という単一の因果関係
+  として書いた。owner の報告自体には `modelBusy` が同時に出ていたという事実も
+  含まれていたが、この事実が abort 完了後の状態（`busy: false`）と矛盾する
+  ことに気付かず、そのまま ADR へ転記した。
+- **根本原因（2 件目）**: 観測された複数の事実（`modelBusy` 表示・
+  `'downloading'` 100％ 表示・`.incoming.gguf` 残存＋manifest 無し）を、
+  「どの実装コードパスがそれぞれの事実を作るか」まで遡って個別に検証せず、
+  最初に浮かんだ一つの筋書き（abort → `IMPORT_CANCELLED`）に全部を当てはめた。
+  `runImport` の catch 節が abort 時に孤立 File を削除する契約になっている
+  ことは自分でコードを読んで把握していたが、その事実が当初の筋書きと矛盾する
+  ことをその場で書き留めず、次の作業へ進んでしまった（advisor 呼び出しで
+  指摘されて初めて気付いた）。
+- **予防策（2 件目）**: 根本原因を書くときは、観測された事実を 1 つずつ「この
+  実装のどの分岐がこの事実を作るか」までコードで裏取りし、矛盾する事実が
+  1 つでも出たら（今回の `modelBusy` と `deleteIncomingQuietly` の 2 つ）
+  その場で筋書きを疑う。ADR の Context は「コードから検証済みの事実」と
+  「観測結果からの推測」を項として分けて書き、両者を混ぜない。この区別を
+  怠ると、直さなくても症状が再現しなくなった別の原因（今回は Bug B の
+  タイミング修正）を、証明されていない別の原因（abort）の手柄にしてしまう。
