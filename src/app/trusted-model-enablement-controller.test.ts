@@ -126,7 +126,8 @@ interface LifecycleOptions {
 function createLifecycle(options: LifecycleOptions = {}): {
   readonly lifecycle: {
     importCandidate: (
-      candidate: ModelImportCandidate
+      candidate: ModelImportCandidate,
+      signal?: AbortSignal
     ) => Promise<ImportedLocalModel>;
     assessActivation: (sha256: string) => Promise<ActivationAssessment>;
     activate: (sha256: string) => Promise<ImportedLocalModel>;
@@ -140,8 +141,18 @@ function createLifecycle(options: LifecycleOptions = {}): {
   return {
     events,
     lifecycle: {
-      async importCandidate(candidate) {
+      async importCandidate(candidate, signal) {
         events.push('import');
+        // ADR-0046: `model-lifecycle.ts` の実 `runImport` と同じく、渡された
+        // signal が既に abort 済みなら import を続けない（このテスト double は
+        // `enableOnDeviceAi` が仕上げフェーズへ signal を一切渡さなくなった
+        // ことを、実行時挙動として検証できるようにする）。
+        if (signal?.aborted) {
+          throw new ModelLifecycleError(
+            'IMPORT_CANCELLED',
+            'Local Model の取り込みを中止しました。'
+          );
+        }
         if (options.importFailure) throw options.importFailure;
         imported = {
           sha256: SOURCE.sha256,
@@ -211,7 +222,7 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
       consented: true,
       signal: new AbortController().signal,
       onProgress: (progress) => receivedProgress.push(progress),
-      onBeforeActivation: () => events.push('before-activation'),
+      onDownloadComplete: () => events.push('download-complete'),
       refresh: async () => {
         refreshCalls.push(refreshCalls.length);
       },
@@ -224,13 +235,14 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
     // code-reviewer 指摘（major、ストレージリーク）: 一時領域（`Paths.cache`
     // 相当）の File が import 成功後も残ると容量を二重消費するため、
     // 一時 File が掃除されることを固定する。
-    // code-reviewer 指摘（2 回目、Cancel の実効性）: `importLocalModelCandidate`
-    // は signal を受け取り実際に中断できるため、`onBeforeActivation` は
-    // import 完了直後・中断不能な activate 開始直前に呼ばれる（ダウンロード
-    // 完了直後ではない）ことを固定する。
+    // ADR-0046（実機 blocker、Issue 152）: `onDownloadComplete` はダウンロード
+    // 完了直後・import 開始前に呼ばれる。この時点から import 本体（copy・
+    // SHA-256 照合・GGUF 検証・manifest 書き込み）と activate は signal を
+    // 一切受け取らず、画面 unmount・Cancel が起きても中断されない
+    // （下の「仕上げフェーズ」テストで実行時に固定する）。
     expect(events).toEqual([
+      'download-complete',
       'import',
-      'before-activation',
       'assess',
       'activate',
     ]);
@@ -240,6 +252,67 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
     expect(receivedProgress).toEqual([
       { bytesWritten: SOURCE.sizeBytes, totalBytes: SOURCE.sizeBytes },
     ]);
+  });
+
+  /**
+   * ADR-0046（実機 blocker、Issue 152）: owner の iOS Simulator で、Qwen
+   * ダウンロード完了後の仕上げ処理（copy・SHA-256 照合・GGUF 検証・manifest
+   * 書き込み）中に Settings 画面から離れると、`use-local-model-management.ts`
+   * の unmount cleanup が `trustedModelControllerRef.current?.abort()` を呼び、
+   * import が中断されて `.incoming.gguf` だけが孤立し manifest が書かれない
+   * まま止まった。原因は `enableOnDeviceAi` がダウンロードと仕上げを単一の
+   * `AbortSignal` で連結しており、ダウンロード完了後も import 本体へ同じ
+   * signal を渡し続けていたことである。ここでは、ダウンロード完了の瞬間
+   * （`onProgress` の最終通知）で signal を abort しても
+   * （= Settings 画面の unmount 相当）、以降の import・activate が中断されず
+   * 完了することを実行時に固定する。`createLifecycle` の Fake は
+   * `model-lifecycle.ts` の実 `assertImportNotCancelled` と同じく、渡された
+   * signal が abort 済みなら `IMPORT_CANCELLED` を投げるため、この修正を戻すと
+   * このテストは Red に戻る。
+   */
+  it('ダウンロード完了時点（onProgress 最終通知）で signal を abort しても、画面 unmount 相当の中断を受けず import・activate が完了する', async () => {
+    const { dependencies, calls } = createAcquisition();
+    const { lifecycle, events } = createLifecycle();
+    const controller = new AbortController();
+
+    const model = await enableOnDeviceAi({
+      acquisition: dependencies,
+      source: SOURCE,
+      lifecycle,
+      consented: true,
+      signal: controller.signal,
+      onProgress: () => controller.abort(),
+      onDownloadComplete: () => events.push('download-complete'),
+      refresh: async () => undefined,
+      setCautionAssessment: () => undefined,
+    });
+
+    expect(model.sha256).toBe(SOURCE.sha256);
+    expect(events).toEqual([
+      'download-complete',
+      'import',
+      'assess',
+      'activate',
+    ]);
+    expect(calls.deleteFile).toEqual(['file:///cache/test-qwen.gguf']);
+  });
+
+  it('onDownloadComplete は省略可能で、渡さなくても import・activate は通常どおり完了する', async () => {
+    const { dependencies } = createAcquisition();
+    const { lifecycle, events } = createLifecycle();
+
+    const model = await enableOnDeviceAi({
+      acquisition: dependencies,
+      source: SOURCE,
+      lifecycle,
+      consented: true,
+      signal: new AbortController().signal,
+      refresh: async () => undefined,
+      setCautionAssessment: () => undefined,
+    });
+
+    expect(model.sha256).toBe(SOURCE.sha256);
+    expect(events).toEqual(['import', 'assess', 'activate']);
   });
 
   it('同意していないときは Download を試みずに CONSENT_REQUIRED を拒否する', async () => {

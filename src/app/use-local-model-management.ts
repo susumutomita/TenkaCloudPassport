@@ -71,9 +71,11 @@ export interface LocalModelManagementView {
    * 同じ一連の流れの排他な段階であり、独立した 2 つの boolean にすると
    * `SettingsScreen.tsx` 側で二重否定の条件分岐が必要になる。単一の tag に
    * まとめ、`LocalModelCard` 等が単一 flag で分岐する既存流儀に合わせる。
-   * `finalizing`（code-reviewer 指摘、Cancel の実効性）: ダウンロード完了後の
-   * import・activate は `AbortSignal` を受け取らない区間を含み、Cancel を
-   * 押しても効かない。この区間では Cancel 導線自体を提示しない。
+   * `finalizing`（ADR-0046、実機 blocker Issue 152）: ダウンロード完了直後
+   *（`enableOnDeviceAi` の `onDownloadComplete`）から遷移する。import 本体
+   *（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と activate は
+   * `AbortSignal` を一切受け取らず、Cancel ボタン・画面 unmount・全データ削除
+   * のどれが起きても中断されない。この区間では Cancel 導線自体を提示しない。
    */
   readonly onDeviceAiFlow:
     | 'idle'
@@ -441,6 +443,14 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
    * chunk ごとに間引きなしで発火するため、そのまま `setState` へ繋ぐと
    * 約 1 GB の Download 全体で大量の再 render を招く。四捨五入した % が
    * 変わったときだけ state を更新し、同じ % の連続通知は無視する。
+   *
+   * ADR-0046（実機 blocker、Issue 152）: `onDownloadComplete` はダウンロード
+   * 完了直後・import 開始前に発火する（`trusted-model-enablement-controller.ts`
+   * 参照）。この時点で `trustedModelControllerRef` を同一 controller である
+   * ことを確認したうえで `null` にし、以降 `cancelOnDeviceAiDownload()` と
+   * unmount cleanup（下記 `useEffect`）のどちらが `.abort()` を呼んでも
+   * 何も起こらないようにする。`enableOnDeviceAi` 自身もこの時点から先は
+   * signal を import/activate へ渡さないため、二重に安全側へ倒れる。
    */
   const performEnableOnDeviceAi = useCallback((): void => {
     if (!management || !mutationLeases) return;
@@ -449,6 +459,15 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
     const controller = new AbortController();
     setOnDeviceAiDownloadProgress(null);
     let lastReportedPercent = -1;
+    // /simplify 指摘（simplification・efficiency）: この操作の間だけ生きる
+    // controller を ref から切り離す処理を、`onDownloadComplete` と `finally`
+    // の 2 箇所で複製していた。同一 controller のときだけ ref をクリアする、
+    // という 1 つの判断として 1 か所にまとめる。
+    const detachController = (): void => {
+      if (trustedModelControllerRef.current === controller) {
+        trustedModelControllerRef.current = null;
+      }
+    };
     const started = run(async () => {
       try {
         await waitForNativeTeardown();
@@ -471,17 +490,22 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
               lastReportedPercent = percent;
               setOnDeviceAiDownloadProgress(progress);
             },
-            onBeforeActivation: () => setOnDeviceAiFlow('finalizing'),
+            onDownloadComplete: () => {
+              detachController();
+              setOnDeviceAiFlow('finalizing');
+            },
             refresh,
             setCautionAssessment,
           })
         );
       } finally {
-        if (trustedModelControllerRef.current === controller) {
-          trustedModelControllerRef.current = null;
-          setOnDeviceAiFlow('idle');
-          setOnDeviceAiDownloadProgress(null);
-        }
+        // /simplify 指摘（efficiency）: `onDeviceAiDownloadProgress` は
+        // `'finalizing'` 表示（`SettingsScreen.tsx`）では読まれないため、
+        // `onDownloadComplete` 側で先に clear する必要は無い。完了（成功・
+        // 失敗いずれも）後にここで 1 回だけ clear すれば十分。
+        detachController();
+        setOnDeviceAiFlow('idle');
+        setOnDeviceAiDownloadProgress(null);
       }
     });
     if (started) {

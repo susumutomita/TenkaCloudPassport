@@ -75,7 +75,16 @@ export async function withLocalModelMutationLease<T>(
 interface ImportLocalModelCandidateInput {
   readonly lifecycle: ImportLifecycle;
   readonly candidate: ModelImportCandidate;
-  readonly signal: AbortSignal;
+  /**
+   * ADR-0046（実機 blocker、Issue 152）: 手動 GGUF import（file picker 経由）は
+   * 常に signal を渡し、Owner の Cancel・画面 unmount のどちらでも中断できる
+   * （既存契約、変更なし）。一方、信頼済み Model 取得の仕上げフェーズ
+   * （`trusted-model-enablement-controller.ts` の `enableOnDeviceAi`）は
+   * ダウンロード完了後、意図的に signal を渡さずにこの関数を呼ぶ
+   * （構造的に中断不能にするため）。`lifecycle.importCandidate` 自体の
+   * signal 引数が optional なため、ここでも optional にする。
+   */
+  readonly signal?: AbortSignal;
   readonly refresh: () => Promise<void>;
   readonly onImported: () => void;
 }
