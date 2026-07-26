@@ -2,11 +2,13 @@ import type { AgentModelInput } from '../domain/agent-model-provider';
 import type { LanguageCode } from '../domain/clue-catalog';
 import {
   buildConversationAgentModelInput,
+  buildConversationAgentModelInputWithoutBridge,
   conversationBridgePartnerNames,
   selectConversationBridge,
 } from '../domain/conversation-agent-evidence';
 import type { ConversationSession } from '../domain/conversation-session';
 import type { IntroCard } from '../domain/intro-card';
+import type { ParticipantId } from '../domain/session-identifiers';
 import type { Locale } from './i18n/locale';
 import { qrFlowErrorMessage } from './qr-error-notice';
 import { QrScanError } from './qr-scanner-port';
@@ -152,11 +154,13 @@ export interface ConversationAgentStartPlanInput {
  * 1 組へ会話理由と最初の質問を提示する」）: `onStart` が行う 3 分岐の判断だけを
  * hook から切り出した純関数。分岐は次の 3 つで、どれを選ぶかが Step B の肝になる。
  *
- * - `no-signal`: どのペアにも Evidence が無い。
+ * - `no-signal`: どのペアにも Evidence が無い（ADR-0048 の Bridge 無し経路も
+ *   含めて材料が無い場合）。
  * - `rules-bridge`: Bridge が 3 名以上へ統合された。2 者間専用の `AgentModelInput`
  *   は組み立てられないため、ADR-0036 のとおり Rules が計算済みの Reason / Opener を
  *   そのまま提示する（Step A ではこの経路を no-signal へ落としていた）。
- * - `provider-run`: 自分 + 相手 1 名の Bridge。既存 2 者間 Provider Contract を回す。
+ * - `provider-run`: 自分 + 相手 1 名の Bridge、または ADR-0048 の Bridge 無し
+ *   経路。既存 2 者間 Provider Contract を回す。
  */
 export type ConversationAgentStartPlan =
   | { readonly kind: 'no-signal' }
@@ -173,13 +177,57 @@ export type ConversationAgentStartPlan =
       readonly partnerNames: readonly string[];
     };
 
+/** `conversation-agent:` + participantId の昇順 join という既存形式を 1 箇所に集約する。 */
+function conversationAgentEncounterKey(
+  participantIds: readonly ParticipantId[]
+): string {
+  return `conversation-agent:${[...participantIds].sort().join('|')}`;
+}
+
+/**
+ * ADR-0048: ADR-0043 が約束した「themeIds の一致が 1 件も無いペアでも、自己紹介文が
+ * 重なっていれば共通点を提示できる」を実現する第 2 の入口。`selectConversationBridge`
+ * が `no-signal`（themeIds 不一致）を返した後にだけ呼ばれ、自分 + 相手がちょうど
+ * 1 名で、両者の自己紹介自由記述が揃っているときだけ `provider-run` を返す。
+ *
+ * peers が 2 名以上（N 者間）は対象外のまま `no-signal` にする。ADR-0036
+ * 「Local Agent は最終選定後の 1 組にだけ適用する」の範囲を、Bridge が無い経路にも
+ * 一貫して適用するためである。
+ */
+function planWithoutRulesBridge(
+  session: ConversationSession,
+  deadlineAtWallClockMs: number,
+  language: LanguageCode
+): ConversationAgentStartPlan {
+  const peer = session.peers.length === 1 ? session.peers[0] : undefined;
+  if (peer === undefined) return { kind: 'no-signal' };
+  const input = buildConversationAgentModelInputWithoutBridge(
+    session.self,
+    peer,
+    deadlineAtWallClockMs,
+    language
+  );
+  if (input === null) return { kind: 'no-signal' };
+  return {
+    kind: 'provider-run',
+    encounterKey: conversationAgentEncounterKey([
+      session.self.participantId,
+      peer.participantId,
+    ]),
+    input,
+    partnerNames: [peer.introCard.name],
+  };
+}
+
 export function planConversationAgentStart({
   session,
   deadlineAtWallClockMs,
   language,
 }: ConversationAgentStartPlanInput): ConversationAgentStartPlan {
   const bridgeResult = selectConversationBridge(session);
-  if (bridgeResult.kind === 'no-signal') return { kind: 'no-signal' };
+  if (bridgeResult.kind === 'no-signal') {
+    return planWithoutRulesBridge(session, deadlineAtWallClockMs, language);
+  }
   const bridge = bridgeResult.bridge;
   const partnerNames = conversationBridgePartnerNames(session, bridge);
   const input = buildConversationAgentModelInput(
@@ -198,9 +246,7 @@ export function planConversationAgentStart({
   }
   return {
     kind: 'provider-run',
-    encounterKey: `conversation-agent:${[...bridge.participantIds]
-      .sort()
-      .join('|')}`,
+    encounterKey: conversationAgentEncounterKey(bridge.participantIds),
     input,
     partnerNames,
   };
