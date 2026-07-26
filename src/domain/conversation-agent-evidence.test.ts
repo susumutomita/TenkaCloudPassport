@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { parsePublicPassport } from '../protocol/schema';
 import type { SelectedBridge } from './bridge-selection';
 import { CATALOG_VERSION } from './clue-catalog';
 import {
@@ -16,6 +17,7 @@ import {
   createConversationSession,
 } from './conversation-session';
 import { createIntroCard } from './intro-card';
+import { PET_NAME_MAX_LENGTH } from './passport';
 import type { ParticipantId } from './session-identifiers';
 
 /**
@@ -42,6 +44,24 @@ function participant<Id extends string>(
 }
 
 describe('introCardToConversationPassport', () => {
+  it('プレースホルダ petName が protocol 上限内で、投影 passport が parsePublicPassport を通る', () => {
+    // 実機で観測した公開 blocker（Issue 152）: 旧プレースホルダ
+    // 'conversation-agent-participant'（30 文字）が PET_NAME_MAX_LENGTH（24）を
+    // 超え、model-safety-boundary の入力検証（parsePublicPassport）が会話
+    // Agent の入力を LLM 到達前に必ず INVALID_SHAPE で弾いていた。手組みの
+    // passport でなく実投影を protocol パーサへ通し、この整合を契約として固定する。
+    expect(CONVERSATION_AGENT_PLACEHOLDER_PET_NAME.length).toBeLessThanOrEqual(
+      PET_NAME_MAX_LENGTH
+    );
+    const card = createIntroCard({
+      name: '田中太郎',
+      themeIds: ['open-source'],
+    });
+    expect(() =>
+      parsePublicPassport(introCardToConversationPassport(card))
+    ).not.toThrow();
+  });
+
   it('themeIds を持たないカードを、空の clues を持つ Public Passport へ投影する', () => {
     const card = createIntroCard({ name: '田中太郎' });
 

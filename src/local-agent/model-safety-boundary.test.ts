@@ -8,8 +8,10 @@ import {
   RULES_MODEL_PROVIDER,
   validateAgentModelProviderOutput,
 } from '../domain/agent-model-provider';
+import { buildConversationAgentModelInputWithoutBridge } from '../domain/conversation-agent-evidence';
 import { publicPassportWithClues } from '../domain/domain-test-kit';
 import { AGENT_MODEL_PROFILE_TEXT_MAX_CHARS } from '../domain/grounded-quote-bridge';
+import { createIntroCard } from '../domain/intro-card';
 import type { PublicPassport } from '../domain/passport';
 import {
   createLocalModelRequest,
@@ -772,5 +774,45 @@ describe('Rules bridge 無しでもモデルを走らせる経路（ADR-0047、I
     expect(result.outcome.settledBy).toBe('primary');
     expect(result.outcome.providerKind).toBe('rules');
     expect(result.outcome.decision).toEqual({ kind: 'no-signal' });
+  });
+});
+
+describe('実 IntroCard 投影の入力を安全境界が受理する（Issue 152 実機で観測した統合ギャップ）', () => {
+  /**
+   * これまでの入力テストは手組みの Public Passport（短い petName）だけを
+   * 使っており、会話 Agent の実投影（`introCardToConversationPassport` の
+   * プレースホルダ petName）が長さ上限で INVALID_SHAPE になることを検出
+   * できなかった。実機では会話 Agent の全入力が LLM 到達前に必ず弾かれ、
+   * Rules へ静かにフォールバックしていた。実カード → 実投影 → 実検証、を
+   * そのまま通して契約として固定する。
+   */
+  it('bridge 無し経路の実投影入力を createLocalModelRequest が受理する', () => {
+    const input = buildConversationAgentModelInputWithoutBridge(
+      {
+        participantId: 'ptc_owner',
+        introCard: createIntroCard({
+          name: '田中太郎',
+          themeIds: ['local-tournament'],
+          selfIntro: '週末は近くの低い山を歩いています。',
+        }),
+      },
+      {
+        participantId: 'ptc_peer',
+        introCard: createIntroCard({
+          name: 'Sample Explorer',
+          title: 'フィールドリサーチャー',
+          selfIntro: 'クラウド基盤の運用とオープンソースのツールが好きです。',
+          themeIds: ['open-source'],
+        }),
+      },
+      1_800_000_000_000,
+      'ja'
+    );
+    if (input === null) throw new Error('実投影の入力が null になりました。');
+
+    const request = createLocalModelRequest(input);
+
+    expect(request.messages).toHaveLength(2);
+    expect(request.messages[1].content).toContain('週末は近くの低い山');
   });
 });
