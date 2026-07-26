@@ -165,7 +165,9 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     const generator = new ControlledConversationExampleGenerator();
     const controller = createConversationExampleFlowController(generator);
     const states: string[] = [];
-    const unsubscribe = controller.subscribe((state) => states.push(state.kind));
+    const unsubscribe = controller.subscribe((state) =>
+      states.push(state.kind)
+    );
 
     controller.prepare(INPUT);
     unsubscribe();

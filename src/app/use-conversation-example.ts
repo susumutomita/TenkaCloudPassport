@@ -4,9 +4,9 @@ import type {
   ConversationExampleInput,
 } from '../domain/conversation-example';
 import {
-  createConversationExampleFlowController,
   type ConversationExampleFlowController,
   type ConversationExampleViewState,
+  createConversationExampleFlowController,
 } from './conversation-example-flow';
 
 export interface ConversationExampleFlow {

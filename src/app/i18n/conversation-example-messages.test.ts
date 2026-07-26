@@ -43,12 +43,9 @@ describe('会話例 Message Catalog（Issue 155）', () => {
 
   it('吹き出しの Accessibility label に順番・話者・本文を含める', () => {
     for (const locale of LOCALES) {
-      const label =
-        CONVERSATION_EXAMPLE_MESSAGES[locale].bubbleAccessibilityLabel(
-          3,
-          'Sample Explorer',
-          'Hello'
-        );
+      const label = CONVERSATION_EXAMPLE_MESSAGES[
+        locale
+      ].bubbleAccessibilityLabel(3, 'Sample Explorer', 'Hello');
       expect(label).toContain('3');
       expect(label).toContain('Sample Explorer');
       expect(label).toContain('Hello');

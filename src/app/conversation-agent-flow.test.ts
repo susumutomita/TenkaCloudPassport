@@ -3,10 +3,10 @@ import { IntroCardError } from '../domain/intro-card';
 import { encodeIntroCardUrl } from '../protocol/intro-card-url';
 import {
   CONVERSATION_AGENT_SAMPLE_PEER_CARD,
+  type ConversationExampleResultView,
   decodeConversationAgentPeerCard,
   INITIAL_CONVERSATION_AGENT_RESULT,
   presentConversationAgentResult,
-  type ConversationExampleResultView,
 } from './conversation-agent-flow';
 
 const CONVERSATION_EXAMPLE: ConversationExampleResultView = {
@@ -94,9 +94,9 @@ describe('presentConversationAgentResult（Issue 155）', () => {
       { kind: 'no-signal' as const },
       { kind: 'error' as const, message: '失敗しました。' },
     ]) {
-      expect(
-        presentConversationAgentResult(result, CONVERSATION_EXAMPLE)
-      ).toBe(result);
+      expect(presentConversationAgentResult(result, CONVERSATION_EXAMPLE)).toBe(
+        result
+      );
     }
   });
 });

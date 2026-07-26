@@ -1,15 +1,15 @@
-import type { LanguageCode } from './clue-catalog';
-import {
-  containsContactLikeText,
-  containsForbiddenTextUnicode,
-  isSingleLineText,
-} from './text-content-guards';
 import {
   arrayValue,
   assertOneOf,
   strictRecord,
   stringValue,
 } from '../protocol/validation';
+import type { LanguageCode } from './clue-catalog';
+import {
+  containsContactLikeText,
+  containsForbiddenTextUnicode,
+  isSingleLineText,
+} from './text-content-guards';
 
 /** Issue 155: LINE 風 UI へ表示する会話例の bounded output contract。 */
 export const CONVERSATION_EXAMPLE_MIN_TURNS = 2;
@@ -83,8 +83,7 @@ function strictDataRecord<const Keys extends readonly string[]>(
     ownKeys.length !== keys.length ||
     ownKeys.some(
       (key) =>
-        typeof key !== 'string' ||
-        !keys.some((candidate) => candidate === key)
+        typeof key !== 'string' || !keys.some((candidate) => candidate === key)
     )
   ) {
     return invalidOutput('会話例に未知の Field は指定できません。');
@@ -111,7 +110,9 @@ function strictTurnsArray(value: unknown): readonly unknown[] {
     CONVERSATION_EXAMPLE_MAX_TURNS
   );
   if (Object.getPrototypeOf(turns) !== Array.prototype) {
-    return invalidOutput('会話例の turns は通常の JSON Array である必要があります。');
+    return invalidOutput(
+      '会話例の turns は通常の JSON Array である必要があります。'
+    );
   }
   const allowedKeys = new Set<string>(['length']);
   for (let index = 0; index < turns.length; index += 1) {
@@ -135,10 +136,7 @@ function strictTurnsArray(value: unknown): readonly unknown[] {
   return turns;
 }
 
-function parseTurn(
-  value: unknown,
-  index: number
-): ConversationExampleTurn {
+function parseTurn(value: unknown, index: number): ConversationExampleTurn {
   const path = `$.turns[${index}]`;
   const record = strictDataRecord(value, path, ['speaker', 'text'] as const);
   const speaker = assertOneOf(

@@ -1,18 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type {
-  ConversationExampleResultView,
-} from '../app/conversation-agent-flow';
-import {
-  CONVERSATION_EXAMPLE_TIMEOUT_MS,
-} from '../app/conversation-example-flow';
-import {
-  CONVERSATION_EXAMPLE_MESSAGES,
-} from '../app/i18n/conversation-example-messages';
+import type { ConversationExampleResultView } from '../app/conversation-agent-flow';
+import { CONVERSATION_EXAMPLE_TIMEOUT_MS } from '../app/conversation-example-flow';
+import { CONVERSATION_EXAMPLE_MESSAGES } from '../app/i18n/conversation-example-messages';
 import type { Locale } from '../app/i18n/locale';
 import ActionButton from '../components/ActionButton';
-import type {
-  ConversationExampleTurn,
-} from '../domain/conversation-example';
+import type { ConversationExampleTurn } from '../domain/conversation-example';
 import { colors, spacing } from '../ui/theme';
 
 interface ConversationExampleSectionProps {
@@ -53,10 +45,7 @@ function ConversationBubble({
         {speaker}
       </Text>
       <View
-        style={[
-          styles.bubble,
-          owner ? styles.ownerBubble : styles.peerBubble,
-        ]}
+        style={[styles.bubble, owner ? styles.ownerBubble : styles.peerBubble]}
       >
         <Text accessible={false} style={styles.bubbleText}>
           {turn.text}
@@ -140,8 +129,7 @@ function ConversationExampleBody({
   }
   const resolvedPeerName = peerName?.trim() || t.peerFallbackLabel;
   const visibleTurns = state.example.turns.slice(0, state.visibleTurnCount);
-  const revealComplete =
-    state.visibleTurnCount >= state.example.turns.length;
+  const revealComplete = state.visibleTurnCount >= state.example.turns.length;
   return (
     <>
       <View accessibilityLiveRegion="polite" style={styles.conversation}>

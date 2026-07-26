@@ -72,9 +72,7 @@ export function createConversationExampleFlowController(
   const timeoutMs = options.timeoutMs ?? CONVERSATION_EXAMPLE_TIMEOUT_MS;
   const revealIntervalMs =
     options.revealIntervalMs ?? CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS;
-  const listeners = new Set<
-    (state: ConversationExampleViewState) => void
-  >();
+  const listeners = new Set<(state: ConversationExampleViewState) => void>();
   let state: ConversationExampleViewState = HIDDEN_CONVERSATION_EXAMPLE_STATE;
   let input: ConversationExampleInput | null = null;
   let generation = 0;

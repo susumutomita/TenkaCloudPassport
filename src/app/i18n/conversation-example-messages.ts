@@ -30,8 +30,7 @@ export const CONVERSATION_EXAMPLE_MESSAGES: Record<
 > = {
   ja: {
     sectionTitle: 'AI 会話例',
-    disclosureBanner:
-      'AI が作った会話の例です。実際のやり取りではありません。',
+    disclosureBanner: 'AI が作った会話の例です。実際のやり取りではありません。',
     privacyNotice: '端末内だけで生成し、内容は保存・送信しません。',
     generateButton: '会話例を見る（AI 生成）',
     generateButtonHint:

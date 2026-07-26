@@ -49,9 +49,7 @@ export function presentConversationAgentResult(
   result: ConversationAgentResultState,
   conversationExample: ConversationExampleResultView
 ): ConversationAgentPresentedResultState {
-  return result.kind === 'bridge'
-    ? { ...result, conversationExample }
-    : result;
+  return result.kind === 'bridge' ? { ...result, conversationExample } : result;
 }
 
 /**

@@ -2,15 +2,15 @@ import {
   AgentModelProviderError,
   type AgentModelProviderOptions,
 } from '../domain/agent-model-provider';
+import type {
+  ConversationExampleCompletionPort,
+  ConversationExampleModelRequest,
+} from './conversation-example-generator';
 import type { LocalModelConfiguration } from './local-model-configuration';
 import type {
   ModelBenchmarkRecorder,
   ModelBenchmarkSession,
 } from './model-benchmark';
-import type {
-  ConversationExampleCompletionPort,
-  ConversationExampleModelRequest,
-} from './conversation-example-generator';
 import type {
   LocalModelCompletionPort,
   LocalModelRequest,
@@ -347,10 +347,7 @@ export function createLlamaCompletionPort(
   recorder?: ModelBenchmarkRecorder
 ): LocalModelCompletionPort & ConversationExampleCompletionPort {
   return {
-    complete(
-      request: LlamaModelRequest,
-      options?: AgentModelProviderOptions
-    ) {
+    complete(request: LlamaModelRequest, options?: AgentModelProviderOptions) {
       return executeLlamaProvider(
         request,
         configuration,
