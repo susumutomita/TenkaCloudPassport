@@ -15,9 +15,7 @@ import {
   type ParticipantId,
 } from '../domain/session-identifiers';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
-import type {
-  ConversationAgentPeerView,
-} from '../screens/ConversationAgentScreen';
+import type { ConversationAgentPeerView } from '../screens/ConversationAgentScreen';
 import {
   type AgentProviderSessionRunner,
   INITIAL_PROVIDER_RUNTIME_STATE,
@@ -38,9 +36,7 @@ import {
   resolveConversationAgentRun,
   resolveScannedPeer,
 } from './conversation-agent-flow-controller';
-import {
-  conversationExampleGeneratorForProvider,
-} from './conversation-example-capability';
+import { conversationExampleGeneratorForProvider } from './conversation-example-capability';
 import type { Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { readableError } from './readable-error';
@@ -109,15 +105,15 @@ export function useConversationAgentFlow({
   const [result, setResult] = useState<ConversationAgentResultState>(
     INITIAL_CONVERSATION_AGENT_RESULT
   );
+  const conversationExampleGenerator =
+    conversationExampleGeneratorForProvider(provider);
   const {
     state: conversationExampleState,
     prepare: prepareConversationExample,
     generate: generateConversationExample,
     cancel: cancelConversationExample,
     hide: hideConversationExample,
-  } = useConversationExample(
-    conversationExampleGeneratorForProvider(provider)
-  );
+  } = useConversationExample(conversationExampleGenerator);
   // Provider 呼出しは非同期のため、セッションが破棄・やり直された後に届く
   // 遅延完了が古い結果を上書きしないための世代キー。
   const runKeyRef = useRef<string | null>(null);
@@ -342,7 +338,7 @@ export function useConversationAgentFlow({
         }
         if (
           outcome.settledBy === 'primary' &&
-          outcome.providerKind === 'local-agent'
+          conversationExampleGenerator !== null
         ) {
           prepareConversationExample({
             bridgeReason: decision.reason,
@@ -370,6 +366,7 @@ export function useConversationAgentFlow({
       },
     });
   }, [
+    conversationExampleGenerator,
     hideConversationExample,
     locale,
     prepareConversationExample,
