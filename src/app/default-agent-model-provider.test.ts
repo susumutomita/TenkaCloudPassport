@@ -119,9 +119,13 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(fileStore).toContain('Paths.document');
     expect(fileStore).toContain('atomicWriteManifest');
     expect(fileStore).toContain('exactManagedFile(privateUri');
-    expect(fileStore).toContain(
-      "throw new Error('Managed model file is outside app-private storage.')"
-    );
+    // ADR-0045（Issue 152）: app-private data container の UUID は再インストール・
+    // Clean Build・App 更新のたびに変わるため、絶対 URI の一致で境界を判定しない。
+    // file 名の allow-list pattern 検証（`resolveManagedFileName`）だけを境界にし、
+    // 常に現在の `modelDirectory()` から Path を再構築する。
+    expect(fileStore).toContain('resolveManagedFileName(privateUri, pattern)');
+    expect(fileStore).not.toContain('outside app-private storage');
+    expect(fileStore).toContain('resolveManagedModelUri(sha256)');
     expect(fileStore).toContain('matchingDeletionFiles(stagedUri, privateUri)');
     for (const sourceText of [apple, android]) {
       expect(sourceText).not.toMatch(

@@ -113,6 +113,13 @@ export interface LocalModelFileStore {
   ) => Promise<ClosableSha256Source>;
   readonly moveIncomingToModel: (sha256: string) => Promise<string>;
   readonly modelFileInfo: (privateUri: string) => Promise<StoredModelFileInfo>;
+  /**
+   * app-private data container の UUID は再インストール・Clean Build・App 更新の
+   * たびに変わる（ADR-0045）。sha256 から「現在の」container における managed File
+   * の絶対 URI を返す。呼び出し側はこれを使い、Manifest に保存された古い container の
+   * `privateUri` を self-heal する。
+   */
+  readonly resolveManagedModelUri: (sha256: string) => Promise<string>;
   readonly stageModelDeletion: (
     privateUri: string,
     sha256: string
@@ -319,7 +326,10 @@ async function readManifest(
         );
       }
     }
-    return parseManifestText(serialized);
+    return await selfHealManagedPrivateUris(
+      fileStore,
+      parseManifestText(serialized)
+    );
   } catch (error: unknown) {
     if (error instanceof ModelLifecycleError) throw error;
     throw lifecycleError(
@@ -341,6 +351,46 @@ async function writeManifest(
       'Local Model Manifest を保存できませんでした。'
     );
   }
+}
+
+/**
+ * app-private data container の UUID は再インストール・Clean Build・App 更新の
+ * たびに変わる（ADR-0045）。Manifest に保存された `privateUri` が古い container を
+ * 指したままでも、file 名（sha256）自体は変わらないため、常に「現在の」container へ
+ * 再解決してから返す。差分があれば訂正済み Manifest の永続化も試みる（永続化が
+ * 失敗しても、次回の書き込み成功時に同じ self-heal が再実行されるため、この 1 回の
+ * 失敗で in-memory の訂正結果を捨てたり Model を読めなくしたりはしない）。
+ */
+async function selfHealManagedPrivateUris(
+  fileStore: LocalModelFileStore,
+  manifest: LocalModelManifest
+): Promise<LocalModelManifest> {
+  if (manifest.models.length === 0) return manifest;
+  let changed = false;
+  const healedModels = await Promise.all(
+    manifest.models.map(async (model) => {
+      let resolvedUri: string;
+      try {
+        resolvedUri = await fileStore.resolveManagedModelUri(model.sha256);
+      } catch {
+        // 解決できなければ self-heal を諦め、保存済みの値をそのまま使う。以降の
+        // integrity 検証・load が従来どおり型付き失敗として扱う。
+        return model;
+      }
+      if (resolvedUri === model.privateUri) return model;
+      changed = true;
+      return { ...model, privateUri: resolvedUri };
+    })
+  );
+  if (!changed) return manifest;
+  const healed = { ...manifest, models: healedModels };
+  try {
+    await writeManifest(fileStore, healed);
+  } catch {
+    // 訂正した in-memory Manifest はこの session でそのまま使う（コメントは
+    // 上記関数 doc 参照）。
+  }
+  return healed;
 }
 
 async function digestPrivateFile(

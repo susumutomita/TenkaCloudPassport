@@ -75,6 +75,23 @@ Manifest は一時 File へ完全な JSON を書き、旧 Manifest を置換す�
 破棄する。次回 load が永続 Manifest を正本として、参照済み File は保持し、未参照 File は削除する。未知 Version、
 未知 Field、重複 SHA-256、重複 File 名、不正 URI、参照先 File の欠落を全体の型付き失敗にする。
 
+### `privateUri` は container-relative に解決し、絶対値を信用しない（ADR-0045）
+
+iOS / Android は再インストール・Clean Build・App 更新のたびに app-private data container を差し替える。
+`privateUri` に保存した絶対 URI はその時点の container を焼き込んでおり、Model File 自体は新 container の
+同じ相対 Path（`Documents/local-models/<sha256>.gguf`）へ移動していても、保存済み絶対 URI は古い container を
+指したまま残る。この絶対 URI を境界チェック（保存値 == 現在の値）に使うと、container が変わるたびに正当な
+Model File を「private storage の外」と誤判定して読めなくなる。
+
+信用してよいのは file 名（`^[a-f0-9]{64}\.gguf$` 等の allow-list pattern で検証済み）だけであり、絶対 Path
+prefix ではない。`expo-model-file-store.native.ts` は file 名を pattern 検証した後、常に「現在の」managed
+directory から Path を再構築し、保存済み絶対 URI とは比較しない。`model-lifecycle.ts` の `readManifest` は
+Manifest を parse した直後に、各 Model の `privateUri` を `LocalModelFileStore.resolveManagedModelUri(sha256)`
+（現在の managed Path）へ再解決し、保存値と異なれば self-heal した Manifest を返し、可能なら永続化する。
+永続化が失敗しても in-memory の self-heal 結果はそのまま使い、Model が読めなくなることを防ぐ（次回の書き込み
+成功時に再度 self-heal されるため hard fail にしない）。詳細な根拠と代替案は
+[ADR-0045](../adr/0045-container-relative-model-resolution.md) を参照。
+
 ## Import の transaction
 
 1. Picker は `copyToCacheDirectory: false`、単一選択で開く。Cancel は `IMPORT_CANCELLED` で終了する。
@@ -201,6 +218,13 @@ Architecture / Context compatibility と、実 File Size / Device Memory の保�
 
 採用しない。Digest は byte 同一性しか示さず、出所、脆弱性、モデル品質を証明しない。UI でも「整合性確認」と
 「安全性」を分離して説明する。
+
+### `privateUri` の絶対値一致で private storage の境界を確認する
+
+採用しない（Issue 152 の実機調査で発見）。app-private data container の UUID は再インストール・Clean Build・
+App 更新のたびに変わるため、絶対 URI の一致を境界チェックに使うと、正当に移動しただけの Model File を
+「private storage の外」と誤判定し、DL 済み Model を owner 全員が失う。境界は file 名の allow-list pattern
+だけで担保しパスは常に現在の managed directory から再構築する（ADR-0045）。
 
 ## 物理端末の完了ゲート
 
