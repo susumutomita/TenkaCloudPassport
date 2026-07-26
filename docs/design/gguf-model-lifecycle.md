@@ -172,8 +172,12 @@ Unload / Delete が teardown を待ちながら同じ lane を保持する循環
 Settings は直近 Import と直近 Completion を分けて選び、Import / Load / First Token / Total Completion、Peak Process
 Memory、開始 / 終了 Thermal、Battery Delta、成功種別を内容非保持の Report として表示する。
 
-App 起動時は active Manifest を strict parse し、File Size と SHA-256 を再検証してから Provider を構成する。
-Manifest 不正、File 欠落、Digest 不一致、現在の Risk blocked は Rules Provider に戻し、active 選択を解除する。
+App 起動時は active Manifest を strict parse し、全 Model の File 存在と Size を再検証してから Provider を
+構成する（[ADR-0047](../adr/0047-load-time-size-check-instead-of-digest.md)）。フル SHA-256 の再計算は
+Import 時と Activate 時だけ行い、起動のたびには行わない。1 GiB 級の Model を Hermes 上の純 TypeScript 実装
+（`sha256.ts`）で毎起動再ハッシュすると数分〜十数分かかり、Settings が操作不能なビジー状態のまま固まるためである。
+Manifest 不正、File 欠落・Size 不一致、現在の Risk blocked は Rules Provider に戻し、active 選択を解除する。
+同じ Size のまま内容だけが破損したケースは起動時には検出できない（ADR-0047 の Consequences 参照）。
 環境変数による Issue 17 の開発者設定は、managed active model が無い場合だけ利用する。
 この初回 load / reconcile / hash は Import や reload と同じ単一 operation lane と process-wide mutation lease に入れる。
 完了するまで Model 管理を busy とし、Settings の自動 reload と Lounge の Provider 開始を受け付けない。実行中

@@ -114,6 +114,7 @@ class PrivateModelStore implements LocalModelFileStore {
   manifestWrites = 0;
   closeCalls = 0;
   copyCalls = 0;
+  openSha256SourceCalls = 0;
   stagedUri: string | null = null;
 
   private get incomingUri(): string {
@@ -206,6 +207,7 @@ class PrivateModelStore implements LocalModelFileStore {
   }
 
   async openSha256Source(privateUri: string): Promise<ClosableSha256Source> {
+    this.openSha256SourceCalls += 1;
     if (this.sourceOpenFailure) throw new Error('open failed');
     const bytes = this.privateFiles.get(privateUri);
     if (!bytes) throw new Error('source missing');
@@ -920,13 +922,8 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     expect((await state.lifecycle.load()).activeModelSha256).toBeNull();
   });
 
-  it('再起動時に digest と現在 Risk を再検証し、不一致・caution・blocked は active を解除する', async () => {
+  it('再起動時に現在の Risk を再検証し、caution・blocked では active を解除する', async () => {
     for (const prepare of [
-      (state: ReturnType<typeof harness>, model: ImportedLocalModel) =>
-        state.fileStore.privateFiles.set(
-          model.privateUri,
-          new TextEncoder().encode('abd')
-        ),
       (state: ReturnType<typeof harness>) => {
         state.telemetry.snapshots = [cautionSnapshot()];
         state.telemetry.calls = 0;
@@ -935,14 +932,11 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
         state.telemetry.snapshots = [blockedSnapshot()];
         state.telemetry.calls = 0;
       },
-      (state: ReturnType<typeof harness>) => {
-        state.fileStore.sourceOpenFailure = true;
-      },
     ]) {
       const state = harness();
       const model = await importModel(state);
       await state.lifecycle.activate(model.sha256);
-      prepare(state, model);
+      prepare(state);
       const reloaded = createLocalModelLifecycle({
         fileStore: state.fileStore,
         inspector: state.inspector,
@@ -951,6 +945,62 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       });
       expect((await reloaded.load()).activeModelSha256).toBeNull();
     }
+  });
+
+  /**
+   * 起動時のフル SHA-256 再計算を廃止した意思決定の中核テスト（ADR-0047）。
+   * Qwen2.5-1.5B（1.04 GiB）を有効化した端末では、起動のたびの純 TypeScript
+   * SHA-256（`sha256.ts`）が Hermes 上で数分〜十数分かかり、Settings が
+   * 「Local Model の端末内処理を実行中です」のままフリーズする（実機で 9 分超
+   * 経過しても解除されないことを owner が観測した公開 blocker）。file 全体を
+   * 再ハッシュしなくても防げるのは「app-private 領域の File が壊れた」ケースだけで、
+   * それは Size 照合でほぼ検出できる（部分書き込みは staging + atomic manifest が
+   * 既に防いでいる）。同じ Size のまま内容だけが変わる破損は再ハッシュでしか
+   * 検出できないが、極めて稀な上、端末そのものが攻撃者に掌握されている場合は
+   * 再ハッシュでも防げないため、起動のたびの数分間のビジー化と釣り合わない。
+   */
+  it('Size が一致すれば内容が変化していても再起動時は active を維持する（起動時フル hash 廃止で受け入れる trade-off、ADR-0047）', async () => {
+    const state = harness();
+    const model = await importModel(state);
+    await state.lifecycle.activate(model.sha256);
+    state.fileStore.privateFiles.set(
+      model.privateUri,
+      new TextEncoder().encode('abd')
+    );
+
+    const reloaded = createLocalModelLifecycle({
+      fileStore: state.fileStore,
+      inspector: state.inspector,
+      telemetry: state.telemetry,
+      clock: state.clock,
+    });
+    const loaded = await reloaded.load();
+    expect(loaded.activeModelSha256).toBe(model.sha256);
+    expect(
+      loaded.models.find((candidate) => candidate.sha256 === model.sha256)?.risk
+        .level
+    ).toBe('supported');
+  });
+
+  it('有効化済み Model の load() は SHA-256 を再計算しない（Import・Activate では計算する、ADR-0047）', async () => {
+    const state = harness();
+    const model = await importModel(state);
+    const callsAfterImport = state.fileStore.openSha256SourceCalls;
+    expect(callsAfterImport).toBeGreaterThan(0);
+
+    await state.lifecycle.activate(model.sha256);
+    const callsAfterActivate = state.fileStore.openSha256SourceCalls;
+    expect(callsAfterActivate).toBeGreaterThan(callsAfterImport);
+
+    const reloaded = createLocalModelLifecycle({
+      fileStore: state.fileStore,
+      inspector: state.inspector,
+      telemetry: state.telemetry,
+      clock: state.clock,
+    });
+    const loaded = await reloaded.load();
+    expect(state.fileStore.openSha256SourceCalls).toBe(callsAfterActivate);
+    expect(loaded.activeModelSha256).toBe(model.sha256);
   });
 
   it('Unload は active Context teardown 後だけ Manifest を Rules 状態へ戻す', async () => {
@@ -1149,10 +1199,12 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
 
       expect(loaded.models).toHaveLength(1);
       expect(loaded.models[0]?.privateUri).toBe(REAL_CURRENT_PRIVATE_URI);
-      // fabricate した 3 byte content は実機の実サイズ・実 digest とは一致しないため、
-      // digest 再検証は失敗し active 選択は解除される。self-heal は File Path だけを
-      // 訂正し、整合性検証を迂回しないことを確認する。
-      expect(loaded.activeModelSha256).toBeNull();
+      // fabricate した 3 byte content は実機の実 digest とは一致しないが、
+      // fixture の `sizeBytes: 3` とは一致する。起動時のフル SHA-256 再計算を
+      // 廃止した後（ADR-0047）は Size 照合だけを見るため、self-heal 後も active
+      // 選択は維持される。これはまさに本 Issue の観測（DL 済み Model を有効化した
+      // 端末が起動のたびに再ハッシュのビジー壁へ当たっていた）を解消する挙動である。
+      expect(loaded.activeModelSha256).toBe(REAL_FIXTURE_SHA256);
       const persisted = JSON.parse(state.fileStore.manifestText ?? 'null');
       expect(persisted.models[0].privateUri).toBe(REAL_CURRENT_PRIVATE_URI);
     });
@@ -1174,7 +1226,7 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       expect(state.fileStore.manifestWrites).toBe(writesBeforeReload);
     });
 
-    it('保存済み privateUri が現行 container と異なる場合、self-heal して現行 Path を Manifest に書き戻し、digest 一致は維持する', async () => {
+    it('保存済み privateUri が現行 container と異なる場合、self-heal して現行 Path を Manifest に書き戻し、active 状態は維持する', async () => {
       const state = harness();
       const model = await importModel(state);
       await state.lifecycle.activate(model.sha256);
