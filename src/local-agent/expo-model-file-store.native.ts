@@ -2,6 +2,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { copyModelBytesBounded } from './bounded-model-copy';
 import {
+  MANAGED_MODEL_FILE_PATTERN,
+  MANAGED_STAGED_FILE_PATTERN,
+  resolveManagedFileName,
+} from './container-relative-model-path';
+import {
   type ClosableSha256Source,
   type LocalModelFileStore,
   type ModelImportCandidate,
@@ -13,8 +18,8 @@ const MODEL_DIRECTORY_NAME = 'local-models';
 const MANIFEST_FILE_NAME = 'manifest.v1.json';
 const MANIFEST_TEMP_FILE_NAME = '.manifest.v1.tmp';
 const INCOMING_FILE_NAME = '.incoming.gguf';
-const MODEL_FILE_PATTERN = /^([a-f0-9]{64})\.gguf$/;
-const STAGED_FILE_PATTERN = /^([a-f0-9]{64})\.deleting\.gguf$/;
+const MODEL_FILE_PATTERN = MANAGED_MODEL_FILE_PATTERN;
+const STAGED_FILE_PATTERN = MANAGED_STAGED_FILE_PATTERN;
 
 function modelDirectory(): Directory {
   const directory = new Directory(Paths.document, MODEL_DIRECTORY_NAME);
@@ -140,16 +145,15 @@ async function copyExternalFileBounded(
   }
 }
 
+/**
+ * `privateUri` は app-private data container の UUID を含む絶対 URI だが、iOS /
+ * Android は再インストール・Clean Build・App 更新のたびにこの container を差し替える
+ * （ADR-0045）。ここでは file 名だけを allow-list pattern で検証し、常に「現在の」
+ * `modelDirectory()` から File を組み立てる。保存済み絶対 URI とは比較しない。
+ */
 function exactManagedFile(privateUri: string, pattern: RegExp): File {
-  const candidate = new File(privateUri);
-  if (!pattern.test(candidate.name)) {
-    throw new Error('Managed model file name is invalid.');
-  }
-  const expected = new File(modelDirectory(), candidate.name);
-  if (candidate.uri !== expected.uri) {
-    throw new Error('Managed model file is outside app-private storage.');
-  }
-  return expected;
+  const name = resolveManagedFileName(privateUri, pattern);
+  return new File(modelDirectory(), name);
 }
 
 function readableManagedFile(privateUri: string): File {
@@ -300,6 +304,9 @@ export function createExpoModelFileStore(): LocalModelFileStore {
     },
     async modelFileInfo(privateUri) {
       return fileInfo(exactManagedFile(privateUri, MODEL_FILE_PATTERN));
+    },
+    async resolveManagedModelUri(sha256) {
+      return new File(modelDirectory(), `${sha256}.gguf`).uri;
     },
     async stageModelDeletion(privateUri, sha256) {
       const source = exactManagedFile(privateUri, MODEL_FILE_PATTERN);

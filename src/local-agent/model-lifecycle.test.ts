@@ -22,6 +22,49 @@ import {
 const DIGEST_ABC =
   'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
 const PRIVATE_ROOT = 'file:///private/local-models';
+
+/**
+ * 実機の実 Manifest（Issue 152、ADR-0045）からそのまま採った sha256 と stale な
+ * privateUri。container UUID `FF11A9B9-...` は既にその端末に存在せず、実際の
+ * File は同じ file 名で `471BC8AB-...` container に移動済みだった。`sizeBytes` は
+ * 実機値（1,117,320,736 byte、約 1.04 GiB）をそのままテストで確保すると重いため、
+ * fabricate した 3 byte content（'abc'）に合わせて縮小している。sha256、privateUri
+ * の container UUID、metadata、risk は実機の値をそのまま使う。`benchmarkReports` は
+ * self-heal が読み書きしない（`models[].privateUri` だけを書き換える）ため、
+ * schema 上有効な空配列にして実機の値を複製しない。
+ */
+const REAL_FIXTURE_SHA256 =
+  '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e';
+const REAL_STALE_PRIVATE_URI =
+  'file:///Users/susumu/Library/Developer/CoreSimulator/Devices/11B71247-E422-4C26-82A0-EE386E49477E/data/Containers/Data/Application/FF11A9B9-4586-4CFB-9804-2DC152E52233/Documents/local-models/6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e.gguf';
+const REAL_CURRENT_PRIVATE_URI =
+  'file:///Users/susumu/Library/Developer/CoreSimulator/Devices/11B71247-E422-4C26-82A0-EE386E49477E/data/Containers/Data/Application/471BC8AB-7409-42B1-901F-6F48F2DF0BD3/Documents/local-models/6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e.gguf';
+
+function realDeviceManifestFixture(): unknown {
+  return {
+    schemaVersion: 1,
+    activeModelSha256: REAL_FIXTURE_SHA256,
+    models: [
+      {
+        sha256: REAL_FIXTURE_SHA256,
+        originalFileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+        privateUri: REAL_STALE_PRIVATE_URI,
+        sizeBytes: 3,
+        importedAt: '2026-07-24T05:26:53.937Z',
+        metadata: { architecture: 'qwen2', contextLength: 32768, fileType: 15 },
+        risk: {
+          level: 'supported',
+          effectiveMemoryBytes: 34_359_738_368,
+          estimatedWorkingSetBytes: 1_877_655_796,
+          ratioPermille: 55,
+          reasons: ['memory-ratio-supported'],
+        },
+        configuration: { nCtx: 2048, nGpuLayers: 99, nPredict: 96 },
+      },
+    ],
+    benchmarkReports: [],
+  };
+}
 const CANDIDATE: ModelImportCandidate = {
   name: 'model.gguf',
   uri: 'content://selected/model.gguf',
@@ -65,6 +108,8 @@ class PrivateModelStore implements LocalModelFileStore {
   finalizeFailure = false;
   incomingDeleteFailure = false;
   purgeFailure = false;
+  resolveManagedModelUriFailure = false;
+  readonly resolveManagedModelUriOverrides = new Map<string, string>();
   manifestReads = 0;
   manifestWrites = 0;
   closeCalls = 0;
@@ -102,8 +147,12 @@ class PrivateModelStore implements LocalModelFileStore {
       throw new Error('incoming cleanup failed');
     }
     this.privateFiles.delete(this.incomingUri);
-    const referenced = new Set(
-      referencedModelDigests.map((digest) => `${PRIVATE_ROOT}/${digest}.gguf`)
+    // file 名（basename）だけで参照を照合する。self-heal 前の container-relative
+    // URI（`PRIVATE_ROOT` と異なる絶対 Path prefix を持つもの）も同じ file 名で
+    // 参照済みと判定できるようにする（本番の reconcile も file 名で照合し、絶対
+    // Path prefix には依存しない）。
+    const referencedNames = new Set(
+      referencedModelDigests.map((digest) => `${digest}.gguf`)
     );
     for (const uri of [...this.privateFiles.keys()]) {
       if (uri.endsWith('.deleting.gguf')) {
@@ -113,11 +162,12 @@ class PrivateModelStore implements LocalModelFileStore {
         );
         const finalUri = `${PRIVATE_ROOT}/${digest}.gguf`;
         const bytes = this.privateFiles.get(uri);
-        if (referenced.has(finalUri) && bytes)
+        if (referencedNames.has(`${digest}.gguf`) && bytes)
           this.privateFiles.set(finalUri, bytes);
         this.privateFiles.delete(uri);
-      } else if (uri.endsWith('.gguf') && !referenced.has(uri)) {
-        this.privateFiles.delete(uri);
+      } else if (uri.endsWith('.gguf')) {
+        const name = uri.slice(uri.lastIndexOf('/') + 1);
+        if (!referencedNames.has(name)) this.privateFiles.delete(uri);
       }
     }
   }
@@ -190,6 +240,16 @@ class PrivateModelStore implements LocalModelFileStore {
       sizeBytes: bytes?.byteLength ?? null,
       uri: privateUri,
     };
+  }
+
+  async resolveManagedModelUri(sha256: string): Promise<string> {
+    if (this.resolveManagedModelUriFailure) {
+      throw new Error('resolve managed model uri failed');
+    }
+    return (
+      this.resolveManagedModelUriOverrides.get(sha256) ??
+      `${PRIVATE_ROOT}/${sha256}.gguf`
+    );
   }
 
   async stageModelDeletion(
@@ -1068,5 +1128,118 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     );
     state.fileStore.copyFailure = false;
     expect((await state.lifecycle.load()).models).toEqual([]);
+  });
+
+  describe('privateUri の container-relative self-heal（ADR-0045、Issue 152）', () => {
+    it('実機の実 Manifest（container UUID が古いまま）を読み込んでも MANIFEST_READ_FAILED にならず、現行 Path へ self-heal する', async () => {
+      const state = harness();
+      state.fileStore.manifestText = JSON.stringify(
+        realDeviceManifestFixture()
+      );
+      state.fileStore.privateFiles.set(
+        REAL_CURRENT_PRIVATE_URI,
+        new TextEncoder().encode('abc')
+      );
+      state.fileStore.resolveManagedModelUriOverrides.set(
+        REAL_FIXTURE_SHA256,
+        REAL_CURRENT_PRIVATE_URI
+      );
+
+      const loaded = await state.lifecycle.load();
+
+      expect(loaded.models).toHaveLength(1);
+      expect(loaded.models[0]?.privateUri).toBe(REAL_CURRENT_PRIVATE_URI);
+      // fabricate した 3 byte content は実機の実サイズ・実 digest とは一致しないため、
+      // digest 再検証は失敗し active 選択は解除される。self-heal は File Path だけを
+      // 訂正し、整合性検証を迂回しないことを確認する。
+      expect(loaded.activeModelSha256).toBeNull();
+      const persisted = JSON.parse(state.fileStore.manifestText ?? 'null');
+      expect(persisted.models[0].privateUri).toBe(REAL_CURRENT_PRIVATE_URI);
+    });
+
+    it('privateUri が既に現行 container と一致する場合は self-heal の書き込みを増やさない', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      const writesBeforeReload = state.fileStore.manifestWrites;
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models[0]?.privateUri).toBe(model.privateUri);
+      expect(state.fileStore.manifestWrites).toBe(writesBeforeReload);
+    });
+
+    it('保存済み privateUri が現行 container と異なる場合、self-heal して現行 Path を Manifest に書き戻し、digest 一致は維持する', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+      const staleUri = `file:///private/OLD-CONTAINER-UUID/local-models/${model.sha256}.gguf`;
+      const beforeReload = JSON.parse(state.fileStore.manifestText ?? 'null');
+      beforeReload.models[0].privateUri = staleUri;
+      state.fileStore.manifestText = JSON.stringify(beforeReload);
+      const writesBeforeReload = state.fileStore.manifestWrites;
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models[0]?.privateUri).toBe(model.privateUri);
+      expect(loaded.activeModelSha256).toBe(model.sha256);
+      expect(state.fileStore.manifestWrites).toBeGreaterThan(
+        writesBeforeReload
+      );
+      const rewritten = JSON.parse(state.fileStore.manifestText ?? 'null');
+      expect(rewritten.models[0].privateUri).toBe(model.privateUri);
+    });
+
+    it('resolveManagedModelUri が失敗した場合は self-heal を諦め、保存済み privateUri をそのまま使う', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+      state.fileStore.resolveManagedModelUriFailure = true;
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models[0]?.privateUri).toBe(model.privateUri);
+      expect(loaded.activeModelSha256).toBe(model.sha256);
+    });
+
+    it('self-heal した Manifest の永続化が失敗しても、in-memory の訂正結果をそのまま返す', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      const staleUri = `file:///private/OLD-CONTAINER-UUID/local-models/${model.sha256}.gguf`;
+      const beforeReload = JSON.parse(state.fileStore.manifestText ?? 'null');
+      beforeReload.models[0].privateUri = staleUri;
+      state.fileStore.manifestText = JSON.stringify(beforeReload);
+      state.fileStore.writeManifestFailures = 1;
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models[0]?.privateUri).toBe(model.privateUri);
+      expect(
+        JSON.parse(state.fileStore.manifestText ?? 'null').models[0].privateUri
+      ).toBe(staleUri);
+    });
   });
 });

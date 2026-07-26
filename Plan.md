@@ -9024,3 +9024,97 @@ Settings のオンデバイス AI 有効化 UI）を v1.1.0 として TestFlight
   離れている。権限や AI の振る舞いを変えても、そこへ波及することが機械的に検出されない。
 - **予防策**: `app.json` の `ios.infoPlist` / `plugins` を変更する PR と、Provider の
   合成を変更する PR では、`docs/release/app-store-submission.md` の該当節を確認する。
+
+### Local Model の private URI を container-relative に解決する（Issue 152 公開 blocker） - 2026-07-26
+
+#### 目的
+
+実機で DL 済みの Local Model が、App 再インストール・Clean Build・更新のたびに
+`MANIFEST_READ_FAILED` になり、会話 Agent の LLM も「全データ削除」も使えなくなる
+公開 blocker を直す。原因は app-private data container の UUID 変化で、Manifest に
+保存した絶対 `privateUri` が古い container を指したまま残ることである。
+
+#### 制約
+
+- `rm` / `npx` 禁止。ios/、node_modules は触らない。8081 kill 禁止。
+- モックデータ・スタブ API 禁止。既存の file store double パターン
+  （`model-lifecycle.test.ts` の `PrivateModelStore`）に合わせる。
+- 型エスケープ（`as any` / `as unknown as` / `@ts-*`）禁止。空 catch 禁止。
+- カバレッジ 100% 維持。日本語 BDD。TDD（Red → Green → Refactor）。
+- `expo-model-file-store.native.ts` は react-native の Flow 構文を含む依存を
+  transitively import するため bun test 上で直接 import できない（既存の
+  `device-resource-telemetry.native.ts` も同じ理由で直接テストされておらず、
+  pure logic を別 file に切り出してテストする既存パターンに倣う）。
+
+#### 設計判断
+
+file 名の allow-list pattern（path traversal 不可）だけを境界にし、絶対 URI の
+一致チェックを外す案と、`LocalModelFileStore` に `resolveManagedModelUri` を足して
+Manifest 読込時に self-heal する案を採用した。詳細・代替案・エッジケースは
+[ADR-0045](./docs/adr/0045-container-relative-model-resolution.md) と
+[GGUF Import 設計](./docs/design/gguf-model-lifecycle.md) の追記節を正本とする。
+
+#### タスク
+
+1. `container-relative-model-path.ts`（pure module）に file 名抽出・検証を切り出し、
+   TDD で先にテストを書く。
+2. `expo-model-file-store.native.ts` の `exactManagedFile` から絶対 URI 一致チェックを外す。
+3. `LocalModelFileStore` に `resolveManagedModelUri` を追加し、native 実装・test double
+   両方に実装する。
+4. `model-lifecycle.ts` の `readManifest` に self-heal を追加し、実機の実 manifest
+   （stale な `privateUri`）を fixture にした回帰テストを先に書く。
+5. 品質ゲートを全通しし、PR を作成する（マージはしない。owner の実機再ビルド確認待ち）。
+
+#### 検証手順
+
+- `bun test src --coverage`（カバレッジ 100% 維持を確認）。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`。
+- owner による実機再ビルドでの最終確認（Settings のオンデバイス AI が
+  `MANIFEST_READ_FAILED` にならないこと、DL 済み Model が再インストール後も使えること）。
+
+#### 進捗ログ
+
+- 2026-07-26: 実機の実 manifest（`privateUri` の container が `FF11A9B9-...` だが
+  実 File は `471BC8AB-...` にある）から根本原因を確定した。`exactManagedFile` の
+  絶対 URI 一致チェックと、`model.privateUri` が `initLlama` の `modelPath` まで
+  そのまま流れる経路の 2 か所が壊れていることを特定した。
+- 2026-07-26: `origin/main` から `fix/model-container-relative-resolution` を切った。
+  ADR-0045 と GGUF Import 設計への追記を先に行った。
+- 2026-07-26: TDD で `container-relative-model-path.ts`（pure module）を先に Red
+  テストで書き、実装した。100% coverage を確認した。
+- 2026-07-26: `expo-model-file-store.native.ts` の `exactManagedFile` から絶対 URI
+  一致チェックを外し、`LocalModelFileStore` に `resolveManagedModelUri` を追加した。
+  `model-lifecycle.ts` の `readManifest` に self-heal を追加し、実機の実 manifest
+  （stale な privateUri、sha256、container UUID をそのまま使った fixture）で
+  「MANIFEST_READ_FAILED を再発させず現行 Path へ self-heal する」ことを検証する
+  回帰テストを含む 5 件のテストを追加した。既存の `default-agent-model-provider.test.ts`
+  の source-text assertion（除去した絶対 URI 一致チェックの文字列を pin していた）も
+  実装に合わせて更新した。全 1536 テスト green、100% coverage、typecheck・lint・
+  architecture-harness・dup_check すべて通過を確認した。
+- 2026-07-26: `code-reviewer` subagent・独立した security review・`/simplify`
+  （4 観点並列レビュー）を実施した。指摘のうち、境界緩和の安全性（path traversal
+  不可）は 2 系統の独立レビューで確認できた。`ManagedFileNameError` という
+  discriminate されない専用 Error subclass は house style（plain `Error`）に反する
+  との指摘を受け、plain `Error` へ戻した。self-heal の 3 関数（単一呼び出し元しか
+  持たない helper 2 つ）を 1 関数へ統合した。テスト fixture の未使用
+  `benchmarkReports` 詳細を簡素化した。「`privateUri` を廃止し常に `sha256` から
+  導出する、より深い設計」という altitude 指摘は今回の blocker 修正の scope 外と
+  判断し、ADR の選択肢節を honest に書き直した上で follow-up として記録した
+  （`ensureLoaded` の 2 回目の write を best-effort にする件と合わせて計 2 件）。
+
+#### 振り返り
+
+- **問題**: `exactManagedFile` の絶対 URI 一致チェックは、レビューでも harness でも
+  長期間検出されなかった。
+- **根本原因**: 「保存時の container == 現在の container」という前提は Simulator や
+  短時間の開発サイクルでは常に真になり、実機で App を再インストール・更新する
+  タイミングでしか崩れない。テストダブル（`PrivateModelStore`）も同じ
+  `PRIVATE_ROOT` 定数を書き込み・読み込み両方で使っていたため、この前提の崩れを
+  再現できていなかった。
+- **予防策**: app-private storage の絶対 Path を保存・比較するコードを書くときは、
+  「OS が sandbox container を差し替える」ケースを最初から異常系として想定し、
+  テストダブルも「書き込み時と読み込み時で絶対 Path の prefix が変わりうる」状態を
+  意図的に作って検証する。今回のように実機の実データ（stale なコンテナ UUID を含む
+  privateUri）を fixture にそのまま使うと、この種の環境依存 bug を机上のテストでも
+  再現しやすい。
