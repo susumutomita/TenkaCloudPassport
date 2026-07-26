@@ -132,7 +132,7 @@ export function conversationBridgePartnerNames(
 
 /**
  * `buildConversationAgentModelInput`（Bridge 前提）と
- * `buildConversationAgentModelInputWithoutBridge`（ADR-0047、Bridge 無し）が共有する
+ * `buildConversationAgentModelInputWithoutBridge`（ADR-0048、Bridge 無し）が共有する
  * 組み立てロジック。Passport 投影・profile text 同梱・deadline・language の規則は
  * ここ 1 箇所だけに書き、両関数のどちらかだけを直して規則がドリフトすることを防ぐ。
  */
@@ -196,7 +196,7 @@ export function buildConversationAgentModelInput(
 }
 
 /**
- * ADR-0047: ADR-0043 は「themeIds（Rules bridge）の一致が 1 件も無いペアでも、
+ * ADR-0048: ADR-0043 は「themeIds（Rules bridge）の一致が 1 件も無いペアでも、
  * 自己紹介文が重なっていれば共通点を提示できる」ことを約束したが、
  * `planConversationAgentStart` は `selectConversationBridge` が `no-signal` を
  * 返した時点でモデルを一度も呼ばずに `no-signal` を確定させていた。この関数は

@@ -9495,7 +9495,7 @@ selfIntro を足しても themeIds が不一致のままだと plan.kind が no-
      (e) Local Agent 失敗 → Rules Fallback → no-signal、(f) Local Agent を持たない
      （`RULES_MODEL_PROVIDER` 直接）→ Primary のまま no-signal、の 3 本の end-to-end
      テスト。
-5. ADR-0047 を新設する。
+5. ADR-0048 を新設する。
 
 #### 検証手順
 

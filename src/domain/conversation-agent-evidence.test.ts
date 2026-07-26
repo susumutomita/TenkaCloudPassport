@@ -22,7 +22,7 @@ import type { ParticipantId } from './session-identifiers';
  * Issue 104 / ADR-0036: 端末内会話エージェントの Evidence 抽出アダプタの日本語 BDD
  * テスト。`bridge-selection.test.ts` と同じく `ptc_<literal>` を使う。
  *
- * ADR-0047: Rules bridge 無しの経路は自己紹介の自由記述（`selfIntro`）の有無が
+ * ADR-0048: Rules bridge 無しの経路は自己紹介の自由記述（`selfIntro`）の有無が
  * 分岐点になるため、`themeIds` に加えて任意の `selfIntro` を指定できるようにする。
  */
 function participant<Id extends string>(
@@ -352,7 +352,7 @@ describe('introCardProfileText（Issue 147: モデルへ渡す自由記述の組
   });
 });
 
-describe('buildConversationAgentModelInputWithoutBridge（ADR-0047: Rules bridge 無しでモデルを走らせる経路）', () => {
+describe('buildConversationAgentModelInputWithoutBridge（ADR-0048: Rules bridge 無しでモデルを走らせる経路）', () => {
   it('themeIds が不一致でも、両者の自由記述が揃っていれば AgentModelInput を組み立てる', () => {
     const self = participant(
       'self',

@@ -294,9 +294,9 @@ describe('resolveConversationAgentRun（major: 遅延完了破棄）', () => {
   });
 });
 
-describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選ぶ 3 分岐、ADR-0047 で Bridge 無し経路を追加）', () => {
+describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選ぶ 3 分岐、ADR-0048 で Bridge 無し経路を追加）', () => {
   /**
-   * ADR-0047: Rules bridge 無し経路は自己紹介の自由記述（`selfIntro`）の有無が
+   * ADR-0048: Rules bridge 無し経路は自己紹介の自由記述（`selfIntro`）の有無が
    * 分岐点になるため、`themeIds` に加えて任意の `selfIntro` を指定できるようにする。
    */
   function participant<Id extends string>(
@@ -434,7 +434,7 @@ describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選
     }
   });
 
-  describe('ADR-0047: Rules bridge（themeIds 一致）が無くても自由記述が揃えばモデルを走らせる', () => {
+  describe('ADR-0048: Rules bridge（themeIds 一致）が無くても自由記述が揃えばモデルを走らせる', () => {
     it('テーマ不一致でも自分・相手 1 名の両方に自己紹介文があれば provider-run を返す', () => {
       const session = addConversationSessionPeer(
         createConversationSession(

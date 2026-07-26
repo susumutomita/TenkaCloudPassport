@@ -154,12 +154,12 @@ export interface ConversationAgentStartPlanInput {
  * 1 組へ会話理由と最初の質問を提示する」）: `onStart` が行う 3 分岐の判断だけを
  * hook から切り出した純関数。分岐は次の 3 つで、どれを選ぶかが Step B の肝になる。
  *
- * - `no-signal`: どのペアにも Evidence が無い（ADR-0047 の Bridge 無し経路も
+ * - `no-signal`: どのペアにも Evidence が無い（ADR-0048 の Bridge 無し経路も
  *   含めて材料が無い場合）。
  * - `rules-bridge`: Bridge が 3 名以上へ統合された。2 者間専用の `AgentModelInput`
  *   は組み立てられないため、ADR-0036 のとおり Rules が計算済みの Reason / Opener を
  *   そのまま提示する（Step A ではこの経路を no-signal へ落としていた）。
- * - `provider-run`: 自分 + 相手 1 名の Bridge、または ADR-0047 の Bridge 無し
+ * - `provider-run`: 自分 + 相手 1 名の Bridge、または ADR-0048 の Bridge 無し
  *   経路。既存 2 者間 Provider Contract を回す。
  */
 export type ConversationAgentStartPlan =
@@ -185,7 +185,7 @@ function conversationAgentEncounterKey(
 }
 
 /**
- * ADR-0047: ADR-0043 が約束した「themeIds の一致が 1 件も無いペアでも、自己紹介文が
+ * ADR-0048: ADR-0043 が約束した「themeIds の一致が 1 件も無いペアでも、自己紹介文が
  * 重なっていれば共通点を提示できる」を実現する第 2 の入口。`selectConversationBridge`
  * が `no-signal`（themeIds 不一致）を返した後にだけ呼ばれ、自分 + 相手がちょうど
  * 1 名で、両者の自己紹介自由記述が揃っているときだけ `provider-run` を返す。
