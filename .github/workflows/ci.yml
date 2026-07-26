@@ -61,8 +61,28 @@ jobs:
       - name: Expo Native compatibility
         run: bun run expo:check
 
-      - name: Run quality gates
-        run: make before-commit ARCHITECTURE_HARNESS_ARGS=--fail-on=error
+      # Issue 155 diagnostic split. Restored to `make before-commit` after the
+      # first failing gate is identified and fixed.
+      - name: Architecture harness
+        run: make architecture_harness ARCHITECTURE_HARNESS_ARGS=--fail-on=error
+      - name: Harness tests
+        run: make harness_test
+      - name: Release coverage tests
+        run: make release_test_coverage
+      - name: Pre-release check
+        run: make pre_release_check
+      - name: Duplication check
+        run: make dup_check
+      - name: Text lint
+        run: make lint_text
+      - name: Biome lint
+        run: make lint
+      - name: Typecheck
+        run: make typecheck
+      - name: App tests and coverage
+        run: make app_test
+      - name: Web export
+        run: make web_export
 
       # knip デッドコード検出は報告のみ (ADR-0012)。knip は「この PR で増えた分」ではなく
       # 「現時点の全量」しか出せないため、gate にすると既存負債で新規 PR が落ちて
