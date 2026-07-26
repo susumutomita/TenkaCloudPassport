@@ -64,7 +64,11 @@ jobs:
       # Issue 155 one-shot branch-local formatter. This temporary step is removed
       # immediately after the generated commit lands.
       - name: Apply and commit Biome formatting
-        if: github.event_name == 'push' && github.ref_name == 'agent/155-conversation-example'
+        if: >-
+          (github.event_name == 'push' && github.ref_name == 'agent/155-conversation-example') ||
+          (github.event_name == 'pull_request' && github.head_ref == 'agent/155-conversation-example')
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           bun biome check --write .
           if git diff --quiet; then
@@ -74,7 +78,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .
           git commit -m "style: apply Biome formatting for Issue 155"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${TARGET_BRANCH}"
 
       - name: Architecture harness
         run: make architecture_harness ARCHITECTURE_HARNESS_ARGS=--fail-on=error
