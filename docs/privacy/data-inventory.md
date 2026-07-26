@@ -50,6 +50,12 @@ GitHub Token は機能要件でも設定値でもなく、要求、生成、保�
 Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容を外部へ送信しない。推論は Owner が
 端末へ配置した GGUF モデルだけで行い、入力、出力、手掛かりを外部推論 API へ送信しない。
 
+[ADR-0047](../adr/0047-labeled-on-device-conversation-examples.md) の AI 会話例は、Local Model が
+Primary Provider として確定した 2 者 Bridge の後に Owner が明示生成する短命な派生データである。
+氏名・メール・電話番号・リンクを表す Field は Prompt に持たず、Prompt、token、検証前 Output、
+検証済み会話例をメモリから永続領域、Log、Benchmark 本文、Diagnostic Report、Pilot Aggregate、
+Clipboard、Share Sheet、外部 Endpoint へ複製しない。
+
 ## データ分類
 
 | 区分 | 意味 | 許可する保存先 |
@@ -57,7 +63,7 @@ Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容
 | `L0` 公開アプリ資産 | アプリと一緒に配布できる定義、カタログ、検証情報である。 | アプリ領域へ永続保存できる。 |
 | `L1` 端末内限定 | Owner が端末内だけで保持する設定と手掛かり候補である。 | OS のアプリ専用保護領域へ永続保存できる。 |
 | `L2` 公開投影 | Owner が現在の Lounge のために明示的に公開した最小データである。 | メモリ、画面、短命な QR に限る。 |
-| `L3` Lounge 限定 | Lounge への参加中だけ必要な通信、推論、結果データである。 | メモリに限る。永続ストレージへ書き込まない。 |
+| `L3` Lounge 限定 | Lounge または会話エージェント画面の参加中だけ必要な通信、推論、結果データである。 | メモリに限る。永続ストレージへ書き込まない。 |
 | `L3P` Process 限定集計 | 複数の Lounge をまたいで件数だけを集計し、Process 終了までに限って必要な非識別 Aggregate である。 | Process Memory に限る。Event Log や永続ストレージへ書き込まない。 |
 | `L4` Owner 管理 Export | Owner が明示操作でアプリ外へ複製したバックアップである。 | Owner が選んだ保存先に限る。 |
 | `L5` 管理された Engineering Evidence | 明示した実機 Security Test だけで作る、Network metadata を含み得る短命な証拠である。Product 機能と Pilot では生成しない。 | 暗号化した検証端末に限る。Repository、CI Artifact、Cloud Storage へ保存しない。 |
@@ -128,8 +134,9 @@ Sanitized Diagnostic Report・Pilot Event Aggregate の明示 Share（OS Share S
 | Owner Question | `L3` | 端末内 Pet が Bridge 判定に不可欠な不明点から最大 1 問生成する。 | カタログ版で定義した質問 ID と表示文である。 | アプリのメモリだけである。 | 自分の Owner の画面だけである。 | 自分の Lounge 参加中だけである。 | 回答、`decline`、`no-signal`、`retired`、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
 | Owner Answer | `L3` | Owner が `yes`、`no`、`decline` から明示選択する。 | 質問 ID、選択値、当該 Lounge での共有同意である。 | アプリのメモリだけである。 | 選択値自体は Wire へ送らない。同意済み Answer から導いたカタログ内 Field Reference と Lounge-scoped Evidence ID だけを共有できる。 | Bridge 判定と許可済み共有が終わるまで、かつ自分の Lounge 参加中だけである。 | 判定と共有の完了、`no-signal`、`retired`、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
 | Pet Message | `L3` | 参加 Pet が Lounge 内で生成する。 | Protocol Version、Message ID、一時 Participant ID、sequence、送信 / 満了時刻、許可 kind、Public Passport、確認済み Field Reference、Evidence ID、現在 Membership である。Owner Answer、Prompt、Model Output、自由記述 Claim は含めない。 | 送受信キューを含むアプリのメモリだけである。最新 Membership と Public Passport 以外の本文履歴は保持しない。 | 認証済みの参加 Pet である。 | Lounge セッションと同じである。 | 処理完了後に本文を解放し、遅くとも退出、Host 終了、20 分満了で全件破棄する。 | 否である。 |
-| 端末内推論データ | `L3` | 端末内 Pet が Public Passport、Pet Message、Owner Answer から生成する。 | 構造化入力、token buffer、候補、検証前のモデル出力である。 | アプリのメモリと GGUF runtime のメモリだけである。 | 外部とは共有しない。 | 1 回の推論処理中だけである。 | 推論完了、失敗、キャンセル、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
+| 端末内推論データ | `L3` | 端末内 Pet が Public Passport、Pet Message、Owner Answer、Intro Card の連絡先を除く Profile text、検証済み Bridge から生成する。 | 構造化入力、token buffer、候補、検証前のモデル出力である。氏名・メール・電話番号・リンクを会話例 Prompt の Field に持たない。 | アプリのメモリと GGUF runtime のメモリだけである。 | 外部とは共有しない。 | 1 回の推論処理中だけである。 | 推論完了、失敗、キャンセル、Timeout、画面離脱、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
 | Bridge | `L3` | 端末内 Pet が確認済みの手掛かりから生成し、検証する。 | 最大 1 件の主要 Bridge と根拠に使った一時参照である。 | アプリのメモリと Owner の画面だけである。 | 自分の Owner だけである。 | Owner が表示を閉じるまで、かつ Lounge セッションの期限内である。 | 画面を閉じる操作、退出、Host 終了、20 分満了のうち最も早い時点である。 | 否である。 |
+| AI 会話例 | `L3` | Local Model の Primary Bridge 後に Owner が明示生成する。 | 全件検証済みの 2〜6 Turn、`owner` / `peer` 話者、各 80 文字以内の単一行本文、AI Disclosure である。氏名・連絡先・URL・制御文字を含めない。 | アプリのメモリと Owner の画面だけである。 | 生成を要求した Owner だけである。相手端末や Server へ送らない。 | 表示中だけである。 | 再生成、Cancel、失敗、Timeout、Reset、相手削除、Provider 変更、画面離脱、Process 終了のうち最も早い時点である。 | 否である。Clipboard、Share、履歴、バックアップ経路を持たない。 |
 | `no-signal` と `retired` | `L3` | 端末内 Pet の状態機械が生成する。 | 現在の参加に限る結果と終端状態である。 | アプリのメモリと Owner の画面だけである。 | 自分の Owner と終了同期が必要な参加 Pet である。 | Lounge セッションと同じである。 | 画面終了、退出、Host 終了、20 分満了、プロセス終了のうち最も早い時点である。 | 否である。 |
 | 端末設定 | `L1` | Owner の設定操作とアプリが生成する。 | 言語、アクセシビリティ、選択中のモデル digest、カタログ版である。 | OS のアプリ専用保護領域である。 | Owner と端末内アプリだけである。 | 設定の変更または初期化までである。 | 設定初期化、モデル解除、アプリ削除である。 | 可である。ただし端末パスは含めない。 |
 | GGUF モデルファイル | `L0` | Owner が Files から手動で選ぶ。アプリは入手元を信頼済みと判定しない。 | モデル本体である。Size と digest は private Manifest に分離する。 | OS のアプリ専用モデル領域である。 | 端末内推論 runtime だけである。 | Owner が置換または削除するまでである。 | モデル削除、検証失敗時の隔離、アプリ削除である。 | 否である。 |
@@ -202,4 +209,7 @@ Pilot Event Aggregate は手動 JSON バックアップと Diagnostic Report の
 5. 認証済みの暗号化チャネルでは、確認済みの手掛かりと同意済み Owner Answer だけを
    Pet Message として交換する。
 6. 端末内 Pet は外部通信機能を持たない GGUF runtime で Bridge または `no-signal` を判定する。
-7. Lounge 由来データは保持期限に従って破棄し、Passport またはバックアップへ逆流させない。
+7. Local primary Bridge 後に Owner が明示した場合だけ、連絡先を除く短い入力から AI 会話例を
+   生成し、全件検証後に Owner の画面へ一時表示する。
+8. Lounge または会話エージェント由来データは保持期限に従って破棄し、Passport、設定、
+   Benchmark 本文、Diagnostic Report、Pilot Aggregate、バックアップへ逆流させない。
