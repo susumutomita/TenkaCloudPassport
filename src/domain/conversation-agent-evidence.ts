@@ -6,7 +6,10 @@ import {
   selectBridges,
 } from './bridge-selection';
 import { CATALOG_VERSION, clueById, type LanguageCode } from './clue-catalog';
-import type { ConversationSession } from './conversation-session';
+import type {
+  ConversationSession,
+  ConversationSessionParticipant,
+} from './conversation-session';
 import type { IntroCard } from './intro-card';
 import type { ConfirmedClue, PublicPassport } from './passport';
 import type { ParticipantId } from './session-identifiers';
@@ -128,6 +131,33 @@ export function conversationBridgePartnerNames(
 }
 
 /**
+ * `buildConversationAgentModelInput`（Bridge 前提）と
+ * `buildConversationAgentModelInputWithoutBridge`（ADR-0047、Bridge 無し）が共有する
+ * 組み立てロジック。Passport 投影・profile text 同梱・deadline・language の規則は
+ * ここ 1 箇所だけに書き、両関数のどちらかだけを直して規則がドリフトすることを防ぐ。
+ */
+function assembleAgentModelInput(
+  ownerCard: IntroCard,
+  peerCard: IntroCard,
+  deadlineAtWallClockMs: number,
+  language?: LanguageCode
+): AgentModelInput {
+  const ownerProfileText = introCardProfileText(ownerCard);
+  const encounteredProfileText = introCardProfileText(peerCard);
+  return {
+    ownerPassport: introCardToConversationPassport(ownerCard),
+    encounteredPassport: introCardToConversationPassport(peerCard),
+    ...(language === undefined ? {} : { language }),
+    // Issue 147: 片方でも自由記述が無ければ引用の照合が成立しないため、両方揃った
+    // ときだけ渡す（`model-safety-boundary.ts` も同じ条件で grounded-bridge を出す）。
+    ...(ownerProfileText !== undefined && encounteredProfileText !== undefined
+      ? { ownerProfileText, encounteredProfileText }
+      : {}),
+    deadlineAtWallClockMs,
+  };
+}
+
+/**
  * 選定済みの Bridge から、既存の 2 者間 `AgentModelProvider` Contract
  * （`AgentModelInput` / `createAgentProviderSessionRunner`）へそのまま渡せる
  * 入力を組み立てる。
@@ -157,17 +187,50 @@ export function buildConversationAgentModelInput(
     (candidate) => candidate.participantId === peerId
   );
   if (peer === undefined) return null;
-  const ownerProfileText = introCardProfileText(session.self.introCard);
-  const encounteredProfileText = introCardProfileText(peer.introCard);
-  return {
-    ownerPassport: introCardToConversationPassport(session.self.introCard),
-    encounteredPassport: introCardToConversationPassport(peer.introCard),
-    ...(language === undefined ? {} : { language }),
-    // Issue 147: 片方でも自由記述が無ければ引用の照合が成立しないため、両方揃った
-    // ときだけ渡す（`model-safety-boundary.ts` も同じ条件で grounded-bridge を出す）。
-    ...(ownerProfileText !== undefined && encounteredProfileText !== undefined
-      ? { ownerProfileText, encounteredProfileText }
-      : {}),
+  return assembleAgentModelInput(
+    session.self.introCard,
+    peer.introCard,
     deadlineAtWallClockMs,
-  };
+    language
+  );
+}
+
+/**
+ * ADR-0047: ADR-0043 は「themeIds（Rules bridge）の一致が 1 件も無いペアでも、
+ * 自己紹介文が重なっていれば共通点を提示できる」ことを約束したが、
+ * `planConversationAgentStart` は `selectConversationBridge` が `no-signal` を
+ * 返した時点でモデルを一度も呼ばずに `no-signal` を確定させていた。この関数は
+ * Rules bridge の有無に関わらず、自分 + 相手 1 名の IntroCard から直接
+ * `AgentModelInput` を組み立てる入口を提供する。
+ *
+ * 「両者の自由記述（`introCardProfileText`: title / organization / selfIntro の
+ * 連結）が揃っているか」だけを判定し、揃っていなければ `null` を返す。揃っていない
+ * 場合、themeIds も一致していない前提の下では Rules も Evidence 0 件で必ず
+ * `no-signal` になり、モデルを呼んでも結果が変わらないためである
+ * （ADR-0023 の単一 Native Lane を無駄に占有しない）。
+ *
+ * 「peers がちょうど 1 名か」の判定は呼び出し側（`planConversationAgentStart`）が
+ * 持つ。N 者間セッション（peers 2 名以上）への適用は ADR-0036「Local Agent は
+ * 最終選定後の 1 組にだけ適用する」の範囲外のため、この関数はそのまま単一の
+ * peer を受け取るだけの形にし、参加者数の判定ロジックを複製しない。
+ */
+export function buildConversationAgentModelInputWithoutBridge(
+  self: ConversationSessionParticipant,
+  peer: ConversationSessionParticipant,
+  deadlineAtWallClockMs: number,
+  language?: LanguageCode
+): AgentModelInput | null {
+  const input = assembleAgentModelInput(
+    self.introCard,
+    peer.introCard,
+    deadlineAtWallClockMs,
+    language
+  );
+  if (
+    input.ownerProfileText === undefined ||
+    input.encounteredProfileText === undefined
+  ) {
+    return null;
+  }
+  return input;
 }

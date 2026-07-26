@@ -9408,3 +9408,209 @@ security review は自ら基準（SQLi・XSS・認証・crypto・injection・情
 であり、攻撃者が端末を掌握している場合は再ハッシュでも防げないため新規の攻撃面では
 ない。(c) `/simplify` 相当は、advisor の指摘どおり重複ロジックを追加せず削除に留めた
 設計そのものが simplification であることを diff の再読で確認した。
+### Rules bridge 無しでもモデルを走らせる（ADR-0043 の未実装ギャップ、Issue 152） - 2026-07-27
+
+#### 目的
+
+ADR-0043 は「カタログ checkbox（themeIds）の一致が 1 件も無いペアでも、自己紹介文が
+重なっていれば共通点を提示できる」ことを Consequences の Good として約束したが、
+`planConversationAgentStart`（`src/app/conversation-agent-flow-controller.ts`）が
+`selectConversationBridge`（themeIds だけで判定する Rules bridge）が no-signal を
+返した時点で即 no-signal を確定させ、モデルへ一度も入力を渡していなかった。owner の
+実カード（テーマ local-tournament のみ・自己紹介文なし）と同梱サンプルカードで実行し、
+selfIntro を足しても themeIds が不一致のままだと plan.kind が no-signal のままである
+ことを実行して確認した（テーマを一致させたときだけ provider-run になった）。
+
+#### 制約
+
+- N 者間（peers が 2 名以上）は ADR-0036「Local Agent は最終選定後の 1 組にだけ適用
+  する」の範囲外のまま変えない。Rules bridge 無しの経路も 1 対 1 に限る。
+- 片方でも自己紹介の自由記述（`introCardProfileText`: title / organization / selfIntro
+  の連結）が無ければ、モデルを呼んでも根拠になる材料が無いため no-signal のままにする。
+- `validateAgentModelProviderOutput` / `model-safety-boundary.ts` / `provider-fallback.ts`
+  （fallback-once）の既存契約は変更しない。読んで確認した結果、`grounded-bridge` の
+  Validator（`validateGroundedBridgeOutput`）は元々 `buildEncounterEvidence`（Rules 由来
+  Evidence）を経由せず `verifyGroundedQuoteBridge` だけで検証しており、Rules bridge が
+  無い（共有 clue が 0 件の）Input でも構造的に受理できる。Safety Boundary の
+  `responseFormatForEvidenceIds` も `quotable`（両者の profile text 有無）だけで
+  `grounded-bridge` Schema 変種を追加するかどうかを決めており、`evidenceOptions.length`
+  には依存しない。つまり §2（下流契約）は実装済みで、必要なのは実行テストによる固定
+  だけである（プロダクションコードの修正は不要）。
+- カバレッジ 100％を維持する。`noUncheckedIndexedAccess` 下で防御的 null チェックを
+  足す際は、到達不能な分岐を作らないこと（`session.peers.length === 1 ? ... : undefined`
+  のように 1 つの式へ畳み込み、2 peers テストと 1 peer テストの両方で両方向を通す）。
+
+#### 代替案
+
+1. **自由記述をカタログ clue へ投影し `selectBridges` に見せる（不採用）**: `clues` は
+   閉じたカタログ ID が前提で、自由記述はカタログに存在しない ID になる。無理に投影
+   すると `bridge-selection.ts` の Fairness / Confidence 計算（カタログ ID の集合演算）
+   を壊すか、意味の無い偽 ID を発明することになり、ADR-0043 が引用を「Rules Evidence
+   とは別の検証経路」として明確に切り分けた設計意図に反する。
+2. **自由記述の有無に関係なく 1 対 1 なら常にモデルを呼ぶ（不採用）**: 自由記述が
+   両者に無ければ `grounded-bridge` の材料が無く、Rules も Evidence 0 件で no-signal
+   になるため、モデルを呼んでも結果は変わらない。ADR-0023 が単一 Native Lane 制約を
+   置いている以上、結果が変わらない呼び出しで Native Lane を占有する理由が無い。
+3. **`selectConversationBridge` が no-signal で、peers がちょうど 1 名で、両者の
+   profile text が揃うときだけ Bridge 無しでモデルを走らせる（採用）**: 新しい plan
+   種別を増やさず、既存の `provider-run` へ合流させる。Bridge 前提の
+   `buildConversationAgentModelInput` と共通の組み立てロジック（Passport 投影・
+   profile text 同梱・deadline・language）を private helper へ抽出し、複製しない。
+
+#### エッジケース
+
+- peers が 0 名・2 名以上: 従来どおり no-signal（2 名以上は themeIds 一致ペアが無い
+  場合に限る。ADR-0036 の N 者間 Local Agent 対象外の範囲を維持）。
+- 片方だけ自由記述あり: no-signal のまま。
+- 両者に自由記述があるが Local Agent を持たない端末（Expo Go / Web / 未導入）:
+  `RULES_MODEL_PROVIDER` が呼ばれるが Evidence 0 件のため no-signal になる。
+  Fallback ではなく Primary Provider（Rules）がそのまま no-signal を返す点が、
+  Local Agent 障害時の Fallback-once（no-signal になるまでの経路が違う）と異なる
+  ため、別テストで区別して固定する。
+- Local Agent が失敗（Timeout / Schema Error 等）: `runProviderOnce` の
+  Fallback-once が Rules へ 1 回だけ切り替わり、Rules も Evidence 0 件のため
+  no-signal で確定する。
+
+#### タスク
+
+1. `conversation-agent-evidence.ts`: 共通組み立てロジックを private helper
+   （`assembleAgentModelInput`）へ抽出し、`buildConversationAgentModelInput` を
+   それに委譲する。Bridge 無しで (self, peer) から直接組み立てる
+   `buildConversationAgentModelInputWithoutBridge` を新設し、両者の profile text が
+   揃わなければ `null` を返す。
+2. `conversation-agent-flow-controller.ts`: `planConversationAgentStart` に
+   Rules bridge が no-signal のときの第 2 分岐（`planWithoutRulesBridge`）を足す。
+   encounterKey の組み立てを private helper へ抽出し、既存の Bridge 経路と共有する。
+3. `messages.ts`: `conversationAgent.noSignalMessage`（ja/en）に、会話テーマを
+   増やす以外に自己紹介文を書く手掛かりも見つかりやすくなる旨を追記する。
+4. 実行テストを 3 層に足す。
+   - `conversation-agent-evidence.test.ts`: 新関数の単体テスト。
+   - `use-conversation-agent-flow.test.ts`（`planConversationAgentStart`）: (a) テーマ
+     不一致 + 両者自由記述 + 1 対 1 → provider-run、(b) 片方自由記述欠如 →
+     no-signal、(c) 2 名以上で全ペア no-signal（全員に自由記述があっても）→
+     no-signal。
+   - `model-safety-boundary.test.ts`: 0 件 Evidence + 両者 profile text で
+     Schema に `grounded-bridge` が乗ることの確認、`createSafetyBoundLocalModelProvider`
+     + `createAgentProviderSessionRunner` を通した (d) grounded-bridge 成功、
+     (e) Local Agent 失敗 → Rules Fallback → no-signal、(f) Local Agent を持たない
+     （`RULES_MODEL_PROVIDER` 直接）→ Primary のまま no-signal、の 3 本の end-to-end
+     テスト。
+5. ADR-0047 を新設する。
+
+#### 検証手順
+
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`
+- `make before-commit`（architecture-harness + harness_test + dup_check + lint_text + lint）
+- `bun test src --coverage`（100% 維持を確認）
+- `bun run typecheck`
+
+#### 進捗ログ
+
+- 2026-07-27: 下流契約（`validateAgentModelProviderOutput` の `grounded-bridge`、
+  `model-safety-boundary.ts` の `responseFormatForEvidenceIds`、
+  `provider-fallback.ts` の Fallback-once）を実際に読み、いずれも Rules bridge
+  （共有 clue）の有無を前提にしていないことを確認した。§2 は実行テストによる固定
+  だけで足り、プロダクションコードの修正は不要と判断した。
+- 2026-07-27: TDD で `conversation-agent-evidence.ts` に
+  `buildConversationAgentModelInputWithoutBridge` を追加し（共通組み立てロジックは
+  `assembleAgentModelInput` へ抽出）、`conversation-agent-flow-controller.ts` の
+  `planConversationAgentStart` に `planWithoutRulesBridge` 分岐を足した。advisor
+  レビューで「`session.peers.length !== 1` の後に `session.peers[0]` の
+  undefined チェックを別行に置くと、`noUncheckedIndexedAccess` 下でそのチェックが
+  到達不能になりカバレッジ 100% を満たせない」指摘を受け、
+  `session.peers.length === 1 ? session.peers[0] : undefined` という 1 つの三項式へ
+  畳み込み、2 peers テストと 1 peer テストの両方で両方向を通す形にした。
+- 2026-07-27: `model-safety-boundary.test.ts` に、共有 clue 0 件 + 両者 profile text
+  で `createSafetyBoundLocalModelProvider` + `createAgentProviderSessionRunner` を
+  通した 3 本の end-to-end テスト（grounded-bridge 成功・Local Agent 失敗から Rules
+  Fallback・Rules-only 端末）を追加した。advisor 指摘で、Rules-only 端末
+  （Expo Go / Web / 未導入、v1.0 consumer 経路の大半）のテストが要求リストに無い
+  ことに気付き追加した。既存の 3 分岐テスト（`use-conversation-agent-flow.test.ts`）
+  の「2 名以上で no-signal」ケースは、全員に自己紹介文を持たせた上でテーマ不一致に
+  することで、自由記述欠如ではなく本当に N 者間対象外のロジックが効いていることを
+  確認する形にした（advisor 指摘: 空 vacuous なテストにしない）。
+  `bun test src --coverage` 1552 pass・対象 6 ファイルすべて 100% を確認した。
+- 2026-07-27: `make before-commit` の `lint`（`biome check .`）が
+  `.claude/worktrees/fix-load-time-size-check/biome.json`（別タスクの並行 git
+  worktree）を nested root configuration として検出し失敗した。
+  `git stash -u && bun run lint; git stash pop` で自分の変更をすべて退避しても
+  同じ失敗が再現することを確認し、担当 PR の diff とは無関係な pre-existing
+  gap（`biome.json` の `files.includes` に `.claude/worktrees/**` の除外が無い）と
+  判断した。他タスクの worktree を削除する権限は無いため触れず、`/follow-up add`
+  で記録し（F-RC4GY4）、変更対象ファイルだけを対象にした `bunx biome check --
+  <files>` で自分の差分が Biome 準拠であることを個別に確認した
+  （1 件のフォーマット差分を検出、`--write` で修正して再確認・green）。
+  `bun run typecheck`・`bun test src --coverage`・`bun run build:web` は
+  この worktree 衝突と無関係に green だった。
+- 2026-07-27: `/simplify` の 4 観点（reuse / simplification / efficiency /
+  altitude）を並列 agent で実施した。適用: 2 つのテストファイルにそれぞれ追加した
+  `participantWithSelfIntro` が、同じファイルの既存 `participant` helper とほぼ
+  同一だったため、`participant` に任意の `selfIntro` 引数を足す形へ統合し重複を
+  解消した（production コードは無変更）。見送り: (a)
+  `buildConversationAgentModelInputWithoutBridge` が `assembleAgentModelInput` を
+  一度呼んでから `ownerProfileText`/`encounteredProfileText` の undefined で
+  判定する構成は、advisor の前段レビューどおり `introCardProfileText` の
+  二重呼び出しを避けるための意図的な設計であり、2 つの agent（simplification・
+  reuse）が指摘したが computed cost が「object literal 2 個」のみで agent 自身も
+  Minor と評価したため据え置いた。(b) `model-safety-boundary.test.ts` の
+  `zeroSharedClueInputWithProfileTexts` が別 describe block 内の既存
+  `inputWithProfileTexts` と形が似ている件は、後者が別スコープ・別パスポート・
+  `unknown` 型（fuzz 用）で目的が異なり、統合すると既存 8 件のテストの signature
+  にまで影響するため見送った。(c) altitude agent の指摘（「両者の profile text が
+  揃っているか」という述語が `conversation-agent-evidence.ts` と
+  `model-safety-boundary.ts` の 2 箇所で別々に判定されている）は、後者がこの PR の
+  diff に含まれない既存コードのため、別 PR 向けに follow-up（F-STFBTW）として
+  記録した。/review・/security-review は、この PR が新しい I/O・外部入力・信頼
+  境界を増やさない（分岐追加・文字列 2 行変更のみ）ため、CLAUDE.md の運用ルールと
+  タスク指示の両方を踏まえて省略した。
+- 2026-07-27: `git commit` が Husky の `pre-commit`（`make before-commit` を
+  そのまま実行）で失敗した。原因は上記と同じ `.claude/worktrees/` の nested
+  biome.json 衝突で、`git stash -u` で自分の変更を全退避しても再現するため
+  担当 diff とは無関係と確認済みだったが、pre-commit hook 自体は毎回
+  `make before-commit` をフルに評価するため、コミットそのものがブロックされた。
+  `.claude/worktrees/fix-load-time-size-check` は既に PR 162（Issue 152 の別
+  fix、`fix: replace load-time full SHA-256 digest with size check for active
+  model`）として open 済みで、その worktree を消す権限も、`biome.json` を承認
+  無しに編集する権限も自分には無い（`biome.json` 編集は PreToolUse hook が
+  ユーザー承認を要求し拒否した。`.husky/pre-commit` や `package.json` の lint
+  script を書き換えて回避する案は `--no-verify` と同じ「品質ゲートを弱める」
+  行為だと判断し不採用にした）。Monitor でこの worktree の消滅を待つ試みも、
+  PR 162 が既に open（＝その agent の作業は完了済みで worktree が自然に消える
+  保証が無い）と分かった時点で中断した。結果、8 ファイルは staged のまま
+  commit 未実施・push 未実施・PR 未作成で作業を終える。呼び出し元に 2 つの
+  unblock 経路（`biome.json` に `"!**/.claude/worktrees"` を承認の上で追加する、
+  または `git worktree remove .claude/worktrees/fix-load-time-size-check` で
+  PR 162 の worktree を片付ける）を提示する。
+
+#### 振り返り
+
+- **問題**: ADR-0043 の Consequences に「checkbox 一致が 1 件も無いペアでも共通点を
+  提示できる」と書きながら、`planConversationAgentStart` の実装がそこに到達する
+  分岐を持っていなかった。ADR の言葉と実装が乖離したまま Accepted 扱いになっていた。
+- **根本原因**: ADR-0043 は下流 3 層（入力層・契約層・合成層）の修正に集中し、
+  「Rules bridge が no-signal を返した時点で即座に確定させる」という
+  `planConversationAgentStart` 側の呼び出し順序までは見直していなかった。下流を
+  直しても、そこへ到達する経路が無ければ約束は実現しない。
+- **予防策**: ADR の Consequences に「〜できるようになる」と書くときは、そのユーザー
+  可視の振る舞いを実際に end-to-end で実行して確認してから Accepted にする
+  （owner の実カードで再現したように、下流の型だけでなく呼び出し経路まで実行して
+  確かめる）。本 PR ではその確認自体を Issue 152 として起票し、実装で応えた。
+- **問題（2 件目）**: 実装・テスト・ADR がすべて green になった後、`git commit`
+  自体が Husky pre-commit（`make before-commit` フル実行）でブロックされた。
+  原因は自分の diff ではなく、並行して動いていた別 agent の git worktree
+  （`.claude/worktrees/fix-load-time-size-check`、PR 162）が `biome.json` の
+  nested root configuration 衝突を起こしていたことだった。
+- **根本原因（2 件目）**: この repo が「複数 agent が同じ working directory を
+  共有し、`isolation: worktree` で並行作業する」運用を前提にしているのに対し、
+  `biome.json` の `files.includes` はその運用が生む `.claude/worktrees/**` を
+  除外していなかった。単体では正しく機能する 2 つの設計（並行 worktree 運用・
+  Biome の nested root 検出）が、組み合わさったときにだけ誰の diff にも属さない
+  gate 失敗を生んだ。
+- **予防策（2 件目）**: 「ゲートが落ちたら自分のコードを直す」という原則は、
+  ゲート失敗が自分の diff に起因することを `git stash -u` 等で機械的に確認して
+  から適用する。確認の結果、原因が自分の権限の及ばない共有環境（他 agent の
+  worktree・承認が要る設定ファイル）にあると分かった場合は、権限の無い回避策
+  （`--no-verify`・hook 書き換え・他 agent の worktree 削除）に手を出さず、
+  未コミットの成果物一式と再現手順・具体的な unblock 案を呼び出し元へ渡して
+  判断を委ねる。「完走する」ことと「権限の無い操作で無理に完走したふりをする」
+  ことは別であり、後者は選ばない。

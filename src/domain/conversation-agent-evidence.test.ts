@@ -3,6 +3,7 @@ import type { SelectedBridge } from './bridge-selection';
 import { CATALOG_VERSION } from './clue-catalog';
 import {
   buildConversationAgentModelInput,
+  buildConversationAgentModelInputWithoutBridge,
   CONVERSATION_AGENT_PLACEHOLDER_PET_NAME,
   conversationBridgePartnerNames,
   introCardProfileText,
@@ -20,17 +21,22 @@ import type { ParticipantId } from './session-identifiers';
 /**
  * Issue 104 / ADR-0036: 端末内会話エージェントの Evidence 抽出アダプタの日本語 BDD
  * テスト。`bridge-selection.test.ts` と同じく `ptc_<literal>` を使う。
+ *
+ * ADR-0047: Rules bridge 無しの経路は自己紹介の自由記述（`selfIntro`）の有無が
+ * 分岐点になるため、`themeIds` に加えて任意の `selfIntro` を指定できるようにする。
  */
 function participant<Id extends string>(
   id: Id,
   name: string,
-  themeIds: readonly string[] = []
+  themeIds: readonly string[] = [],
+  selfIntro?: string
 ): ConversationSessionParticipant {
   return {
     participantId: `ptc_${id}`,
     introCard: createIntroCard({
       name,
       ...(themeIds.length > 0 ? { themeIds } : {}),
+      ...(selfIntro === undefined ? {} : { selfIntro }),
     }),
   };
 }
@@ -343,5 +349,96 @@ describe('introCardProfileText（Issue 147: モデルへ渡す自由記述の組
     expect(
       introCardProfileText(createIntroCard({ name: '山田', selfIntro: '   ' }))
     ).toBeUndefined();
+  });
+});
+
+describe('buildConversationAgentModelInputWithoutBridge（ADR-0047: Rules bridge 無しでモデルを走らせる経路）', () => {
+  it('themeIds が不一致でも、両者の自由記述が揃っていれば AgentModelInput を組み立てる', () => {
+    const self = participant(
+      'self',
+      '田中太郎',
+      ['local-tournament'],
+      '週末は近所の低山を歩いています。'
+    );
+    const peer = participant(
+      'peer',
+      '鈴木花子',
+      [],
+      'アウトドア全般が好きで、最近はキャンプに行きます。'
+    );
+
+    const input = buildConversationAgentModelInputWithoutBridge(
+      self,
+      peer,
+      1_000,
+      'ja'
+    );
+
+    expect(input).not.toBeNull();
+    expect(input?.deadlineAtWallClockMs).toBe(1_000);
+    expect(input?.language).toBe('ja');
+    expect(input?.ownerProfileText).toBe('週末は近所の低山を歩いています。');
+    expect(input?.encounteredProfileText).toBe(
+      'アウトドア全般が好きで、最近はキャンプに行きます。'
+    );
+    expect(input?.ownerPassport.clues).toEqual([
+      {
+        value: 'local-tournament',
+        category: 'activity',
+        source: 'owner-selected',
+      },
+    ]);
+    expect(input?.encounteredPassport.clues).toEqual([]);
+  });
+
+  it('自分の自由記述が無ければ null を返す', () => {
+    const self = participant('self', '田中太郎');
+    const peer = participant(
+      'peer',
+      '鈴木花子',
+      [],
+      'アウトドア全般が好きです。'
+    );
+
+    expect(
+      buildConversationAgentModelInputWithoutBridge(self, peer, 1_000)
+    ).toBeNull();
+  });
+
+  it('相手の自由記述が無ければ null を返す', () => {
+    const self = participant(
+      'self',
+      '田中太郎',
+      [],
+      '週末は低山を歩いています。'
+    );
+    const peer = participant('peer', '鈴木花子');
+
+    expect(
+      buildConversationAgentModelInputWithoutBridge(self, peer, 1_000)
+    ).toBeNull();
+  });
+
+  it('language を渡さない場合、AgentModelInput.language は undefined のままになる', () => {
+    const self = participant(
+      'self',
+      '田中太郎',
+      [],
+      '週末は低山を歩いています。'
+    );
+    const peer = participant(
+      'peer',
+      '鈴木花子',
+      [],
+      'アウトドア全般が好きです。'
+    );
+
+    const input = buildConversationAgentModelInputWithoutBridge(
+      self,
+      peer,
+      1_000
+    );
+
+    expect(input?.language).toBeUndefined();
   });
 });

@@ -1438,7 +1438,7 @@ const ja: AppMessages = {
     runningNotice: '共通点を探しています…',
     noSignalTitle: '共通点が見つかりませんでした',
     noSignalMessage:
-      'お互いが確認済みの会話テーマに重なりがありませんでした。会話テーマを増やすと見つかりやすくなります。',
+      'お互いが確認済みの会話テーマに重なりがありませんでした。会話テーマを増やすか、お互いのカードに自己紹介文を書くと見つかりやすくなります。',
     bridgeReasonTitle: '共通点',
     bridgeOpenerTitle: '最初の質問',
     runErrorMessage: '計算を完了できませんでした。もう一度お試しください。',
@@ -2182,7 +2182,7 @@ const en: AppMessages = {
     runningNotice: 'Looking for common ground…',
     noSignalTitle: 'No common ground found',
     noSignalMessage:
-      'Your confirmed conversation topics did not overlap. Adding more topics makes a match more likely.',
+      'Your confirmed conversation topics did not overlap. Adding more topics, or writing a short intro on both cards, makes a match more likely.',
     bridgeReasonTitle: 'Common ground',
     bridgeOpenerTitle: 'Opening question',
     runErrorMessage: 'Could not finish. Please try again.',

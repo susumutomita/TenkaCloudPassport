@@ -5,6 +5,7 @@ import { createAgentProviderSessionRunner } from '../app/agent-provider-session'
 import {
   type AgentModelInput,
   AgentModelProviderError,
+  RULES_MODEL_PROVIDER,
   validateAgentModelProviderOutput,
 } from '../domain/agent-model-provider';
 import { publicPassportWithClues } from '../domain/domain-test-kit';
@@ -658,5 +659,118 @@ describe('自己紹介の自由記述を渡すときの境界（Issue 147）', (
     );
 
     expect(request.messages[1].content).toContain(exact);
+  });
+});
+
+/**
+ * ADR-0047: ADR-0043 は「themeIds（Rules bridge）の一致が 1 件も無いペアでも、
+ * 自己紹介文が重なっていれば共通点を提示できる」ことを Consequences で約束したが、
+ * `planConversationAgentStart`（`src/app/conversation-agent-flow-controller.ts`）が
+ * Rules bridge 無しではモデルを一度も呼んでいなかった。ここでは、その約束を支える
+ * 下流の 3 契約（Safety Boundary の Schema 選択・`validateAgentModelProviderOutput`・
+ * `provider-fallback.ts` の Fallback-once）が、共有 clue が 0 件（themeIds 不一致）の
+ * `AgentModelInput` でも `createSafetyBoundLocalModelProvider` +
+ * `createAgentProviderSessionRunner` を通して端から端まで受理・表示できることを、
+ * 実際にコードを実行して固定する（この describe 自体はプロダクションコードの
+ * 修正を伴わない。読んで確認した結果、`validateGroundedBridgeOutput` は元々
+ * `buildEncounterEvidence` を経由せず `verifyGroundedQuoteBridge` だけで検証しており、
+ * `responseFormatForEvidenceIds` も `quotable` だけで Schema 変種を決めるため、
+ * この経路は実装済みだった）。
+ */
+describe('Rules bridge 無しでもモデルを走らせる経路（ADR-0047、Issue 152）', () => {
+  const ZERO_SHARED_CLUE_OWNER_PASSPORT = publicPassportWithClues([
+    'local-tournament',
+  ]);
+  const ZERO_SHARED_CLUE_ENCOUNTERED_PASSPORT = publicPassportWithClues([
+    'accessibility',
+  ]);
+  const OWNER_TEXT = '週末は近所の低山を歩いています。';
+  const PEER_TEXT = 'アウトドア全般が好きで、最近はキャンプに行きます。';
+
+  function zeroSharedClueInputWithProfileTexts(): AgentModelInput {
+    return {
+      ...inputWithPassports(
+        ZERO_SHARED_CLUE_OWNER_PASSPORT,
+        ZERO_SHARED_CLUE_ENCOUNTERED_PASSPORT
+      ),
+      ownerProfileText: OWNER_TEXT,
+      encounteredProfileText: PEER_TEXT,
+    };
+  }
+
+  it('共有 clue が 0 件でも、両者の自由記述が揃っていれば Local Model Request の Schema に grounded-bridge が乗る', () => {
+    const request = createLocalModelRequest(
+      zeroSharedClueInputWithProfileTexts()
+    );
+    const schema = JSON.stringify(request.responseFormat.schema);
+
+    expect(schema).toContain('no-signal');
+    expect(schema).toContain('grounded-bridge');
+    expect(schema).not.toContain('evidenceIds');
+  });
+
+  it('Local Agent が grounded-bridge を返すと、共有 clue が 0 件でも Bridge として確定し表示文まで組み立てる', async () => {
+    const provider = createSafetyBoundLocalModelProvider({
+      complete() {
+        return {
+          kind: 'grounded-bridge',
+          ownerQuote: '低山を歩いています',
+          peerQuote: 'アウトドア全般が好き',
+        };
+      },
+    });
+
+    const result = await createAgentProviderSessionRunner().run({
+      state: { status: 'rules' },
+      encounterKey: 'adr-0047-grounded-bridge-success',
+      provider,
+      input: zeroSharedClueInputWithProfileTexts(),
+    });
+
+    expect(result.outcome.settledBy).toBe('primary');
+    expect(result.outcome.providerKind).toBe('local-agent');
+    expect(result.outcome.decision).toEqual({
+      kind: 'bridge',
+      confidence: 'possible',
+      evidenceIds: ['grounded-quote'],
+      reason:
+        'あなたの自己紹介の「低山を歩いています」と、相手の「アウトドア全般が好き」が重なっています。',
+      opener: '「アウトドア全般が好き」について聞いてみましょう。',
+    });
+  });
+
+  it('Local Agent が失敗すると、共有 clue が 0 件の Rules Fallback は no-signal で確定する（fallback-once）', async () => {
+    const provider = createSafetyBoundLocalModelProvider({
+      complete(): never {
+        throw new AgentModelProviderError(
+          'SCHEMA_ERROR',
+          'native internal detail'
+        );
+      },
+    });
+
+    const result = await createAgentProviderSessionRunner().run({
+      state: { status: 'rules' },
+      encounterKey: 'adr-0047-grounded-bridge-failure',
+      provider,
+      input: zeroSharedClueInputWithProfileTexts(),
+    });
+
+    expect(result.outcome.settledBy).toBe('rules-fallback');
+    expect(result.outcome.switchReason).toBe('schema-error');
+    expect(result.outcome.decision).toEqual({ kind: 'no-signal' });
+  });
+
+  it('Local Agent を持たない端末（Rules Provider のみ）でも、共有 clue が 0 件なら Primary のまま no-signal で確定する', async () => {
+    const result = await createAgentProviderSessionRunner().run({
+      state: { status: 'rules' },
+      encounterKey: 'adr-0047-rules-only',
+      provider: RULES_MODEL_PROVIDER,
+      input: zeroSharedClueInputWithProfileTexts(),
+    });
+
+    expect(result.outcome.settledBy).toBe('primary');
+    expect(result.outcome.providerKind).toBe('rules');
+    expect(result.outcome.decision).toEqual({ kind: 'no-signal' });
   });
 });

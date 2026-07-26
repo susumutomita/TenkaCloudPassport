@@ -294,17 +294,23 @@ describe('resolveConversationAgentRun（major: 遅延完了破棄）', () => {
   });
 });
 
-describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選ぶ 3 分岐）', () => {
+describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選ぶ 3 分岐、ADR-0047 で Bridge 無し経路を追加）', () => {
+  /**
+   * ADR-0047: Rules bridge 無し経路は自己紹介の自由記述（`selfIntro`）の有無が
+   * 分岐点になるため、`themeIds` に加えて任意の `selfIntro` を指定できるようにする。
+   */
   function participant<Id extends string>(
     id: Id,
     name: string,
-    themeIds: readonly string[] = []
+    themeIds: readonly string[] = [],
+    selfIntro?: string
   ): ConversationSessionParticipant {
     return {
       participantId: `ptc_${id}`,
       introCard: createIntroCard({
         name,
         ...(themeIds.length > 0 ? { themeIds } : {}),
+        ...(selfIntro === undefined ? {} : { selfIntro }),
       }),
     };
   }
@@ -426,5 +432,102 @@ describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選
       expect(plan.opener).toContain('情報セキュリティ');
       expect(plan.partnerNames).toEqual(['共通点だけの人', '補完関係の人']);
     }
+  });
+
+  describe('ADR-0047: Rules bridge（themeIds 一致）が無くても自由記述が揃えばモデルを走らせる', () => {
+    it('テーマ不一致でも自分・相手 1 名の両方に自己紹介文があれば provider-run を返す', () => {
+      const session = addConversationSessionPeer(
+        createConversationSession(
+          participant(
+            'self',
+            '田中太郎',
+            ['local-tournament'],
+            '週末は近所の低山を歩いています。'
+          )
+        ),
+        participant(
+          'peer',
+          '鈴木花子',
+          [],
+          'アウトドア全般が好きで、最近はキャンプに行きます。'
+        )
+      );
+
+      const plan = planConversationAgentStart({
+        session,
+        deadlineAtWallClockMs: DEADLINE_MS,
+        language: 'ja',
+      });
+
+      expect(plan.kind).toBe('provider-run');
+      if (plan.kind === 'provider-run') {
+        expect(plan.encounterKey).toBe('conversation-agent:ptc_peer|ptc_self');
+        expect(plan.partnerNames).toEqual(['鈴木花子']);
+        expect(plan.input.ownerProfileText).toBe(
+          '週末は近所の低山を歩いています。'
+        );
+        expect(plan.input.encounteredProfileText).toBe(
+          'アウトドア全般が好きで、最近はキャンプに行きます。'
+        );
+        expect(plan.input.deadlineAtWallClockMs).toBe(DEADLINE_MS);
+      }
+    });
+
+    it('相手に自己紹介文が無ければ、テーマ不一致と合わせて no-signal のままになる', () => {
+      const session = addConversationSessionPeer(
+        createConversationSession(
+          participant(
+            'self',
+            '田中太郎',
+            ['local-tournament'],
+            '週末は近所の低山を歩いています。'
+          )
+        ),
+        participant('peer', '鈴木花子')
+      );
+
+      expect(
+        planConversationAgentStart({
+          session,
+          deadlineAtWallClockMs: DEADLINE_MS,
+          language: 'ja',
+        })
+      ).toEqual({ kind: 'no-signal' });
+    });
+
+    it('相手が 2 名以上でテーマ一致ペアが無ければ、全員に自己紹介文があっても no-signal のままになる（ADR-0036 の N 者間対象外を維持）', () => {
+      const session = addConversationSessionPeer(
+        addConversationSessionPeer(
+          createConversationSession(
+            participant(
+              'self',
+              '田中太郎',
+              ['local-tournament'],
+              '週末は近所の低山を歩いています。'
+            )
+          ),
+          participant(
+            'peerA',
+            '鈴木花子',
+            ['accessibility'],
+            'アウトドア全般が好きで、最近はキャンプに行きます。'
+          )
+        ),
+        participant(
+          'peerB',
+          '佐藤次郎',
+          ['cloud-infrastructure'],
+          '週末はコーヒーを淹れています。'
+        )
+      );
+
+      expect(
+        planConversationAgentStart({
+          session,
+          deadlineAtWallClockMs: DEADLINE_MS,
+          language: 'ja',
+        })
+      ).toEqual({ kind: 'no-signal' });
+    });
   });
 });
