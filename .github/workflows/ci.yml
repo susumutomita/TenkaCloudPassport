@@ -7,7 +7,7 @@ name: ci
 # - Minimal permissions following principle of least privilege
 
 permissions:
-  contents: read
+  contents: write
   packages: read
   actions: read
 
@@ -61,36 +61,20 @@ jobs:
       - name: Expo Native compatibility
         run: bun run expo:check
 
-      # Issue 155 diagnostic. The generated patch and report are removed together
-      # with this split after all quality gates pass.
-      - name: Generate Biome diagnostic
-        id: biome-diagnostic
-        shell: bash
+      # Issue 155 one-shot branch-local formatter. This temporary step is removed
+      # immediately after the generated commit lands.
+      - name: Apply and commit Biome formatting
+        if: github.event_name == 'push' && github.ref_name == 'agent/155-conversation-example'
         run: |
-          set +e
-          bun biome check --write . > "$RUNNER_TEMP/biome.log" 2>&1
-          status="$?"
-          git diff --binary > "$RUNNER_TEMP/biome.patch"
-          if ! git diff --quiet; then
-            status=1
+          bun biome check --write .
+          if git diff --quiet; then
+            exit 0
           fi
-          printf 'status=%s\n' "$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload Biome diagnostic
-        if: steps.biome-diagnostic.outputs.status != '0'
-        # actions/upload-artifact v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: issue-155-biome-diagnostic
-          path: |
-            ${{ runner.temp }}/biome.log
-            ${{ runner.temp }}/biome.patch
-          if-no-files-found: error
-
-      - name: Require clean Biome result
-        if: steps.biome-diagnostic.outputs.status != '0'
-        run: exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "style: apply Biome formatting for Issue 155"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Architecture harness
         run: make architecture_harness ARCHITECTURE_HARNESS_ARGS=--fail-on=error
@@ -104,6 +88,8 @@ jobs:
         run: make dup_check
       - name: Text lint
         run: make lint_text
+      - name: Biome lint
+        run: make lint
       - name: Typecheck
         run: make typecheck
       - name: App tests and coverage
