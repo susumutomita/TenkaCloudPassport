@@ -22,10 +22,22 @@ describe('会話例 Message Catalog（Issue 155）', () => {
         messages.ownerLabel,
         messages.peerFallbackLabel,
         messages.generatingStatus(12),
+        messages.peerAiLabel('Sample Explorer'),
         messages.bubbleAccessibilityLabel(2, 'Peer', 'Hello'),
       ]) {
         expect(text.length).toBeGreaterThan(0);
       }
+    }
+  });
+
+  it('話者ラベルは本人名でなく AI であることを明示する（ADR-0050）', () => {
+    for (const locale of LOCALES) {
+      const messages = CONVERSATION_EXAMPLE_MESSAGES[locale];
+      expect(messages.ownerLabel).toContain('AI');
+      expect(messages.peerFallbackLabel).toContain('AI');
+      const peerLabel = messages.peerAiLabel('Sample Explorer');
+      expect(peerLabel).toContain('Sample Explorer');
+      expect(peerLabel).toContain('AI');
     }
   });
 
