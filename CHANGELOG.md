@@ -7,6 +7,15 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
+## [1.1.2] - 2026-07-28
+
+TestFlight v1.1.1 の実機で owner が確認した 2 件を修正した Release です。
+
+### Fixed
+
+- モデル削除が必ず「MANIFEST_READ_FAILED」で失敗して見えた問題を修正した。真因は `File.move` が成功時に instance の uri を移動先へ付け替える仕様で、移動後の整合チェックが自分自身（移動先）を見て常に誤 throw していたこと。旧パスの不存在確認を新しい File で行う（ADR-0054 とあわせて、削除後の後始末の競合耐性と、未知エラーを実コードで表示する分類も改善）。
+- AI 同士の事前会話で、相手の AI が owner 側の情報を自分のオーナーの事として話す取り違えを修正した。各 AI と profile text の対応をプロンプトで明示的に束縛する。
+
 ## [1.1.1] - 2026-07-27
 
 TestFlight v1.1.0 の実機で owner が確認した公開 blocker 3 件（モデル取得の体験）を修正した Release です。あわせて会話体験を大きく改善しています。
