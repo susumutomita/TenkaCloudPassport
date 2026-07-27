@@ -185,4 +185,16 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(parsed.expo?.experiments?.baseUrl).toBe('/app');
     expect(parsed.expo?.experiments?.baseUrl?.endsWith('/')).toBe(false);
   });
+
+  it('stageModelDeletion の move 後整合チェックは旧パスの新しい File で行う（Issue 152: File.move は成功時に instance の uri を移動先へ付け替えるため、source.exists を見ると成功でも常に incomplete と誤判定して削除が必ず失敗していた）', async () => {
+    const store = await source(
+      '../local-agent/expo-model-file-store.native.ts'
+    );
+
+    expect(store).toContain(
+      'const original = new File(modelDirectory(), `${sha256}.gguf`);'
+    );
+    expect(store).toContain('if (original.exists || !staged.exists)');
+    expect(store).not.toContain('if (source.exists || !staged.exists)');
+  });
 });

@@ -341,7 +341,14 @@ export function createExpoModelFileStore(): LocalModelFileStore {
       const staged = new File(modelDirectory(), `${sha256}.deleting.gguf`);
       deleteIfPresent(staged);
       await source.move(staged);
-      if (source.exists || !staged.exists) {
+      // 実機・シミュレーターの実測（Issue 152 の削除失敗）: `File.move` は成功時に
+      // この instance の uri を移動先へ付け替える（SharedObject が新しい場所を
+      // 指す）。移動後に `source.exists` を見ると staged file を指した自分自身を
+      // 見てしまい、成功していても常に「incomplete」と誤判定して throw していた
+      //（旧既定マッピングにより MANIFEST_READ_FAILED と表示されていた）。
+      // 旧パスの不存在確認は、インスタンスではなく旧パスを指す新しい File で行う。
+      const original = new File(modelDirectory(), `${sha256}.gguf`);
+      if (original.exists || !staged.exists) {
         throw new Error('Model deletion staging was incomplete.');
       }
       return staged.uri;
