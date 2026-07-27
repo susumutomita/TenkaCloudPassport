@@ -13,6 +13,7 @@ import {
   ModelLifecycleError,
   type StoredModelFileInfo,
 } from './model-lifecycle';
+import { nativeMd5OfFile } from './native-md5.native';
 
 const MODEL_DIRECTORY_NAME = 'local-models';
 const MANIFEST_FILE_NAME = 'manifest.v1.json';
@@ -295,6 +296,9 @@ export function createExpoModelFileStore(): LocalModelFileStore {
           handle.close();
         },
       };
+    },
+    async md5OfFile(privateUri) {
+      return nativeMd5OfFile(readableManagedFile(privateUri).uri);
     },
     async moveIncomingToModel(sha256) {
       const incoming = new File(modelDirectory(), INCOMING_FILE_NAME);

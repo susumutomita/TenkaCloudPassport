@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
 import {
   type ImportedLocalModel,
   type LocalModelBenchmarkReport,
@@ -17,7 +18,12 @@ import {
   ModelLifecycleError,
   type ModelLifecycleErrorCode,
   type StoredModelFileInfo,
+  type TrustedImportVerification,
 } from './model-lifecycle';
+
+function md5Hex(bytes: Uint8Array): string {
+  return createHash('md5').update(bytes).digest('hex');
+}
 
 const DIGEST_ABC =
   'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
@@ -115,6 +121,8 @@ class PrivateModelStore implements LocalModelFileStore {
   closeCalls = 0;
   copyCalls = 0;
   openSha256SourceCalls = 0;
+  md5OfFileCalls: string[] = [];
+  md5OfFileFailure = false;
   stagedUri: string | null = null;
 
   private get incomingUri(): string {
@@ -222,6 +230,14 @@ class PrivateModelStore implements LocalModelFileStore {
         if (this.closeFailure) throw new Error('close failed');
       },
     };
+  }
+
+  async md5OfFile(privateUri: string): Promise<string> {
+    this.md5OfFileCalls.push(privateUri);
+    if (this.md5OfFileFailure) throw new Error('md5 failed');
+    const bytes = this.privateFiles.get(privateUri);
+    if (!bytes) throw new Error('file missing');
+    return md5Hex(bytes);
   }
 
   async moveIncomingToModel(sha256: string): Promise<string> {
@@ -376,7 +392,7 @@ class FixedClock implements ModelLifecycleClock {
   }
 }
 
-function harness() {
+function harness(trustedModelMd5For?: (sha256: string) => string | null) {
   const fileStore = new PrivateModelStore();
   const inspector = new GgufInspector();
   const telemetry = new ResourceTelemetry();
@@ -386,6 +402,7 @@ function harness() {
     inspector,
     telemetry,
     clock,
+    ...(trustedModelMd5For ? { trustedModelMd5For } : {}),
   });
   return { fileStore, inspector, telemetry, clock, lifecycle };
 }
@@ -1292,6 +1309,200 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       expect(
         JSON.parse(state.fileStore.manifestText ?? 'null').models[0].privateUri
       ).toBe(staleUri);
+    });
+  });
+
+  /**
+   * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: 信頼済みダウンロードの
+   * 取り込みは純 TypeScript SHA-256（`digestPrivateFile`・`openSha256Source`）を
+   * 使わず、ネイティブ MD5（`md5OfFile`）で catalog の pinned 値と照合し、
+   * pinned sha256 をそのまま identity に使う。手動 GGUF import
+   * （`trustedVerification` 省略）は既存の純 TypeScript SHA-256 経路を維持する
+   * （この describe 外の全テストが既にその回帰保証になっている）。
+   */
+  describe('信頼済みダウンロードの取り込み検証（ADR-0053、ネイティブ MD5）', () => {
+    function trustedVerification(
+      overrides: Partial<TrustedImportVerification> = {}
+    ): TrustedImportVerification {
+      return {
+        sha256: DIGEST_ABC,
+        md5: md5Hex(new TextEncoder().encode('abc')),
+        ...overrides,
+      };
+    }
+
+    it('md5 が一致すれば pinned sha256 を identity に使い、純 TypeScript SHA-256（openSha256Source）は呼ばない', async () => {
+      const state = harness();
+
+      const model = await state.lifecycle.importCandidate(
+        CANDIDATE,
+        undefined,
+        trustedVerification()
+      );
+
+      expect(model.sha256).toBe(DIGEST_ABC);
+      expect(model.privateUri).toBe(`${PRIVATE_ROOT}/${DIGEST_ABC}.gguf`);
+      expect(state.fileStore.md5OfFileCalls.length).toBe(1);
+      expect(state.fileStore.openSha256SourceCalls).toBe(0);
+    });
+
+    it('onVerifying は copy 完了後・MD5 照合前に 1 度だけ呼ばれる', async () => {
+      const state = harness();
+      const events: string[] = [];
+      const originalMd5 = state.fileStore.md5OfFile.bind(state.fileStore);
+      state.fileStore.md5OfFile = async (privateUri: string) => {
+        events.push('md5-check');
+        return originalMd5(privateUri);
+      };
+
+      await state.lifecycle.importCandidate(
+        CANDIDATE,
+        undefined,
+        trustedVerification({
+          onVerifying: () => events.push('on-verifying'),
+        })
+      );
+
+      expect(events).toEqual(['on-verifying', 'md5-check']);
+    });
+
+    it('MD5 が一致しない場合 fail-closed で MODEL_INTEGRITY_FAILED を投げ、incoming File を残さない', async () => {
+      const state = harness();
+
+      await expectLifecycleError(
+        state.lifecycle.importCandidate(
+          CANDIDATE,
+          undefined,
+          trustedVerification({ md5: 'f'.repeat(32) })
+        ),
+        'MODEL_INTEGRITY_FAILED'
+      );
+      expect((await state.fileStore.incomingFileInfo()).exists).toBe(false);
+    });
+
+    it('MD5 計算自体が失敗した場合 SOURCE_UNREADABLE として拒否する', async () => {
+      const state = harness();
+      state.fileStore.md5OfFileFailure = true;
+
+      await expectLifecycleError(
+        state.lifecycle.importCandidate(
+          CANDIDATE,
+          undefined,
+          trustedVerification()
+        ),
+        'SOURCE_UNREADABLE'
+      );
+    });
+
+    it('trustedVerification を渡さない従来の import（手動 GGUF import）は md5OfFile を呼ばない', async () => {
+      const state = harness();
+
+      await importModel(state);
+
+      expect(state.fileStore.md5OfFileCalls.length).toBe(0);
+      expect(state.fileStore.openSha256SourceCalls).toBeGreaterThan(0);
+    });
+
+    /**
+     * code-reviewer 指摘（medium）: 本番配線（`default-local-model-management.native.ts`）
+     * は `trustedModelMd5For` を常に渡す（lookup 自体は常に存在する）。手動 GGUF
+     * import された Model は catalog に無い sha256 のため lookup が `null` を
+     * 返すだけで、「lookup 未指定」とは別の組み合わせになる。この組み合わせだけを
+     * 個別にテストする既存 test が無かったため追加し、`assertModelIntegrity` が
+     * 「lookup が定義されているか」ではなく「lookup の返り値」で分岐することを
+     * 固定する。
+     */
+    it('trustedModelMd5For が定義されていても対象外の sha256 には null を返す場合、手動 import の activate は既存の SHA-256 全量計算を使う', async () => {
+      // `importModel` の CANDIDATE は内容が 'abc' 固定のため、その sha256 は
+      // `DIGEST_ABC` になる（`trustedVerification()` の catalog 値と同じ digest）。
+      // 「lookup は定義されているが、この Model の sha256 には対応しない」組み合わせを
+      // 作るため、catalog に存在しない別の sha256（'f' の 64 桁）だけに値を返す
+      // lookup にする。
+      const state = harness((sha256) =>
+        sha256 === 'f'.repeat(64) ? 'unrelated-md5' : null
+      );
+
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+
+      expect(model.sha256).toBe(DIGEST_ABC);
+      expect(state.fileStore.md5OfFileCalls.length).toBe(0);
+      expect(state.fileStore.openSha256SourceCalls).toBeGreaterThan(0);
+    });
+
+    /**
+     * security-review 指摘（ADR-0053 追補）: `enableOnDeviceAi` は import 直後に
+     * assessActivation/activate を連続実行する。`assess` が呼ぶ
+     * `assertModelIntegrity` が `trustedModelMd5For` を考慮せず常に
+     * `digestPrivateFile`（純 TypeScript SHA-256 全量計算）へ Fallback すると、
+     * import 時に高速化したはずの検証が activate で即座に再び数分間のフル
+     * hash に戻ってしまう（「検証しています」の「数秒で完了」表示が偽りになる）。
+     * `trustedModelMd5For` を渡した lifecycle では activate もネイティブ MD5
+     * 照合だけを使うことをここで固定する。
+     */
+    describe('信頼済み Model の activate（ADR-0053 追補、フル SHA-256 二重計算の解消）', () => {
+      function trustedHarness() {
+        return harness((sha256) =>
+          sha256 === DIGEST_ABC ? trustedVerification().md5 : null
+        );
+      }
+
+      it('import 後の activate はネイティブ MD5 照合を使い、純 TypeScript SHA-256 を再計算せず manifest が active になる', async () => {
+        const state = trustedHarness();
+        const model = await state.lifecycle.importCandidate(
+          CANDIDATE,
+          undefined,
+          trustedVerification()
+        );
+        expect(state.fileStore.md5OfFileCalls.length).toBe(1);
+
+        await state.lifecycle.activate(model.sha256);
+
+        expect(state.fileStore.openSha256SourceCalls).toBe(0);
+        expect(state.fileStore.md5OfFileCalls.length).toBe(2);
+        expect(state.fileStore.md5OfFileCalls[1]).toBe(model.privateUri);
+
+        const reloaded = createLocalModelLifecycle({
+          fileStore: state.fileStore,
+          inspector: state.inspector,
+          telemetry: state.telemetry,
+          clock: state.clock,
+        });
+        expect((await reloaded.load()).activeModelSha256).toBe(DIGEST_ABC);
+      });
+
+      it('Size が一致していても内容が破損していれば activate 時に MD5 不一致で fail-closed する', async () => {
+        const state = trustedHarness();
+        const model = await state.lifecycle.importCandidate(
+          CANDIDATE,
+          undefined,
+          trustedVerification()
+        );
+        state.fileStore.privateFiles.set(
+          model.privateUri,
+          new TextEncoder().encode('xyz')
+        );
+
+        await expectLifecycleError(
+          state.lifecycle.activate(model.sha256),
+          'MODEL_INTEGRITY_FAILED'
+        );
+      });
+
+      it('activate 時に MD5 計算自体が失敗した場合 SOURCE_UNREADABLE として拒否する', async () => {
+        const state = trustedHarness();
+        const model = await state.lifecycle.importCandidate(
+          CANDIDATE,
+          undefined,
+          trustedVerification()
+        );
+        state.fileStore.md5OfFileFailure = true;
+
+        await expectLifecycleError(
+          state.lifecycle.activate(model.sha256),
+          'SOURCE_UNREADABLE'
+        );
+      });
     });
   });
 });

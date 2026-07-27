@@ -51,7 +51,7 @@ export interface EnableOnDeviceAiInput {
   /**
    * ADR-0046（実機 blocker、Issue 152）: `acquireTrustedModel`（ダウンロード）が
    * 成功した直後、`importCandidate` を呼ぶ**前**に一度だけ呼ぶ。この callback
-   * 以降、import 本体（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と
+   * 以降、import 本体（copy・MD5 照合・GGUF 検証・manifest 書き込み）と
    * activate は呼び出し元の `signal` を一切受け取らず、構造的に中断不能になる
    * （下記 `importLocalModelCandidate` 呼び出しに signal を渡さない実装を参照）。
    * 呼び出し元（Settings 画面）はこれを使って Cancel 導線を隠し、
@@ -61,6 +61,14 @@ export interface EnableOnDeviceAiInput {
    * ダウンロード完了直後まで早めた。
    */
   readonly onDownloadComplete?: () => void;
+  /**
+   * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: import の copy 完了後・
+   * ネイティブ MD5 照合の直前に 1 度だけ呼ぶ（`model-lifecycle.ts` の
+   * `TrustedImportVerification.onVerifying` 参照）。呼び出し元
+   * （`use-local-model-management.ts`）はこれを使い UI を「検証しています」
+   * 表示へ切り替える。
+   */
+  readonly onVerifying?: () => void;
   readonly refresh: () => Promise<void>;
   readonly setCautionAssessment: (
     assessment: ActivationAssessment | null
@@ -85,7 +93,7 @@ export interface EnableOnDeviceAiInput {
  *
  * ADR-0046（実機 blocker、Issue 152）: ダウンロード（`acquireTrustedModel`）は
  * 呼び出し元の `signal` で中断できるが、`onDownloadComplete` 発火後の
- * import 本体（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と activate
+ * import 本体（copy・MD5 照合・GGUF 検証・manifest 書き込み）と activate
  * は `signal` を一切受け取らない（`importLocalModelCandidate` へ渡さない）。
  * `assessActivation`/`activate` は元々 signal を持たないため、この 2 つを
  * 合わせて「ダウンロード完了後は構造的に中断不能」という契約になる。
@@ -110,6 +118,11 @@ export async function enableOnDeviceAi(
     const imported = await importLocalModelCandidate({
       lifecycle: input.lifecycle,
       candidate: acquired,
+      trustedVerification: {
+        sha256: input.source.sha256,
+        md5: input.source.md5,
+        ...(input.onVerifying ? { onVerifying: input.onVerifying } : {}),
+      },
       refresh: input.refresh,
       onImported: () => undefined,
     });

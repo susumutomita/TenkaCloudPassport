@@ -73,15 +73,19 @@ export interface LocalModelManagementView {
    * まとめ、`LocalModelCard` 等が単一 flag で分岐する既存流儀に合わせる。
    * `finalizing`（ADR-0046、実機 blocker Issue 152）: ダウンロード完了直後
    *（`enableOnDeviceAi` の `onDownloadComplete`）から遷移する。import 本体
-   *（copy・SHA-256 照合・GGUF 検証・manifest 書き込み）と activate は
+   *（copy・MD5 照合・GGUF 検証・manifest 書き込み）と activate は
    * `AbortSignal` を一切受け取らず、Cancel ボタン・画面 unmount・全データ削除
    * のどれが起きても中断されない。この区間では Cancel 導線自体を提示しない。
+   * `verifying`（ADR-0053、実機 blocker 3）: `finalizing` の中で copy が完了し、
+   * ネイティブ MD5 照合（数秒）に入ったタイミングで遷移する（`onVerifying`）。
+   * `finalizing` と同じく Cancel 導線は出さない。
    */
   readonly onDeviceAiFlow:
     | 'idle'
     | 'consent-pending'
     | 'downloading'
-    | 'finalizing';
+    | 'finalizing'
+    | 'verifying';
   readonly onDeviceAiDownloadProgress: TrustedModelDownloadProgress | null;
   readonly requestEnableOnDeviceAi: () => void;
   readonly confirmEnableOnDeviceAiConsent: () => void;
@@ -214,8 +218,15 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
 
   useEffect(
     () => () => {
+      // ADR-0052（実機 blocker 1/2、Issue 152 実機フィードバック）: 手動 GGUF
+      // import（file picker 経由）は既存どおり unmount で中断する（製品要件、
+      // ADR-0046 の対象外）。一方、信頼済み Model のダウンロード・仕上げ
+      // フェーズはアプリスコープの進行として扱い、画面遷移や Settings の
+      // unmount では中断しない。明示的な「ダウンロードを中止する」ボタン
+      // （`cancelOnDeviceAiDownload`）と全データ削除
+      //（`invalidateAfterExternalPurge`）だけが `trustedModelControllerRef` を
+      // abort する。
       importControllerRef.current?.abort();
-      trustedModelControllerRef.current?.abort();
       operationLaneRef.current.dispose();
     },
     []
@@ -447,10 +458,19 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
    * ADR-0046（実機 blocker、Issue 152）: `onDownloadComplete` はダウンロード
    * 完了直後・import 開始前に発火する（`trusted-model-enablement-controller.ts`
    * 参照）。この時点で `trustedModelControllerRef` を同一 controller である
-   * ことを確認したうえで `null` にし、以降 `cancelOnDeviceAiDownload()` と
-   * unmount cleanup（下記 `useEffect`）のどちらが `.abort()` を呼んでも
-   * 何も起こらないようにする。`enableOnDeviceAi` 自身もこの時点から先は
-   * signal を import/activate へ渡さないため、二重に安全側へ倒れる。
+   * ことを確認したうえで `null` にし、以降 `cancelOnDeviceAiDownload()` が
+   * `.abort()` を呼んでも何も起こらないようにする。`enableOnDeviceAi` 自身も
+   * この時点から先は signal を import/activate へ渡さないため、二重に安全側へ
+   * 倒れる。
+   *
+   * ADR-0052（実機 blocker 1/2、画面遷移・Background 遷移で DL が死ぬ）:
+   * ダウンロード中（`onDownloadComplete` 発火前）も含め、unmount cleanup（下記
+   * `useEffect`）は `trustedModelControllerRef` を一切 abort しない。信頼済み
+   * Model の取得はアプリスコープの進行として扱い、Settings から離れても
+   * 進捗（%）を保持したまま継続する。abort できる経路は明示的な
+   * `cancelOnDeviceAiDownload()`（ダウンロードを中止するボタン）と、全データ
+   * 削除後の `invalidateAfterExternalPurge`（storage 自体が失われるため中断が
+   * 必須）の 2 つだけに絞る。
    */
   const performEnableOnDeviceAi = useCallback((): void => {
     if (!management || !mutationLeases) return;
@@ -494,6 +514,7 @@ export function useLocalModelManagement(input: UseLocalModelManagementInput): {
               detachController();
               setOnDeviceAiFlow('finalizing');
             },
+            onVerifying: () => setOnDeviceAiFlow('verifying'),
             refresh,
             setCautionAssessment,
           })

@@ -6,6 +6,7 @@ import {
 } from './trusted-model-catalog';
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const MD5_PATTERN = /^[a-f0-9]{32}$/;
 
 describe('信頼済み Model カタログ（Issue 104 PR #132、モデル入手経路）', () => {
   it('Qwen2.5-1.5B-Instruct（Q4_K_M）の URL が Hugging Face の resolve/main 安定 URL である', () => {
@@ -17,6 +18,10 @@ describe('信頼済み Model カタログ（Issue 104 PR #132、モデル入手�
 
   it('期待 SHA-256 が小文字 64 桁 hex の形式である', () => {
     expect(QWEN2_5_1_5B_INSTRUCT_Q4_K_M.sha256).toMatch(SHA256_PATTERN);
+  });
+
+  it('ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: ネイティブ md5 照合用の期待値が小文字 32 桁 hex の形式である', () => {
+    expect(QWEN2_5_1_5B_INSTRUCT_Q4_K_M.md5).toMatch(MD5_PATTERN);
   });
 
   it('ライセンスが Apache-2.0 である（qwen-research ライセンスの 3B 版と混同しない、ADR-0037）', () => {

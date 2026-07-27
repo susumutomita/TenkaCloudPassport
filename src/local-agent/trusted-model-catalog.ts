@@ -17,8 +17,21 @@ export interface TrustedModelSource {
   readonly licenseUrl: string;
   /** Hugging Face の `resolve/main/...` 安定 URL（Range request 対応、`accept-ranges: bytes` 確認済み）。 */
   readonly url: string;
-  /** 期待 SHA-256（小文字 64 桁 hex）。ダウンロード後にこの値と一致することを検証する。 */
+  /** 期待 SHA-256（小文字 64 桁 hex）。ファイル identity（`${sha256}.gguf`）にそのまま使う。 */
   readonly sha256: string;
+  /**
+   * Issue 152（実機 blocker 3、DL 完了後の検証フリーズ）: 純 TypeScript SHA-256
+   * （`sha256.ts`）による 1 GiB 級 File の全量計算は実機 Hermes で数分〜十数分かかる。
+   * `expo-file-system/legacy` の `getInfoAsync(uri, { md5: true })` は同じ File を
+   * ネイティブ計算で数秒で検証できるため、信頼済み Model の DL・取り込み検証はこの
+   * 値との一致確認に置き換える（ADR-0053）。
+   *
+   * 値の由来: 呼び出し元が 2026-07-27 に上記 `url`（公式配布 URL）から取得した File で、
+   * pinned `sha256`（上記フィールド）と `sizeBytes`（下記フィールド）の一致を確認した
+   * 上で `md5 -q` により採取した。sha256 の信頼チェーンに連結された参照値であり、
+   * 独立した信頼の根拠ではない（sha256 自体は一次情報で確認済み、上記 comment 参照）。
+   */
+  readonly md5: string;
   readonly sizeBytes: number;
   /** 一次情報の出典。owner・レビュアが値を再確認できるようにする。 */
   readonly source: string;
@@ -39,6 +52,7 @@ export const QWEN2_5_1_5B_INSTRUCT_Q4_K_M: TrustedModelSource = {
   licenseUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF',
   url: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
   sha256: '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',
+  md5: '8e5111fdbc5c150920d368ff802c4b5a',
   sizeBytes: 1_117_320_736,
   source: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF',
 };

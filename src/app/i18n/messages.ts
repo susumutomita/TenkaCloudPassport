@@ -336,6 +336,12 @@ export interface AppMessages {
      * 出さない。
      */
     readonly onDeviceAiFinalizingStatus: string;
+    /**
+     * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: ネイティブ MD5 照合は
+     * 数秒で終わるが、Cancel 導線が無い区間である点は `onDeviceAiFinalizingStatus`
+     * と同じため、専用の文言で「検証中である」ことを明示する。
+     */
+    readonly onDeviceAiVerifyingStatus: string;
     readonly onDeviceAiActiveStatus: string;
     readonly onDeviceAiImportedNotActiveStatus: string;
     readonly onDeviceAiRemoveButton: string;
@@ -997,6 +1003,8 @@ const ja: AppMessages = {
     onDeviceAiDownloadCancelButton: 'ダウンロードを中止する',
     onDeviceAiFinalizingStatus:
       'ダウンロード完了。端末内で仕上げの処理をしています（この処理は中止できません）。',
+    onDeviceAiVerifyingStatus:
+      '検証しています。数秒で完了します（この処理は中止できません）。',
     onDeviceAiActiveStatus:
       '有効です。会話 Agent はこの Model を使用しています。',
     onDeviceAiImportedNotActiveStatus:
@@ -1747,6 +1755,8 @@ const en: AppMessages = {
     onDeviceAiDownloadCancelButton: 'Cancel the download',
     onDeviceAiFinalizingStatus:
       'Download complete. Finishing setup on this device (this step cannot be cancelled).',
+    onDeviceAiVerifyingStatus:
+      'Verifying. This finishes in a few seconds (this step cannot be cancelled).',
     onDeviceAiActiveStatus:
       'Enabled. The conversation agent is using this model.',
     onDeviceAiImportedNotActiveStatus:

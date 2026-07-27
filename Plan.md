@@ -9753,3 +9753,129 @@ owner の要求（実際に生成が進んでいく）に応えられないた�
   すべての遷移」を列挙してから修正を横展開する。今回のように、同じ判定を複数の handler が独立に
   持つ場合は、判定ロジックを共有ヘルパーへ最初から抽出しておけば、片方だけ直して他方を見落とすリスク
   自体を構造的に防げた（今回は 2 度目のレビューで発覚した後にヘルパー化した）。
+
+### 実機 v1.1.0 3 blocker（DL リセット・Background 死亡・検証フリーズ） - 2026-07-27
+
+#### 目的
+
+owner が TestFlight v1.1.0 の実機で確認した公開 blocker 3 件を直す。
+(1) Settings から別画面へ行くと信頼済み Model の DL が 0% に戻る。
+(2) アプリを Background に回すと DL が止まり、戻ると 0% に戻る。
+(3) DL 100% 後、取り込み検証（純 TypeScript SHA-256、1.04 GiB）が Hermes 上で
+数分〜十数分かかり完了しないように見える。
+
+#### 制約
+
+`rm`/`npx` 禁止・ios/ node_modules 不触・8081 kill 禁止・モック禁止・型エスケープ禁止・
+空 catch 禁止。TDD・日本語 BDD・カバレッジ 100%。ADR 2 本（0052・0053）。
+
+#### タスク
+
+1. `use-local-model-management.ts` の unmount cleanup から
+   `trustedModelControllerRef.current?.abort()` を削除する（ADR-0046 の
+   仕上げフェーズ限定の非中断化を、ダウンロードフェーズにも拡張）。
+2. `trusted-model-download.ts`/`expo-trusted-model-download.native.ts` に
+   AppState 監視 + `pause`/`savable`/`fromSavable`/`resumeAsync` による
+   Background 遷移からの再開を実装する（`'interrupted'` outcome +
+   `resumeDownload` port method、`acquireTrustedModel` の再開 loop）。
+3. `trusted-model-catalog.ts` に pinned `md5` を追加し、信頼済みダウンロードの
+   検証（取得時 `acquireTrustedModel`・取り込み時 `model-lifecycle.ts` の
+   `runImport`）を純 TypeScript SHA-256 全量計算からネイティブ MD5
+   （`expo-file-system/legacy` の `getInfoAsync`）+ sizeBytes 厳密一致 +
+   GGUF metadata 検査の 3 点照合へ置き換える。identity は catalog の pinned
+   sha256 をそのまま使い、デバイスでは再計算しない。手動 GGUF import は
+   従来の chunked SHA-256 を維持する。
+4. `onDeviceAiFlow` に `'verifying'` を追加し、検証中専用の i18n メッセージ
+   （ja/en）を表示する。
+5. ADR-0052（項目 1・2）・ADR-0053（項目 3）を作成する。
+6. 品質ゲート（harness → before-commit）を通す。
+
+#### 検証手順
+
+`bun test src --coverage`、`bun scripts/architecture-harness.ts --staged
+--fail-on=error`、`make before-commit`。シミュレーターで検証できるのは
+unmount 非中断・検証高速化・状態遷移のみ。Background 実挙動（AppState 遷移の
+タイミング・iOS の foreground URLSession 終了挙動）は実機のみで確認可能。
+
+#### 進捗ログ
+
+- 2026-07-27: 調査の結果、symptom #1（画面遷移で 0% に戻る）は
+  `useLocalModelManagement` が `PassportApp` で 1 度だけ呼ばれ、`stage` 切り替えは
+  `UtilityStageGate` の JSX 分岐に過ぎず unmount を伴わないため、unmount cleanup の
+  abort が直接原因ではないと判明した（advisor のレビューで指摘、当初の推測を訂正）。
+  実際には symptom #1・#2 とも、iOS が `AppState` の `'active'` から離れる遷移
+  （Background・他アプリの前面化・一瞬の `'inactive'` も含む）で foreground
+  URLSession を終了させ、`downloadAsync()` が reject → `DOWNLOAD_FAILED` →
+  hook の `finally` が `onDeviceAiFlow` を `'idle'` に戻す、という同一の経路で
+  説明できる。ADR-0052 はこの訂正済みの原因分析を明記した上で、(a) unmount
+  cleanup からの abort 除去（構造的なハードニング、ADR-0046 と同じ精神を
+  ダウンロードフェーズへ拡張）と (b) AppState 監視 + savable/fromSavable に
+  よる再開（実際の fix）の両方を実装した。
+- 2026-07-27: symptom #3 の原因は `runImport` の `digestPrivateFile` だけでなく、
+  `acquireTrustedModel` 内の `sha256OfFile`（ダウンロード直後、`onDownloadComplete`
+  より前、つまり `'downloading'` 表示のまま実行される）にも同じ 1 GiB 級純
+  TypeScript SHA-256 があることをコードから発見した（既存
+  `trusted-model-enablement-controller.test.ts` の「Issue 138（実機 blocker A）」
+  と同一症状クラス）。ADR-0053 で両方をネイティブ MD5 照合へ置き換えた。
+- 2026-07-27: Red→Green で全タスクを実装。`TrustedModelDownloadPort` に
+  `'interrupted'`/`resumeDownload`/`md5OfFile`（`sha256OfFile` から rename）を、
+  `LocalModelFileStore` に `md5OfIncomingFile` を、`LocalModelLifecycle.importCandidate`
+  に `trustedVerification` 引数を追加。`bun test src --coverage` 100%、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error` 0 件、
+  `typecheck` green を確認。
+- 2026-07-27: security-review subagent のレビューで、symptom #3 の修正が
+  import 時点までしか届いていないことが発覚した。`enableOnDeviceAi` は import
+  完了直後に `performLocalModelActivation`（`assessActivation`/`activate`）を
+  呼ぶが、両者が内部で呼ぶ `assess` は `assertModelIntegrity` を無条件に呼び、
+  `assertModelIntegrity` は `trustedVerification` の有無を考慮せず常に
+  `digestPrivateFile`（純 TypeScript SHA-256 全量計算）へ Fallback していた。
+  つまり import を高速化しても、同じユーザー操作の中で activate が同じ 1 GiB
+  級 File を再度フル hash し、「検証しています」＝「数秒で完了」の表示が
+  偽りになる状態が残っていた。advisor に相談し、`ImportedLocalModel` へ
+  `trustedMd5` field を持たせる案（`local-model-manifest.ts` の exact-key
+  schema 変更・migration 判断が必要になり高コスト）ではなく、
+  `LocalModelLifecycleDependencies` に `trustedModelMd5For?: (sha256) => string
+  | null` という lookup 依存を追加する設計を採用した。`assertModelIntegrity`
+  は Size 一致確認の後この lookup を呼び、非 null ならネイティブ MD5 照合
+  （`fileStore.md5OfFile(model.privateUri)`）だけを行い、null なら既存の
+  `digestPrivateFile` にフォールバックする。`LocalModelFileStore.md5OfIncomingFile()`
+  は `md5OfFile(privateUri: string)` へ一般化し（`readableManagedFile` 経由で
+  import 時の incoming file と activate 時の確定済み managed file の両方を
+  解決、ADR-0045 の container UUID 自己修復も維持）、
+  `default-local-model-management.native.ts` で `TRUSTED_MODEL_CATALOG` から
+  引く関数を配線した。Red（import→activate→`activeModelSha256` 一致・
+  `openSha256SourceCalls === 0` を先に書いて失敗を確認）→ Green で
+  `model-lifecycle.test.ts` に 3 test を追加（MD5 一致で active になる・Size
+  一致でも内容破損なら MODEL_INTEGRITY_FAILED・MD5 計算失敗なら
+  SOURCE_UNREADABLE）、`bun test --coverage` 2078 pass / 100% coverage、
+  `typecheck` green を確認。ADR-0053 を追補（コードから確認済みの原因を
+  2 箇所→3 箇所に訂正、Decision に activate 時の対応を追加、Consequences の
+  「デバイス上での SHA-256 全量計算は経路から完全に無くなる」という記述が
+  この修正前は誤りだったことを明記）。
+- 2026-07-27: code-reviewer subagent 1 件・`/simplify` の 4 並列 review agent
+ （reuse・simplification・efficiency・altitude）を diff 全体（working tree、
+  2271 行）に対して実行した。適用した指摘: (a) `model-lifecycle.ts` の
+  `verifyTrustedIncoming`/`assertModelIntegrity` に重複していた「native MD5
+  計算→不一致は MODEL_INTEGRITY_FAILED」を `assertNativeMd5` へ集約、
+  (b) `expo-model-file-store.native.ts`・`expo-trusted-model-download.native.ts`
+  に重複していた `getInfoAsync(uri, {md5:true})` 呼び出しを新規
+  `native-md5.native.ts` の `nativeMd5OfFile` へ集約（返り値を
+  `.toLowerCase()` で正規化、code-reviewer 指摘 low の casing 防御を兼ねる）、
+  (c) `expo-trusted-model-download.native.ts` の `nativeDownloadOptions` の
+  無意味な progress 再構築を削除、`startDownloadSession`/`resumeDownloadSession`
+  に重複していた「foreground を待つ→abort 判定」前段を `runSession` へ集約、
+  ローカル `deleteIfPresent` helper を追加、`TrustedModelDownloadCallOptions`
+  を export し native adapter・test の重複型定義を解消、(d)
+  `trusted-model-download.test.ts` の `FakeDownloadPort.settle` の
+  progress 組み立て重複を解消、(e) code-reviewer 指摘（medium）: 本番配線が
+  常に `trustedModelMd5For` を渡すため「lookup は定義されているが対象外の
+  sha256 には null」という組み合わせを検証する test が無かったので追加した。
+  全て適用後 `bun test --coverage` 2079 pass / 100% coverage、`typecheck`
+  green を確認。対応しなかった指摘（pre-existing の設計上の重複・実機計測が
+  必要・advisor 既承認のトレードオフのいずれかに該当するため、`/follow-up`
+  で記録し ADR-0052/0053 の Consequences に caveat を追記）: 
+  F-PPCM59（interrupted 再試行に上限が無く恒久的失敗を無音リトライしうる）、
+  F-DG22OH（`trustedModelMd5For` が catalog を都度参照し import 時検証値と
+  乖離しうる）、F-ZUOFZG（`assessActivation`+`activate` の重複 `assess()`
+  呼び出しにより同一 File を最大 3 回 MD5 計算する、pre-existing の lifecycle
+  契約）。

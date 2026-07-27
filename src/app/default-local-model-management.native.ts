@@ -18,7 +18,10 @@ import {
   ModelLifecycleError,
 } from '../local-agent/model-lifecycle';
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
-import { QWEN2_5_1_5B_INSTRUCT_Q4_K_M } from '../local-agent/trusted-model-catalog';
+import {
+  QWEN2_5_1_5B_INSTRUCT_Q4_K_M,
+  TRUSTED_MODEL_CATALOG,
+} from '../local-agent/trusted-model-catalog';
 import { registerConversationExampleGenerator } from './conversation-example-capability';
 import type { DefaultLocalModelManagementComposition } from './default-local-model-management-contract';
 import { createLocalModelLifecycleStorageAdapter } from './local-model-lifecycle-storage-adapter';
@@ -34,6 +37,12 @@ function createNativeManagement(
     fileStore,
     inspector: createLlamaModelInspector(),
     telemetry,
+    // ADR-0053 追補: 信頼済みダウンロード経由で import された Model
+    // （catalog 上の pinned sha256 と一致するもの）は、activate 時も import 時
+    // と同じネイティブ MD5 照合を使い、フル SHA-256 の二重計算を避ける。
+    trustedModelMd5For: (sha256) =>
+      TRUSTED_MODEL_CATALOG.find((source) => source.sha256 === sha256)?.md5 ??
+      null,
   });
   const management: LocalModelManagementPort = {
     lifecycle,

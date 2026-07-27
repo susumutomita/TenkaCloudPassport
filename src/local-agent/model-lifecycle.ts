@@ -111,6 +111,18 @@ export interface LocalModelFileStore {
   readonly openSha256Source: (
     privateUri: string
   ) => Promise<ClosableSha256Source>;
+  /**
+   * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: 信頼済み Model の
+   * ネイティブ MD5 を計算する（`expo-file-system/legacy` の
+   * `getInfoAsync(uri, { md5: true })`、数秒）。取り込み時は `.incoming.gguf`
+   * の URI（`copyExternalFileToIncoming` 完了直後の URI）を、activate 時は
+   * 確定済み managed File の `privateUri` を渡す。どちらも native adapter 側で
+   * `readableManagedFile` を経由し、app-private data container の UUID 差し替え
+   * （ADR-0045）に対して自己修復する。手動 GGUF import（Document Picker 経由）は
+   * `openSha256Source` による純 TypeScript SHA-256 全量計算を引き続き使うため、
+   * この Method は呼ばない。
+   */
+  readonly md5OfFile: (privateUri: string) => Promise<string>;
   readonly moveIncomingToModel: (sha256: string) => Promise<string>;
   readonly modelFileInfo: (privateUri: string) => Promise<StoredModelFileInfo>;
   /**
@@ -171,6 +183,26 @@ export interface ActivationAssessment {
   readonly cautionConfirmationKey: string | null;
 }
 
+/**
+ * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: 信頼済みダウンロード
+ * （`trusted-model-catalog.ts` の pinned エントリ）の取り込みだけが渡す。
+ * `sha256` は catalog の pinned 値をそのまま identity（`${sha256}.gguf`）に
+ * 使い、デバイスでは再計算しない。`md5` は取り込んだ `.incoming.gguf` の
+ * ネイティブ MD5 との一致検証に使う。手動 GGUF import（Document Picker
+ * 経由）はこれを渡さず、従来どおり純 TypeScript SHA-256 全量計算
+ * （`digestPrivateFile`）で identity を導出する。
+ */
+export interface TrustedImportVerification {
+  readonly sha256: string;
+  readonly md5: string;
+  /**
+   * copy 完了後・ネイティブ MD5 照合の直前に 1 度だけ呼ぶ。呼び出し元
+   * （`use-local-model-management.ts`）はこれを使い、UI の「検証しています」
+   * 表示へ切り替える。
+   */
+  readonly onVerifying?: () => void;
+}
+
 export interface LocalModelLifecycle {
   readonly load: () => Promise<LocalModelManifest>;
   readonly assessImportCandidate: (
@@ -178,7 +210,8 @@ export interface LocalModelLifecycle {
   ) => Promise<number>;
   readonly importCandidate: (
     candidate: ModelImportCandidate,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    trustedVerification?: TrustedImportVerification
   ) => Promise<ImportedLocalModel>;
   readonly assessActivation: (sha256: string) => Promise<ActivationAssessment>;
   readonly activate: (
@@ -203,6 +236,18 @@ export interface LocalModelLifecycleDependencies {
   readonly inspector: LocalModelInspector;
   readonly telemetry: DeviceResourceTelemetry;
   readonly clock?: ModelLifecycleClock;
+  /**
+   * ADR-0053 追補（実機 blocker 3、activate 時のフル SHA-256 二重計算の解消）:
+   * import 直後の `enableOnDeviceAi` は import → assessActivation/activate を
+   * 連続実行する。`assess` が呼ぶ `assertModelIntegrity` がここを考慮せず常に
+   * 純 TypeScript SHA-256 全量計算（`digestPrivateFile`）を行うと、import 時に
+   * 高速化したはずのネイティブ MD5 検証のすぐ後で同じ 1 GiB 級 File を再度フル
+   * hash し、「検証しています」表示が謳う「数秒で完了」が偽りになる。この
+   * lookup が対象 `sha256` に対して非 null を返す限り、activate 時も import 時と
+   * 同じネイティブ MD5 照合を使う。未指定・対象外の sha256（＝手動 GGUF
+   * import）は既存の SHA-256 全量計算にフォールバックする。
+   */
+  readonly trustedModelMd5For?: (sha256: string) => string | null;
 }
 
 /**
@@ -442,9 +487,65 @@ async function digestPrivateFile(
   return digest;
 }
 
+/**
+ * `/simplify` 指摘（simplification・altitude）: 「native MD5 を計算し、失敗は
+ * `SOURCE_UNREADABLE`、不一致は `MODEL_INTEGRITY_FAILED`」という同じ制御フローが
+ * `verifyTrustedIncoming`（import 時）と `assertModelIntegrity`（activate 時）に
+ * 重複していた。呼び出し側ごとに異なる不一致時メッセージだけを引数化し、
+ * 1 か所へ集約する。
+ */
+async function assertNativeMd5(
+  fileStore: LocalModelFileStore,
+  uri: string,
+  expectedMd5: string,
+  mismatchMessage: string
+): Promise<void> {
+  let md5: string;
+  try {
+    md5 = await fileStore.md5OfFile(uri);
+  } catch {
+    throw lifecycleError(
+      'SOURCE_UNREADABLE',
+      'Local Model File の MD5 を計算できませんでした。'
+    );
+  }
+  if (md5 !== expectedMd5) {
+    throw lifecycleError('MODEL_INTEGRITY_FAILED', mismatchMessage);
+  }
+}
+
+/**
+ * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: 信頼済みダウンロードの
+ * 取り込みだけが通る経路。純 TypeScript SHA-256（`digestPrivateFile`）の代わりに
+ * ネイティブ MD5（`fileStore.md5OfFile`）を catalog の pinned 値と照合し、
+ * 一致すれば pinned sha256 をそのまま identity として返す（デバイスでは
+ * 再計算しない）。
+ */
+async function verifyTrustedIncoming(
+  fileStore: LocalModelFileStore,
+  verification: TrustedImportVerification,
+  incomingUri: string
+): Promise<string> {
+  verification.onVerifying?.();
+  await assertNativeMd5(
+    fileStore,
+    incomingUri,
+    verification.md5,
+    '取り込んだ Local Model の内容が確認済みの値と一致しません。'
+  );
+  return verification.sha256;
+}
+
+/**
+ * ADR-0053 追補: `trustedMd5For(model.sha256)` が非 null を返す Model（信頼済み
+ * ダウンロード経由で import された Model）は、activate 時もネイティブ MD5 照合
+ * だけを行い、純 TypeScript SHA-256 全量計算は行わない。対象外（手動 GGUF
+ * import）は既存どおり `digestPrivateFile` にフォールバックする。
+ */
 async function assertModelIntegrity(
   fileStore: LocalModelFileStore,
-  model: ImportedLocalModel
+  model: ImportedLocalModel,
+  trustedMd5For?: (sha256: string) => string | null
 ): Promise<void> {
   let info: StoredModelFileInfo;
   try {
@@ -460,6 +561,16 @@ async function assertModelIntegrity(
       'MODEL_INTEGRITY_FAILED',
       'Local Model File の Size が取り込み時と一致しません。'
     );
+  }
+  const trustedMd5 = trustedMd5For?.(model.sha256) ?? null;
+  if (trustedMd5 !== null) {
+    await assertNativeMd5(
+      fileStore,
+      model.privateUri,
+      trustedMd5,
+      'Local Model File の MD5 が取り込み時と一致しません。'
+    );
+    return;
   }
   if ((await digestPrivateFile(fileStore, model.privateUri)) !== model.sha256) {
     throw lifecycleError(
@@ -910,7 +1021,8 @@ export function createLocalModelLifecycle(
 
   async function runImport(
     candidate: ModelImportCandidate,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    trustedVerification?: TrustedImportVerification
   ): Promise<ImportedLocalModel> {
     const current = await ensureLoaded();
     assertCandidate(candidate, current);
@@ -927,7 +1039,13 @@ export function createLocalModelLifecycle(
         signal
       );
       assertImportNotCancelled(signal);
-      const sha256 = await digestPrivateFile(fileStore, incoming.uri, signal);
+      const sha256 = trustedVerification
+        ? await verifyTrustedIncoming(
+            fileStore,
+            trustedVerification,
+            incoming.uri
+          )
+        : await digestPrivateFile(fileStore, incoming.uri, signal);
       assertImportNotCancelled(signal);
       if (current.models.some((model) => model.sha256 === sha256)) {
         throw lifecycleError(
@@ -983,15 +1101,20 @@ export function createLocalModelLifecycle(
 
   function importCandidate(
     candidate: ModelImportCandidate,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    trustedVerification?: TrustedImportVerification
   ): Promise<ImportedLocalModel> {
-    return schedule(() => runImport(candidate, signal));
+    return schedule(() => runImport(candidate, signal, trustedVerification));
   }
 
   async function assess(sha256: string): Promise<ActivationAssessment> {
     const current = await ensureLoaded();
     const model = findModel(current, sha256);
-    await assertModelIntegrity(fileStore, model);
+    await assertModelIntegrity(
+      fileStore,
+      model,
+      dependencies.trustedModelMd5For
+    );
     const snapshot = await resourceSnapshot(telemetry);
     const risk = evaluateModelResourceRisk(
       resourceRiskInputFrom(snapshot, model.sizeBytes, model.configuration.nCtx)
