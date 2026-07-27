@@ -50,7 +50,7 @@ GitHub Token は機能要件でも設定値でもなく、要求、生成、保�
 Analytics SDK を組み込まず、利用状況、広告、クラッシュ内容を外部へ送信しない。推論は Owner が
 端末へ配置した GGUF モデルだけで行い、入力、出力、手掛かりを外部推論 API へ送信しない。
 
-[ADR-0047](../adr/0047-labeled-on-device-conversation-examples.md) の AI 会話例は、Local Model が
+[ADR-0049](../adr/0049-labeled-on-device-conversation-examples.md) の AI 会話例は、Local Model が
 Primary Provider として確定した 2 者 Bridge の後に Owner が明示生成する短命な派生データである。
 氏名・メール・電話番号・リンクを表す Field は Prompt に持たず、Prompt、token、検証前 Output、
 検証済み会話例をメモリから永続領域、Log、Benchmark 本文、Diagnostic Report、Pilot Aggregate、

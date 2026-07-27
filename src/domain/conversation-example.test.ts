@@ -157,8 +157,8 @@ describe('parseConversationExample（Issue 155 の fail-closed 出力契約）',
     const specialTurn: Record<string, unknown> = Object.create({
       inherited: true,
     });
-    specialTurn.speaker = 'owner';
-    specialTurn.text = 'こんにちは';
+    specialTurn['speaker'] = 'owner';
+    specialTurn['text'] = 'こんにちは';
     expectInvalidOutput(() =>
       parseConversationExample({
         turns: [specialTurn, { speaker: 'peer', text: 'こんにちは' }],

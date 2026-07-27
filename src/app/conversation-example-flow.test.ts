@@ -145,8 +145,11 @@ class ControlledConversationExampleGenerator
 }
 
 async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  // nativeLane.then → async generate → settlement.then の採択で microtask が
+  // 4 tick 以上要るため、固定 8 tick で全連鎖を確実に消化する。
+  for (let tick = 0; tick < 8; tick += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe('ConversationExampleFlowController（Issue 155 の状態機械）', () => {

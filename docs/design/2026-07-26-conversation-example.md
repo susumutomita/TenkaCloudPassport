@@ -2,7 +2,7 @@
 
 - **対象**: TenkaCloud Passport v1.1 系の会話エージェント
 - **関連 Issue**: https://github.com/susumutomita/TenkaCloudPassport/issues/155
-- **決定記録**: [ADR-0047](../adr/0047-labeled-on-device-conversation-examples.md)
+- **決定記録**: [ADR-0049](../adr/0049-labeled-on-device-conversation-examples.md)
 - **前提**: [ADR-0036](../adr/0036-on-device-conversation-agent.md)、
   [ADR-0041](../adr/0041-conversation-agent-step-b-n-party.md)、
   [ADR-0043](../adr/0043-grounded-quote-bridge-and-local-llm-reenablement.md)

@@ -21,12 +21,14 @@ const INPUT: ConversationExampleInput = {
 
 describe('llama.rn Adapter の会話例 Request 設定（Issue 155）', () => {
   it('既存 Context lifecycle で Request 単位の生成設定だけを上書きする', async () => {
-    let parameters: LlamaCompletionParameters | null = null;
+    const captured: { parameters: LlamaCompletionParameters | null } = {
+      parameters: null,
+    };
     let releaseCalls = 0;
     const initializations: object[] = [];
     const context: LlamaContextPort = {
       async completion(nextParameters, onToken) {
-        parameters = nextParameters;
+        captured.parameters = nextParameters;
         onToken({ token: '{' });
         return {
           text: JSON.stringify({
@@ -65,9 +67,11 @@ describe('llama.rn Adapter の会話例 Request 設定（Issue 155）', () => {
     await expect(generator.generate(INPUT)).resolves.toMatchObject({
       turns: [{ speaker: 'owner' }, { speaker: 'peer' }],
     });
-    expect(parameters?.n_predict).toBe(CONVERSATION_EXAMPLE_N_PREDICT);
-    expect(parameters?.temperature).toBe(CONVERSATION_EXAMPLE_TEMPERATURE);
-    expect(parameters?.response_format).toMatchObject({
+    expect(captured.parameters?.n_predict).toBe(CONVERSATION_EXAMPLE_N_PREDICT);
+    expect(captured.parameters?.temperature).toBe(
+      CONVERSATION_EXAMPLE_TEMPERATURE
+    );
+    expect(captured.parameters?.response_format).toMatchObject({
       type: 'json_schema',
       json_schema: { strict: true },
     });

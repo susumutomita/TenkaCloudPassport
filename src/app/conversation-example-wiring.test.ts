@@ -33,12 +33,14 @@ describe('AI 会話例の一気通貫配線（Issue 155）', () => {
   it('Provider identity から optional Generator capability を取得する', async () => {
     const text = await hookSource();
 
+    // 'state: conversationExampleState' は hook の分割代入（先頭側）にも現れるため、
+    // 実ソースの出現順（分割代入 → useConversationExample → 提示呼び出し）で検証する。
     expectInOrder(text, [
       'const conversationExampleGenerator =',
       'conversationExampleGeneratorForProvider(provider)',
+      'state: conversationExampleState',
       'useConversationExample(conversationExampleGenerator)',
       'presentConversationAgentResult(result, {',
-      'state: conversationExampleState',
       'onGenerate: generateConversationExample',
       'onCancel: cancelConversationExample',
     ]);

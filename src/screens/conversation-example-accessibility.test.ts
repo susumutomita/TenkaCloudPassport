@@ -48,14 +48,15 @@ describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
   it('失敗は alert と再試行、成功は再生成を共有 ActionButton で提供する', async () => {
     const text = await sectionSource();
 
+    // 'onPress={view.onGenerate}' は available 状態の生成ボタンにも現れ、
+    // expectInOrder は各 label の最初の出現位置で比較するため、retry と
+    // regenerate は label + onPress の 2 行をまとめて一意に照合する。
     expectInOrder(text, [
       "state.kind === 'failed'",
       'accessibilityRole="alert"',
-      'label={t.retryButton}',
-      'onPress={view.onGenerate}',
+      'label={t.retryButton}\n          onPress={view.onGenerate}',
       'const visibleTurns = state.example.turns.slice(',
-      'label={t.regenerateButton}',
-      'onPress={view.onGenerate}',
+      'label={t.regenerateButton}\n          onPress={view.onGenerate}',
     ]);
   });
 

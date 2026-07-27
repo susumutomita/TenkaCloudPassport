@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { AgentModelProviderOptions } from '../domain/agent-model-provider';
 import {
+  type ConversationExample,
   ConversationExampleError,
   type ConversationExampleInput,
 } from '../domain/conversation-example';
@@ -19,7 +20,7 @@ const INPUT: ConversationExampleInput = {
   language: 'ja',
 };
 
-const VALID_OUTPUT = {
+const VALID_OUTPUT: ConversationExample = {
   turns: [
     { speaker: 'owner', text: '最近触った OSS はありますか？' },
     { speaker: 'peer', text: '小さな CLI を直しています。' },

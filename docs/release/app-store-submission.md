@@ -316,7 +316,7 @@ owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC 
 v1.1.0 で会話エージェントの端末内 LLM を再有効化しました（根拠
 [ADR-0043](../adr/0043-grounded-quote-bridge-and-local-llm-reenablement.md)。ADR-0038 が
 v1.0 の暫定措置として置いていた Provider の Rules 固定を supersede します）。会話例の限定された
-自由生成面は [ADR-0047](../adr/0047-labeled-on-device-conversation-examples.md) を正本とします。
+自由生成面は [ADR-0049](../adr/0049-labeled-on-device-conversation-examples.md) を正本とします。
 
 モデルはアプリに同梱せず、利用者が Settings で明示的に有効化したときにだけダウンロードします。
 モデルを入れていない端末では従来どおり Rules 方式で動作し、会話例 Section は表示しません。
