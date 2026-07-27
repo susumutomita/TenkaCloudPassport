@@ -9879,3 +9879,118 @@ unmount 非中断・検証高速化・状態遷移のみ。Background 実挙動�
   乖離しうる）、F-ZUOFZG（`assessActivation`+`activate` の重複 `assess()`
   呼び出しにより同一 File を最大 3 回 MD5 計算する、pre-existing の lifecycle
   契約）。
+
+### Settings 削除直後の MANIFEST_READ_FAILED 誤表示と、会話例の owner/peer 取り違えを直す - 2026-07-28
+
+目的: owner から次の 2 件の実機フィードバックが届いた。(A) Settings の
+「オンデバイス AI を無効化して削除する」を押した直後、実際には削除が成功しているのに
+「Local Model の処理を完了できませんでした（MANIFEST_READ_FAILED）」が表示され、
+削除に失敗したように見える（数分後や再起動後に確認すると実際は削除済み）。
+(B) 会話のきっかけ機能の AI 同士の会話例で、owner 側の自己紹介（例:「自分の
+TenkaCloud を作っている」）を peer 側のターンが自分の話として語ってしまう
+owner/peer の取り違えが起きる。両方とも「原因不明のまま様子見」にせず、
+コードから確認できる真因を特定し、再現・修正・検証まで完走する。
+
+制約: 既存の 3 契約（`model-lifecycle.ts` の Manifest/Delete transaction、
+`trusted-model-enablement-controller.ts` の Error 分類、
+`conversation-example-prompt.ts` の ADR-0050 話者契約）を壊さない。新しい state・
+Provider・Resource Gate は作らない。診断用に一時的に入れた `console.log` は
+コミット前に必ず全て除去する。
+
+タスク:
+1. `mapOnDeviceAiErrorCode` とその呼び出し経路を読み、`MANIFEST_READ_FAILED` が
+   fallback 由来か実在コードかを切り分ける。
+2. `deleteModel`・`ensureLoaded`・`reconcilePrivateStore` を読み、削除成功直後の
+   `refresh()` が失敗しうる経路を特定する。
+3. シミュレーター（iPhone 17 Pro、既存ダウンロード済み Qwen2.5-1.5B を再利用）で
+   会話エージェント（サンプルカード）→ Settings → 削除、を実際に操作し、
+   ログ・画面遷移を確認する。
+4. `conversation-example-prompt.ts` の system prompt を読み、owner/peer と
+   `ownerProfileText`/`peerProfileText` の対応が明示されているかを確認する。
+5. Red（既存 `reconcileFailure` を使った回帰テスト）→ Green で
+   `reconcilePrivateStore` を best-effort化し、`mapOnDeviceAiErrorCode` の
+   fallback を `UNKNOWN` に変える。
+6. `conversation-example-prompt.ts` に owner/peer ⇔ profile text の対応を
+   明示する文言を追加し、契約テストを足す。
+7. ADR-0054 を書く。診断ログを全除去し、`bun test --coverage`・typecheck・
+   `architecture-harness --staged`・`make before-commit` を通す。
+
+検証手順: `bun test src --coverage`（100% 維持）、
+`bun scripts/architecture-harness.ts --staged --fail-on=error`、
+`make before-commit`、シミュレーターでの目視確認（会話例生成・Settings 削除）。
+
+進捗ログ:
+- 2026-07-28: `mapOnDeviceAiErrorCode` の fallback（未知 Error → 既定で
+  `'MANIFEST_READ_FAILED'`）を読み、これが真因を隠す設計になっていることを確認。
+  ただし `deleteModel` → `performDelete` → `refresh()` の経路をコードから
+  精読した結果、owner が実際に踏んだ経路は fallback ではなく、
+  `reconcilePrivateStore` が「実在する」`MANIFEST_READ_FAILED` を投げるケース
+  だと判明した: `deleteModel` の `finalizeStagedModelDeletion` 失敗（一時的な
+  File 競合）は握りつぶされ `manifest = null` になるが、直後の `refresh()` が
+  `ensureLoaded()` → `reconcilePrivateStore` を再実行し、同じ一時的な条件で
+  同じ孤立 staged File の掃除にまた失敗すると、`MANIFEST_READ_FAILED` が
+  投げられる。この時点で Manifest 自体は既に正しく削除済み状態で書き込まれて
+  いるため、「削除は実際には成功していたのに Error が表示される」「React state
+  が古いまま残る（`refresh()` が `setManifest` の前に例外を投げるため）」
+  「再起動すると reconcile が成功し正しい状態に戻る」という owner の観測すべてと
+  一致する。
+- 2026-07-28: 一時的な `[TenkaDBG]` console.log を
+  `use-local-model-management.ts`・`model-lifecycle.ts`・
+  `expo-model-file-store.native.ts` に仕込み、シミュレーター（iPhone 17 Pro、
+  Qwen2.5-1.5B 取得済み）でサンプルカードによる会話例生成 → Settings →
+  削除、を実行して経路を確認しようとした。会話例生成（ターン毎、Issue 169）が
+  ターン 3 で 9 分以上進まず無限ハングする別事象を踏んでしまい（本 PR の
+  scope 外、`/follow-up add` で記録）、削除操作まで到達する live repro は
+  安定して完走できなかった。advisor 相談の上、この静的コード読解と
+  `model-lifecycle.test.ts` の既存 fake harness（`PrivateModelStore`）による
+  決定的な Red/Green 回帰テストを正としての検証へ切り替えた
+  （live race の強制より確実で、100% coverage の対象内でもあるため）。
+- 2026-07-28: 修正を実装。(1) `reconcilePrivateStore` を best-effort 化し、
+  `fileStore.reconcilePrivateFiles` の失敗を握りつぶす（直後の
+  `assertManifestFilesPresent` が参照済み Model の整合性を独立に検証するため
+  安全、ADR-0054）。既存の「reconcile 失敗は Manifest 空でも fatal」テストを
+  「fatal にしない」契約へ更新し、owner のシナリオ（delete 成功 → 直後の
+  reconcile も失敗 → load は成功し Manifest は正しい削除後の状態）と「再起動で
+  取りこぼした File が掃除される」の 2 test を新規追加。fix 適用前に戻して
+  git stash で Red（新規 3 test 中 3 件 fail、既存 38 件は無傷）を確認済み。
+  (2) `expo-model-file-store.native.ts` の `reconcilePrivateFiles` に
+  per-entry try/catch を追加（1 件の File 掃除失敗が他の File を巻き込まない、
+  native-only のため bun test 対象外・コードレビューで担保）。
+  (3) `mapOnDeviceAiErrorCode` の fallback を `'MANIFEST_READ_FAILED'` から
+  `'UNKNOWN'` へ変更し、`OnDeviceAiErrorCode` に `'UNKNOWN'` を追加。
+  既存テスト・`messages.test.ts` を更新し、実在コード（例:
+  `MANIFEST_READ_FAILED`）はそのまま表示され続けることを別テストで固定した。
+- 2026-07-28: Bug B（owner/peer 取り違え）は `conversation-example-prompt.ts`
+  の `speakerInstruction`・`turnSystemPrompt` を読み、「first person / second
+  person」という抽象的な言い方だけでは 1.5B モデルがどちらの assistant が
+  どちらの `ownerProfileText`/`peerProfileText` に対応するか推測できず、
+  相手側 profile の事実を自分のオーナーの事として話しうる余地があると判断した。
+  system prompt 全体に対応関係を明示する `ownerPeerBindingInstruction()` を
+  追加し、`speakerInstruction` にも同じ対応を話者ごとに繰り返す文言を足した。
+  契約テストを `conversation-example-prompt.test.ts` に追加（15 test 全 green）。
+  シミュレーターでサンプルカード（Sample Explorer）+ owner 自己紹介文
+  （「自分の TenkaCloud というクラウド学習サービスを作っている」、themeIds に
+  `cloud-infrastructure` を含め bridge が発火するようにした）で実際に生成させ、
+  修正後のプロンプトが配信されていること（Metro bundle に新文言が含まれる、
+  `stopApp: true` の cold start 後であること）を確認したうえで、生成された
+  最初の 3 ターンで owner/peer の事実の取り違えが無いことを目視確認した
+  （ターン 3 で前述の無限ハングを踏み、4 ターン目までの完走は確認できず）。
+- 2026-07-28: `bun test src --coverage`（1679 pass、100% coverage）、
+  `bunx tsc --noEmit -p .`、
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`（0 件）、
+  `make before-commit`（exit 0）を確認。診断用 `[TenkaDBG]` ログは全除去。
+  ADR-0054 を作成。
+
+振り返り:
+- 問題: owner の報告した表示コード（`MANIFEST_READ_FAILED`）だけを見ると
+  「fallback が真因を隠している」という説明が最初は最も自然に見えたが、実際の
+  経路をコードで追うと fallback ではなく実在コードだった。
+- 根本原因: 表示された Error コードの文字列だけでは、それが「型付きの本物の
+  失敗」なのか「fallback による偽装」なのかを区別できない。これは今回
+  `UNKNOWN` を新設した動機そのものでもある。
+- 予防策: 「表示されているコードは本物か fallback か」を、コードジャンプで
+  該当する `throw` 箇所を実際に特定するまで確定させない。シミュレーターでの
+  live repro は貴重だが、on-device LLM 推論を経由する経路は速度・安定性の
+  variance が大きく（今回はターン 3 で無限ハングを踏んだ）、行き詰まった場合は
+  advisor 相談の上、決定的な単体テスト（既存 fake harness の活用）による
+  検証へ早めに切り替える判断が有効だった。

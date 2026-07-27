@@ -134,12 +134,20 @@ export function verifyConversationExampleInput(
   };
 }
 
+/**
+ * owner/peer 取り違えバグ（owner 実機観測）: 1.5B モデルは「first person /
+ * second person」という抽象的な言い方だけでは、どちらの assistant がどちらの
+ * profile text に対応するかを推測できず、相手側 `peerProfileText` の事実を
+ * 自分（"owner" assistant）のオーナーの事として話してしまうことがあった。
+ * 話者ごとの指示で、今回の話者自身の profile text だけを使ってよいことを
+ * 明示的に固定する（他方の profile text には一切触れない）。
+ */
 function speakerInstruction(speaker: ConversationExampleSpeaker): string {
   // ADR-0050: 話者は本人ではなく、それぞれのオーナーを代理する AI アシスタント。
   // 自分のオーナーについて三人称で語り、本人を演じない契約をターン毎にも固定する。
   return speaker === 'owner'
-    ? 'Speak now as the "owner" assistant, representing the first person in the third person (for example 「私のオーナーは…」), and never impersonate the owners themselves.'
-    : 'Speak now as the "peer" assistant, representing the second person in the third person, and never impersonate the owners themselves.';
+    ? 'Speak now as the "owner" assistant: your owner is the person described in ownerProfileText (if present), representing them in the third person (for example 「私のオーナーは…」), and never impersonate the owners themselves. Use only ownerProfileText facts for your own owner; never state peerProfileText facts as your own owner\'s facts.'
+    : 'Speak now as the "peer" assistant: your owner is the person described in peerProfileText (if present), representing them in the third person, and never impersonate the owners themselves. Use only peerProfileText facts for your own owner; never state ownerProfileText facts as your own owner\'s facts.';
 }
 
 function progressInstruction(isFinalTurn: boolean, turnsLeft: number): string {

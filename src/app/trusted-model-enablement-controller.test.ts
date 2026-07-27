@@ -588,11 +588,9 @@ describe('オンデバイス AI 失敗の型分類', () => {
     expect(mapOnDeviceAiErrorCode(error)).toBe('RESOURCE_BLOCKED');
   });
 
-  it('未知の Error は MANIFEST_READ_FAILED として扱う（既存 errorCode 既定と同じ fail-closed）', () => {
-    expect(mapOnDeviceAiErrorCode(new Error('unexpected'))).toBe(
-      'MANIFEST_READ_FAILED'
-    );
-    expect(mapOnDeviceAiErrorCode('not an error')).toBe('MANIFEST_READ_FAILED');
+  it('未知の Error は実コードを偽装せず UNKNOWN として扱う（owner 実機観測: MANIFEST_READ_FAILED 偽装の修正）', () => {
+    expect(mapOnDeviceAiErrorCode(new Error('unexpected'))).toBe('UNKNOWN');
+    expect(mapOnDeviceAiErrorCode('not an error')).toBe('UNKNOWN');
   });
 });
 

@@ -213,6 +213,27 @@ function reconcileListedFile(
   if (model?.[1] && !referenced.has(model[1])) deleteIfPresent(entry);
 }
 
+/**
+ * owner 実機観測（TestFlight v1.1.1）: 1 件の孤立 File が削除・move できなくても
+ * （例えば delete 直後の一時的な File 競合）、他の File の掃除や呼び出し元の
+ * load を巻き込んで失敗させない。取りこぼした File は次回の reconcile でも
+ * 同じ対象になるため、消えずに残り続けることはない
+ * （`model-lifecycle.ts` の `LocalModelFileStore.reconcilePrivateFiles` doc
+ * comment、ADR-0054 参照）。この分岐は Native module 依存のため bun test では
+ * 検証できず、コードレビューと実機・シミュレーター確認で担保する。
+ */
+function reconcileListedFileTolerant(
+  directory: Directory,
+  entry: File,
+  referenced: ReadonlySet<string>
+): void {
+  try {
+    reconcileListedFile(directory, entry, referenced);
+  } catch {
+    // 意図的に握りつぶす（上記 doc comment 参照）。
+  }
+}
+
 /** Picker は参照だけを返し、Owner 確定前の cache copy を行わない。 */
 export async function pickGgufImportCandidate(): Promise<ModelImportCandidate> {
   const result = await DocumentPicker.getDocumentAsync({
@@ -258,7 +279,7 @@ export function createExpoModelFileStore(): LocalModelFileStore {
       const referenced = new Set(referencedModelDigests);
       for (const entry of directory.list()) {
         if (entry instanceof File) {
-          reconcileListedFile(directory, entry, referenced);
+          reconcileListedFileTolerant(directory, entry, referenced);
         }
       }
     },
@@ -320,7 +341,14 @@ export function createExpoModelFileStore(): LocalModelFileStore {
       const staged = new File(modelDirectory(), `${sha256}.deleting.gguf`);
       deleteIfPresent(staged);
       await source.move(staged);
-      if (source.exists || !staged.exists) {
+      // 実機・シミュレーターの実測（Issue 152 の削除失敗）: `File.move` は成功時に
+      // この instance の uri を移動先へ付け替える（SharedObject が新しい場所を
+      // 指す）。移動後に `source.exists` を見ると staged file を指した自分自身を
+      // 見てしまい、成功していても常に「incomplete」と誤判定して throw していた
+      //（旧既定マッピングにより MANIFEST_READ_FAILED と表示されていた）。
+      // 旧パスの不存在確認は、インスタンスではなく旧パスを指す新しい File で行う。
+      const original = new File(modelDirectory(), `${sha256}.gguf`);
+      if (original.exists || !staged.exists) {
         throw new Error('Model deletion staging was incomplete.');
       }
       return staged.uri;

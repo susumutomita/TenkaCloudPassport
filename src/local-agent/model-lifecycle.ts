@@ -99,6 +99,22 @@ export class LocalModelCopyError extends Error {
 export interface LocalModelFileStore {
   readonly readManifestText: () => Promise<string | null>;
   readonly atomicWriteManifest: (serialized: string) => Promise<void>;
+  /**
+   * best-effort: 2 つの private storage 整合作業をまとめて行う。(1) Manifest が
+   * もう参照しない孤立 File（`.incoming.gguf`・staged 削除の残骸・参照切れの
+   * managed File）を掃除する。(2) 逆に、まだ参照されている Model の staged File
+   * （crash 等で削除の undo が完了しないまま残った状態）を最終位置へ復元する。
+   * どちらも呼び出し元（`reconcilePrivateStore`）はこの呼び出しの失敗を致命的に
+   * 扱わない（owner 実機観測、ADR-0054）。孤立 File の掃除失敗は次回の
+   * reconcile へ持ち越されるだけで安全だが、(2) の復元に失敗した場合は
+   * 「参照されているはずの Model の File が無い」状態が残りうる。これは
+   * 直後に呼ばれる `assertManifestFilesPresent`（`modelFileInfo` で参照済み
+   * Model 全件の存在・Size を独立検証する）が正しく検出し、その場合は
+   * `MANIFEST_READ_FAILED` を投げる——つまりこの Method 自体は握りつぶしても、
+   * 参照済み Model の整合性が握りつぶされることはない。実装は 1 件の File の
+   * 掃除・復元失敗で他の File の処理まで止めないことが望ましい
+   * （`expo-model-file-store.native.ts` 参照）。
+   */
   readonly reconcilePrivateFiles: (
     referencedModelDigests: readonly string[]
   ) => Promise<void>;
@@ -893,6 +909,13 @@ async function restoreDeletion(
   }
 }
 
+/**
+ * `reconcilePrivateFiles` の best-effort 契約は Port 定義（`LocalModelFileStore`
+ * の doc comment）を正本とする。owner 実機観測（TestFlight v1.1.1、ADR-0054）:
+ * `deleteModel` 成功直後の `refresh()`（`ensureLoaded` 再実行）がここで失敗し、
+ * 既に完了していた削除に対して真因の無い `MANIFEST_READ_FAILED` を表示していた
+ * ため、この呼び出しの失敗を握りつぶす。
+ */
 async function reconcilePrivateStore(
   fileStore: LocalModelFileStore,
   loaded: LocalModelManifest
@@ -902,10 +925,7 @@ async function reconcilePrivateStore(
       loaded.models.map((model) => model.sha256)
     );
   } catch {
-    throw lifecycleError(
-      'MANIFEST_READ_FAILED',
-      'Local Model private storage を照合できませんでした。'
-    );
+    // 意図的に握りつぶす（上記 doc comment 参照）。
   }
 }
 
