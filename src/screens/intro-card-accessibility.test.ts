@@ -52,7 +52,7 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
     expect(text).toContain("accessibilityRole={isError ? 'alert' : 'summary'}");
   });
 
-  it('表示画面は実 QR・説明・名前・編集・削除の順に配置する', async () => {
+  it('表示画面は実 QR・説明・名前・会話エージェント・編集・削除の順に配置する', async () => {
     const text = await source('IntroCardScreen.tsx');
 
     expect(text).toContain('<RealQrView matrix={encodedQr.matrix} />');
@@ -60,9 +60,26 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
       '<RealQrView matrix={encodedQr.matrix} />',
       't.qrExplanation',
       'card.name',
+      'settingsT.conversationAgentButton',
       't.editButton',
       't.deleteButton',
     ]);
+  });
+
+  it('会話エージェントはホームの最上位 ActionButton で、編集は secondary に落とす（Issue 170: 中核機能を Settings の奥から主導線へ）', async () => {
+    const text = await source('IntroCardScreen.tsx');
+
+    expect(text).toContain('label={settingsT.conversationAgentButton}');
+    expect(text).toContain('onPress={onOpenConversationAgent}');
+    expect(text).toContain(
+      'accessibilityHint={settingsT.conversationAgentButtonHint}'
+    );
+    const agentStart = text.indexOf(
+      'label={settingsT.conversationAgentButton}'
+    );
+    const editStart = text.indexOf('label={t.editButton}');
+    expect(agentStart).toBeGreaterThan(-1);
+    expect(editStart).toBeGreaterThan(agentStart);
   });
 
   it('表示画面の QR は encodeIntroCardUrl（自己紹介ページ URL）から生成し vCard 直埋めには依存しない（Issue 84）', async () => {
