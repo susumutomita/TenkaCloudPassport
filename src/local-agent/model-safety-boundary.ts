@@ -50,7 +50,13 @@ const LOCAL_MODEL_SYSTEM_INSTRUCTION = [
 
 const LOCAL_MODEL_QUOTE_INSTRUCTION = [
   LOCAL_MODEL_SYSTEM_INSTRUCTION,
-  'When both profile texts describe the same concrete interest, you may instead return grounded-bridge.',
+  // Issue 152（シミュレーター e2e で観測）: 弱い指示だと小型 Model は temperature 0
+  // でほぼ同一の 2 文からも常に no-signal 分岐を選ぶ。判断手順を順序付きで明示し、
+  // 「重なりがあれば grounded-bridge を返す」を既定側にする。引用の逐語性・出典の
+  // 制約は変えていない（検証は verifyGroundedQuoteBridge が担う）。
+  'Decision procedure: first compare ownerProfileText and encounteredProfileText.',
+  'If any concrete topic (an activity, interest, place, or job area) appears in both texts, you must return grounded-bridge with one short quote from each text.',
+  'Return no-signal only when no concrete topic appears in both texts.',
   'Copy each quote character-for-character from the matching profile text; never paraphrase, translate, merge, or invent.',
   'ownerQuote must come from ownerProfileText and peerQuote from encounteredProfileText.',
 ].join(' ');

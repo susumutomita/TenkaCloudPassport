@@ -363,6 +363,59 @@ describe('llama.rn LocalModelCompletionPort', () => {
     expect(context.releaseCalls).toBe(1);
   });
 
+  it('先頭に chat template の assistant ヘッダが混入した JSON 出力を受理する', async () => {
+    // Issue 152（シミュレーター e2e で観測した実出力そのまま）: Qwen2.5 の
+    // chat template 適用がヘッダ無しで終わり、モデルが '<|im_start|>assistant'
+    // を自分で書いた。中身は正しい JSON だったため、既知のテンプレート痕跡
+    // だけを剥がして strict に解析する。
+    const context = new RecordingLlamaContext({
+      result: { text: '<|im_start|>assistant\n{"kind":"no-signal"}' },
+    });
+    const port = llamaPort(async () => new RecordingLlamaModule(context));
+
+    const output = await port.complete(REQUEST);
+
+    expect(output).toEqual({ kind: 'no-signal' });
+    expect(context.releaseCalls).toBe(1);
+  });
+
+  it('末尾に <|im_end|> が混入した JSON 出力を受理する', async () => {
+    const context = new RecordingLlamaContext({
+      result: {
+        text: '<|im_start|>assistant\n{"kind":"no-signal"}<|im_end|>\n',
+      },
+    });
+    const port = llamaPort(async () => new RecordingLlamaModule(context));
+
+    const output = await port.complete(REQUEST);
+
+    expect(output).toEqual({ kind: 'no-signal' });
+  });
+
+  it('テンプレート痕跡を剥がしても JSON でない出力は従来どおり Schema Error にする', async () => {
+    const context = new RecordingLlamaContext({
+      result: { text: '<|im_start|>assistant\nこんにちは、共通点は…' },
+    });
+    const port = llamaPort(async () => new RecordingLlamaModule(context));
+
+    await expectProviderError(
+      async () => port.complete(REQUEST),
+      'SCHEMA_ERROR'
+    );
+    expect(context.releaseCalls).toBe(1);
+  });
+
+  it('completion へ add_generation_prompt: true を明示して assistant ヘッダの再発を防ぐ', async () => {
+    const context = new RecordingLlamaContext({
+      result: { text: '{"kind":"no-signal"}' },
+    });
+    const port = llamaPort(async () => new RecordingLlamaModule(context));
+
+    await port.complete(REQUEST);
+
+    expect(context.parameters?.add_generation_prompt).toBe(true);
+  });
+
   it('Completion Result に text が無い場合は Schema Error にする', async () => {
     const context = new RecordingLlamaContext({ result: { content: '{}' } });
     const port = llamaPort(async () => new RecordingLlamaModule(context));
