@@ -18,6 +18,13 @@ export interface LlamaCompletionParameters {
   readonly messages: readonly LlamaMessage[];
   readonly n_predict: number;
   readonly temperature: number;
+  /**
+   * Issue 152（シミュレーター e2e で観測）: chat template の適用が assistant
+   * ヘッダ無しで終わると、モデルが '<|im_start|>assistant' を出力の先頭に
+   * 自分で書き、構造化 Output の JSON 解析が壊れる。生成プロンプトを
+   * ヘッダ付きで終わらせることを llama.rn へ明示する。
+   */
+  readonly add_generation_prompt: true;
   readonly response_format: {
     readonly type: 'json_schema';
     readonly json_schema: {
@@ -86,6 +93,7 @@ function completionParameters(
     messages: request.messages.map(({ role, content }) => ({ role, content })),
     n_predict: configuration.nPredict,
     temperature: 0,
+    add_generation_prompt: true,
     response_format: {
       type: 'json_schema',
       json_schema: {
@@ -94,6 +102,23 @@ function completionParameters(
       },
     },
   };
+}
+
+/**
+ * Issue 152（シミュレーター e2e で観測した実出力）: chat template の適用が
+ * assistant ヘッダ無しで終わった場合、モデルは正しい JSON の前に
+ * '<|im_start|>assistant' を、末尾に '<|im_end|>' を自分で書くことがある。
+ * 既知のテンプレート痕跡（この 2 つだけ）を剥がしてから strict に解析する。
+ * それ以外の前後テキスト（自由文・説明など）は従来どおり JSON.parse が失敗し
+ * SCHEMA_ERROR に倒れるため、fail-closed の性質は変わらない。
+ */
+const CHAT_TEMPLATE_HEADER_PATTERN = /^\s*<\|im_start\|>assistant\s*/;
+const CHAT_TEMPLATE_FOOTER_PATTERN = /\s*<\|im_end\|>\s*$/;
+
+function completionTextWithoutChatTemplateArtifacts(text: string): string {
+  return text
+    .replace(CHAT_TEMPLATE_HEADER_PATTERN, '')
+    .replace(CHAT_TEMPLATE_FOOTER_PATTERN, '');
 }
 
 function parsedCompletionResult(result: unknown): unknown {
@@ -109,7 +134,9 @@ function parsedCompletionResult(result: unknown): unknown {
     );
   }
   try {
-    return JSON.parse(Reflect.get(result, 'text'));
+    return JSON.parse(
+      completionTextWithoutChatTemplateArtifacts(Reflect.get(result, 'text'))
+    );
   } catch {
     throw new AgentModelProviderError(
       'SCHEMA_ERROR',
