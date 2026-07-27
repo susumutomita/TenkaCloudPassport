@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { ConversationAgentResultState } from '../app/conversation-agent-flow';
+import type { ConversationAgentPresentedResultState } from '../app/conversation-agent-flow';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import ActionButton from '../components/ActionButton';
@@ -8,6 +8,7 @@ import SettingsLinkFooter from '../components/SettingsLinkFooter';
 import type { ParticipantId } from '../domain/session-identifiers';
 import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
+import ConversationExampleSection from './ConversationExampleSection';
 
 /**
  * Issue 104 / ADR-0036 + ADR-0041: 端末内会話エージェントの画面。相手の
@@ -31,7 +32,7 @@ export interface ConversationAgentScreenProps {
   readonly canAddPeer: boolean;
   readonly pasteInput: string;
   readonly errorMessage: string | null;
-  readonly result: ConversationAgentResultState;
+  readonly result: ConversationAgentPresentedResultState;
   readonly locale?: Locale;
   readonly onChangePasteInput: (value: string) => void;
   readonly onSubmitPasteInput: () => void;
@@ -112,10 +113,12 @@ function IntakeSection({
 }
 
 function ResultSection({
+  locale,
   result,
   t,
 }: {
-  readonly result: ConversationAgentResultState;
+  readonly locale: Locale;
+  readonly result: ConversationAgentPresentedResultState;
   readonly t: (typeof MESSAGES)[Locale]['conversationAgent'];
 }) {
   if (result.kind === 'idle') return null;
@@ -142,24 +145,31 @@ function ResultSection({
     );
   }
   return (
-    <View
-      accessibilityLiveRegion="polite"
-      accessibilityRole="summary"
-      style={styles.notice}
-    >
-      {result.partnerNames.length > 0 ? (
-        <>
-          <Text style={styles.noticeTitle}>{t.bridgePartnerTitle}</Text>
-          <Text style={styles.noticeText}>
-            {result.partnerNames.join(', ')}
-          </Text>
-        </>
-      ) : null}
-      <Text style={styles.noticeTitle}>{t.bridgeReasonTitle}</Text>
-      <Text style={styles.noticeText}>{result.reason}</Text>
-      <Text style={styles.noticeTitle}>{t.bridgeOpenerTitle}</Text>
-      <Text style={styles.noticeText}>{result.opener}</Text>
-    </View>
+    <>
+      <View
+        accessibilityLiveRegion="polite"
+        accessibilityRole="summary"
+        style={styles.notice}
+      >
+        {result.partnerNames.length > 0 ? (
+          <>
+            <Text style={styles.noticeTitle}>{t.bridgePartnerTitle}</Text>
+            <Text style={styles.noticeText}>
+              {result.partnerNames.join(', ')}
+            </Text>
+          </>
+        ) : null}
+        <Text style={styles.noticeTitle}>{t.bridgeReasonTitle}</Text>
+        <Text style={styles.noticeText}>{result.reason}</Text>
+        <Text style={styles.noticeTitle}>{t.bridgeOpenerTitle}</Text>
+        <Text style={styles.noticeText}>{result.opener}</Text>
+      </View>
+      <ConversationExampleSection
+        locale={locale}
+        peerName={result.partnerNames[0]}
+        view={result.conversationExample}
+      />
+    </>
   );
 }
 
@@ -267,7 +277,7 @@ export default function ConversationAgentScreen({
                 onPress={onReset}
                 variant="secondary"
               />
-              <ResultSection result={result} t={t} />
+              <ResultSection locale={locale} result={result} t={t} />
             </View>
           ) : null}
         </>

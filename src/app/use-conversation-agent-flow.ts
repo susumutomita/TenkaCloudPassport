@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { AgentModelProvider } from '../domain/agent-model-provider';
 import { MAX_BRIDGE_SELECTION_PARTICIPANTS } from '../domain/bridge-selection';
 import {
@@ -23,9 +23,11 @@ import {
 import type { CameraQrCapturePort } from './camera-qr-capture';
 import {
   CONVERSATION_AGENT_SAMPLE_PEER_CARD,
+  type ConversationAgentPresentedResultState,
   type ConversationAgentResultState,
   decodeConversationAgentPeerCard,
   INITIAL_CONVERSATION_AGENT_RESULT,
+  presentConversationAgentResult,
 } from './conversation-agent-flow';
 import {
   conversationAgentScanErrorMessage,
@@ -34,9 +36,11 @@ import {
   resolveConversationAgentRun,
   resolveScannedPeer,
 } from './conversation-agent-flow-controller';
+import { conversationExampleGeneratorForProvider } from './conversation-example-capability';
 import type { Locale } from './i18n/locale';
 import { MESSAGES } from './i18n/messages';
 import { readableError } from './readable-error';
+import { useConversationExample } from './use-conversation-example';
 
 /**
  * Issue 104 / ADR-0036: 端末内会話エージェント（Step A）の state・handler を
@@ -73,7 +77,7 @@ export interface ConversationAgentFlow {
   readonly canAddPeer: boolean;
   readonly pasteInput: string;
   readonly errorMessage: string | null;
-  readonly result: ConversationAgentResultState;
+  readonly result: ConversationAgentPresentedResultState;
   readonly onChangePasteInput: (value: string) => void;
   readonly onSubmitPasteInput: () => void;
   readonly onScanPeer: () => void;
@@ -101,6 +105,15 @@ export function useConversationAgentFlow({
   const [result, setResult] = useState<ConversationAgentResultState>(
     INITIAL_CONVERSATION_AGENT_RESULT
   );
+  const conversationExampleGenerator =
+    conversationExampleGeneratorForProvider(provider);
+  const {
+    state: conversationExampleState,
+    prepare: prepareConversationExample,
+    generate: generateConversationExample,
+    cancel: cancelConversationExample,
+    hide: hideConversationExample,
+  } = useConversationExample(conversationExampleGenerator);
   // Provider 呼出しは非同期のため、セッションが破棄・やり直された後に届く
   // 遅延完了が古い結果を上書きしないための世代キー。
   const runKeyRef = useRef<string | null>(null);
@@ -139,11 +152,12 @@ export function useConversationAgentFlow({
     // 待機中でなければ no-op で、待機中なら SCAN_CANCELLED として決着する
     // （その完了は上の世代キーが stale として捨てる）。
     cameraQrCapturePort.cancel();
+    hideConversationExample();
     setPasteInput('');
     setErrorMessage(null);
     setResult(INITIAL_CONVERSATION_AGENT_RESULT);
     forgetActiveRun();
-  }, [cameraQrCapturePort, forgetActiveRun]);
+  }, [cameraQrCapturePort, forgetActiveRun, hideConversationExample]);
 
   const open = useCallback(
     (introCard: IntroCard | null): void => {
@@ -185,6 +199,7 @@ export function useConversationAgentFlow({
             participantId: createParticipantId(webCryptoRandomBytes),
             introCard: card,
           });
+          hideConversationExample();
           setPasteInput('');
           setErrorMessage(null);
           setResult(INITIAL_CONVERSATION_AGENT_RESULT);
@@ -200,7 +215,7 @@ export function useConversationAgentFlow({
         }
       });
     },
-    [locale]
+    [hideConversationExample, locale]
   );
 
   const onSubmitPasteInput = useCallback((): void => {
@@ -254,10 +269,11 @@ export function useConversationAgentFlow({
           ? removeConversationSessionPeer(current, participantId)
           : current
       );
+      hideConversationExample();
       setResult(INITIAL_CONVERSATION_AGENT_RESULT);
       forgetActiveRun();
     },
-    [forgetActiveRun]
+    [forgetActiveRun, hideConversationExample]
   );
 
   const onReset = useCallback((): void => {
@@ -265,11 +281,12 @@ export function useConversationAgentFlow({
     setSession((current) =>
       current ? clearConversationSessionPeers(current) : current
     );
+    hideConversationExample();
     setPasteInput('');
     setErrorMessage(null);
     setResult(INITIAL_CONVERSATION_AGENT_RESULT);
     forgetActiveRun();
-  }, [forgetActiveRun]);
+  }, [forgetActiveRun, hideConversationExample]);
 
   /**
    * 既存の Provider Contract（Rules / Local Agent、`providerRunner`・`provider` は
@@ -280,6 +297,7 @@ export function useConversationAgentFlow({
   const onStart = useCallback((): void => {
     if (!session) return;
     if (result.kind === 'running') return;
+    hideConversationExample();
     const plan = planConversationAgentStart({
       session,
       deadlineAtWallClockMs: Date.now() + INTERACTION_DEADLINE_MS,
@@ -311,26 +329,67 @@ export function useConversationAgentFlow({
           input: plan.input,
         }),
       onSuccess: (runResult) => {
-        const decision = runResult.outcome.decision;
-        setResult(
-          decision.kind === 'bridge'
-            ? {
-                kind: 'bridge',
-                reason: decision.reason,
-                opener: decision.opener,
-                partnerNames: plan.partnerNames,
-              }
-            : { kind: 'no-signal' }
-        );
+        const { outcome } = runResult;
+        const { decision } = outcome;
+        if (decision.kind !== 'bridge') {
+          hideConversationExample();
+          setResult({ kind: 'no-signal' });
+          return;
+        }
+        if (
+          outcome.settledBy === 'primary' &&
+          conversationExampleGenerator !== null
+        ) {
+          prepareConversationExample({
+            bridgeReason: decision.reason,
+            bridgeOpener: decision.opener,
+            ownerProfileText: plan.input.ownerProfileText,
+            peerProfileText: plan.input.encounteredProfileText,
+            language: plan.input.language ?? locale,
+          });
+        } else {
+          hideConversationExample();
+        }
+        setResult({
+          kind: 'bridge',
+          reason: decision.reason,
+          opener: decision.opener,
+          partnerNames: plan.partnerNames,
+        });
       },
       onError: () => {
+        hideConversationExample();
         setResult({
           kind: 'error',
           message: MESSAGES[locale].conversationAgent.runErrorMessage,
         });
       },
     });
-  }, [locale, provider, providerRunner, result.kind, session]);
+  }, [
+    conversationExampleGenerator,
+    hideConversationExample,
+    locale,
+    prepareConversationExample,
+    provider,
+    providerRunner,
+    result.kind,
+    session,
+  ]);
+
+  const presentedResult = useMemo(
+    () =>
+      presentConversationAgentResult(result, {
+        state: conversationExampleState,
+        onGenerate: generateConversationExample,
+        onCancel: cancelConversationExample,
+      }),
+    [
+      cancelConversationExample,
+      conversationExampleState,
+      generateConversationExample,
+      result,
+    ]
+  );
 
   return {
     hasSelfIntroCard: session !== null,
@@ -343,7 +402,7 @@ export function useConversationAgentFlow({
       session.peers.length + 1 < MAX_BRIDGE_SELECTION_PARTICIPANTS,
     pasteInput,
     errorMessage,
-    result,
+    result: presentedResult,
     onChangePasteInput: setPasteInput,
     onSubmitPasteInput,
     onScanPeer,

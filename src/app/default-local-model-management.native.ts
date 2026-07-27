@@ -1,4 +1,5 @@
 import { isRunningInExpoGo } from 'expo';
+import { createConversationExampleGenerator } from '../local-agent/conversation-example-generator';
 import { createDeviceResourceTelemetry } from '../local-agent/device-resource-telemetry.native';
 import {
   createExpoModelFileStore,
@@ -18,6 +19,7 @@ import {
 } from '../local-agent/model-lifecycle';
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
 import { QWEN2_5_1_5B_INSTRUCT_Q4_K_M } from '../local-agent/trusted-model-catalog';
+import { registerConversationExampleGenerator } from './conversation-example-capability';
 import type { DefaultLocalModelManagementComposition } from './default-local-model-management-contract';
 import { createLocalModelLifecycleStorageAdapter } from './local-model-lifecycle-storage-adapter';
 import type { LocalModelManagementPort } from './local-model-management-port';
@@ -43,18 +45,21 @@ function createNativeManagement(
         appendReport: (report) => lifecycle.appendBenchmarkReport(report),
         onWriteFailure: onBenchmarkWriteFailure,
       });
-      return createSafetyBoundLocalModelProvider(
-        createLlamaCompletionPort(
-          {
-            modelPath: model.privateUri,
-            nCtx: model.configuration.nCtx,
-            nGpuLayers: model.configuration.nGpuLayers,
-            nPredict: model.configuration.nPredict,
-          },
-          loadLlamaModule,
-          executionLeases,
-          recorder
-        )
+      const completion = createLlamaCompletionPort(
+        {
+          modelPath: model.privateUri,
+          nCtx: model.configuration.nCtx,
+          nGpuLayers: model.configuration.nGpuLayers,
+          nPredict: model.configuration.nPredict,
+        },
+        loadLlamaModule,
+        executionLeases,
+        recorder
+      );
+      const provider = createSafetyBoundLocalModelProvider(completion);
+      return registerConversationExampleGenerator(
+        provider,
+        createConversationExampleGenerator(completion)
       );
     },
     trustedModelSource: QWEN2_5_1_5B_INSTRUCT_Q4_K_M,

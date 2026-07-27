@@ -3,9 +3,17 @@ import { IntroCardError } from '../domain/intro-card';
 import { encodeIntroCardUrl } from '../protocol/intro-card-url';
 import {
   CONVERSATION_AGENT_SAMPLE_PEER_CARD,
+  type ConversationExampleResultView,
   decodeConversationAgentPeerCard,
   INITIAL_CONVERSATION_AGENT_RESULT,
+  presentConversationAgentResult,
 } from './conversation-agent-flow';
+
+const CONVERSATION_EXAMPLE: ConversationExampleResultView = {
+  state: { kind: 'available' },
+  onGenerate: () => undefined,
+  onCancel: () => undefined,
+};
 
 describe('decodeConversationAgentPeerCard', () => {
   it('完全な自己紹介ページ URL から Intro Card を復元する', () => {
@@ -79,5 +87,40 @@ describe('CONVERSATION_AGENT_SAMPLE_PEER_CARD', () => {
 describe('INITIAL_CONVERSATION_AGENT_RESULT', () => {
   it('idle 状態である', () => {
     expect(INITIAL_CONVERSATION_AGENT_RESULT).toEqual({ kind: 'idle' });
+  });
+});
+
+describe('presentConversationAgentResult（Issue 155）', () => {
+  it('Bridge にだけ会話例 View Model を合成する', () => {
+    expect(
+      presentConversationAgentResult(
+        {
+          kind: 'bridge',
+          reason: '共通点があります。',
+          opener: '聞いてみましょう。',
+          partnerNames: ['鈴木花子'],
+        },
+        CONVERSATION_EXAMPLE
+      )
+    ).toEqual({
+      kind: 'bridge',
+      reason: '共通点があります。',
+      opener: '聞いてみましょう。',
+      partnerNames: ['鈴木花子'],
+      conversationExample: CONVERSATION_EXAMPLE,
+    });
+  });
+
+  it('Bridge 以外の状態は余分な field を追加せずそのまま返す', () => {
+    for (const result of [
+      { kind: 'idle' as const },
+      { kind: 'running' as const },
+      { kind: 'no-signal' as const },
+      { kind: 'error' as const, message: '失敗しました。' },
+    ]) {
+      expect(presentConversationAgentResult(result, CONVERSATION_EXAMPLE)).toBe(
+        result
+      );
+    }
   });
 });
