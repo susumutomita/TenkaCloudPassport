@@ -395,6 +395,8 @@ interface ProfileHomeGateProps {
   readonly locale: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onOpenSettings: () => void;
+  /** Issue 170: 会話エージェントをホームの主導線から開く。 */
+  readonly onOpenConversationAgent: () => void;
   readonly encounter: EncounterBranchProps;
   readonly creation: PassportCreationBranchProps;
   /** Issue 79: 自己紹介カードピボット Step 1。詳細は `IntroCardStageGate` を参照。 */
@@ -419,6 +421,7 @@ function ProfileHomeGate({
   locale,
   onChangeLocale,
   onOpenSettings,
+  onOpenConversationAgent,
   encounter,
   creation,
   introCard,
@@ -439,6 +442,7 @@ function ProfileHomeGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDeleteIntroCard}
         onEdit={onEditIntroCard}
+        onOpenConversationAgent={onOpenConversationAgent}
         onOpenSettings={onOpenSettings}
         stage={stage}
       />
@@ -722,6 +726,8 @@ interface IntroCardStageGateProps {
    * （`IntroCardScreen` / `IntroCardEditScreen` 参照）。
    */
   readonly onOpenSettings: () => void;
+  /** Issue 170: 会話エージェントをホームの主導線から開く。 */
+  readonly onOpenConversationAgent: () => void;
   readonly edit: IntroCardEditBranchProps;
 }
 
@@ -733,6 +739,7 @@ function IntroCardStageGate({
   onEdit,
   onDelete,
   onOpenSettings,
+  onOpenConversationAgent,
   edit,
 }: IntroCardStageGateProps) {
   if (stage === 'intro-card' && introCard) {
@@ -746,6 +753,7 @@ function IntroCardStageGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDelete}
         onEdit={onEdit}
+        onOpenConversationAgent={onOpenConversationAgent}
         onOpenSettings={onOpenSettings}
       />
     );
@@ -2588,6 +2596,7 @@ export default function PassportApp({
       locale={locale}
       onDeleteIntroCard={() => void deleteIntroCard()}
       onEditIntroCard={openIntroCardEdit}
+      onOpenConversationAgent={() => conversationAgentFlow.open(introCard)}
       onOpenSettings={openSettings}
       privateProfile={privateProfile}
       stage={stage}
