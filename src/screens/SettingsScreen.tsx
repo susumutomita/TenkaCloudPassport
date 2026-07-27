@@ -153,6 +153,11 @@ function OnDeviceAiSection({ modelManagement, t }: OnDeviceAiSectionProps) {
           {t.onDeviceAiFinalizingStatus}
         </Text>
       ) : null}
+      {onDeviceAiFlow === 'verifying' ? (
+        <Text accessibilityLiveRegion="polite" style={styles.body}>
+          {t.onDeviceAiVerifyingStatus}
+        </Text>
+      ) : null}
       {onDeviceAiFlow === 'consent-pending' ? (
         <>
           <Text style={styles.modelTitle}>{t.onDeviceAiConsentTitle}</Text>

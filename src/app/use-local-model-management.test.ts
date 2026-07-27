@@ -525,4 +525,50 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
     ]);
     expect(text).toContain('candidateSelectionBlocked: hasActiveProviderRun');
   });
+
+  /**
+   * ADR-0052（実機 blocker 1/2、Issue 152 実機フィードバック）: 画面遷移や
+   * Settings の unmount で信頼済み Model のダウンロードが中断されリセットされる
+   * 不具合を、unmount cleanup effect から `trustedModelControllerRef` への
+   * abort 呼び出しを外すことで直した。手動 GGUF import（`importControllerRef`）は
+   * 既存どおり unmount で中断する（ADR-0046 の対象外、変更なし）。abort できる
+   * 経路は明示的な「ダウンロードを中止する」ボタン（`cancelOnDeviceAiDownload`）と
+   * 全データ削除後の `invalidateAfterExternalPurge` の 2 つだけに絞ったことを、
+   * 実装コードのテキストで固定する。
+   */
+  it('ADR-0052: unmount cleanup は trustedModelControllerRef を abort せず、手動 import の Cancel だけ維持する', async () => {
+    const text = await source();
+    const unmountCleanupStart = text.indexOf('() => () => {');
+    const unmountCleanupEnd = text.indexOf(
+      'useEffect(() => {',
+      unmountCleanupStart
+    );
+    const unmountCleanupBody = text.slice(
+      unmountCleanupStart,
+      unmountCleanupEnd
+    );
+
+    expect(unmountCleanupBody).toContain(
+      'importControllerRef.current?.abort()'
+    );
+    expect(unmountCleanupBody).not.toContain(
+      'trustedModelControllerRef.current?.abort()'
+    );
+
+    const cancelDownloadBody = text.slice(
+      text.indexOf('const cancelOnDeviceAiDownload'),
+      text.indexOf('const removeOnDeviceAiModel')
+    );
+    expect(cancelDownloadBody).toContain(
+      'trustedModelControllerRef.current?.abort()'
+    );
+
+    const invalidateBody = text.slice(
+      text.indexOf('const invalidateAfterExternalPurge')
+    );
+    expect(invalidateBody).toContain('importControllerRef.current?.abort()');
+    expect(invalidateBody).toContain(
+      'trustedModelControllerRef.current?.abort()'
+    );
+  });
 });

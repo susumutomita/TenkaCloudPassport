@@ -11,6 +11,7 @@ import {
   type ModelImportCandidate,
   ModelLifecycleError,
   REQUIRED_FREE_SPACE_BYTES,
+  type TrustedImportVerification,
 } from '../local-agent/model-lifecycle';
 import type { TrustedModelSource } from '../local-agent/trusted-model-catalog';
 import {
@@ -39,6 +40,7 @@ const SOURCE: TrustedModelSource = {
   licenseUrl: 'https://example.com/license',
   url: 'https://example.com/models/test-qwen.gguf',
   sha256: 'a'.repeat(64),
+  md5: 'a'.repeat(32),
   sizeBytes: 1_000,
   source: 'https://example.com',
 };
@@ -55,13 +57,13 @@ function createAcquisition(options: AcquisitionOptions = {}): {
   readonly dependencies: TrustedModelAcquisitionDependencies;
   readonly calls: {
     startDownload: number;
-    sha256OfFile: number;
+    md5OfFile: number;
     readonly deleteFile: string[];
   };
 } {
   const calls = {
     startDownload: 0,
-    sha256OfFile: 0,
+    md5OfFile: 0,
     deleteFile: [] as string[],
   };
   const downloadPort: TrustedModelDownloadPort = {
@@ -81,9 +83,12 @@ function createAcquisition(options: AcquisitionOptions = {}): {
         result: { uri: 'file:///cache/test-qwen.gguf', sizeBytes },
       };
     },
-    async sha256OfFile() {
-      calls.sha256OfFile += 1;
-      return options.resultDigest ?? SOURCE.sha256;
+    async resumeDownload(_pauseState, downloadOptions) {
+      return this.startDownload(SOURCE, downloadOptions);
+    },
+    async md5OfFile() {
+      calls.md5OfFile += 1;
+      return options.resultDigest ?? SOURCE.md5;
     },
     async deleteFile(uri) {
       calls.deleteFile.push(uri);
@@ -127,22 +132,33 @@ function createLifecycle(options: LifecycleOptions = {}): {
   readonly lifecycle: {
     importCandidate: (
       candidate: ModelImportCandidate,
-      signal?: AbortSignal
+      signal?: AbortSignal,
+      trustedVerification?: TrustedImportVerification
     ) => Promise<ImportedLocalModel>;
     assessActivation: (sha256: string) => Promise<ActivationAssessment>;
     activate: (sha256: string) => Promise<ImportedLocalModel>;
   };
   readonly events: string[];
+  readonly receivedTrustedVerifications: (
+    | TrustedImportVerification
+    | undefined
+  )[];
 } {
   const events: string[] = [];
+  const receivedTrustedVerifications: (
+    | TrustedImportVerification
+    | undefined
+  )[] = [];
   let imported: ImportedLocalModel | null = null;
   const riskLevel = options.riskLevel ?? 'supported';
   const risk = riskFor(riskLevel);
   return {
     events,
+    receivedTrustedVerifications,
     lifecycle: {
-      async importCandidate(candidate, signal) {
+      async importCandidate(candidate, signal, trustedVerification) {
         events.push('import');
+        receivedTrustedVerifications.push(trustedVerification);
         // ADR-0046: `model-lifecycle.ts` の実 `runImport` と同じく、渡された
         // signal が既に abort 済みなら import を続けない（このテスト double は
         // `enableOnDeviceAi` が仕上げフェーズへ signal を一切渡さなくなった
@@ -231,13 +247,13 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
 
     expect(model.sha256).toBe(SOURCE.sha256);
     expect(calls.startDownload).toBe(1);
-    expect(calls.sha256OfFile).toBe(1);
+    expect(calls.md5OfFile).toBe(1);
     // code-reviewer 指摘（major、ストレージリーク）: 一時領域（`Paths.cache`
     // 相当）の File が import 成功後も残ると容量を二重消費するため、
     // 一時 File が掃除されることを固定する。
     // ADR-0046（実機 blocker、Issue 152）: `onDownloadComplete` はダウンロード
     // 完了直後・import 開始前に呼ばれる。この時点から import 本体（copy・
-    // SHA-256 照合・GGUF 検証・manifest 書き込み）と activate は signal を
+    // MD5 照合・GGUF 検証・manifest 書き込み）と activate は signal を
     // 一切受け取らず、画面 unmount・Cancel が起きても中断されない
     // （下の「仕上げフェーズ」テストで実行時に固定する）。
     expect(events).toEqual([
@@ -256,7 +272,7 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
 
   /**
    * ADR-0046（実機 blocker、Issue 152）: owner の iOS Simulator で、Qwen
-   * ダウンロード完了後の仕上げ処理（copy・SHA-256 照合・GGUF 検証・manifest
+   * ダウンロード完了後の仕上げ処理（copy・MD5 照合・GGUF 検証・manifest
    * 書き込み）中に Settings 画面から離れると、`use-local-model-management.ts`
    * の unmount cleanup が `trustedModelControllerRef.current?.abort()` を呼び、
    * import が中断されて `.incoming.gguf` だけが孤立し manifest が書かれない
@@ -313,6 +329,58 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
 
     expect(model.sha256).toBe(SOURCE.sha256);
     expect(events).toEqual(['import', 'assess', 'activate']);
+  });
+
+  /**
+   * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: `enableOnDeviceAi` は
+   * `source`（catalog の pinned sha256・md5）と呼び出し元供給の `onVerifying`
+   * から `TrustedImportVerification` を組み立て、`lifecycle.importCandidate`
+   * の 3 番目の引数へそのまま渡す。`model-lifecycle.ts` 側の実装（純
+   * TypeScript SHA-256 を使わずネイティブ MD5 で検証する）は
+   * `model-lifecycle.test.ts` で別途検証済みのため、ここでは配線
+   * （catalog の値が正しく届き、onVerifying が呼び出し可能なまま渡ること）
+   * だけを固定する。
+   */
+  it('catalog の pinned sha256・md5・onVerifying を trustedVerification として lifecycle.importCandidate まで届ける', async () => {
+    const { dependencies } = createAcquisition();
+    const { lifecycle, receivedTrustedVerifications } = createLifecycle();
+    const verifyingEvents: string[] = [];
+
+    await enableOnDeviceAi({
+      acquisition: dependencies,
+      source: SOURCE,
+      lifecycle,
+      consented: true,
+      signal: new AbortController().signal,
+      onVerifying: () => verifyingEvents.push('verifying'),
+      refresh: async () => undefined,
+      setCautionAssessment: () => undefined,
+    });
+
+    expect(receivedTrustedVerifications).toHaveLength(1);
+    const received = receivedTrustedVerifications[0];
+    expect(received?.sha256).toBe(SOURCE.sha256);
+    expect(received?.md5).toBe(SOURCE.md5);
+    received?.onVerifying?.();
+    expect(verifyingEvents).toEqual(['verifying']);
+  });
+
+  it('onVerifying を省略しても import・activate は通常どおり完了する', async () => {
+    const { dependencies } = createAcquisition();
+    const { lifecycle, receivedTrustedVerifications } = createLifecycle();
+
+    const model = await enableOnDeviceAi({
+      acquisition: dependencies,
+      source: SOURCE,
+      lifecycle,
+      consented: true,
+      signal: new AbortController().signal,
+      refresh: async () => undefined,
+      setCautionAssessment: () => undefined,
+    });
+
+    expect(model.sha256).toBe(SOURCE.sha256);
+    expect(receivedTrustedVerifications[0]?.onVerifying).toBeUndefined();
   });
 
   it('同意していないときは Download を試みずに CONSENT_REQUIRED を拒否する', async () => {
@@ -391,9 +459,9 @@ describe('オンデバイス AI 有効化（信頼済みダウンロード -> im
     expect(events).toEqual([]);
   });
 
-  it('ダウンロード内容の SHA-256 が期待値と一致しないときは import を試みずに INTEGRITY_MISMATCH を拒否する', async () => {
+  it('ダウンロード内容の MD5 が期待値と一致しないときは import を試みずに INTEGRITY_MISMATCH を拒否する', async () => {
     const { dependencies, calls } = createAcquisition({
-      resultDigest: 'f'.repeat(64),
+      resultDigest: 'f'.repeat(32),
     });
     const { lifecycle, events } = createLifecycle();
 
@@ -538,7 +606,7 @@ describe('オンデバイス AI 失敗の型分類', () => {
  * 実行できない（`use-local-model-management.test.ts` 冒頭と同じ制約）。
  * そのため、実際に呼び出されるのと同じ 2 つの実関数
  * （`createLocalModelOperationLane` と `enableOnDeviceAi`）を実際に組み合わせて
- * 実行し、verify（Download 内 SHA-256 照合）→ import（copy + digest）→
+ * 実行し、verify（Download 内 MD5 照合）→ import（copy + digest）→
  * activate の完了経路が、成功でも各失敗（ここでは Download 後の Digest
  * 不一致、Resource Blocked）でも busy（`onStart`/`onFinish` の発火）を必ず
  * true → false へ戻すことを、source-text 検査ではなく実行で固定する
@@ -582,9 +650,9 @@ describe('オンデバイス AI 有効化を Operation Lane 経由で実行し�
     expect(busyEvents).toEqual([true, false]);
   });
 
-  it('DL 後の SHA-256 照合失敗（INTEGRITY_MISMATCH）でも busy は true になった後で必ず false へ戻り、Rules を含む既存 Provider 状態は変更されない', async () => {
+  it('DL 後の MD5 照合失敗（INTEGRITY_MISMATCH）でも busy は true になった後で必ず false へ戻り、Rules を含む既存 Provider 状態は変更されない', async () => {
     const { dependencies } = createAcquisition({
-      resultDigest: 'f'.repeat(64),
+      resultDigest: 'f'.repeat(32),
     });
     const { lifecycle, events } = createLifecycle();
     const busyEvents: boolean[] = [];

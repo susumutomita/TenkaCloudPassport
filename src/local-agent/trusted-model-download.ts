@@ -35,7 +35,10 @@ export interface TrustedModelDownloadProgress {
   readonly totalBytes: number | null;
 }
 
-export type TrustedModelDownloadOutcomeKind = 'completed' | 'cancelled';
+export type TrustedModelDownloadOutcomeKind =
+  | 'completed'
+  | 'cancelled'
+  | 'interrupted';
 
 export interface TrustedModelDownloadResult {
   readonly uri: string;
@@ -46,13 +49,33 @@ export interface TrustedModelDownloadOutcome {
   readonly kind: TrustedModelDownloadOutcomeKind;
   /** `kind === 'completed'` のときだけ存在する。 */
   readonly result?: TrustedModelDownloadResult;
+  /**
+   * ADR-0052（実機 blocker 1/2、画面遷移・Background 遷移で DL が死ぬ）:
+   * `kind === 'interrupted'` のときだけ意味を持つ。Native 側の実体は
+   * `expo-file-system` の `DownloadPauseState`（`DownloadTask.savable()`）だが、
+   * この層は platform 非依存のため opaque な値として扱い、`resumeDownload` へ
+   * そのまま渡す以外の操作をしない。Native が pause する前に転送自体が失敗し、
+   * savable な再開状態を得られなかった場合は `null`（呼び出し側は
+   * `startDownload` から取り直す＝再ダウンロードにフォールバックする）。
+   */
+  readonly pauseState?: unknown;
 }
 
 /**
- * Native 側の実体は `expo-file-system` の `DownloadTask`（iOS
- * `sessionType: 'background'`・`pauseAsync`/`resumeAsync`・`DownloadPauseState`
- * による永続化を Native が提供する）を使う想定。ダウンロード先は Issue 18 の
- * 既存 `.incoming.gguf`（`LocalModelFileStore` が管理する private storage）とは
+ * `/simplify` 指摘（reuse）: この shape が native adapter・test fake で個別に
+ * 再定義されていた。ここを正本として export し、両方でこの型を再利用する。
+ */
+export type TrustedModelDownloadCallOptions = {
+  readonly onProgress?: (progress: TrustedModelDownloadProgress) => void;
+  readonly signal?: AbortSignal;
+};
+
+/**
+ * Native 側の実体は `expo-file-system` の `DownloadTask`
+ * （`sessionType: 'foreground'`・AppState 監視による `pause()`・
+ * `DownloadPauseState` を介した `savable()`/`fromSavable()` 再開を Native が
+ * 提供する、ADR-0052）を使う。ダウンロード先は Issue 18 の既存
+ * `.incoming.gguf`（`LocalModelFileStore` が管理する private storage）とは
  * 別の一時領域（例: `Paths.cache`）に置き、検証済みの候補だけを
  * `ModelImportCandidate` として既存 `importCandidate` へ渡す
  * （`LocalModelFileStore` の「1 つの incoming file だけを持つ」既存契約を崩さない）。
@@ -60,13 +83,28 @@ export interface TrustedModelDownloadOutcome {
 export interface TrustedModelDownloadPort {
   readonly startDownload: (
     source: TrustedModelSource,
-    options: {
-      readonly onProgress?: (progress: TrustedModelDownloadProgress) => void;
-      readonly signal?: AbortSignal;
-    }
+    options: TrustedModelDownloadCallOptions
   ) => Promise<TrustedModelDownloadOutcome>;
-  /** 一時領域に置いたダウンロード結果の SHA-256 を計算する（managed store には触れない）。 */
-  readonly sha256OfFile: (uri: string) => Promise<string>;
+  /**
+   * ADR-0052: `startDownload`/`resumeDownload` が `'interrupted'` を返したとき、
+   * 同じ options（onProgress・signal）で再開を試みる。呼び出し側
+   * （`acquireTrustedModel`）は `outcome.pauseState` が非 `null` の間だけこれを
+   * 呼び、`null` のときは `startDownload` から取り直す。
+   */
+  readonly resumeDownload: (
+    pauseState: unknown,
+    options: TrustedModelDownloadCallOptions
+  ) => Promise<TrustedModelDownloadOutcome>;
+  /**
+   * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: 一時領域に置いた
+   * ダウンロード結果の MD5 をネイティブ計算する（managed store には触れない）。
+   * 以前はここで純 TypeScript SHA-256（`sha256.ts`）を全量計算していたが、
+   * 1 GiB 級 File では Hermes 上で数分〜十数分かかり、DL 100% 到達後もこの
+   * 検証が終わるまで UI が「ダウンロード中」のまま固まって見えた
+   * （既存 `trusted-model-enablement-controller.test.ts` の
+   * 「Issue 138（実機 blocker A）」がまさにこの症状）。
+   */
+  readonly md5OfFile: (uri: string) => Promise<string>;
   /** 検証失敗・import 完了後に一時 File を消す。 */
   readonly deleteFile: (uri: string) => Promise<void>;
 }
@@ -129,7 +167,30 @@ export async function deleteQuietly(
 }
 
 /**
- * 信頼済み Model を取得し、期待 SHA-256 と一致した候補だけを返す。
+ * ADR-0052（実機 blocker 1/2）: Native が `'interrupted'` を返す限り、同じ
+ * options（onProgress・signal）で再開を試み続ける。`pauseState` が無いとき
+ * （pause 前に転送自体が失敗し savable な状態を得られなかった場合）は
+ * `startDownload` から取り直す（=最初から再ダウンロード）。この loop 自体は
+ * platform 非依存で、Native adapter が「いつ interrupted を返すか」（AppState
+ * 監視で Background 遷移を検知した場合）だけを Native 側の責務として切り離す。
+ */
+async function attemptDownloadUntilSettled(
+  downloadPort: TrustedModelDownloadPort,
+  source: TrustedModelSource,
+  callOptions: TrustedModelDownloadCallOptions
+): Promise<TrustedModelDownloadOutcome> {
+  let outcome = await downloadPort.startDownload(source, callOptions);
+  while (outcome.kind === 'interrupted') {
+    outcome =
+      outcome.pauseState === null || outcome.pauseState === undefined
+        ? await downloadPort.startDownload(source, callOptions)
+        : await downloadPort.resumeDownload(outcome.pauseState, callOptions);
+  }
+  return outcome;
+}
+
+/**
+ * 信頼済み Model を取得し、期待 MD5 と一致した候補だけを返す。
  * 呼び出し側は戻り値をそのまま `LocalModelLifecycle.importCandidate` へ渡す。
  */
 export async function acquireTrustedModel(
@@ -155,12 +216,18 @@ export async function acquireTrustedModel(
     );
   }
 
+  const callOptions: TrustedModelDownloadCallOptions = {
+    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  };
+
   let outcome: TrustedModelDownloadOutcome;
   try {
-    outcome = await dependencies.downloadPort.startDownload(source, {
-      ...(options.onProgress ? { onProgress: options.onProgress } : {}),
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
+    outcome = await attemptDownloadUntilSettled(
+      dependencies.downloadPort,
+      source,
+      callOptions
+    );
   } catch {
     // code-reviewer 指摘（major）: Native adapter は abort 以外の genuine な
     // 転送失敗（回線切断・HTTP error・timeout）を reject で返しうる
@@ -195,9 +262,9 @@ export async function acquireTrustedModel(
     );
   }
 
-  let digest: string;
+  let md5: string;
   try {
-    digest = await dependencies.downloadPort.sha256OfFile(result.uri);
+    md5 = await dependencies.downloadPort.md5OfFile(result.uri);
   } catch {
     await deleteQuietly(dependencies.downloadPort, result.uri);
     throw new TrustedModelAcquisitionError(
@@ -205,12 +272,12 @@ export async function acquireTrustedModel(
       'ダウンロードした Model を読み取れませんでした。'
     );
   }
-  if (digest !== source.sha256) {
-    // fail-closed: 期待 SHA-256 と一致しない File を import へ進ませない。
+  if (md5 !== source.md5) {
+    // fail-closed: 期待 MD5 と一致しない File を import へ進ませない。
     await deleteQuietly(dependencies.downloadPort, result.uri);
     throw new TrustedModelAcquisitionError(
       'INTEGRITY_MISMATCH',
-      'ダウンロードした Model の SHA-256 が一致しません。'
+      'ダウンロードした Model の MD5 が一致しません。'
     );
   }
 

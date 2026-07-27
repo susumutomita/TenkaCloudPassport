@@ -258,13 +258,18 @@ App Store 審査官は 2 台目の端末・2 人目の協力者を用意でき�
   `src/local-agent/trusted-model-catalog.ts`（Qwen2.5-1.5B-Instruct、Q4_K_M、Apache-2.0 の
   URL・SHA-256・サイズを設定として保持）と `src/local-agent/trusted-model-download.ts`
  （明示同意・容量確認・ダウンロード・期待 SHA-256 照合の純粋な orchestration）を追加した。
-  Native 実装は `expo-file-system` の `DownloadTask` を使う。iOS では
-  `sessionType: 'background'`・`pauseAsync`/`resumeAsync`・`DownloadPauseState`
-  により、native 側が永続化を提供する。
-  検証済みの候補は Issue 18 の既存 `LocalModelLifecycle.importCandidate` へそのまま渡し、
-  private copy 以降（chunked SHA-256・GGUF 検証・Resource Risk・manifest）は再実装しない。
-  Settings 画面からの同意 UI・進捗表示・実機検証は本 PR の scope に収まらず、別
-  Issue/PR（設計文書ゲート・物理端末実機証跡を先に満たす）へ follow-up した。
+  Native 実装は `expo-file-system` の `DownloadTask` を使う。Issue 138（実機）で
+  `sessionType: 'background'` は 100％ 到達後に完了 Promise が解決せず固まることが
+  判明したため `sessionType: 'foreground'` へ変更し、ADR-0052（Issue 152）で
+  `AppState` 監視 + `pauseAsync`/`resumeAsync`/`DownloadPauseState`
+（`savable()`/`fromSavable()`）による Background 遷移からの再開を追加した。
+  信頼済みダウンロードの取り込み検証は当初 Issue 18 と同じ chunked SHA-256 を
+  流用していたが、1 GiB 級 File では Hermes 上で数分〜十数分かかり DL 完了後の
+  UI が固まる公開 blocker になったため、ADR-0053（Issue 152）でネイティブ
+  MD5（`expo-file-system/legacy` の `getInfoAsync(uri, { md5: true })`）+
+  sizeBytes 一致 + GGUF metadata 検査の 3 点照合へ置き換えた（手動 GGUF import は
+  chunked SHA-256 のまま維持）。private copy 以降の GGUF 検証・Resource Risk・
+  manifest は Issue 18 の既存 `LocalModelLifecycle.importCandidate` を再実装しない。
 - **entitlement**: production entitlement 復元は本機能の前提条件ではない（0.5B〜3B class は
   entitlement なしでも Resource Risk `supported` に収まる設計目標）。Bonsai 1-bit を採用する
   場合だけ復元が必須になる。preview entitlement（実機テスト用）についても、`app.json` の

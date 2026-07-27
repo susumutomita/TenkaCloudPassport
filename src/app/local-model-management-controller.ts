@@ -4,6 +4,7 @@ import {
   type LocalModelLifecycle,
   type ModelImportCandidate,
   ModelLifecycleError,
+  type TrustedImportVerification,
 } from '../local-agent/model-lifecycle';
 import type {
   LocalModelMutationLease,
@@ -85,6 +86,12 @@ interface ImportLocalModelCandidateInput {
    * signal 引数が optional なため、ここでも optional にする。
    */
   readonly signal?: AbortSignal;
+  /**
+   * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: 信頼済みダウンロードの
+   * 取り込みだけが渡す。`lifecycle.importCandidate` へそのまま転送する
+   * （`model-lifecycle.ts` の `TrustedImportVerification` 参照）。
+   */
+  readonly trustedVerification?: TrustedImportVerification;
   readonly refresh: () => Promise<void>;
   readonly onImported: () => void;
 }
@@ -97,7 +104,8 @@ export async function importLocalModelCandidate(
   try {
     imported = await input.lifecycle.importCandidate(
       input.candidate,
-      input.signal
+      input.signal,
+      input.trustedVerification
     );
   } catch (error: unknown) {
     try {
