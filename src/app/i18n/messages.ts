@@ -1077,7 +1077,8 @@ const ja: AppMessages = {
     pilotMeasurementButton: 'Pilot の匿名 Aggregate',
     pilotMeasurementButtonHint:
       'Process 内 Counter の全項目を Preview し、最低集計単位を満たす場合だけ手動共有できます。',
-    conversationAgentButton: '端末内会話エージェントを試す',
+    // owner フィードバック: 「試す」は実験機能に見える。中核機能として断定形にする。
+    conversationAgentButton: '会話のきっかけを AI と見つける',
     conversationAgentButtonHint:
       '相手の自己紹介カードから、会話のきっかけを端末内だけで見つけます。',
     conversationAgentButtonDisabledHint:
@@ -1828,7 +1829,7 @@ const en: AppMessages = {
     pilotMeasurementButton: 'Anonymous Pilot aggregate',
     pilotMeasurementButtonHint:
       'Previews every in-process counter and permits manual sharing only after the minimum aggregation unit.',
-    conversationAgentButton: 'Try the on-device conversation agent',
+    conversationAgentButton: 'Find a conversation starter with AI',
     conversationAgentButtonHint:
       "Finds a conversation opener from someone's intro card, entirely on this device.",
     conversationAgentButtonDisabledHint:
