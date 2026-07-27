@@ -188,11 +188,27 @@ describe('Message Catalog（src/app/i18n/messages.ts）', () => {
         downloadFailed: modelError('DOWNLOAD_FAILED'),
         downloadCancelled: modelError('DOWNLOAD_CANCELLED'),
         integrityMismatch: modelError('INTEGRITY_MISMATCH'),
-        unknown: modelError('MANIFEST_READ_FAILED'),
+        // owner 実機観測（MANIFEST_READ_FAILED 偽装）の修正後、未知の失敗は
+        // `mapOnDeviceAiErrorCode` が `UNKNOWN` を返す（本物の Manifest 読み取り
+        // 失敗を指す `MANIFEST_READ_FAILED` を騙らない）。汎用文言 fallback は
+        // 実コードをそのまま埋め込むため、ここでも `UNKNOWN` を渡して検証する。
+        unknown: modelError('UNKNOWN'),
       };
       const distinctMessages = new Set(Object.values(messages));
       expect(distinctMessages.size).toBe(Object.values(messages).length);
-      expect(messages.unknown).toContain('MANIFEST_READ_FAILED');
+      expect(messages.unknown).toContain('UNKNOWN');
+    }
+  });
+
+  it('MANIFEST_READ_FAILED のような実在する型付きコードは、汎用文言にそのコードをそのまま埋め込む（真因を隠さない）', () => {
+    for (const locale of LOCALES) {
+      const { modelError } = MESSAGES[locale].settings;
+      expect(modelError('MANIFEST_READ_FAILED')).toContain(
+        'MANIFEST_READ_FAILED'
+      );
+      expect(modelError('MANIFEST_READ_FAILED')).not.toBe(
+        modelError('UNKNOWN')
+      );
     }
   });
 });

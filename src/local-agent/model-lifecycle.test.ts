@@ -476,7 +476,7 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     expect(state.fileStore.manifestReads).toBe(1);
   });
 
-  it('Manifest の JSON・read・reconcile・File 参照不整合を型付きで拒否する', async () => {
+  it('Manifest の JSON・read・File 参照不整合（reconcile 以外）を型付きで拒否する', async () => {
     const invalidJson = harness();
     invalidJson.fileStore.manifestText = '{';
     await expectLifecycleError(
@@ -505,13 +505,6 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       missingManifestWithPayload.fileStore.privateFiles.has(orphanUri)
     ).toBeTrue();
 
-    const reconcileFailure = harness();
-    reconcileFailure.fileStore.reconcileFailure = true;
-    await expectLifecycleError(
-      reconcileFailure.lifecycle.load(),
-      'MANIFEST_READ_FAILED'
-    );
-
     const missing = harness();
     const model = await importModel(missing);
     missing.fileStore.privateFiles.delete(model.privateUri);
@@ -536,6 +529,78 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       infoFailureReloaded.load(),
       'MANIFEST_READ_FAILED'
     );
+  });
+
+  describe('孤立 File 掃除（reconcile）の失敗は load を失敗させない（owner 実機観測、ADR-0054）', () => {
+    it('reconcile 失敗は Manifest が空でも load を落とさない（best-effort、参照済み Model が無いため掃除は無意味）', async () => {
+      const state = harness();
+      state.fileStore.reconcileFailure = true;
+
+      expect(await state.lifecycle.load()).toEqual({
+        schemaVersion: 1,
+        activeModelSha256: null,
+        models: [],
+        benchmarkReports: [],
+      });
+    });
+
+    it('delete 成功直後、孤立 staged File の再掃除が失敗しても load は成功し、Manifest は削除後の状態のまま返る', async () => {
+      // owner 実機観測（TestFlight v1.1.1）: 「オンデバイス AI を無効化して削除
+      // する」を押した直後に「MANIFEST_READ_FAILED」の Error が表示され、実際は
+      // 既に削除が成功していた（後で確認・再起動すると消えている）。
+      // deleteModel の finalizeStagedModelDeletion 失敗（一時的な File 競合）は
+      // 既存どおり成功を返す（in-memory manifest は null 化し、次回 load で
+      // 再読込を強制する）。この直後の load が「同じ File が再び掃除に失敗する」
+      // という現実的な状況でも失敗しないことを固定する。
+      const state = harness();
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+      state.fileStore.finalizeFailure = true;
+
+      expect(
+        await state.lifecycle.deleteModel(model.sha256, async () => undefined)
+      ).toBe(true);
+
+      state.fileStore.reconcileFailure = true;
+      const loaded = await state.lifecycle.load();
+
+      expect(loaded.models).toEqual([]);
+      expect(loaded.activeModelSha256).toBeNull();
+      expect(loaded.benchmarkReports).toEqual([]);
+      // Manifest（真実の情報源）は既に正しく書き換え済みで、掃除できなかった
+      // staged File だけが取りこぼされている。
+      expect(state.fileStore.stagedUri).not.toBeNull();
+      expect(
+        state.fileStore.privateFiles.has(state.fileStore.stagedUri ?? '')
+      ).toBeTrue();
+    });
+
+    it('取りこぼした staged File は、次回の reconcile 成功時に掃除される（再起動を模す）', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+      state.fileStore.finalizeFailure = true;
+      await state.lifecycle.deleteModel(model.sha256, async () => undefined);
+      state.fileStore.reconcileFailure = true;
+      await state.lifecycle.load();
+      const stagedUri = state.fileStore.stagedUri;
+      if (stagedUri === null) throw new Error('stagedUri が必要です。');
+
+      // 実機の再起動は in-memory manifest キャッシュを持たない新しい
+      // lifecycle instance として観測できる。同じ fileStore（= 同じ private
+      // storage）を渡し、今度は reconcile が成功する状態に戻す。
+      state.fileStore.reconcileFailure = false;
+      const restarted = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const reloaded = await restarted.load();
+
+      expect(reloaded.models).toEqual([]);
+      expect(state.fileStore.privateFiles.has(stagedUri)).toBeFalse();
+    });
   });
 
   it('Owner 確定後だけ copy・SHA-256・Metadata・Risk・内容非保持 Report を保存する', async () => {

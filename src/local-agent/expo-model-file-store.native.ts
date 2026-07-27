@@ -213,6 +213,27 @@ function reconcileListedFile(
   if (model?.[1] && !referenced.has(model[1])) deleteIfPresent(entry);
 }
 
+/**
+ * owner 実機観測（TestFlight v1.1.1）: 1 件の孤立 File が削除・move できなくても
+ * （例えば delete 直後の一時的な File 競合）、他の File の掃除や呼び出し元の
+ * load を巻き込んで失敗させない。取りこぼした File は次回の reconcile でも
+ * 同じ対象になるため、消えずに残り続けることはない
+ * （`model-lifecycle.ts` の `LocalModelFileStore.reconcilePrivateFiles` doc
+ * comment、ADR-0054 参照）。この分岐は Native module 依存のため bun test では
+ * 検証できず、コードレビューと実機・シミュレーター確認で担保する。
+ */
+function reconcileListedFileTolerant(
+  directory: Directory,
+  entry: File,
+  referenced: ReadonlySet<string>
+): void {
+  try {
+    reconcileListedFile(directory, entry, referenced);
+  } catch {
+    // 意図的に握りつぶす（上記 doc comment 参照）。
+  }
+}
+
 /** Picker は参照だけを返し、Owner 確定前の cache copy を行わない。 */
 export async function pickGgufImportCandidate(): Promise<ModelImportCandidate> {
   const result = await DocumentPicker.getDocumentAsync({
@@ -258,7 +279,7 @@ export function createExpoModelFileStore(): LocalModelFileStore {
       const referenced = new Set(referencedModelDigests);
       for (const entry of directory.list()) {
         if (entry instanceof File) {
-          reconcileListedFile(directory, entry, referenced);
+          reconcileListedFileTolerant(directory, entry, referenced);
         }
       }
     },

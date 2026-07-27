@@ -164,15 +164,27 @@ export function onDeviceAiStatusFromManifest(
 
 export type OnDeviceAiErrorCode =
   | TrustedModelAcquisitionErrorCode
-  | ModelLifecycleError['code'];
+  | ModelLifecycleError['code']
+  | 'UNKNOWN';
 
 /**
  * `enableOnDeviceAi` の失敗を、既存 Settings 画面の `modelError()` 表示と同じ
- * 粒度（型付きコードの文字列）へ分類する。未知の Error は既存 hook の
- * `errorCode()` 既定と同じ `MANIFEST_READ_FAILED` へ fail-closed に倒す。
+ * 粒度（型付きコードの文字列）へ分類する。
+ *
+ * owner 実機観測（TestFlight v1.1.1）: モデル削除は実際には成功しているのに
+ * 「MANIFEST_READ_FAILED」という Error が表示され、失敗したように見えた。
+ * 原因は 2 つの型付き Error（`TrustedModelAcquisitionError` /
+ * `ModelLifecycleError`）のどちらでもない未知の失敗を、既存 hook の
+ * `errorCode()` 既定と同じ `MANIFEST_READ_FAILED` へ fail-closed に倒していた
+ * ことで、真因が分からない失敗を「Manifest を読み取れなかった」という具体的
+ * だが誤った Code で表示していた点にある（真因は
+ * `docs/adr/0054-tolerate-best-effort-reconcile-failures-and-classify-unknown-errors.md`
+ * 参照）。
+ * 未知の失敗は実コードを偽装せず `UNKNOWN` として表示し、`MANIFEST_READ_FAILED`
+ * などの具体的なコードは実際にその型付き Error が投げられたときだけ出す。
  */
 export function mapOnDeviceAiErrorCode(error: unknown): OnDeviceAiErrorCode {
   if (error instanceof TrustedModelAcquisitionError) return error.code;
   if (error instanceof ModelLifecycleError) return error.code;
-  return 'MANIFEST_READ_FAILED';
+  return 'UNKNOWN';
 }

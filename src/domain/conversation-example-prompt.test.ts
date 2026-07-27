@@ -190,6 +190,41 @@ describe('buildConversationExampleTurnPrompt（Issue 169 のターン毎 bounded
     expect(peerTurn.systemPrompt).toContain('as the "peer" assistant');
   });
 
+  it('owner 実機観測（相手の情報を自分のオーナーの事として話す取り違え）を踏まえ、owner/peer と profile text の対応を話者ごとに system prompt で明示する', () => {
+    // owner 実機フィードバック: 会話例で「自分の TenkaCloud を作っている」という
+    // owner 側の事実を、peer 側のターンが自分のオーナーの事として話し、どちらが
+    // どちらか分からなくなった。「first person / second person」という抽象的な
+    // 言い方だけでは 1.5B モデルが対応関係を推測できないため、話者ごとの指示で
+    // 「今回の話者自身の profile text だけを使ってよい」ことを固定する。
+    const ownerTurn = buildConversationExampleTurnPrompt({
+      input: VERIFIED_INPUT,
+      transcript: [],
+      speaker: 'owner',
+      turnIndex: 0,
+      totalTurns: 4,
+    });
+    const peerTurn = buildConversationExampleTurnPrompt({
+      input: VERIFIED_INPUT,
+      transcript: TRANSCRIPT,
+      speaker: 'peer',
+      turnIndex: 1,
+      totalTurns: 4,
+    });
+
+    expect(ownerTurn.systemPrompt).toContain(
+      'your owner is the person described in ownerProfileText'
+    );
+    expect(ownerTurn.systemPrompt).toContain(
+      "never state peerProfileText facts as your own owner's facts"
+    );
+    expect(peerTurn.systemPrompt).toContain(
+      'your owner is the person described in peerProfileText'
+    );
+    expect(peerTurn.systemPrompt).toContain(
+      "never state ownerProfileText facts as your own owner's facts"
+    );
+  });
+
   it('owner 実機観測（Issue 169: 3 ターン目が 1 ターン目の完全反復）を踏まえ、反復禁止と直前ターンへの応答を指示する', () => {
     const prompt = buildConversationExampleTurnPrompt({
       input: VERIFIED_INPUT,
