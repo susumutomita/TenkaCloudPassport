@@ -518,6 +518,41 @@ describe('ConversationExampleFlowController（Issue 169: ターン毎生成の�
     controller.dispose();
   });
 
+  it('全ターン確定後（nextSpeaker が null）の 60 秒 Timeout は、失われたものが無いため shown として扱う', async () => {
+    // レビュー指摘の回帰テスト: Cancel だけでなく Timeout も同じ「実際には成功
+    // したのに ended-early と誤表示する」不具合を踏みうる。最終ターン確定から
+    // session.close() 完了までの間にちょうど Timeout がまたがるケースを再現する。
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+    run?.options?.onTurn?.(TURN_2, false);
+    run?.options?.onTurn?.(TURN_3, false);
+    run?.options?.onTurn?.(TURN_4, true);
+
+    scheduler.advanceBy(CONVERSATION_EXAMPLE_TIMEOUT_MS);
+
+    expect(controller.getState()).toEqual({
+      kind: 'shown',
+      example: { turns: [TURN_1, TURN_2, TURN_3, TURN_4] },
+    });
+
+    // 遅れて届く settlement は世代が古いため無視される。
+    run?.resolve(EXAMPLE);
+    await flushPromises();
+    expect(controller.getState()).toEqual({
+      kind: 'shown',
+      example: { turns: [TURN_1, TURN_2, TURN_3, TURN_4] },
+    });
+    controller.dispose();
+  });
+
   it('表示済み状態から同じ入力で別の会話例を再生成できる', async () => {
     const scheduler = new ManualConversationExampleScheduler();
     const generator = new ControlledConversationExampleGenerator();

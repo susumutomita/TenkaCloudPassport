@@ -55,12 +55,22 @@
   構造的に検出し、無限に同じ文を繰り返す劣化を防ぐ。
 - **Good**（レビュー指摘の修正）: 最終ターン確定から Native Context 解放（`session.close()`）完了までの
   間、存在しない次の話者の typing indicator を出さない（生成側が `onTurn` へ渡す `isFinalTurn` で判定）。
-  同じ待ち時間中に Cancel されても、会話は実際には最後まで確定済みで何も失っていないため、
-  `ended-early`（「途中で終了した」文言）ではなく `shown` として扱う。
+  Cancel だけでなく 60 秒 Timeout も同じ判定を共有する（片方だけに入れると、もう片方が同じ不具合を
+  再発するため）。同じ待ち時間中に Cancel・Timeout が発火しても、会話は実際には最後まで確定済みで
+  何も失っていないため、`ended-early`（「途中で終了した」文言）ではなく `shown` として扱う。一方、
+  `generate()` の Promise が実際に失敗で reject した場合（例: `session.close()` 自体の失敗）は、
+  全ターン確定済みでも `ended-early`/`failed` のままにする（Native 失敗が実際に起きたことを示すのは
+  妥当なため）。
 - **Good**（レビュー指摘の修正）: `beginConversationExampleSession` の Benchmark outcome
-  （success / cancelled / failed）は、`context.release()` 自体の成否だけでなく、途中ターンの Native
-  completion 失敗・Cancel も反映する。`executeLlamaProvider` と同じ判定方法に揃え、Context 解放自体は
-  成功したが会話としては失敗・Cancel だった場合に誤って `success` と記録しないようにした。
+  （success / cancelled / failed）は、`context.release()` 自体の成否だけでなく、途中ターンの **Native
+  completion 自体**の失敗・Cancel も反映する。`executeLlamaProvider` と同じ判定方法に揃え、Context
+  解放自体は成功したが Native completion（推論そのもの）が失敗・Cancel だった場合に誤って `success`
+  と記録しないようにした。あわせて `markCompletion`（first-write-wins）をターン毎ではなく全ターン
+  成功が確定する `close()` 側でだけ呼ぶよう修正し、`completionDurationMs` が「1 ターン目の完了時刻」
+  ではなく「会話全体の完了時刻」を指すようにした。なお、ターン単位 Content Guard 違反
+  （`parseConversationExampleTurn` の反復拒否 Guard を含む）は Native completion 自体は成功している
+  ため、この outcome には反映しない、と意図的にスコープ外にしている（`beginConversationExampleSession`
+  のコード comment 参照）。この境界を広げるかは follow-up として別途検討する。
 - **Tradeoff**: `LocalModelContextLeaseRegistry` の `model-context` lease を、会話全体（既存の 60 秒
   タイムアウト上限まで）保持し続ける。単発生成時代も同じ 60 秒上限で Native Context を保持していたため、
   排他期間の上限そのものは変わらない。Bridge 実行と会話例生成は UI 上直列（会話例生成は Bridge 確定後の

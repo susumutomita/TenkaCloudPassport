@@ -109,6 +109,24 @@ describe('parseConversationExampleTurn（Issue 169 のターン毎 fail-closed �
     );
   });
 
+  it('話者が異なっていても、transcript 中の別話者の発話と完全一致すれば拒否する', () => {
+    // レビュー指摘の回帰テスト: 上のテストは「同じ話者が自分の過去発話を繰り返す」
+    // ケースだけを検証していた。Guard は話者を問わず transcript 全体を見る設計
+    // （ADR-0051）のため、話者が異なる完全一致（owner の発話を peer が繰り返す）
+    // も拒否されることを固定する。
+    const transcript = [
+      { speaker: 'owner' as const, text: '週末の過ごし方について教えて下さい' },
+    ];
+
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(
+        { text: '週末の過ごし方について教えて下さい' },
+        'peer',
+        transcript
+      )
+    );
+  });
+
   it('trim 後に完全一致しない、似ているだけの本文は受理する', () => {
     const transcript = [
       { speaker: 'owner' as const, text: '週末の過ごし方について教えて下さい' },

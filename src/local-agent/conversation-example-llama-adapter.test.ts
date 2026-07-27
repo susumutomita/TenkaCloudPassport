@@ -234,6 +234,69 @@ describe('llama.rn Adapter の会話例 Session（Issue 169: Context 1 会話 1 
     expect(outcomes).toEqual(['failed']);
   });
 
+  it('途中ターンの Abort は Context Release 自体が成功しても Benchmark を cancelled で終える', async () => {
+    // レビュー指摘の回帰テスト: 'failed' 分岐は上のテストで検証済みだが、
+    // 'cancelled' 分岐は beginConversationExampleSession を実際に経由するテストが
+    // 無かった（fake port を使う generator のテストだけが Cancel を再現していた）。
+    const outcomes: string[] = [];
+    const recorder: ModelBenchmarkRecorder = {
+      async start() {
+        const session: ModelBenchmarkSession = {
+          markLoaded: () => undefined,
+          markFirstToken: () => undefined,
+          markCompletion: () => undefined,
+          async finish(outcome) {
+            outcomes.push(outcome);
+          },
+        };
+        return session;
+      },
+    };
+    const controller = new AbortController();
+    let completionCalls = 0;
+    let releaseCalls = 0;
+    const context: LlamaContextPort = {
+      async completion(_parameters, onToken) {
+        completionCalls += 1;
+        if (completionCalls === 2) controller.abort();
+        onToken({ token: '{' });
+        return {
+          text: JSON.stringify({ text: TURN_TEXTS[completionCalls - 1] }),
+        };
+      },
+      async stopCompletion() {
+        return;
+      },
+      async release() {
+        releaseCalls += 1;
+      },
+    };
+    const module: LlamaModulePort = {
+      async initLlama() {
+        return context;
+      },
+    };
+    const completion = createLlamaCompletionPort(
+      {
+        modelPath: 'file:///data/model.gguf',
+        nCtx: 2048,
+        nGpuLayers: 32,
+        nPredict: 96,
+      },
+      async () => module,
+      new LocalModelContextLeaseRegistry(false),
+      recorder
+    );
+    const generator = createConversationExampleGenerator(completion);
+
+    await expect(
+      generator.generate(INPUT, { signal: controller.signal })
+    ).rejects.toMatchObject({ code: 'CANCELLED' });
+
+    expect(releaseCalls).toBe(1);
+    expect(outcomes).toEqual(['cancelled']);
+  });
+
   it('Module 読込・Model 初期化の失敗は Session 開始時に Load Error にし、lease を解放する', async () => {
     const leases = new LocalModelContextLeaseRegistry(false);
     const completion = createLlamaCompletionPort(

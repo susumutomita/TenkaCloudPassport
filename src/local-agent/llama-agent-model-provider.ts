@@ -434,7 +434,11 @@ async function beginConversationExampleSession(
         sessionFailure = completion.error;
         throw completion.error;
       }
-      benchmark?.markCompletion();
+      // レビュー指摘の修正: `markCompletion` は `model-benchmark.ts` 側で最初の
+      // 呼び出しだけを記録する（1 回の completion を想定した first-write-wins）。
+      // ここで毎ターン呼ぶと「1 ターン目の completion 時刻」が固定されてしまい、
+      // `executeLlamaProvider`（単発 completion 成功時にのみ呼ぶ）と意味がずれる。
+      // 全ターン成功が確定する `close()` 側でだけ 1 度呼び、会話全体の完了時刻にする。
       return completion.output;
     },
     async close() {
@@ -447,6 +451,7 @@ async function beginConversationExampleSession(
         throw quarantinedLoadError();
       }
       lease.release();
+      if (sessionFailure === null) benchmark?.markCompletion();
       void finishBenchmark(
         benchmark,
         sessionFailure === null

@@ -131,15 +131,20 @@ Bridge を残す設計、および完全一致の反復拒否 Guard で小さく
 hidden
   └─ Local primary bridge ─> available
 available
-  └─ Generate ─> generating（確定済み turns + 生成中の次話者を保持）
+  └─ Generate ─> generating（確定済み turns + 生成中の次話者 nextSpeaker を保持）
                      ├─ ターン確定ごとに turns を 1 件ずつ増やして publish
-                     ├─ 全ターン確定 ─> shown
-                     ├─ 途中失敗 / 60s timeout / ターン単位 Guard 違反
+                     │     └─ 最終ターン確定後は nextSpeaker を null にする
+                     │           （typing indicator を出さない。Native Context 解放
+                     │           〔session.close()〕の完了待ちがこの後に続く）
+                     ├─ generate() の Promise が成功で解決 ─> shown
+                     ├─ generate() の Promise が失敗で reject（Native 失敗が実際に起きた）
                      │     ├─ 確定済み turns が 1 件以上 ─> ended-early（確定分を残す）
                      │     └─ 確定済み turns が 0 件 ─> failed
-                     └─ Cancel
-                           ├─ 確定済み turns が 1 件以上 ─> ended-early（確定分を残す）
-                           └─ 確定済み turns が 0 件 ─> available
+                     └─ Cancel / 60s timeout（「待つのをやめる」操作）
+                           ├─ nextSpeaker が null（全ターン確定済み）─> shown
+                           │     （session.close() の完了を待たず、何も失っていないため）
+                           ├─ 確定済み turns が 1 件以上（nextSpeaker あり）─> ended-early
+                           └─ 確定済み turns が 0 件 ─> failed（Cancel のみ available）
 shown / ended-early / failed
   └─ Generate again ─> generating
 any state
@@ -151,6 +156,15 @@ any state
   まだ確定していない次話者側に typing indicator を出す。
 - `generating` 中は経過秒を 1 秒ごとに更新する。
 - 60 秒で `AbortSignal` を発火する。
+- レビュー指摘の修正: 最終ターン確定後も `generate()` の Promise は Native Context 解放
+  （`session.close()`）の完了まで解決しない。この間 `nextSpeaker` は `null` にし、typing
+  indicator を出さない。同じ間に Cancel・60 秒 Timeout が発火しても、実際には何も失われて
+  いないため `ended-early` ではなく `shown` へ直接遷移する（Cancel と Timeout の両方に同じ
+  判定を適用する。片方だけに入れると、もう片方が同じ「実際には成功したのに ended-early と
+  誤表示する」不具合を再発する）。
+- 一方、`generate()` の Promise が実際に失敗で reject した場合（例: `session.close()` 自体が
+  失敗）は、全ターン確定済みでも `ended-early`/`failed` のままにする（Native 失敗が実際に
+  起きたことを示すのは妥当なため、Cancel/Timeout の「待つのをやめる」場合とは区別する）。
 - 途中失敗・タイムアウト・ターン単位 Guard 違反・Cancel のいずれでも、**確定済み turns が 1 件以上
   あれば `ended-early` へ移り、その turns を残したまま終了する**（全捨てしない）。0 件のまま終わった
   場合だけ、従来どおり `failed`（Cancel は `available`）にする。
@@ -225,12 +239,18 @@ v1 では専用の Report / Flag UI を追加しない。理由は、会話例�
 - Prompt に氏名 Field が存在しないことと、Runtime の余分な名前が列挙されないこと。
 - Rules / Web 相当で capability が取得できず `hidden` のままであること。
 - ターン確定ごとに `generating` state の turns が 1 件ずつ増えること。
-- 途中失敗・途中キャンセル・タイムアウト・ターン単位 Guard 違反のいずれでも、確定済み turns が
-  1 件以上あれば `ended-early` になって確定分を残し、0 件なら `failed`（Cancel は `available`）に
-  なること。
+- generate() の Promise が実際に失敗で reject した場合（途中失敗・タイムアウト・ターン単位 Guard
+  違反）は、確定済み turns が 1 件以上あれば `ended-early` になって確定分を残し、0 件なら `failed`
+  （Cancel は `available`）になること。
+- **最終ターン確定後（`nextSpeaker` が `null`）は typing indicator を出さず、その状態での Cancel・
+  60 秒 Timeout は `ended-early` ではなく `shown` へ直接遷移すること**（レビュー指摘の回帰テスト。
+  Cancel と Timeout の両方で固定する）。
 - 60 秒 Timeout、Cancel、遅延完了・stale な onTurn 通知の破棄、直列 lane。
 - `llama.rn` Request にターン単位の 128 / 0.7 / strict JSON Schema が渡ること。
 - Native Context・execution lease が会話 1 回（4 ターン分）につき 1 度だけ init/release されること。
+- Benchmark outcome（success / cancelled / failed）が `context.release()` 自体の成否だけでなく、
+  途中ターンの Native completion 失敗・Cancel も反映すること（Content Guard 違反は Native 完了
+  そのものは成功しているため対象外、と明示的に扱う）。
 - Native Composition Root が同じ completion port を Bridge と会話例に使うこと。
 - Disclosure、Progress、Alert、Typing indicator、Ended-early notice、左右配置、Accessibility label の
   source contract。

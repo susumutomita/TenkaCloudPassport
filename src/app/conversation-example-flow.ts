@@ -91,6 +91,25 @@ function endedEarlyOrFallback(
 }
 
 /**
+ * 生成を「待つのをやめる」操作（Cancel・60 秒 Timeout）が終了先を決める共通判定。
+ * レビュー指摘の修正: 最終ターンまで確定済み(`nextSpeaker === null`、session.close() の
+ * 完了待ちだけの状態)なら何も失っていないため shown にする。この判定を Cancel だけに
+ * 入れて Timeout handler に入れ忘れると、Timeout でも同じ「実際には成功したのに
+ * ended-early と誤表示する」不具合を再発するため、共通ヘルパーへ集約する。
+ * 一方、session.close() 自体が失敗した「本当の失敗」（settlement の rejection handler）は
+ * 対象外のまま維持する（Native 失敗が実際に起きたことを ended-early で示すのは妥当なため）。
+ */
+function terminalStateAfterGivingUp(
+  confirmedTurns: readonly ConversationExampleTurn[],
+  allTurnsConfirmed: boolean,
+  fallback: ConversationExampleViewState
+): ConversationExampleViewState {
+  return allTurnsConfirmed
+    ? { kind: 'shown', example: { turns: confirmedTurns } }
+    : endedEarlyOrFallback(confirmedTurns, fallback);
+}
+
+/**
  * React に依存しない会話例の非同期状態機械。Native Context は直前の Promise の settlement
  * 後にだけ次を開始し、Cancel 直後の再生成でも execution lease を競合させない。
  * Issue 169: ターン確定ごとに `generating` state を更新して 1 件ずつ公開し、途中失敗・
@@ -189,11 +208,16 @@ export function createConversationExampleFlowController(
     timeoutHandle = scheduler.setTimeout(() => {
       if (generation !== runGeneration || state.kind !== 'generating') return;
       const confirmedTurns = state.turns;
+      const allTurnsConfirmed = state.nextSpeaker === null;
       generation += 1;
       controller.abort();
       if (abortController === controller) abortController = null;
       clearElapsedAndTimeout();
-      publish(endedEarlyOrFallback(confirmedTurns, { kind: 'failed' }));
+      publish(
+        terminalStateAfterGivingUp(confirmedTurns, allTurnsConfirmed, {
+          kind: 'failed',
+        })
+      );
     }, timeoutMs);
 
     const run = nativeLane.then(() =>
@@ -220,16 +244,15 @@ export function createConversationExampleFlowController(
   function cancel(): void {
     if (state.kind !== 'generating') return;
     const confirmedTurns = state.turns;
-    // レビュー指摘の修正: 最終ターンまで確定済み(nextSpeaker === null)の状態で
-    // Cancel されても、実際には何も失われていない(session.close() の完了待ちを
-    // やめさせただけ)ため ended-early ではなく shown として扱う。
     const allTurnsConfirmed = state.nextSpeaker === null;
     stopCurrentGeneration();
-    if (allTurnsConfirmed) {
-      publish({ kind: 'shown', example: { turns: confirmedTurns } });
-      return;
-    }
-    publish(endedEarlyOrFallback(confirmedTurns, availableOrHidden()));
+    publish(
+      terminalStateAfterGivingUp(
+        confirmedTurns,
+        allTurnsConfirmed,
+        availableOrHidden()
+      )
+    );
   }
 
   function subscribe(
