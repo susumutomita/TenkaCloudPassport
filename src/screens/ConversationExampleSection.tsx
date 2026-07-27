@@ -127,7 +127,12 @@ function ConversationExampleBody({
       </>
     );
   }
-  const resolvedPeerName = peerName?.trim() || t.peerFallbackLabel;
+  // Issue 155（owner フィードバック）: 相手の生の名前を吹き出しに出すと
+  // 「本人が実際に言った」ように見える。話者は AI であることをラベルで明示する。
+  const trimmedPeerName = peerName?.trim();
+  const resolvedPeerName = trimmedPeerName
+    ? t.peerAiLabel(trimmedPeerName)
+    : t.peerFallbackLabel;
   const visibleTurns = state.example.turns.slice(0, state.visibleTurnCount);
   const revealComplete = state.visibleTurnCount >= state.example.turns.length;
   return (

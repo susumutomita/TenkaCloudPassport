@@ -44,6 +44,22 @@ describe('buildConversationExamplePrompt（氏名・連絡先を持たない入�
     expect(prompt.responseSchema).toBe(CONVERSATION_EXAMPLE_RESPONSE_SCHEMA);
   });
 
+  it('話者は本人ではなく AI アシスタント同士で、オーナーを三人称で語り接点を探す指示を持つ', () => {
+    // Issue 155（owner フィードバック）: 人間 2 人の会話シナリオを創作させず、
+    // AI 同士がオーナーの接点を先に見つけておく対話にする。本人の台詞を
+    // 捏造しない契約をプロンプト文言で固定する。
+    const prompt = buildConversationExamplePrompt(INPUT);
+
+    expect(prompt.systemPrompt).toContain('dialogue between two AI assistants');
+    expect(prompt.systemPrompt).toContain('third person');
+    expect(prompt.systemPrompt).toContain(
+      'never impersonates the owners themselves'
+    );
+    expect(prompt.systemPrompt).toContain(
+      'discover and confirm what the two owners have in common'
+    );
+  });
+
   it('英語 Locale では英語生成を指示し、空の Profile text は Field ごと省略する', () => {
     const prompt = buildConversationExamplePrompt({
       bridgeReason: 'You both care about accessibility.',
