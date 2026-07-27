@@ -1,24 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import {
   ConversationExampleError,
-  parseConversationExample,
+  parseConversationExampleTurn,
 } from './conversation-example';
 
-function validExample(turnCount = 4): {
-  readonly turns: readonly {
-    readonly speaker: string;
-    readonly text: string;
-  }[];
-} {
-  return {
-    turns: Array.from({ length: turnCount }, (_, index) => ({
-      speaker: index % 2 === 0 ? 'owner' : 'peer',
-      text: index % 2 === 0 ? ` 質問 ${index + 1} ` : `回答 ${index + 1}`,
-    })),
-  };
-}
-
-function expectInvalidOutput(action: () => unknown): void {
+function expectInvalidTurnOutput(action: () => unknown): void {
   try {
     action();
     throw new Error('ConversationExampleError が必要です。');
@@ -29,158 +15,129 @@ function expectInvalidOutput(action: () => unknown): void {
   }
 }
 
-describe('parseConversationExample（Issue 155 の fail-closed 出力契約）', () => {
-  it.each([2, 4, 6])('%i ターンの owner 開始・交互会話を受理する', (count) => {
-    const parsed = parseConversationExample(validExample(count));
-
-    expect(parsed.turns).toHaveLength(count);
-    expect(parsed.turns[0]).toEqual({ speaker: 'owner', text: '質問 1' });
+describe('parseConversationExampleTurn（Issue 169 のターン毎 fail-closed 出力契約）', () => {
+  it('speaker は呼び出し側の交互スケジュールから決め、text だけを検証する', () => {
+    expect(
+      parseConversationExampleTurn({ text: '最近触った OSS は？' }, 'owner', [])
+    ).toEqual({ speaker: 'owner', text: '最近触った OSS は？' });
+    expect(
+      parseConversationExampleTurn({ text: '小さな CLI です' }, 'peer', [])
+    ).toEqual({ speaker: 'peer', text: '小さな CLI です' });
   });
 
-  it('turns が 1 件または 7 件なら全体を拒否する', () => {
-    expectInvalidOutput(() => parseConversationExample(validExample(1)));
-    expectInvalidOutput(() => parseConversationExample(validExample(7)));
-  });
-
-  it('owner 開始でない場合と同じ話者が連続する場合を拒否する', () => {
-    expectInvalidOutput(() =>
-      parseConversationExample({
-        turns: [
-          { speaker: 'peer', text: 'こんにちは' },
-          { speaker: 'owner', text: 'こんにちは' },
-        ],
-      })
+  it('speaker field を Native 応答から受理せず、追加 Field も拒否する', () => {
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(
+        { speaker: 'peer', text: 'こんにちは' },
+        'owner',
+        []
+      )
     );
-    expectInvalidOutput(() =>
-      parseConversationExample({
-        turns: [
-          { speaker: 'owner', text: 'こんにちは' },
-          { speaker: 'owner', text: 'こんにちは' },
-        ],
-      })
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(
+        { text: 'こんにちは', extra: true },
+        'owner',
+        []
+      )
     );
   });
 
-  it('未知の speaker、Root・Turn の追加 Field、型違いを拒否する', () => {
-    expectInvalidOutput(() =>
-      parseConversationExample({
-        turns: [
-          { speaker: 'owner', text: 'こんにちは' },
-          { speaker: 'assistant', text: 'こんにちは' },
-        ],
-      })
-    );
-    expectInvalidOutput(() =>
-      parseConversationExample({ ...validExample(2), extra: true })
-    );
-    expectInvalidOutput(() =>
-      parseConversationExample({
-        turns: [
-          { speaker: 'owner', text: 'こんにちは', extra: true },
-          { speaker: 'peer', text: 'こんにちは' },
-        ],
-      })
-    );
-    expectInvalidOutput(() => parseConversationExample({ turns: 'not-array' }));
-    expectInvalidOutput(() => parseConversationExample(null));
-  });
-
-  it('空文字、81 文字、改行、制御文字、不可視文字を拒否する', () => {
+  it('空文字、81 文字、改行、連絡先らしい本文を拒否する', () => {
     for (const text of [
       '   ',
       'あ'.repeat(81),
       '1 行目\n2 行目',
-      '末尾改行\n',
-      '1 行目\u20282 行目',
-      'a\u0000b',
-      'a\u200bb',
-    ]) {
-      expectInvalidOutput(() =>
-        parseConversationExample({
-          turns: [
-            { speaker: 'owner', text },
-            { speaker: 'peer', text: '安全な本文' },
-          ],
-        })
-      );
-    }
-  });
-
-  it('メール、URL、電話番号らしい本文を拒否し、短い年号は受理する', () => {
-    for (const text of [
       '連絡は a@example.com へ',
       'https://example.com を見てください',
-      'www.example.com を見てください',
       '電話は 090-1234-5678 です',
     ]) {
-      expectInvalidOutput(() =>
-        parseConversationExample({
-          turns: [
-            { speaker: 'owner', text },
-            { speaker: 'peer', text: '安全な本文' },
-          ],
-        })
+      expectInvalidTurnOutput(() =>
+        parseConversationExampleTurn({ text }, 'owner', [])
       );
     }
-
-    expect(
-      parseConversationExample({
-        turns: [
-          { speaker: 'owner', text: '2026 年に 3 回参加しました' },
-          { speaker: 'peer', text: 'その話を聞きたいです' },
-        ],
-      }).turns[0]?.text
-    ).toBe('2026 年に 3 回参加しました');
   });
 
-  it('Getter を実行せず、特殊 Prototype・Symbol Field・疎な Array を拒否する', () => {
+  it('前後の空白だけを取り除く', () => {
+    expect(
+      parseConversationExampleTurn({ text: '  質問です  ' }, 'owner', [])
+    ).toEqual({ speaker: 'owner', text: '質問です' });
+  });
+
+  it('Getter を実行せず、型違い・null を拒否する', () => {
     let getterCalls = 0;
     const accessorTurn: Record<string, unknown> = Object.create(null);
-    Object.defineProperty(accessorTurn, 'speaker', {
+    Object.defineProperty(accessorTurn, 'text', {
       enumerable: true,
       get() {
         getterCalls += 1;
-        return 'owner';
+        return 'こんにちは';
       },
     });
-    Object.defineProperty(accessorTurn, 'text', {
-      enumerable: true,
-      value: 'こんにちは',
-    });
-    expectInvalidOutput(() =>
-      parseConversationExample({
-        turns: [accessorTurn, { speaker: 'peer', text: 'こんにちは' }],
-      })
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(accessorTurn, 'owner', [])
     );
     expect(getterCalls).toBe(0);
-
-    const specialTurn: Record<string, unknown> = Object.create({
-      inherited: true,
-    });
-    specialTurn['speaker'] = 'owner';
-    specialTurn['text'] = 'こんにちは';
-    expectInvalidOutput(() =>
-      parseConversationExample({
-        turns: [specialTurn, { speaker: 'peer', text: 'こんにちは' }],
-      })
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(null, 'owner', [])
     );
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn({ text: 42 }, 'owner', [])
+    );
+  });
 
-    const symbolRoot = validExample(2);
-    Object.defineProperty(symbolRoot, Symbol('hidden'), { value: true });
-    expectInvalidOutput(() => parseConversationExample(symbolRoot));
-
-    const sparseTurns: unknown[] = [];
-    sparseTurns.length = 2;
-    sparseTurns[0] = { speaker: 'owner', text: 'こんにちは' };
-    expectInvalidOutput(() => parseConversationExample({ turns: sparseTurns }));
-
-    const specialArray = [
-      { speaker: 'owner', text: 'こんにちは' },
-      { speaker: 'peer', text: 'こんにちは' },
+  it('owner 実機観測（Issue 169）: transcript のいずれかと完全一致する繰り返しを拒否する', () => {
+    const transcript = [
+      { speaker: 'owner' as const, text: '週末の過ごし方について教えて下さい' },
+      { speaker: 'peer' as const, text: '近くの山を歩くのが好きです' },
     ];
-    Object.setPrototypeOf(specialArray, null);
-    expectInvalidOutput(() =>
-      parseConversationExample({ turns: specialArray })
+
+    // 直前ターン（peer）との一致だけでなく、話者を問わず transcript 全体との
+    // 完全一致（trim 後）を拒否する（1 ターン目との一致も検出する）。
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(
+        { text: '週末の過ごし方について教えて下さい' },
+        'owner',
+        transcript
+      )
     );
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(
+        { text: '  近くの山を歩くのが好きです  ' },
+        'peer',
+        transcript
+      )
+    );
+  });
+
+  it('話者が異なっていても、transcript 中の別話者の発話と完全一致すれば拒否する', () => {
+    // レビュー指摘の回帰テスト: 上のテストは「同じ話者が自分の過去発話を繰り返す」
+    // ケースだけを検証していた。Guard は話者を問わず transcript 全体を見る設計
+    // （ADR-0051）のため、話者が異なる完全一致（owner の発話を peer が繰り返す）
+    // も拒否されることを固定する。
+    const transcript = [
+      { speaker: 'owner' as const, text: '週末の過ごし方について教えて下さい' },
+    ];
+
+    expectInvalidTurnOutput(() =>
+      parseConversationExampleTurn(
+        { text: '週末の過ごし方について教えて下さい' },
+        'peer',
+        transcript
+      )
+    );
+  });
+
+  it('trim 後に完全一致しない、似ているだけの本文は受理する', () => {
+    const transcript = [
+      { speaker: 'owner' as const, text: '週末の過ごし方について教えて下さい' },
+    ];
+
+    expect(
+      parseConversationExampleTurn(
+        { text: '週末はどんなことをしていますか？' },
+        'peer',
+        transcript
+      )
+    ).toEqual({ speaker: 'peer', text: '週末はどんなことをしていますか？' });
   });
 });

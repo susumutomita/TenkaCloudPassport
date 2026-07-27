@@ -24,6 +24,8 @@ describe('会話例 Message Catalog（Issue 155）', () => {
         messages.generatingStatus(12),
         messages.peerAiLabel('Sample Explorer'),
         messages.bubbleAccessibilityLabel(2, 'Peer', 'Hello'),
+        messages.typingIndicatorLabel('Sample Explorer'),
+        messages.endedEarlyNotice,
       ]) {
         expect(text.length).toBeGreaterThan(0);
       }
@@ -62,5 +64,21 @@ describe('会話例 Message Catalog（Issue 155）', () => {
       expect(label).toContain('Sample Explorer');
       expect(label).toContain('Hello');
     }
+  });
+
+  it('typing indicator の Accessibility label は誰が入力中かを含める（Issue 169）', () => {
+    for (const locale of LOCALES) {
+      const label =
+        CONVERSATION_EXAMPLE_MESSAGES[locale].typingIndicatorLabel(
+          'Sample Explorer'
+        );
+      expect(label).toContain('Sample Explorer');
+    }
+  });
+
+  it('ended-early notice は ja / en で別々の自然な文言にする（Issue 169）', () => {
+    expect(CONVERSATION_EXAMPLE_MESSAGES.ja.endedEarlyNotice).not.toBe(
+      CONVERSATION_EXAMPLE_MESSAGES.en.endedEarlyNotice
+    );
   });
 });

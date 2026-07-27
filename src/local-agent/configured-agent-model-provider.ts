@@ -28,13 +28,20 @@ const DEFAULT_N_PREDICT = '96';
 type ConfiguredCompletionPort = LocalModelCompletionPort &
   ConversationExampleCompletionPort;
 
+function unavailableCompletionPortError(): AgentModelProviderError {
+  return new AgentModelProviderError(
+    'LOAD_ERROR',
+    'Local Model の設定を読み込めませんでした。'
+  );
+}
+
 function unavailableCompletionPort(): ConfiguredCompletionPort {
   return {
     complete() {
-      throw new AgentModelProviderError(
-        'LOAD_ERROR',
-        'Local Model の設定を読み込めませんでした。'
-      );
+      throw unavailableCompletionPortError();
+    },
+    beginSession() {
+      throw unavailableCompletionPortError();
     },
   };
 }

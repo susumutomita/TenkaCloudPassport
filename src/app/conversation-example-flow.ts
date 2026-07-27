@@ -2,20 +2,37 @@ import type {
   ConversationExample,
   ConversationExampleGenerator,
   ConversationExampleInput,
+  ConversationExampleSpeaker,
+  ConversationExampleTurn,
 } from '../domain/conversation-example';
 
 export const CONVERSATION_EXAMPLE_TIMEOUT_MS = 60_000;
-export const CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS = 300;
 export const CONVERSATION_EXAMPLE_ELAPSED_INTERVAL_MS = 1_000;
 
 export type ConversationExampleViewState =
   | { readonly kind: 'hidden' }
   | { readonly kind: 'available' }
-  | { readonly kind: 'generating'; readonly elapsedSeconds: number }
   | {
-      readonly kind: 'shown';
-      readonly example: ConversationExample;
-      readonly visibleTurnCount: number;
+      readonly kind: 'generating';
+      readonly elapsedSeconds: number;
+      /** これまでに確定した（Content Guard 済みの）ターン列。ターン確定ごとに 1 件ずつ増える。 */
+      readonly turns: readonly ConversationExampleTurn[];
+      /**
+       * まだ確定していない、次に生成中の話者（typing indicator の表示側）。
+       * レビュー指摘の修正: 最終ターン確定後は次の話者がいないため `null` にする。
+       * Native Context 解放（`session.close()`）待ちの間、存在しない 5 番目の話者の
+       * typing indicator を出し続けないために区別する。
+       */
+      readonly nextSpeaker: ConversationExampleSpeaker | null;
+    }
+  | { readonly kind: 'shown'; readonly example: ConversationExample }
+  | {
+      /**
+       * Issue 169: 途中失敗・途中キャンセル・タイムアウト・ターン単位 Guard 違反の
+       * いずれでも、1 件以上確定済みならそのターンを残したまま終了する（全捨てしない）。
+       */
+      readonly kind: 'ended-early';
+      readonly turns: readonly ConversationExampleTurn[];
     }
   | { readonly kind: 'failed' };
 
@@ -57,12 +74,46 @@ export interface ConversationExampleFlowController {
 interface ControllerOptions {
   readonly scheduler?: ConversationExampleScheduler;
   readonly timeoutMs?: number;
-  readonly revealIntervalMs?: number;
+}
+
+function nextSpeakerAfter(
+  speaker: ConversationExampleSpeaker
+): ConversationExampleSpeaker {
+  return speaker === 'owner' ? 'peer' : 'owner';
+}
+
+/** 1 件以上確定済みならそのターンを残す。0 件なら Fallback 状態を使う。 */
+function endedEarlyOrFallback(
+  turns: readonly ConversationExampleTurn[],
+  fallback: ConversationExampleViewState
+): ConversationExampleViewState {
+  return turns.length > 0 ? { kind: 'ended-early', turns } : fallback;
+}
+
+/**
+ * 生成を「待つのをやめる」操作（Cancel・60 秒 Timeout）が終了先を決める共通判定。
+ * レビュー指摘の修正: 最終ターンまで確定済み(`nextSpeaker === null`、session.close() の
+ * 完了待ちだけの状態)なら何も失っていないため shown にする。この判定を Cancel だけに
+ * 入れて Timeout handler に入れ忘れると、Timeout でも同じ「実際には成功したのに
+ * ended-early と誤表示する」不具合を再発するため、共通ヘルパーへ集約する。
+ * 一方、session.close() 自体が失敗した「本当の失敗」（settlement の rejection handler）は
+ * 対象外のまま維持する（Native 失敗が実際に起きたことを ended-early で示すのは妥当なため）。
+ */
+function terminalStateAfterGivingUp(
+  confirmedTurns: readonly ConversationExampleTurn[],
+  allTurnsConfirmed: boolean,
+  fallback: ConversationExampleViewState
+): ConversationExampleViewState {
+  return allTurnsConfirmed
+    ? { kind: 'shown', example: { turns: confirmedTurns } }
+    : endedEarlyOrFallback(confirmedTurns, fallback);
 }
 
 /**
  * React に依存しない会話例の非同期状態機械。Native Context は直前の Promise の settlement
  * 後にだけ次を開始し、Cancel 直後の再生成でも execution lease を競合させない。
+ * Issue 169: ターン確定ごとに `generating` state を更新して 1 件ずつ公開し、途中失敗・
+ * キャンセルでも確定済みターンを `ended-early` として残す。
  */
 export function createConversationExampleFlowController(
   generator: ConversationExampleGenerator | null,
@@ -70,8 +121,6 @@ export function createConversationExampleFlowController(
 ): ConversationExampleFlowController {
   const scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
   const timeoutMs = options.timeoutMs ?? CONVERSATION_EXAMPLE_TIMEOUT_MS;
-  const revealIntervalMs =
-    options.revealIntervalMs ?? CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS;
   const listeners = new Set<(state: ConversationExampleViewState) => void>();
   let state: ConversationExampleViewState = HIDDEN_CONVERSATION_EXAMPLE_STATE;
   let input: ConversationExampleInput | null = null;
@@ -79,7 +128,6 @@ export function createConversationExampleFlowController(
   let abortController: AbortController | null = null;
   let elapsedHandle: unknown = null;
   let timeoutHandle: unknown = null;
-  let revealHandle: unknown = null;
   let nativeLane: Promise<void> = Promise.resolve();
 
   function publish(next: ConversationExampleViewState): void {
@@ -94,39 +142,17 @@ export function createConversationExampleFlowController(
     timeoutHandle = null;
   }
 
-  function clearReveal(): void {
-    if (revealHandle !== null) scheduler.clearInterval(revealHandle);
-    revealHandle = null;
-  }
-
   function stopCurrentGeneration(): void {
     generation += 1;
     abortController?.abort();
     abortController = null;
     clearElapsedAndTimeout();
-    clearReveal();
   }
 
   function availableOrHidden(): ConversationExampleViewState {
     return generator && input
       ? { kind: 'available' }
       : HIDDEN_CONVERSATION_EXAMPLE_STATE;
-  }
-
-  function reveal(example: ConversationExample, runGeneration: number): void {
-    publish({ kind: 'shown', example, visibleTurnCount: 1 });
-    revealHandle = scheduler.setInterval(() => {
-      if (generation !== runGeneration || state.kind !== 'shown') {
-        clearReveal();
-        return;
-      }
-      const visibleTurnCount = Math.min(
-        state.visibleTurnCount + 1,
-        state.example.turns.length
-      );
-      publish({ ...state, visibleTurnCount });
-      if (visibleTurnCount === state.example.turns.length) clearReveal();
-    }, revealIntervalMs);
   }
 
   function prepare(nextInput: ConversationExampleInput): void {
@@ -143,18 +169,36 @@ export function createConversationExampleFlowController(
 
   function generate(): void {
     if (!generator || !input || state.kind === 'generating') return;
-    clearReveal();
     const runGeneration = generation + 1;
     generation = runGeneration;
     const runInput = input;
     const controller = new AbortController();
     abortController = controller;
     const startedAt = scheduler.now();
-    publish({ kind: 'generating', elapsedSeconds: 0 });
-    elapsedHandle = scheduler.setInterval(() => {
+
+    function onTurn(turn: ConversationExampleTurn, isFinalTurn: boolean): void {
       if (generation !== runGeneration || state.kind !== 'generating') return;
       publish({
         kind: 'generating',
+        elapsedSeconds: state.elapsedSeconds,
+        turns: [...state.turns, turn],
+        // レビュー指摘の修正(ghost typing indicator): 最終ターン確定後は
+        // session.close()（Native Context 解放）の完了待ちの間があっても、
+        // 存在しない次の話者の typing indicator を出さない。
+        nextSpeaker: isFinalTurn ? null : nextSpeakerAfter(turn.speaker),
+      });
+    }
+
+    publish({
+      kind: 'generating',
+      elapsedSeconds: 0,
+      turns: [],
+      nextSpeaker: 'owner',
+    });
+    elapsedHandle = scheduler.setInterval(() => {
+      if (generation !== runGeneration || state.kind !== 'generating') return;
+      publish({
+        ...state,
         elapsedSeconds: Math.max(
           0,
           Math.floor((scheduler.now() - startedAt) / 1_000)
@@ -163,28 +207,35 @@ export function createConversationExampleFlowController(
     }, CONVERSATION_EXAMPLE_ELAPSED_INTERVAL_MS);
     timeoutHandle = scheduler.setTimeout(() => {
       if (generation !== runGeneration || state.kind !== 'generating') return;
+      const confirmedTurns = state.turns;
+      const allTurnsConfirmed = state.nextSpeaker === null;
       generation += 1;
       controller.abort();
       if (abortController === controller) abortController = null;
       clearElapsedAndTimeout();
-      publish({ kind: 'failed' });
+      publish(
+        terminalStateAfterGivingUp(confirmedTurns, allTurnsConfirmed, {
+          kind: 'failed',
+        })
+      );
     }, timeoutMs);
 
     const run = nativeLane.then(() =>
-      generator.generate(runInput, { signal: controller.signal })
+      generator.generate(runInput, { signal: controller.signal, onTurn })
     );
     const settlement = run.then(
       (example) => {
         if (generation !== runGeneration) return;
         abortController = null;
         clearElapsedAndTimeout();
-        reveal(example, runGeneration);
+        publish({ kind: 'shown', example });
       },
       () => {
         if (generation !== runGeneration) return;
+        const confirmedTurns = state.kind === 'generating' ? state.turns : [];
         abortController = null;
         clearElapsedAndTimeout();
-        publish({ kind: 'failed' });
+        publish(endedEarlyOrFallback(confirmedTurns, { kind: 'failed' }));
       }
     );
     nativeLane = settlement;
@@ -192,8 +243,16 @@ export function createConversationExampleFlowController(
 
   function cancel(): void {
     if (state.kind !== 'generating') return;
+    const confirmedTurns = state.turns;
+    const allTurnsConfirmed = state.nextSpeaker === null;
     stopCurrentGeneration();
-    publish(availableOrHidden());
+    publish(
+      terminalStateAfterGivingUp(
+        confirmedTurns,
+        allTurnsConfirmed,
+        availableOrHidden()
+      )
+    );
   }
 
   function subscribe(

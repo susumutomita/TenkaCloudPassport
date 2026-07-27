@@ -1,9 +1,4 @@
-import {
-  arrayValue,
-  assertOneOf,
-  strictRecord,
-  stringValue,
-} from '../protocol/validation';
+import { strictRecord, stringValue } from '../protocol/validation';
 import type { LanguageCode } from './clue-catalog';
 import {
   containsContactLikeText,
@@ -12,9 +7,7 @@ import {
 } from './text-content-guards';
 
 /** Issue 155: LINE 風 UI へ表示する会話例の bounded output contract。 */
-export const CONVERSATION_EXAMPLE_MIN_TURNS = 2;
 export const CONVERSATION_EXAMPLE_DEFAULT_TURNS = 4;
-export const CONVERSATION_EXAMPLE_MAX_TURNS = 6;
 export const CONVERSATION_EXAMPLE_TURN_MAX_CHARS = 80;
 
 export const CONVERSATION_EXAMPLE_SPEAKERS = ['owner', 'peer'] as const;
@@ -45,6 +38,21 @@ export interface ConversationExampleInput {
 
 export interface ConversationExampleGeneratorOptions {
   readonly signal?: AbortSignal;
+  /**
+   * Issue 169: ターン毎生成へ移行し、確定したターンを 1 件ずつ画面へ即時公開する。
+   * `generate` は従来どおり全ターン確定後の `ConversationExample` へ解決するが、
+   * 呼び出し側（`conversation-example-flow.ts`）はこの callback で確定順を追い、
+   * 途中失敗・キャンセルでも確定済みターンを残せるようにする。
+   *
+   * `isFinalTurn`（レビュー指摘の修正）: このターンが最後の 1 件かどうかを、ターン数を
+   * 知る生成側（`local-agent/conversation-example-generator.ts`）から呼び出し側へ伝える。
+   * 最終ターン確定後は Native Context 解放（`session.close()`）待ちの間があっても、
+   * 存在しない次の話者の typing indicator を画面に出さないために使う。
+   */
+  readonly onTurn?: (
+    turn: ConversationExampleTurn,
+    isFinalTurn: boolean
+  ) => void;
 }
 
 export interface ConversationExampleGenerator {
@@ -101,57 +109,10 @@ function strictDataRecord<const Keys extends readonly string[]>(
   return record;
 }
 
-/** Array subclass、疎な配列、Accessor、追加 field を一括で拒否する。 */
-function strictTurnsArray(value: unknown): readonly unknown[] {
-  const turns = arrayValue(
-    value,
-    '$.turns',
-    CONVERSATION_EXAMPLE_MIN_TURNS,
-    CONVERSATION_EXAMPLE_MAX_TURNS
-  );
-  if (Object.getPrototypeOf(turns) !== Array.prototype) {
-    return invalidOutput(
-      '会話例の turns は通常の JSON Array である必要があります。'
-    );
-  }
-  const allowedKeys = new Set<string>(['length']);
-  for (let index = 0; index < turns.length; index += 1) {
-    allowedKeys.add(String(index));
-  }
-  for (const key of Reflect.ownKeys(turns)) {
-    if (typeof key !== 'string' || !allowedKeys.has(key)) {
-      return invalidOutput('会話例の turns に追加 Field は指定できません。');
-    }
-  }
-  for (let index = 0; index < turns.length; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(turns, String(index));
-    if (
-      descriptor === undefined ||
-      !descriptor.enumerable ||
-      !Object.hasOwn(descriptor, 'value')
-    ) {
-      return invalidOutput('会話例の turns は疎でない JSON Array が必要です。');
-    }
-  }
-  return turns;
-}
-
-function parseTurn(value: unknown, index: number): ConversationExampleTurn {
-  const path = `$.turns[${index}]`;
-  const record = strictDataRecord(value, path, ['speaker', 'text'] as const);
-  const speaker = assertOneOf(
-    record.speaker,
-    CONVERSATION_EXAMPLE_SPEAKERS,
-    `${path}.speaker`
-  );
-  const expectedSpeaker: ConversationExampleSpeaker =
-    index % 2 === 0 ? 'owner' : 'peer';
-  if (speaker !== expectedSpeaker) {
-    return invalidOutput('会話例は owner 開始で交互に話す必要があります。');
-  }
-
+/** ターン毎生成が使う `text` 単体の fail-closed 検証。 */
+function verifiedTurnText(rawValue: unknown, path: string): string {
   const rawText = stringValue(
-    record.text,
+    rawValue,
     `${path}.text`,
     CONVERSATION_EXAMPLE_TURN_MAX_CHARS
   );
@@ -165,28 +126,45 @@ function parseTurn(value: unknown, index: number): ConversationExampleTurn {
   if (containsContactLikeText(text)) {
     return invalidOutput('会話例の本文に連絡先らしい内容が含まれています。');
   }
-  return { speaker, text };
-}
-
-function parseConversationExampleUnchecked(
-  value: unknown
-): ConversationExample {
-  const record = strictDataRecord(value, '$', ['turns'] as const);
-  return { turns: strictTurnsArray(record.turns).map(parseTurn) };
+  return text;
 }
 
 /**
- * Native 境界から来る unknown を、追加 field も許さない fail-closed contract で検証する。
- * 詳細な Validator Error は UI へ漏らさず、この機能専用の閉じた Error へ正規化する。
+ * owner 実機観測（Issue 169）: 4 ターン生成のうち 3 ターン目が 1 ターン目と
+ * 完全に同一の文を返し、会話が transcript の上に積み上がらず繰り返しループした。
+ * trim 後の完全一致を、話者を問わずこれまでの transcript 全体に対して検査する
+ * fail-closed Guard として固定する（1 Turn だけを救済せず、そのターンで会話を終了する）。
  */
-export function parseConversationExample(value: unknown): ConversationExample {
+function assertNotRepeatingTranscript(
+  text: string,
+  transcript: readonly ConversationExampleTurn[]
+): void {
+  if (transcript.some((turn) => turn.text === text)) {
+    invalidOutput('会話例の本文がこれまでのターンと完全に同じ繰り返しです。');
+  }
+}
+
+/**
+ * Issue 169: ターン毎生成の 1 応答を検証する。話者は Native 応答ではなく交互スケジュール
+ * （呼び出し側の `turnIndex`）から決定的に決まるため、Schema・検証対象は `text` だけにする。
+ * `transcript` はこれまでに確定済みの全ターンで、直前ターンとの一致だけでなく、
+ * 話者を問わず transcript 全体との完全一致（trim 後）を拒否する。
+ */
+export function parseConversationExampleTurn(
+  value: unknown,
+  speaker: ConversationExampleSpeaker,
+  transcript: readonly ConversationExampleTurn[]
+): ConversationExampleTurn {
   try {
-    return parseConversationExampleUnchecked(value);
+    const record = strictDataRecord(value, '$', ['text'] as const);
+    const text = verifiedTurnText(record.text, '$');
+    assertNotRepeatingTranscript(text, transcript);
+    return { speaker, text };
   } catch (error: unknown) {
     if (error instanceof ConversationExampleError) throw error;
     throw new ConversationExampleError(
       'INVALID_OUTPUT',
-      '会話例の構造化 Output を安全に検証できませんでした。'
+      '会話例のターンを安全に検証できませんでした。'
     );
   }
 }

@@ -9625,3 +9625,131 @@ selfIntro を足しても themeIds が不一致のままだと plan.kind が no-
   未コミットの成果物一式と再現手順・具体的な unblock 案を呼び出し元へ渡して
   判断を委ねる。「完走する」ことと「権限の無い操作で無理に完走したふりをする」
   ことは別であり、後者は選ばない。
+
+### [AI 会話例のターン毎ライブ生成] - 2026-07-27
+
+#### 目的
+
+Issue 169。AI 同士の事前会話（ADR-0050）を「生成完了後にまとめて表示」から「1 ターンずつ
+ライブで進んでいく」見せ方へ変える。owner フィードバック「会話が進んでいくのが面白いのに
+生成はつまらん」に応え、生成中の待ち表示だけで進行感が死んでいる状態を解消する。
+
+#### 制約
+
+- `rm`/`npx` 禁止、ios/ node_modules 不触、8081 kill 禁止、モック禁止、型エスケープ禁止、
+  空 catch 禁止。TDD、日本語 BDD、カバレッジ 100%。
+- `src/app/PassportApp.tsx`・`src/app/i18n/messages.ts` は並行編集中のため触らない
+  （会話例専用 i18n は `src/app/i18n/conversation-example-messages.ts` で完結させる）。
+- 設計判断（ターン毎生成・Context 再利用・途中失敗の扱い）は ADR-0051 として記録する。
+
+#### 設計判断
+
+案 b2（ターン毎生成）を採用した。単発 completion（全ターン一括）のまま演出だけ足す案は、
+owner の要求（実際に生成が進んでいく）に応えられないため不採用。ターン毎に Native Context を
+都度 init/release する案は、モデルロードが 4 回走り体感速度が悪化するため不採用。ターン毎生成
+かつ Native Context は会話 1 回につき 1 度だけ確保・再利用する設計を採用した。詳細は
+[ADR-0051](./docs/adr/0051-live-per-turn-conversation-example-generation.md) と
+[設計 doc](./docs/design/2026-07-26-conversation-example.md)（案 b2、Section 5〜7、11 を本 Issue で更新）
+を正本とする。
+
+#### タスク
+
+1. `domain/conversation-example.ts`: ターン単体 Parser（`parseConversationExampleTurn`）を追加し、
+   speaker は交互スケジュールから決め、`text` だけを検証する。
+2. `domain/conversation-example-prompt.ts`: transcript を受け取り次の 1 ターンだけを返させる
+   Prompt Builder（`buildConversationExampleTurnPrompt`）を追加する。
+3. `local-agent/conversation-example-generator.ts`: Session ベースの Completion Port
+   （`beginSession` / `completeTurn` / `close`）へ変更し、ターン毎ループで `onTurn` callback を通知する。
+4. `local-agent/llama-agent-model-provider.ts`: `beginConversationExampleSession` を追加し、
+   Native Context・execution lease を会話 1 回につき 1 度だけ init/release する。
+5. `app/conversation-example-flow.ts`: 状態機械を拡張し、`generating` に確定済み turns + 次話者を持たせ、
+   途中失敗・キャンセル・Timeout・ターン単位 Guard 違反で確定分が 1 件以上あれば `ended-early` へ、
+   0 件なら従来どおり `failed`（Cancel は `available`）にする。300ms reveal Timer は廃止する。
+6. `screens/ConversationExampleSection.tsx`: 生成中は次話者側に typing indicator を出し、確定ターンは
+   即時表示する。
+7. i18n（`app/i18n/conversation-example-messages.ts`）に typing indicator の Accessibility Label と
+   ended-early notice を ja/en 追加する。
+
+#### 検証手順
+
+`bun test`（該当ファイル一式）→ 全体 `bun run test:coverage`（1658 pass、100%/100%）→
+`bun scripts/architecture-harness.ts --staged --fail-on=error` → `make before-commit`。
+
+#### 進捗ログ
+
+- 2026-07-27: Red→Green で上記 7 タスクを実装。ADR-0051 作成、設計 doc の Section 5〜7・11 を
+  ターン毎生成の実態に合わせて更新（旧 300ms reveal・512 token・turns 一括検証の記述を差し替え）。
+- 2026-07-27（owner 実機フィードバック追記）: owner が Development Build で実際の生成を観測し、
+  4 ターンのうち 3 ターン目が 1 ターン目と完全に同一の文を返す不具合を発見した（会話が transcript
+  の上に積み上がらず繰り返しループする）。対応として (a) `parseConversationExampleTurn` に
+  `assertNotRepeatingTranscript` を追加し、trim 後の完全一致を話者を問わず transcript 全体に対して
+  検査する fail-closed Guard を実装（一致したらそのターンで会話を打ち切り、確定分は ended-early として
+  残す）、(b) ターン毎プロンプトへ「transcript のどのターンとも同じ・ほぼ同じ発話を繰り返さない」
+  「直前の相手の発話に必ず応答してから展開する」指示を追加、(c) 直前ターンの本文が実際に userPrompt へ
+  含まれることを assert する実行テストを追加、(d) 3 ターン目が 1 ターン目を反復する実観測をそのまま
+  再現する回帰テスト（`local-agent/conversation-example-generator.test.ts`）を追加した。ADR-0051 の
+  Consequences・設計 doc Section 5/6/11 にもこの経緯を明記した。
+- 2026-07-27（コードレビュー Blocker 修正）: PR 作成前の必須レビュー（code-reviewer subagent）で
+  Blocker が見つかった。最終ターン（4 ターン目）確定後も `generate()` は `finally { await
+  session.close(); }`（Native Context 解放の実往復）の分だけ Promise 決着が遅れるため、その間ずっと
+  画面には「来ないはずの 5 番目のターン」の typing indicator と Cancel ボタンが出続け、かつその間に
+  Cancel すると実際には全ターン成功しているのに `ended-early`（「途中で終了した」文言）が出てしまう
+  再現性のある不具合だった。対応: (a) `ConversationExampleGeneratorOptions.onTurn` に `isFinalTurn`
+  引数を追加し、ターン数を知る生成側（`local-agent/conversation-example-generator.ts`）が最終ターンを
+  呼び出し側へ伝える、(b) `conversation-example-flow.ts` の `generating.nextSpeaker` を nullable にし、
+  最終ターン確定後は `null`（=typing indicator を出さない）にする、(c) 同じ状態での Cancel は
+  `ended-early` ではなく `shown` へ直接遷移させる（何も失われていないため）。あわせて `/simplify` 指摘
+  だった `confirmedTurns` closure 変数の重複を解消し `state.turns` を直接読むようにした。同時に届いた
+  HIGH 指摘（`beginConversationExampleSession` の Benchmark outcome が `context.release()` 自体の
+  成否しか見ておらず、途中ターンの Native 完了失敗を `success` と誤記録しうる）も合わせて修正し、
+  `executeLlamaProvider` と `beginConversationExampleSession` の重複コード（lease 取得・エラー正規化）を
+  `acquireLeaseOrLoadError` / `normalizeAndFailBenchmark` へ抽出した（reuse・efficiency・altitude の
+  3 視点が同一箇所を指摘）。ADR-0051 の Consequences に追記済み。同時性review の指摘のうち、
+  「重複 Guard を話者一致条件へ狭める」提案と UI 吹き出しの構造共通化は、既に ADR・設計 doc・テストで
+  明示的に固定した決定を覆す/この時点でのリスクに見合わないため見送り、必要なら別 PR の follow-up とする。
+- 2026-07-27（PR #174 作成後の独立レビューで 2 度目の Blocker 級指摘）: PR 作成後、code-reviewer
+  subagent に PR #174 の diff を独立コンテキストで再レビューさせたところ、前回修正（cancel() の
+  `nextSpeaker === null → shown`）と同じ不具合クラスが 60 秒 Timeout handler には適用されておらず、
+  最終ターン確定から `session.close()` 完了までの間にちょうど Timeout がまたがると、全ターン成功して
+  いるのに `ended-early` が出る不具合が残っていた（HIGH 指摘）。`cancel()` と Timeout handler の判定を
+  `terminalStateAfterGivenUp` という共通ヘルパーへ集約して両方に適用し、回帰テストを追加した。あわせて
+  MEDIUM/LOW 指摘のうち費用対効果が高いものを同 PR で修正: (a) `markCompletion`（first-write-wins）が
+  ターン毎に呼ばれ 1 ターン目の完了時刻に固定されていたバグを、全ターン成功が確定する `close()` 側に
+  移して修正、(b) `beginConversationExampleSession` の `'cancelled'` outcome 分岐が実装経由のテストで
+  一度も踏まれていなかったため回帰テストを追加、(c) 反復拒否 Guard の「話者を問わず」動作が実は
+  同一話者パターンしかテストされていなかったため、真の cross-speaker 一致を拒否するテストを追加、
+  (d) 設計 doc の状態遷移図・検証節が `cancel()`/Timeout の `shown` 分岐を反映しておらず実装と
+  食い違っていたため更新、(e) ADR-0051 の「`executeLlamaProvider` と同じ判定方法に揃えた」という
+  記述が、ターン単位 Content Guard 違反（本 Issue の動機バグである反復ループを含む）を outcome に
+  反映しない実装の実態を超えて言い切っていたため、意図的なスコープ外である旨を明示する表現へ修正した。
+  この最後の点（Content Guard 違反が Benchmark outcome に反映されない）自体は設計判断として妥当と
+  判断し、コードは変えず follow-up として記録した。
+
+#### 振り返り（1 回目）
+
+- **問題**: ターン毎生成へ移行した設計レビュー時点では、「反復ループ」という失敗モードを想定していな
+  かった。単発 completion（全ターン一括）だった旧方式では、モデルが 1 回の生成で 4 ターン分の文脈を
+  同時に見るため同一文の反復が起きにくかったが、ターン毎生成は各 Request が独立した短い completion に
+  なる分、モデルが「まだ発話していないつもりで」既出の文を再生成しうるリスクが構造的に増える。
+- **根本原因**: ターン毎生成の設計時に、transcript を Prompt へ渡すことと「渡した transcript を
+  モデルが実際に活用する」ことを同一視していた。渡すだけでは反復を防げず、検証側（Guard）でも
+  反復を検出していなかったため、二重の抜けになっていた。
+- **予防策**: 「これまでの文脈を Prompt へ渡す」設計をレビューするときは、渡すこと自体と、渡した
+  文脈から外れた出力（反復・矛盾）を検出する Guard の両方をセットで設計する。今回は owner の実機
+  観測で発覚したが、次回以降はターン毎生成のような「独立した繰り返し呼び出し」を設計する時点で
+  「同じ出力が繰り返されないか」を実行テストの受け入れ基準に最初から含める。
+
+#### 振り返り（2 回目）
+
+- **問題**: 1 回目のレビューで見つかった Blocker（ghost typing indicator / cancel 時の誤った
+  ended-early）を修正する際、同じ判定ロジックが必要な 2 箇所（`cancel()` と 60 秒 Timeout handler）の
+  うち片方（`cancel()`）にしか手を入れず、もう片方は「同じ状態機械の中の別の遷移先」として見落とした。
+- **根本原因**: 「Blocker を直した」という確認を、修正した 1 箇所のテストが通ることだけで判断し、
+  同じ状態（`nextSpeaker === null` の待ち時間）に到達しうる他の遷移経路（Timeout・将来追加されうる
+  他の「待つのをやめる」操作）を横断的に洗い出さなかった。修正対象を「見つかった 1 つの再現手順」に
+  narrow し過ぎ、「その状態が持つ意味（全ターン確定済みなら何も失っていない）」という不変条件として
+  捉え直さなかった。
+- **予防策**: 状態機械の Bug を直すときは、直した分岐の対症療法で終わらせず、「この状態に到達しうる
+  すべての遷移」を列挙してから修正を横展開する。今回のように、同じ判定を複数の handler が独立に
+  持つ場合は、判定ロジックを共有ヘルパーへ最初から抽出しておけば、片方だけ直して他方を見落とすリスク
+  自体を構造的に防げた（今回は 2 度目のレビューで発覚した後にヘルパー化した）。
