@@ -106,4 +106,18 @@ describe('Native LocalModelCompletionPort の構成', () => {
     await expectLoadError(async () => port?.complete(REQUEST));
     expect(loads).toBe(0);
   });
+
+  it('不正設定は会話例の Session 開始も同じ Load Error にする', async () => {
+    const port = createConfiguredLocalModelCompletionPort(
+      {
+        modelPath: 'https://example.invalid/model.gguf',
+        nCtx: 'not-a-number',
+      },
+      async () => ({ initLlama: async () => new NoSignalContext() }),
+      new LocalModelContextLeaseRegistry(false)
+    );
+
+    expect(port).toBeDefined();
+    await expectLoadError(async () => port?.beginSession());
+  });
 });

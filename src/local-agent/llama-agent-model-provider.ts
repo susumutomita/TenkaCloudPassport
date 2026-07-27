@@ -4,7 +4,8 @@ import {
 } from '../domain/agent-model-provider';
 import type {
   ConversationExampleCompletionPort,
-  ConversationExampleModelRequest,
+  ConversationExampleSession,
+  ConversationExampleTurnModelRequest,
 } from './conversation-example-generator';
 import type { LocalModelConfiguration } from './local-model-configuration';
 import type {
@@ -92,7 +93,9 @@ export interface LocalModelExecutionLeasePort {
   acquire(): LocalModelExecutionLease;
 }
 
-type LlamaModelRequest = LocalModelRequest | ConversationExampleModelRequest;
+type LlamaModelRequest =
+  | LocalModelRequest
+  | ConversationExampleTurnModelRequest;
 
 function completionParameters(
   request: LlamaModelRequest,
@@ -313,6 +316,40 @@ async function finishBenchmark(
   }
 }
 
+/**
+ * `executeLlamaProvider` と `beginConversationExampleSession` の両方が使う
+ * lease 取得の失敗経路（Benchmark を 'failed' で終え、型付き LOAD_ERROR にする）。
+ * `/simplify` 指摘（reuse・efficiency・altitude の 3 視点が同一箇所を指摘）で
+ * 重複を解消するために抽出した。
+ */
+function acquireLeaseOrLoadError(
+  executionLeases: LocalModelExecutionLeasePort,
+  benchmark: ModelBenchmarkSession | null
+): LocalModelExecutionLease {
+  try {
+    return executionLeases.acquire();
+  } catch {
+    void finishBenchmark(benchmark, 'failed');
+    throw loadError();
+  }
+}
+
+/**
+ * Native 由来の error を型付き `AgentModelProviderError` へ正規化し、Benchmark を
+ * CANCELLED か失敗かに応じて終える。呼び出し元は正規化後の error を必ず throw する。
+ */
+function normalizeAndFailBenchmark(
+  error: unknown,
+  benchmark: ModelBenchmarkSession | null
+): AgentModelProviderError {
+  const normalized = normalizeNativeError(error);
+  void finishBenchmark(
+    benchmark,
+    normalized.code === 'CANCELLED' ? 'cancelled' : 'failed'
+  );
+  return normalized;
+}
+
 async function executeLlamaProvider(
   request: LlamaModelRequest,
   configuration: LocalModelConfiguration,
@@ -322,13 +359,7 @@ async function executeLlamaProvider(
   recorder: ModelBenchmarkRecorder | undefined
 ): Promise<unknown> {
   const benchmark = await startBenchmark(recorder);
-  let lease: LocalModelExecutionLease;
-  try {
-    lease = executionLeases.acquire();
-  } catch {
-    void finishBenchmark(benchmark, 'failed');
-    throw loadError();
-  }
+  const lease = acquireLeaseOrLoadError(executionLeases, benchmark);
   let quarantined = false;
   try {
     const context = await initializeContext(configuration, loadModule, signal);
@@ -354,13 +385,78 @@ async function executeLlamaProvider(
     return completion.output;
   } catch (error: unknown) {
     if (!quarantined) lease.release();
-    const normalized = normalizeNativeError(error);
-    void finishBenchmark(
-      benchmark,
-      normalized.code === 'CANCELLED' ? 'cancelled' : 'failed'
-    );
-    throw normalized;
+    throw normalizeAndFailBenchmark(error, benchmark);
   }
+}
+
+/**
+ * Issue 169: 会話例はターン毎生成へ移行したが、ターンごとに Native Context を
+ * 都度 init/release するとモデルロードが毎回走り遅くなる。`beginSession` は
+ * Context・execution lease を 1 度だけ確保し、`completeTurn` で全ターン再利用、
+ * `close` で 1 度だけ解放する。Bridge 側の `executeLlamaProvider`（1 回の
+ * completion で init/release が完結する契約）はそのまま維持し、この Session
+ * 経路とは lease の取得回数以外を共有する（`completeContext` / `captureCompletion`）。
+ */
+async function beginConversationExampleSession(
+  configuration: LocalModelConfiguration,
+  loadModule: LlamaModuleLoader,
+  executionLeases: LocalModelExecutionLeasePort,
+  recorder: ModelBenchmarkRecorder | undefined,
+  options: AgentModelProviderOptions | undefined
+): Promise<ConversationExampleSession> {
+  const signal = options?.signal;
+  const benchmark = await startBenchmark(recorder);
+  const lease = acquireLeaseOrLoadError(executionLeases, benchmark);
+  let context: LlamaContextPort;
+  try {
+    context = await initializeContext(configuration, loadModule, signal);
+  } catch (error: unknown) {
+    lease.release();
+    throw normalizeAndFailBenchmark(error, benchmark);
+  }
+  benchmark?.markLoaded();
+  // レビュー指摘（HIGH）: `close()` は `context.release()` 自体の成否だけでなく、
+  // 全ターンを通じた completion の失敗・Cancel も outcome に反映する
+  // （`executeLlamaProvider` の `completion.kind`/`normalized.code` 判定と同じ考え方）。
+  // Guard 違反（Content Guard）は Native 完了そのものは成功しているため、
+  // ここでは扱わない（`parseConversationExampleTurn` は completeTurn の外側で呼ばれる）。
+  let sessionFailure: AgentModelProviderError | null = null;
+  return {
+    async completeTurn(request, turnOptions) {
+      const completion = await captureCompletion(
+        context,
+        request,
+        configuration,
+        turnOptions?.signal ?? signal,
+        benchmark
+      );
+      if (completion.kind === 'failure') {
+        sessionFailure = completion.error;
+        throw completion.error;
+      }
+      benchmark?.markCompletion();
+      return completion.output;
+    },
+    async close() {
+      try {
+        await context.release();
+      } catch {
+        // Native Context の解放を証明できないため lease を保持し、Process 再起動まで
+        // 次の Context 確保を止める（`executeLlamaProvider` と同じ quarantine 方針）。
+        void finishBenchmark(benchmark, 'failed');
+        throw quarantinedLoadError();
+      }
+      lease.release();
+      void finishBenchmark(
+        benchmark,
+        sessionFailure === null
+          ? 'success'
+          : sessionFailure.code === 'CANCELLED'
+            ? 'cancelled'
+            : 'failed'
+      );
+    },
+  };
 }
 
 /**
@@ -374,7 +470,7 @@ export function createLlamaCompletionPort(
   recorder?: ModelBenchmarkRecorder
 ): LocalModelCompletionPort & ConversationExampleCompletionPort {
   return {
-    complete(request: LlamaModelRequest, options?: AgentModelProviderOptions) {
+    complete(request: LocalModelRequest, options?: AgentModelProviderOptions) {
       return executeLlamaProvider(
         request,
         configuration,
@@ -382,6 +478,15 @@ export function createLlamaCompletionPort(
         executionLeases,
         options?.signal,
         recorder
+      );
+    },
+    beginSession(options?: AgentModelProviderOptions) {
+      return beginConversationExampleSession(
+        configuration,
+        loadModule,
+        executionLeases,
+        recorder,
+        options
       );
     },
   };

@@ -4,9 +4,9 @@ import type {
   ConversationExampleGenerator,
   ConversationExampleGeneratorOptions,
   ConversationExampleInput,
+  ConversationExampleTurn,
 } from '../domain/conversation-example';
 import {
-  CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS,
   CONVERSATION_EXAMPLE_TIMEOUT_MS,
   type ConversationExampleScheduler,
   createConversationExampleFlowController,
@@ -18,13 +18,25 @@ const INPUT: ConversationExampleInput = {
   language: 'ja',
 };
 
+const TURN_1: ConversationExampleTurn = {
+  speaker: 'owner',
+  text: '最近触った OSS はありますか？',
+};
+const TURN_2: ConversationExampleTurn = {
+  speaker: 'peer',
+  text: '小さな CLI を直しています。',
+};
+const TURN_3: ConversationExampleTurn = {
+  speaker: 'owner',
+  text: 'どこを改善しているんですか？',
+};
+const TURN_4: ConversationExampleTurn = {
+  speaker: 'peer',
+  text: 'エラー表示を分かりやすくしています。',
+};
+
 const EXAMPLE: ConversationExample = {
-  turns: [
-    { speaker: 'owner', text: '最近触った OSS はありますか？' },
-    { speaker: 'peer', text: '小さな CLI を直しています。' },
-    { speaker: 'owner', text: 'どこを改善しているんですか？' },
-    { speaker: 'peer', text: 'エラー表示を分かりやすくしています。' },
-  ],
+  turns: [TURN_1, TURN_2, TURN_3, TURN_4],
 };
 
 interface ScheduledTask {
@@ -119,11 +131,15 @@ class ManualConversationExampleScheduler
 
 interface PendingGeneration {
   readonly input: ConversationExampleInput;
-  readonly signal: AbortSignal | undefined;
+  readonly options: ConversationExampleGeneratorOptions | undefined;
   readonly resolve: (example: ConversationExample) => void;
   readonly reject: (error: Error) => void;
 }
 
+/**
+ * `generate` の Promise 決着を外部から制御しつつ、実装同様
+ * `options.onTurn` を任意回数呼んでターン確定を模擬できる Fake。
+ */
 class ControlledConversationExampleGenerator
   implements ConversationExampleGenerator
 {
@@ -136,7 +152,7 @@ class ControlledConversationExampleGenerator
     return new Promise((resolve, reject) => {
       this.runs.push({
         input,
-        signal: options?.signal,
+        options,
         resolve,
         reject,
       });
@@ -152,7 +168,7 @@ async function flushPromises(): Promise<void> {
   }
 }
 
-describe('ConversationExampleFlowController（Issue 155 の状態機械）', () => {
+describe('ConversationExampleFlowController（Issue 169: ターン毎生成の状態機械）', () => {
   it('Generator が無い Rules/Web では prepare 後も hidden のままにする', () => {
     const controller = createConversationExampleFlowController(null);
 
@@ -181,7 +197,7 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     controller.dispose();
   });
 
-  it('生成中の経過秒を更新し、全件検証済み結果を 300ms 間隔で順次表示する', async () => {
+  it('生成中はターン確定ごとに turns が 1 件ずつ増え、経過秒を保ったまま更新する', async () => {
     const scheduler = new ManualConversationExampleScheduler();
     const generator = new ControlledConversationExampleGenerator();
     const controller = createConversationExampleFlowController(generator, {
@@ -194,35 +210,114 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     expect(controller.getState()).toEqual({
       kind: 'generating',
       elapsedSeconds: 0,
+      turns: [],
+      nextSpeaker: 'owner',
     });
     scheduler.advanceBy(2_500);
     expect(controller.getState()).toEqual({
       kind: 'generating',
       elapsedSeconds: 2,
+      turns: [],
+      nextSpeaker: 'owner',
     });
-    expect(generator.runs).toHaveLength(1);
 
-    generator.runs[0]?.resolve(EXAMPLE);
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+    expect(controller.getState()).toEqual({
+      kind: 'generating',
+      elapsedSeconds: 2,
+      turns: [TURN_1],
+      nextSpeaker: 'peer',
+    });
+    run?.options?.onTurn?.(TURN_2, false);
+    expect(controller.getState()).toEqual({
+      kind: 'generating',
+      elapsedSeconds: 2,
+      turns: [TURN_1, TURN_2],
+      nextSpeaker: 'owner',
+    });
+
+    run?.resolve(EXAMPLE);
     await flushPromises();
-    expect(controller.getState()).toMatchObject({
-      kind: 'shown',
-      visibleTurnCount: 1,
-    });
+    expect(controller.getState()).toEqual({ kind: 'shown', example: EXAMPLE });
 
-    scheduler.advanceBy(CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS);
-    expect(controller.getState()).toMatchObject({ visibleTurnCount: 2 });
-    scheduler.advanceBy(CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS * 2);
-    expect(controller.getState()).toMatchObject({ visibleTurnCount: 4 });
-
-    scheduler.timeoutCallbacks[0]?.();
-    expect(controller.getState()).toMatchObject({ kind: 'shown' });
     controller.hide();
-    scheduler.intervalCallbacks.at(-1)?.();
     expect(controller.getState()).toEqual({ kind: 'hidden' });
     controller.dispose();
   });
 
-  it('失敗後は Bridge を残すため failed にし、同じ入力で再試行できる', async () => {
+  it('最終ターン確定後、Session Close 完了待ちの間は typing indicator 用の nextSpeaker を出さない', async () => {
+    // レビュー指摘（ghost typing indicator）の回帰テスト。生成器の実装
+    // （`local-agent/conversation-example-generator.ts`）は最終ターンの
+    // onTurn 通知後も `finally { await session.close(); }` の分だけ Promise の
+    // 決着が遅れる。この間、画面には存在しない次の話者の typing indicator も
+    // Cancel ボタンも「まだ生成中」の見た目のまま出てはいけない。
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+
+    run?.options?.onTurn?.(TURN_1, false);
+    run?.options?.onTurn?.(TURN_2, false);
+    run?.options?.onTurn?.(TURN_3, false);
+    run?.options?.onTurn?.(TURN_4, true);
+
+    // Session Close（Native Context 解放）を模した非同期の間 = Promise 未決着。
+    expect(controller.getState()).toEqual({
+      kind: 'generating',
+      elapsedSeconds: 0,
+      turns: [TURN_1, TURN_2, TURN_3, TURN_4],
+      nextSpeaker: null,
+    });
+
+    run?.resolve(EXAMPLE);
+    await flushPromises();
+    expect(controller.getState()).toEqual({ kind: 'shown', example: EXAMPLE });
+    controller.dispose();
+  });
+
+  it('全ターン確定後（nextSpeaker が null）の Cancel は、失われたものが無いため shown として扱う', async () => {
+    // レビュー指摘の回帰テスト: 最終ターンまで確定した後の Cancel は
+    // Session Close の完了待ちをやめさせるだけで、会話の内容は何も失われない。
+    // ended-early（「途中で終了した」文言）ではなく shown にする。
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+
+    run?.options?.onTurn?.(TURN_1, false);
+    run?.options?.onTurn?.(TURN_2, false);
+    run?.options?.onTurn?.(TURN_3, false);
+    run?.options?.onTurn?.(TURN_4, true);
+
+    controller.cancel();
+
+    expect(controller.getState()).toEqual({
+      kind: 'shown',
+      example: { turns: [TURN_1, TURN_2, TURN_3, TURN_4] },
+    });
+
+    // 遅れて届く settlement（成功・失敗どちらでも）は世代が古いため無視される。
+    run?.resolve(EXAMPLE);
+    await flushPromises();
+    expect(controller.getState()).toEqual({
+      kind: 'shown',
+      example: { turns: [TURN_1, TURN_2, TURN_3, TURN_4] },
+    });
+    controller.dispose();
+  });
+
+  it('失敗後、確定ターンが 0 件なら Bridge を残すため failed にし、同じ入力で再試行できる', async () => {
     const scheduler = new ManualConversationExampleScheduler();
     const generator = new ControlledConversationExampleGenerator();
     const controller = createConversationExampleFlowController(generator, {
@@ -243,7 +338,54 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     controller.dispose();
   });
 
-  it('Cancel は Abort して available へ戻し、遅延完了を表示しない', async () => {
+  it('確定済みターンが 1 件以上ある途中失敗は ended-early にして確定分を残す', async () => {
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+
+    run?.reject(new Error('generation failed after first turn'));
+    await flushPromises();
+
+    expect(controller.getState()).toEqual({
+      kind: 'ended-early',
+      turns: [TURN_1],
+    });
+    controller.dispose();
+  });
+
+  it('ターン単位の Content Guard 違反も、確定分が 1 件以上あれば ended-early にする', async () => {
+    // ターン単位の Guard 違反は Generator 内部で ConversationExampleError として
+    // reject される（`local-agent/conversation-example-generator.ts` の責務）。
+    // Controller から見ればこれも「途中失敗」であり、同じ ended-early 分岐を通る。
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+
+    run?.reject(new Error('turn content guard violation'));
+    await flushPromises();
+
+    expect(controller.getState()).toEqual({
+      kind: 'ended-early',
+      turns: [TURN_1],
+    });
+    controller.dispose();
+  });
+
+  it('Cancel は確定ターンが 0 件なら Abort して available へ戻し、遅延完了を表示しない', async () => {
     const scheduler = new ManualConversationExampleScheduler();
     const generator = new ControlledConversationExampleGenerator();
     const controller = createConversationExampleFlowController(generator, {
@@ -259,8 +401,58 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     firstRun?.resolve(EXAMPLE);
     await flushPromises();
 
-    expect(firstRun?.signal?.aborted).toBe(true);
+    expect(firstRun?.options?.signal?.aborted).toBe(true);
     expect(controller.getState()).toEqual({ kind: 'available' });
+    controller.dispose();
+  });
+
+  it('確定済みターンが 1 件以上あるキャンセルは ended-early にして確定分を残す', async () => {
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+    run?.options?.onTurn?.(TURN_2, false);
+
+    controller.cancel();
+
+    expect(run?.options?.signal?.aborted).toBe(true);
+    expect(controller.getState()).toEqual({
+      kind: 'ended-early',
+      turns: [TURN_1, TURN_2],
+    });
+    controller.dispose();
+  });
+
+  it('Cancel 後に遅れて届く stale な onTurn 通知は世代を検査して無視する', async () => {
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+    controller.cancel();
+    expect(controller.getState()).toEqual({
+      kind: 'ended-early',
+      turns: [TURN_1],
+    });
+
+    // 世代の古い Generator が Abort に気づかず onTurn を呼んでも、画面は汚さない。
+    run?.options?.onTurn?.(TURN_2, false);
+
+    expect(controller.getState()).toEqual({
+      kind: 'ended-early',
+      turns: [TURN_1],
+    });
     controller.dispose();
   });
 
@@ -284,7 +476,7 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     controller.dispose();
   });
 
-  it('60 秒 Timeout で Abort して failed にし、後から届く結果を破棄する', async () => {
+  it('60 秒 Timeout で確定ターンが 0 件なら Abort して failed にし、後から届く結果を破棄する', async () => {
     const scheduler = new ManualConversationExampleScheduler();
     const generator = new ControlledConversationExampleGenerator();
     const controller = createConversationExampleFlowController(generator, {
@@ -296,12 +488,33 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     const run = generator.runs[0];
 
     scheduler.advanceBy(CONVERSATION_EXAMPLE_TIMEOUT_MS);
-    expect(run?.signal?.aborted).toBe(true);
+    expect(run?.options?.signal?.aborted).toBe(true);
     expect(controller.getState()).toEqual({ kind: 'failed' });
 
     run?.resolve(EXAMPLE);
     await flushPromises();
     expect(controller.getState()).toEqual({ kind: 'failed' });
+    controller.dispose();
+  });
+
+  it('60 秒 Timeout でも確定ターンが 1 件以上あれば ended-early にして確定分を残す', async () => {
+    const scheduler = new ManualConversationExampleScheduler();
+    const generator = new ControlledConversationExampleGenerator();
+    const controller = createConversationExampleFlowController(generator, {
+      scheduler,
+    });
+    controller.prepare(INPUT);
+    controller.generate();
+    await flushPromises();
+    const run = generator.runs[0];
+    run?.options?.onTurn?.(TURN_1, false);
+
+    scheduler.advanceBy(CONVERSATION_EXAMPLE_TIMEOUT_MS);
+
+    expect(controller.getState()).toEqual({
+      kind: 'ended-early',
+      turns: [TURN_1],
+    });
     controller.dispose();
   });
 
@@ -323,6 +536,8 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     expect(controller.getState()).toEqual({
       kind: 'generating',
       elapsedSeconds: 0,
+      turns: [],
+      nextSpeaker: 'owner',
     });
     expect(generator.runs).toHaveLength(2);
     expect(generator.runs[1]?.input).toEqual(INPUT);
@@ -363,13 +578,12 @@ describe('ConversationExampleFlowController（Issue 155 の状態機械）', () 
     };
     const controller = createConversationExampleFlowController(generator, {
       timeoutMs: 1_000,
-      revealIntervalMs: 1_000,
     });
     controller.prepare(INPUT);
     controller.generate();
     await flushPromises();
 
-    expect(controller.getState()).toMatchObject({ kind: 'shown' });
+    expect(controller.getState()).toEqual({ kind: 'shown', example: EXAMPLE });
     controller.dispose();
     expect(controller.getState()).toEqual({ kind: 'hidden' });
   });

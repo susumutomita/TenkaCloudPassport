@@ -32,6 +32,16 @@ export interface ConversationExampleMessages {
     speaker: string,
     text: string
   ) => string;
+  /**
+   * Issue 169: ターン毎生成に移行し、次に話す側の吹き出しへ「入力中…」表示を出す。
+   * Accessibility Label は視覚の「…」だけでは伝わらない「誰が入力中か」を明示する。
+   */
+  readonly typingIndicatorLabel: (speaker: string) => string;
+  /**
+   * Issue 169: 途中失敗・途中キャンセル・Timeout・ターン単位 Guard 違反でも
+   * 確定済みターンを残す（`ended-early` state）。全捨てにしないことを明示する短い notice。
+   */
+  readonly endedEarlyNotice: string;
 }
 
 export const CONVERSATION_EXAMPLE_MESSAGES: Record<
@@ -62,6 +72,9 @@ export const CONVERSATION_EXAMPLE_MESSAGES: Record<
     peerAiLabel: (peerName) => `${peerName} の AI`,
     bubbleAccessibilityLabel: (index, speaker, text) =>
       `AI の会話 ${index} 件目、${speaker}: ${text}`,
+    typingIndicatorLabel: (speaker) => `${speaker}が入力中です。`,
+    endedEarlyNotice:
+      '会話をここまでで終了しました。共通点と最初の質問はそのまま使えます。',
   },
   en: {
     sectionTitle: 'AI-to-AI icebreaker chat',
@@ -89,5 +102,8 @@ export const CONVERSATION_EXAMPLE_MESSAGES: Record<
     peerAiLabel: (peerName) => `${peerName}'s AI`,
     bubbleAccessibilityLabel: (index, speaker, text) =>
       `AI chat item ${index}, ${speaker}: ${text}`,
+    typingIndicatorLabel: (speaker) => `${speaker} is typing.`,
+    endedEarlyNotice:
+      'The chat ended here. You can still use the common ground and opening question.',
   },
 };

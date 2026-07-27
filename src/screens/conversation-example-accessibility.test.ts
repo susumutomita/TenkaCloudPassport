@@ -9,7 +9,7 @@ function agentSource(): Promise<string> {
   return readSourceFile(import.meta.url, 'ConversationAgentScreen.tsx');
 }
 
-describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
+describe('AI 会話例 Section の Accessibility 契約（Issue 155 / 169）', () => {
   it('hidden では Section 自体を描画しない', async () => {
     const text = await sectionSource();
 
@@ -32,7 +32,7 @@ describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
     ]);
   });
 
-  it('生成中は progressbar・polite live region・Cancel を持つ', async () => {
+  it('生成中は progressbar・polite live region・Cancel を持ち、確定ターンと typing indicator を表示する', async () => {
     const text = await sectionSource();
 
     expectInOrder(text, [
@@ -40,6 +40,10 @@ describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
       'accessibilityLiveRegion="polite"',
       'accessibilityRole="progressbar"',
       'accessibilityValue={{',
+      '<ConversationTurnList',
+      'turns={state.turns}',
+      '<TypingIndicatorBubble',
+      'speaker={state.nextSpeaker}',
       'label={t.cancelButton}',
       'onPress={view.onCancel}',
     ]);
@@ -55,9 +59,29 @@ describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
       "state.kind === 'failed'",
       'accessibilityRole="alert"',
       'label={t.retryButton}\n          onPress={view.onGenerate}',
-      'const visibleTurns = state.example.turns.slice(',
+      "state.kind === 'ended-early'",
+      'turns={state.example.turns}',
+      'label={t.regenerateButton}\n        onPress={view.onGenerate}',
+    ]);
+  });
+
+  it('ended-early は確定ターンと終了 notice を、生成完了後の regenerate と区別して提供する', async () => {
+    const text = await sectionSource();
+    const start = text.indexOf("state.kind === 'ended-early'");
+    // 'turns={state.example.turns}' は生成完了後（shown）の Block だけが使う一意な
+    // 目印のため、ended-early の Block 終端として使う。
+    const end = text.indexOf('turns={state.example.turns}', start);
+    const endedEarlySection = text.slice(start, end);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expectInOrder(endedEarlySection, [
+      "state.kind === 'ended-early'",
+      'turns={state.turns}',
+      '{t.endedEarlyNotice}',
       'label={t.regenerateButton}\n          onPress={view.onGenerate}',
     ]);
+    expect(endedEarlySection).not.toContain('accessibilityRole="alert"');
   });
 
   it('各吹き出しは順番・話者・本文の accessibilityLabel を持つ', async () => {
@@ -68,6 +92,26 @@ describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
     );
     expect(text).toContain('accessible');
     expect(text).toContain("turn.speaker === 'owner'");
+  });
+
+  it('typing indicator は誰が入力中かを Accessibility Label で明示し、Theme token だけを使う', async () => {
+    const text = await sectionSource();
+
+    expect(text).toContain('function TypingIndicatorBubble(');
+    expect(text).toContain(
+      'accessibilityLabel={accessibilityLabel(speakerName)}'
+    );
+    expect(text).toContain('styles.typingBubble');
+    expect(text).toContain('opacity: 0.6');
+    expect(text).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+  });
+
+  it('最終ターン確定後（nextSpeaker が null）は typing indicator を描画しない', async () => {
+    // レビュー指摘（ghost typing indicator）の回帰テスト。次の話者がいない間、
+    // Session Close（Native Context 解放）待ちの見た目上の「入力中」表示を出さない。
+    const text = await sectionSource();
+
+    expect(text).toContain('{state.nextSpeaker !== null && (');
   });
 
   it('owner を右、peer を左へ配置し、Theme token だけを使う', async () => {
@@ -84,24 +128,21 @@ describe('AI 会話例 Section の Accessibility 契約（Issue 155）', () => {
     expect(text).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 
-  it('完全検証後の visibleTurnCount 件だけを順次描画する', async () => {
+  it('確定済みターンは reveal Timer を経ずに即時描画する（Issue 169）', async () => {
     const text = await sectionSource();
 
-    expectInOrder(text, [
-      'const visibleTurns = state.example.turns.slice(',
-      'state.visibleTurnCount',
-      'visibleTurns.map((turn, index) => (',
-      '<ConversationBubble',
-    ]);
+    // ターン毎生成では completion の待ち時間自体が進行感を作るため、旧来の
+    // 300ms 順次表示（`visibleTurnCount`）は不要になった。
+    expect(text).not.toContain('visibleTurnCount');
+    expect(text).not.toContain('CONVERSATION_EXAMPLE_REVEAL_INTERVAL_MS');
+    expect(text).toContain('function ConversationTurnList(');
   });
 
   it('配列 index 単独ではなく、先頭からの会話内容で安定 Key を作る', async () => {
     const text = await sectionSource();
 
     expect(text).toContain('function conversationTurnKey(');
-    expect(text).toContain(
-      'key={conversationTurnKey(state.example.turns, index)}'
-    );
+    expect(text).toContain('key={conversationTurnKey(turns, index)}');
     expect(text).not.toContain('key={index}');
   });
 
