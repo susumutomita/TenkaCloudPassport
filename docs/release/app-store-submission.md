@@ -224,11 +224,17 @@ are not logged, persisted, exported, copied to the clipboard, shared with the co
 to any server. The feature is absent in the rules-only, web, Expo Go, model-unavailable, and
 provider-fallback paths.
 
-You can test the base agent single-handed on one device: open the conversation agent from Settings
-and tap "Try with a sample" ("サンプルで試す"). This injects a fixed fictional counterpart card,
-with no real person or real contact information. To test the optional AI example, first enable the
-trusted on-device model in Settings and wait until activation completes, run the sample bridge, and
-tap the AI example button below the common ground and first question.
+You can test the base agent single-handed on one device. When creating your test Intro Card,
+select at least one conversation theme that the built-in sample also has — for example
+"オープンソース" (Open source) — and optionally write a one-line self introduction. Then open the
+conversation agent from the home screen button and tap "Try with a sample" ("サンプルで試す").
+This injects a fixed fictional counterpart card, with no real person or real contact information,
+and the agent surfaces the shared theme as common ground with a first question. If you create a
+card with only a name (no theme, no self introduction), the agent correctly reports that no common
+ground was found — that is the designed no-signal state, not a malfunction. To test the optional
+AI-to-AI icebreaker chat, first enable the trusted on-device model in Settings and wait until
+activation completes, run the sample bridge, and tap the AI chat button below the common ground
+and first question.
 
 (b) QR intro flow
 Create an Intro Card (name is the only required field), then show its QR code. Scanning it with a
