@@ -119,15 +119,15 @@ describe('AI 会話例の一気通貫配線（Issue 155）', () => {
     ]);
   });
 
-  it('環境変数経由の Development Build も同じ Completion Port に capability を登録する', async () => {
+  it('ADR-0057: Apple Foundation Models 経由の Native Composition も同じ Completion Port に capability を登録する', async () => {
     const text = await environmentCompositionSource();
 
     expectInOrder(text, [
-      'const completionPort = createConfiguredLocalModelCompletionPort(',
-      'const provider = createSafetyBoundLocalModelProvider(completionPort);',
+      'const port = createAppleFoundationModelsCompletionPort(',
+      'const provider = createSafetyBoundLocalModelProvider(port);',
       'registerConversationExampleGenerator(',
       'provider,',
-      'createConversationExampleGenerator(completionPort)',
+      'createConversationExampleGenerator(port)',
     ]);
   });
 

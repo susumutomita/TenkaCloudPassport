@@ -10417,3 +10417,356 @@ consent → DL フロー（`use-local-model-management.ts` の
   また、致命的なユーザー向け文言を投げる箇所は、その文言が正しい場面
   （本当に回復不能）とそれ以外（一時的な busy）を型（`reason`）で区別
   できる設計を最初から選ぶと、後から見つかる「過大な文言」バグを防げる。
+
+### [Issue 171 Apple Intelligence 一本化（Qwen 撤去）] - 2026-07-28
+
+#### 目的
+
+会話エージェントの端末内 Provider を Qwen（GGUF ダウンロード型、llama.rn）から
+Apple Intelligence（FoundationModels framework、iOS 26+）へ一本化する。
+owner 方針（Issue 171 最新コメント、2026-07-28）: v1.1.1〜v1.1.6 の実機不具合が
+ほぼ全てダウンロード起因（転送・検証・削除・manifest・復旧）であり、OS 内蔵モデルなら
+このクラスの問題が構造的に消える。対応端末は iPhone 15 Pro 以降 + iOS 26 +
+Apple Intelligence 有効、非対応端末は Rules（テーマ照合）で動作継続する。
+
+#### 制約
+
+- `rm` / `npx` 禁止。既存の `ios/` 生成物と `node_modules` は不触
+  （`modules/` 配下の新設・`src/` の変更のみ）。8081 kill 禁止。モック禁止
+  （テストダブルは既存慣行の範囲）。型エスケープ禁止。TDD・日本語 BDD・
+  カバレッジ 100%（TS 部分）。
+- CI はネイティブ Swift を compile しない。Swift の妥当性は「目視 + 型に忠実」
+  だが、可能な範囲で実機の SDK に対して直接検証する（後述）。
+- Issue は `#番号` 引用禁止。
+
+#### 設計判断（代替案の比較）
+
+##### 1. FoundationModels の実 API 確認方法
+
+Apple Intelligence の API 記憶だけで Swift を書くと、`UnavailableReason` の
+ケース名や `respond()` の形が実際と食い違うリスクが高い（学習データの
+cutoff 後に GA した API のため）。この macOS には Xcode 26.6 / iOS 26.5 SDK が
+実在するため、`FoundationModels.framework` の `.swiftinterface`
+（`/Applications/Xcode.app/.../iPhoneSimulator.sdk/.../FoundationModels.swiftmodule/
+arm64-apple-ios-simulator.swiftinterface`）をテキストとして直接読み、
+実シグネチャから設計した。当てずっぽうの再現ではなく一次情報を使う。
+
+確認できた実シグネチャ（要旨）:
+
+- `SystemLanguageModel.Availability`: `.available` / `.unavailable(UnavailableReason)`。
+  `UnavailableReason`: `.deviceNotEligible` / `.appleIntelligenceNotEnabled` /
+  `.modelNotReady`（`@frozen` ではないため `@unknown default` が必須）。
+- `LanguageModelSession(instructions: String?)` と
+  `respond(to: String, options: GenerationOptions)` / `respond(to: String,
+  schema: GenerationSchema, options:)` の両方が存在する（自由文と Guided
+  Generation を同じ Session 型で切替可能）。
+- `DynamicGenerationSchema` に `init(name:properties:)`（object）、
+  `init(name:anyOf: [DynamicGenerationSchema])`（oneOf、object 分岐用）、
+  `init(name:anyOf: [String])`（文字列 enum/const 用）、
+  `init(arrayOf:minimumElements:maximumElements:)`（array）、
+  `init(type: Value.Type)`（プリミティブ leaf）が揃っており、
+  `GenerationSchema(root:dependencies:) throws` で確定 Schema へ変換できる。
+- `GeneratedContent.jsonString` で構造化 Output を JSON 文字列として取得できる。
+
+##### 2. Guided Generation の Schema をどう作るか（3 案）
+
+`model-safety-boundary.ts` の `responseFormat.schema` は `oneOf` 3 分岐
+（`no-signal` / `bridge`（evidenceIds enum 配列）/ `grounded-bridge`（2 文字列））
+という限定された JSON Schema の部分集合である。
+
+1. **JSON Schema 文字列 → `DynamicGenerationSchema` への変換器（採用）**:
+   上記の限定部分集合（object / string の const・enum / array の items）だけを
+   サポートする変換器を Swift で書く。データ駆動（evidenceIds の個数が
+   変わっても Native コード変更不要）で、TS 側 Schema 定義を正本のまま保てる。
+   未対応の形は `invalidSchema` で fail-closed にする（拡張は ADR/レビューで
+   気づける）。
+2. **3 つの `@Generable` Swift 型を用意し、Request の中身で分岐**: 型安全だが
+   Native と TS の Schema 定義が二重管理になり drift の温床になる。
+   `evidenceIds` の enum 値（動的な Evidence ID 集合）を `@Generable` の
+   静的型だけで表現しづらい。
+3. **自由文 + 「JSON で返して」という指示文だけ**: 実装は最も簡単だが、
+   Guided Generation を使わない選択は品質バー（`最初に動いた構造を採用
+   しない`）に反する。`llama.rn` 経路がすでに `response_format` で
+   構造化 Output を強制しており、後退になる。
+
+1 を採用する。TS 側の Schema 定義（`model-safety-boundary.ts` /
+`conversation-example-prompt.ts`）を正本のまま維持し、Native 側は
+「解釈できる部分集合」を宣言的に持つだけで済む。
+
+##### 3. Session の Lifecycle（llama.rn との違い）
+
+`llama.rn` の `LlamaContextPort` は重み読み込みを伴う重い Native Context で、
+init/release と execution lease（同時に 1 本しか使わせない直列化）が必須
+だった。FoundationModels の `SystemLanguageModel` は重み読み込みを伴わない
+OS 常駐サービスであり、`LanguageModelSession` の生成・破棄に相当する
+lifecycle API は無い（`deinit` のみ）。そのため Apple 版の
+`ConversationExampleCompletionPort.beginSession` は Native 側に状態を
+持たせず、TS 側で「毎ターン `complete()` を呼び直す」ことで模倣する
+（`close()` は no-op）。execution lease（`LocalModelExecutionLeasePort`）も
+Apple 経路では使わない。並行呼び出しの rate limit（`GenerationError
+.concurrentRequests` / `.rateLimited`）は型付き `LOAD_ERROR` として
+Rules へ Fallback する既存の Fallback-once に任せ、新しい直列化機構は
+作らない（1 端末 1 Encounter という実運用の並行度を踏まえた判断。将来
+問題が顕在化したら Follow-up で対応）。
+
+##### 4. 配線: Primary/Fallback を新しく作らない
+
+「Apple Intelligence が使えるなら最優先、使えなければ Rules」は、
+既存の Fallback-once 機構（`provider-fallback.ts` の `runProviderOnce`、
+`agent-provider-session.ts` の timeout/cancel 処理）がそのまま実現する。
+`createNativeAgentModelProvider` は Apple 版 Completion Port を常に
+Primary Provider として返し、Native 側が unavailable を検出した場合は
+型付き `AgentModelProviderError('LOAD_ERROR')` を投げるだけでよい。
+Provider 選定のための新しい非同期 Availability 事前チェックを composition
+層に増設しない（既存の「型付き失敗は Rules へ 1 回だけ Fallback する」
+契約を再利用するだけで済むため）。
+
+`llama.rn`（Qwen）関連ファイル（`llama-agent-model-provider.ts` /
+`configured-agent-model-provider.ts` / `local-model-configuration.ts` 等）は
+削除せず残置する（再導入口として、また Model Lifecycle・Diagnostics 等の
+既存機能はこの PR の scope 外のため）。既存テストも残置し、カバレッジ
+100% を維持する。
+
+##### 5. PR 分割
+
+owner 方針で 1 PR 可・大きければ native+provider を先行、UI 撤去を
+後続 PR に分割可とされた。今回は下記の理由で **native module + provider
+配線 + ADR + テストをこの PR、Settings / 会話画面の Qwen UI 撤去と
+`docs/release/app-store-submission.md` のメタデータ更新は後続 PR** に
+分割する（`/follow-up add` で記録）。
+
+- UI 撤去は Settings・会話画面・`use-local-model-management` 系の複数
+  ファイルに渡る独立した変更量があり、native/provider 側の検証（実機
+  ビルド）を待たずに単独でレビューできる。
+- 現行 Settings の Qwen ダウンロード UI は配線変更後も「表示はされるが
+  Provider には反映されない」状態になるが、クラッシュや data loss を
+  起こす壊れ方ではない（owner 指摘どおり Qwen は既に実機不具合だらけで
+  あり、状態としては悪化しない）。この状態を PR 本文に明記する。
+
+#### タスク
+
+1. `modules/apple-foundation-models/`（Swift Engine + Schema Converter +
+   Exceptions + 薄い Module + podspec + config）を新設する。
+2. `src/local-agent/apple-foundation-models-availability.ts`
+   （Native Availability 値の fail-closed 解析）を TDD で実装する。
+3. `src/local-agent/apple-foundation-models-provider.ts`
+   （`LocalModelCompletionPort` & `ConversationExampleCompletionPort` 実装、
+   Request → systemPrompt/userPrompt/schemaJson 変換、Native error の
+   `AgentModelProviderError` 正規化）を TDD で実装する。
+4. `src/app/native-agent-model-provider-composition.ts` /
+   `default-agent-model-provider.native.ts` を Apple Primary + Rules
+   Fallback へ書き換え、既存の Composition Test を更新する。
+5. ADR-0057 を書く。
+6. `bun scripts/architecture-harness.ts --staged --fail-on=error` →
+   `make before-commit` を green にする。
+7. `/follow-up add` で UI 撤去・メタデータ更新の後続 PR を記録する。
+
+#### 検証手順
+
+- `xcrun swiftc -typecheck`（iOS 26.5 SDK 実物に対して）で Engine /
+  Schema Converter の型を検証する（ExpoModulesCore 依存の Module /
+  Exceptions は Camera 等の実インストール済み Expo Module の実例パターンに
+  倣う）。
+- `bun test src --coverage` で 100% を維持する（変更前ベースライン:
+  1717 pass / 全ファイル 100%）。
+- 実機 / Simulator 実行検証（`bunx expo prebuild` 以降のネイティブ
+  ビルドが要る）は呼び出し元・owner が別途行う。手順を PR 本文に明記する。
+
+#### 進捗ログ
+
+- 2026-07-28: `FoundationModels.swiftinterface`（iOS 26.5 SDK）を読み、
+  実 API シグネチャを確認した。`AppleFoundationModelsEngine.swift` /
+  `AppleFoundationModelsSchemaConverter.swift` を実装し、
+  `xcrun swiftc -typecheck -sdk $(xcrun --sdk iphonesimulator
+  --show-sdk-path) -target arm64-apple-ios26.0-simulator` で
+  exit 0 を確認した。ExpoModulesCore 側（Module / Exceptions）は
+  `node_modules/expo-camera` の実装（`GenericException<String>` /
+  `guard #available` / `AsyncFunction` 内の暗黙 `async throws` 推論）を
+  一次情報として踏襲した。podspec に `weak_frameworks = ['FoundationModels']`
+  を追加し、deployment target 16.4（`ios/Podfile` 実測値）のままでも
+  起動時クラッシュしない構成にした。
+- 2026-07-28: TS 側（`apple-foundation-models-availability.ts` /
+  `apple-foundation-models-provider.ts`、TDD）と Composition 配線
+  （`native-agent-model-provider-composition.ts` /
+  `default-agent-model-provider.native.ts`）を実装し、既存の
+  `default-agent-model-provider.test.ts` / `conversation-example-wiring.test.ts`
+  を新配線に合わせて更新した。harness invariant
+  `INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY` が `apple-foundation-models-
+  availability.ts` の doc comment 内の `AgentModelProvider` という単語（コード
+  ではなく散文）を機械的に検出したため、識別子を直接書かない言い回しへ修正
+  した（機構は正しく動いており、規約側を緩めない）。ADR-0057 を作成し、
+  `make before-commit`（exit 0、1734 pass、全ファイルカバレッジ 100%）を
+  確認した。
+- 2026-07-28: `/security-review` を実行した。信頼できる高確度の指摘は
+  0 件（Native `complete` の失敗詳細が peer 由来の未信頼文字列を含みうる
+  という候補を検討したが、TS 側 `normalizeNativeError` が詳細を握り潰して
+  固定文言へ丸めており、ログ・UI・呼び出し元のどこにも到達しないため
+  confidence 4/10 で不採用）。
+- 2026-07-28: `code-reviewer` subagent（独立 context）へレビューを依頼し、
+  blocker 1 件・high 1 件を検出された。
+  1. **blocker**: `AppleFoundationModelsSchemaConverter.dynamicSchema` が
+     `oneOf` 判定の直後に `object["type"]` を必須にしていたため、
+     `model-safety-boundary.ts` の全 Schema が判別子に使う
+     `kind: { const: '...' }`（`type` を持たない、標準 JSON Schema として
+     正当な省略）を変換できず、Bridge 判定が Guided Generation の度に
+     必ず `invalidSchema` で失敗していた。`xcrun swiftc -typecheck` は
+     型検証のみで実行時ロジックのこの欠陥を検出できていなかった。
+  2. **high**: `ConversationExampleTurnModelRequest.generation.temperature`
+     （会話例が意図的に指定する `0.7`）を Native `complete()` へ転送しておらず、
+     常に `temperature: 0`・`.greedy`（決定的）で生成していた。会話例の
+     多様性が失われ、`assertNotRepeatingTranscript` の重複検出に引っかかり
+     やすくなる設計上の欠落だった。
+  reviewer は「fix の完了条件には実データ（`responseFormatForEvidenceIds`
+  の実出力）を通す実行可能な検証を含めるべき」と明記していたため、修正後に
+  以下を実施した。
+  - blocker 修正: `oneOf` の次に「`type` が無く `const`/`enum` を持つ
+    ノードか」を判定する `isBareStringLiteralSchema` を追加し、
+    `stringSchema` へ委譲するようにした。
+  - high 修正: Native `complete()` に `temperature: Double` 引数を追加し、
+    `temperature > 0` のときだけ `.random(probabilityThreshold: 0.9)`
+    （nucleus sampling）へ切り替える（`.greedy` は `temperature` を無視する
+    ため）。TS 側は `'generation' in request` で Bridge（`0`）と会話例
+    （`request.generation.temperature`）を分岐する、`llama-agent-model-
+    provider.ts` の `completionParameters` と同じパターンを踏襲した。
+  - **実行可能な検証**: `bun` で `createLocalModelRequest` /
+    `CONVERSATION_EXAMPLE_TURN_RESPONSE_SCHEMA` を実際に呼び出し、本番の
+    JSON Schema 4 種（no-signal-only / bridge / grounded-bridge / 会話例）を
+    `JSON.stringify` で取得した。この Engine / Schema Converter の 2 ファイル
+    （ExpoModulesCore 非依存）を、この開発機（macOS 26.5.2、Apple
+    Intelligence 有効）向けに `xcrun swiftc -sdk $(xcrun --sdk macosx
+    --show-sdk-path) -target arm64-apple-macosx26.0` で実際にコンパイル・
+    リンクし、検証用 `main.swift`（この PR には含めない一時検証物、
+    scratchpad 配下）から実行した。結果、4 Schema 全てが `GenerationSchema`
+    への変換に成功し、さらに実際の Apple Intelligence へ
+    `LanguageModelSession.respond(to:schema:options:)` を投げたところ、
+    Bridge Schema では `{"evidenceIds": ["topic:open-source"], "kind":
+    "bridge"}`、no-signal-only では `{"kind": "no-signal"}`、会話例 Schema
+    （`temperature: 0.7`）では `{"text": "こんにちは！"}`、`schemaJson` 無し
+    （自由文）では自然な英語の挨拶文が返った。macOS host 上での Engine 単体
+    実行という制約はあるが、`xcrun swiftc -typecheck` を超える実データでの
+    実行確認になった。テスト（`apple-foundation-models-provider.test.ts`）にも
+    `temperature` 転送の分岐（Bridge は `0`、会話例は
+    `CONVERSATION_EXAMPLE_TEMPERATURE`）を追加した。修正後、
+    `bunx tsc --noEmit -p .`・`bun test src --coverage`（1734 pass、全
+    ファイル 100%）・`xcrun swiftc -typecheck`・`bun scripts/architecture-
+    harness.ts --staged --fail-on=error`・`make before-commit`（exit 0）を
+    全て green で再確認した。ADR-0057 に blocker/high の指摘内容と修正・
+    実行検証の結果を追記した。
+
+#### 振り返り
+
+- 問題: Swift の Guided Generation Schema 変換器（`isUnsafeProviderStructure`
+  ならぬ `dynamicSchema` の型判定分岐）を書いた時点では、`xcrun swiftc
+  -typecheck` が通ったことをもって「型に忠実」と判断していたが、実際には
+  本番の JSON Schema（判別子 `kind` が `type` を省略する形）を一度も実データで
+  通していなかったため、Bridge 判定という PR の主目的そのものが機能しない
+  状態のまま実装を進めていた。
+- 根本原因: 「コンパイルが通る」と「実行時に正しい分岐へ入る」は別の性質の
+  保証であり、特に JSON Schema のような「省略可能な field の組み合わせで
+  意味が確定する」仕様を手書きの Walker で解釈するコードは、型検査だけでは
+  分岐網羅性を保証できない。CI がネイティブを compile しない制約下では、
+  この種の実行時ロジックの欠陥は「目視」だけでは見つからず、独立した
+  code-reviewer の視点（reviewer は実際に production Schema を Swift の
+  REPL 相当で動かして repro した）があって初めて発覆した。
+- 予防策: 「ネイティブはコンパイルできれば良い」という基準を、この開発機に
+  実機と同じ Apple Silicon + 同 OS 世代の SDK が実在する場合は「代表的な
+  実データを実際に実行して確認する」まで引き上げる。特に外部データ形式
+  （JSON Schema 等）を手書きで解釈する変換ロジックは、型検査対象コードに
+  実データを流し込む実行可能な検証（この PR では一時的な Swift 実行 driver）
+  を、少なくとも 1 回は必ず行う。また、実装が「意図どおりに動く」という
+  主張は、実装者自身の目視だけでなく独立した viewpoint（code-reviewer
+  subagent 等）でのレビューを経てから確定させる。
+- 2026-07-28: `/simplify`（reuse・simplification・efficiency・altitude の
+  4 観点並列 subagent）を実行した。
+  - **efficiency**: 有意な指摘なし（Native 呼び出し前の数十バイトの
+    `JSON.stringify` 等は無視できるコストであり、キャッシュ導入は
+    かえって並行実行時の共有可変状態を持ち込むため明示的に非推奨との
+    助言も得た）。
+  - **reuse**: (1) `llama-agent-model-provider.test.ts` と新設した
+    `apple-foundation-models-provider.test.ts` が byte-for-byte 同一の
+    `expectProviderError` Helper を個別定義していた点を、共有 Test Kit
+    `domain-test-kit.ts` へ集約して解消した。(2) 両 Provider が同じ
+    `'generation' in request ? ... : 0` という温度選択ロジックを個別定義
+    している点は、llama.rn 経路（この PR の scope 外、ADR-0057 により
+    残置のみ）まで触れることになるため見送った（`/follow-up add` で
+    Qwen 撤去 PR と合わせて記録済みの延長として扱う）。
+  - **simplification**: `apple-foundation-models-availability.ts` の
+    接頭辞切り出し + Set 判定を、Native rawValue と 1 対 1 の Map へ
+    書き換えた。この過程で、テストの期待値が `unavailable-unknown-reason`
+    （Swift 側の実際の rawValue は `unavailable-unknown`）という、
+    どこにも一致しない文字列を検査しており、fail-closed の既定値へ
+    偶然一致することで見逃されていた drift を発見・修正した（table 化
+    により、この種の drift は該当 key が存在しないだけで即座に露呈する
+    構造になった）。加えて `completeRequest` の 3 箇所の重複した
+    abort チェックを `throwIfAborted` Helper へ集約し、単一呼び出し元
+    だった `normalizeNativeError` をインライン化した。テスト側は
+    Recording Native Port + Completion Port の組み立てを `setup()`
+    Helper へ集約した（カスタム Native 実装を使う 2 件はそのまま個別に
+    書いた）。「availability 系モジュール自体が本 PR では未消費」という
+    指摘は、Issue 171 の元設計が native module の deliverable として
+    明示的に要求した項目であり、UI 撤去 PR（Follow-up）がそのまま
+    消費する予定のため、意図的な scope として据え置いた（削除しない）。
+  - **altitude**: 概ね適切な深さだったが、Swift Schema Converter の
+    `stringSchema`/`arraySchema` で「key が無い（許容）」と
+    「key はあるが型が違う（本来は invalidSchema にすべき）」を
+    区別しておらず、後者が無言で制約なしへフォールバックしていた
+    （blocker と同じ種類の fail-closed 抜け）。`const`/`enum` が
+    string でない場合と `minItems`/`maxItems` が整数でない場合を
+    `invalidSchema` にする修正を加えた。ADR-0057 にも、
+    `agent-provider-session.ts` の既存 Native Lane 直列化
+    primitive（`nativeLaneTail`）が Apple 経路にも引き続き適用される旨を
+    明記した（「新しい直列化機構を作らない」という記述の正確な意味を
+    補足）。
+  - 修正後、Swift 側は `xcrun swiftc -typecheck` と、macOS host 実行
+    （本番 4 Schema + 実際の Apple Intelligence 応答）の両方を再実行し、
+    引き続き成功することを確認した。TS 側は `bunx tsc --noEmit -p .`・
+    `bun test src --coverage`（1734 pass、全ファイル 100%）・
+    `bun biome check`・`bun scripts/architecture-harness.ts --staged
+    --fail-on=error`・`make before-commit`（exit 0）を全て green で
+    再確認した。
+- 2026-07-28: コミット（`77eb59e`）後、advisor（独立レビュー）に相談した。
+  次の指摘を得た。
+  1. **設計上の副作用（未修正、Follow-up 化）**: 「新しい非同期
+     Availability 事前チェックを composition 層に増設しない」判断
+     （§4）は、`provider.kind` を常に `local-agent` にすることを
+     意味する。`agent-provider-session.ts` の `executeAgentProviderSession`
+     は `provider.kind === 'local-agent'` を条件に `local-started` /
+     `local-failed` イベントを発火するため、Apple Intelligence
+     非対応端末では毎 Encounter で `ProviderRuntimeState` が
+     `rules` → `loading-local-model` → `falling-back` → `rules` と
+     遷移し、`providerStatusNotice` の通知が毎回一瞬表示される
+     （Qwen 未設定時代は `provider.kind` が最初から `rules` 固定
+     だったため、この遷移自体が起きなかった）。加えて
+     `use-conversation-agent-flow.ts` の `onStart` は
+     `outcome.settledBy === 'primary'` のときだけ会話例
+     （ADR-0050）を準備するため、非対応端末では常にスキップされる。
+     `grep -n "switchReason\|settledBy" src/app/*.ts` で該当箇所
+     （`use-conversation-agent-flow.ts:355`）を特定し、
+     `provider-fallback.ts` / `agent-provider-session.ts` を実際に
+     読んで遷移経路を確認した。修正には
+     `apple-foundation-models-availability.ts` の
+     `checkAppleFoundationModelsAvailability` を起動時に 1 回呼ぶ
+     構成が必要だが、`App.tsx` は `createDefaultAgentModelProvider`
+     を top-level 同期呼び出ししており（`App.tsx:30`）、非同期化は
+     「消費者 UI 変更はこの spike ではしない」という制約を超える
+     ため、この PR では実装せず `/follow-up add` で記録した
+     （severity: high、`.claude/state/follow-ups.jsonl`）。ADR-0057
+     の §4・§5・Consequences に同内容を追記した。
+  2. **PR 本文への follow-up 反映**: `list-pr-body` の出力を PR 本文の
+     「Known follow-ups」節へ確実に貼ることの確認（AGENTS.md の手順）。
+  3. **検証手順の具体化**: ADR §5 の「JSI 境界は未検証」という
+     抽象的な記述を、(a) `temperature`（JS `number` → Swift `Double`）
+     の marshalling、(b) `schemaJson: String?` が必須の
+     `temperature: Double` より前に並ぶ位置引数の解決、(c)
+     `weak_frameworks` の iOS 16〜25 実機での起動時リンク挙動、の
+     3 点へ具体化した（レビュー可能な粒度にするため）。
+  - 対応: ADR-0057 に (1)(3) を追記し、実機 / Simulator 検証手順に
+    5 番目の手順（非対応端末での通知フラッシュ有無の確認）を追加した。
+    ついでに ADR 本文中の `availability()` 戻り値一覧が
+    `unavailable-unknown-reason` という、Swift 実装
+    （`AppleFoundationModelsEngine.swift`）の実際の rawValue
+    （`unavailable-unknown`）と一致しない stale な
+    値のままだったことに気づき修正した（`/simplify` で TS 側の
+    テスト値は直したが、ADR 本文の転記までは直していなかった）。
+    `bunx textlint docs/adr/0057-apple-intelligence-primary-provider.md`
+    で clean を確認した。

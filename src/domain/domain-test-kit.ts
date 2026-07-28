@@ -1,3 +1,5 @@
+import { expect } from 'bun:test';
+import { AgentModelProviderError } from './agent-model-provider';
 import {
   createLocalPrivateProfile,
   type PublicPassport,
@@ -36,4 +38,26 @@ export function publicPassportWithClues(
     languageCodes,
     ownerConfirmed: true,
   });
+}
+
+/**
+ * `/simplify` 指摘（reuse）: `llama-agent-model-provider.test.ts` と
+ * `apple-foundation-models-provider.test.ts` が同一の Local Model Completion
+ * Port 契約（型付き `AgentModelProviderError` を投げるかどうか）を検証する
+ * ために、byte-for-byte 同じ Helper を個別に定義していた。Engine が増えるたび
+ * 複製が増えないよう、この共有 Test Kit へ 1 箇所へ集約する。
+ */
+export async function expectProviderError(
+  action: () => Promise<unknown>,
+  code: AgentModelProviderError['code']
+): Promise<AgentModelProviderError> {
+  try {
+    await action();
+    throw new Error('AgentModelProviderError が必要です。');
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(AgentModelProviderError);
+    if (!(error instanceof AgentModelProviderError)) throw error;
+    expect(error.code).toBe(code);
+    return error;
+  }
 }
