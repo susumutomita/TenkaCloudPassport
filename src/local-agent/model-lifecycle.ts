@@ -108,11 +108,13 @@ export interface LocalModelFileStore {
    * 扱わない（owner 実機観測、ADR-0054）。孤立 File の掃除失敗は次回の
    * reconcile へ持ち越されるだけで安全だが、(2) の復元に失敗した場合は
    * 「参照されているはずの Model の File が無い」状態が残りうる。これは
-   * 直後に呼ばれる `assertManifestFilesPresent`（`modelFileInfo` で参照済み
-   * Model 全件の存在・Size を独立検証する）が正しく検出し、その場合は
-   * `MANIFEST_READ_FAILED` を投げる——つまりこの Method 自体は握りつぶしても、
-   * 参照済み Model の整合性が握りつぶされることはない。実装は 1 件の File の
-   * 掃除・復元失敗で他の File の処理まで止めないことが望ましい
+   * 直後に呼ばれる `selfHealMissingModelFiles`（`modelFileInfo` で参照済み
+   * Model 全件の存在・Size を検証する）が正しく検出し、欠落・不一致が
+   * あれば ADR-0055 により当該 Model だけを Manifest から除去して load を
+   * 継続させる——つまりこの Method 自体は握りつぶしても、参照済み Model の
+   * 整合性が握りつぶされて load 全体が壊れる（v1.1.1 の削除バグ残骸で owner
+   * 実機が踏んだ恒久ブリック）ことはない。実装は 1 件の File の掃除・復元
+   * 失敗で他の File の処理まで止めないことが望ましい
    * （`expo-model-file-store.native.ts` 参照）。
    */
   readonly reconcilePrivateFiles: (
@@ -415,6 +417,24 @@ async function writeManifest(
 }
 
 /**
+ * `/simplify` 指摘（reuse）: `selfHealManagedPrivateUris`（ADR-0045）と
+ * `selfHealMissingModelFiles`（ADR-0055）が共有する tolerance。load 時に
+ * self-heal した Manifest の永続化を試みるが、失敗しても in-memory の訂正
+ * 結果をそのまま使う（次回の書き込み成功時に同じ self-heal が再実行される
+ * ため、この 1 回の失敗で修復結果を捨てる理由が無い）。
+ */
+async function persistHealedManifestBestEffort(
+  fileStore: LocalModelFileStore,
+  healed: LocalModelManifest
+): Promise<void> {
+  try {
+    await writeManifest(fileStore, healed);
+  } catch {
+    // 訂正した in-memory Manifest はこの session でそのまま使う（doc comment 参照）。
+  }
+}
+
+/**
  * app-private data container の UUID は再インストール・Clean Build・App 更新の
  * たびに変わる（ADR-0045）。Manifest に保存された `privateUri` が古い container を
  * 指したままでも、file 名（sha256）自体は変わらないため、常に「現在の」container へ
@@ -445,12 +465,7 @@ async function selfHealManagedPrivateUris(
   );
   if (!changed) return manifest;
   const healed = { ...manifest, models: healedModels };
-  try {
-    await writeManifest(fileStore, healed);
-  } catch {
-    // 訂正した in-memory Manifest はこの session でそのまま使う（コメントは
-    // 上記関数 doc 参照）。
-  }
+  await persistHealedManifestBestEffort(fileStore, healed);
   return healed;
 }
 
@@ -667,6 +682,32 @@ function withUpdatedModelRisk(
     models: manifest.models.map((model) =>
       model.sha256 === sha256 ? { ...model, risk } : model
     ),
+  };
+}
+
+/**
+ * `/simplify` 指摘（altitude）: 「1 件以上の Model を Manifest から除去する」
+ * という同じ 3 field 変更（`models`・`benchmarkReports`・`activeModelSha256`）
+ * が `deleteModel`（明示的に 1 件を指定）と `selfHealMissingModelFiles`
+ * （ADR-0055、File 欠落から計算した複数件）の 2 箇所に分かれて実装されていた。
+ * 1 か所へまとめ、将来 3 つ目の除去経路が増えても 3 field を揃え忘れるリスクを
+ * 無くす。
+ */
+function withoutModels(
+  manifest: LocalModelManifest,
+  removedSha256: ReadonlySet<string>
+): LocalModelManifest {
+  return {
+    ...manifest,
+    models: manifest.models.filter((model) => !removedSha256.has(model.sha256)),
+    benchmarkReports: manifest.benchmarkReports.filter(
+      (report) => !removedSha256.has(report.modelSha256)
+    ),
+    activeModelSha256:
+      manifest.activeModelSha256 !== null &&
+      removedSha256.has(manifest.activeModelSha256)
+        ? null
+        : manifest.activeModelSha256,
   };
 }
 
@@ -929,26 +970,63 @@ async function reconcilePrivateStore(
   }
 }
 
-async function assertManifestFilesPresent(
+type ManifestFilePresence = 'present' | 'missing' | 'unknown';
+
+/**
+ * `modelFileInfo` の結果を 3 通りに分ける。`!exists`・Size 不一致は「壊れて
+ * いる」という積極的な証拠があるため `'missing'`。呼び出し自体が例外を投げる
+ * 場合は「情報が取れない」だけで積極的な証拠が無いため `'unknown'`（ADR-0055
+ * 選択肢 2 参照、`selfHealMissingModelFiles` はこれを self-heal 対象にしない）。
+ */
+async function modelFilePresence(
+  fileStore: LocalModelFileStore,
+  model: ImportedLocalModel
+): Promise<ManifestFilePresence> {
+  let info: StoredModelFileInfo;
+  try {
+    info = await fileStore.modelFileInfo(model.privateUri);
+  } catch {
+    return 'unknown';
+  }
+  return info.exists && info.sizeBytes === model.sizeBytes
+    ? 'present'
+    : 'missing';
+}
+
+/**
+ * ADR-0055（owner 実機観測、TestFlight v1.1.2、「DL したら Manifest error」
+ * blocker）: v1.1.1 の削除バグ残骸（Manifest はモデルを参照したまま、実体は
+ * `${sha256}.deleting.gguf` に取り残し・消失）を読み込んだとき、以前の
+ * fail-hard（即 `MANIFEST_READ_FAILED`）は `ensureLoaded` の入口で全操作を
+ * 恒久的にブリックさせていた（新しい DL・import も同じ入口を通るため回復
+ * 手段が無い）。final File が無い・Size が一致しない（`modelFilePresence` が
+ * `'missing'`）Model だけを `models`・`benchmarkReports` から除去し、
+ * `activeModelSha256` が指していれば `null` にする。`modelFileInfo` 自体が
+ * 例外を投げるケース（`'unknown'`）は対象にせず、保存済み Model をそのまま
+ * 維持する（`selfHealManagedPrivateUris`・ADR-0045 と同じ、情報が取れない
+ * ことを壊れている証拠として扱わない判断）。除去自体は `deleteModel` と
+ * 共有する `withoutModels` が行い、永続化は `selfHealManagedPrivateUris`
+ * （ADR-0045）と共有する `persistHealedManifestBestEffort` の best-effort
+ * tolerance に従う（失敗しても in-memory の修復結果をそのまま返し、次回の
+ * 書き込み成功時に同じ self-heal が再実行される）。fail-closed を維持する
+ * のは Manifest 自体が parse 不能な場合（`parseManifestText`）だけである。
+ */
+async function selfHealMissingModelFiles(
   fileStore: LocalModelFileStore,
   loaded: LocalModelManifest
-): Promise<void> {
-  try {
-    for (const model of loaded.models) {
-      const info = await fileStore.modelFileInfo(model.privateUri);
-      if (!info.exists || info.sizeBytes !== model.sizeBytes) {
-        throw lifecycleError(
-          'MANIFEST_READ_FAILED',
-          'Local Model Manifest と private File が一致しません。'
-        );
-      }
-    }
-  } catch {
-    throw lifecycleError(
-      'MANIFEST_READ_FAILED',
-      'Local Model Manifest と private File を照合できませんでした。'
-    );
-  }
+): Promise<LocalModelManifest> {
+  if (loaded.models.length === 0) return loaded;
+  const missingSha256 = new Set<string>();
+  await Promise.all(
+    loaded.models.map(async (model) => {
+      const presence = await modelFilePresence(fileStore, model);
+      if (presence === 'missing') missingSha256.add(model.sha256);
+    })
+  );
+  if (missingSha256.size === 0) return loaded;
+  const healed = withoutModels(loaded, missingSha256);
+  await persistHealedManifestBestEffort(fileStore, healed);
+  return healed;
 }
 
 async function resourceSnapshot(
@@ -967,9 +1045,14 @@ async function resourceSnapshot(
  * 純 TypeScript 実装（`sha256.ts`）で再ハッシュしていたため、Hermes 上で数分〜
  * 十数分かかり Settings が「Local Model の端末内処理を実行中です」のまま固まる
  * 公開 blocker になっていた。File 整合性の存在＋Size 照合は `ensureLoaded` が
- * この関数を呼ぶ直前に `assertManifestFilesPresent` で既に全 Model（active を
- * 含む）に対して行っており、不一致・欠落があれば `MANIFEST_READ_FAILED` として
- * load 全体を拒否する（fail-safe はそちらが担う）。したがってこの関数の責務は
+ * この関数を呼ぶ直前に `selfHealMissingModelFiles` で既に全 Model（active を
+ * 含む）に対して行っており、不一致・欠落があれば ADR-0055 により当該 Model を
+ * Manifest・`activeModelSha256` から除去する（fail-safe はそちらが担う）。
+ * したがって、この関数が呼ばれる時点で `loaded.activeModelSha256` が指す
+ * Model は「File 欠落・Size 不一致という積極的な証拠は無い」（`modelFileInfo`
+ * 自体が例外を投げた `'unknown'` ケースは ADR-0045 と同じ判断で対象外のまま
+ * active を維持するため、File 存在・Size 照合が必ず済んでいるとは限らない）。
+ * この関数の責務は
  * 「現在の Resource Risk を再評価し、blocked / caution なら active を解除する」
  * ことだけで、File の digest には関与しない。同じ Size のまま内容だけが破損した
  * ケースはここでは検出できなくなるが、そのリスクと起動のたびのフル hash の
@@ -1018,9 +1101,9 @@ export function createLocalModelLifecycle(
     if (manifest) return manifest;
     const loaded = await readManifest(fileStore);
     await reconcilePrivateStore(fileStore, loaded);
-    await assertManifestFilesPresent(fileStore, loaded);
-    const verified = await verifyActiveModelAtLoad(telemetry, loaded);
-    if (verified !== loaded) await writeManifest(fileStore, verified);
+    const healed = await selfHealMissingModelFiles(fileStore, loaded);
+    const verified = await verifyActiveModelAtLoad(telemetry, healed);
+    if (verified !== healed) await writeManifest(fileStore, verified);
     manifest = verified;
     return verified;
   }
@@ -1208,15 +1291,7 @@ export function createLocalModelLifecycle(
         current = { ...current, activeModelSha256: null };
       }
       const stagedUri = await stageDeletion(fileStore, model);
-      const next = {
-        ...current,
-        models: current.models.filter(
-          (candidate) => candidate.sha256 !== sha256
-        ),
-        benchmarkReports: current.benchmarkReports.filter(
-          (report) => report.modelSha256 !== sha256
-        ),
-      };
+      const next = withoutModels(current, new Set([sha256]));
       try {
         await writeManifest(fileStore, next);
       } catch (error: unknown) {

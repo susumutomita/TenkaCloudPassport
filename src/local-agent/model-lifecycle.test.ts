@@ -476,7 +476,7 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     expect(state.fileStore.manifestReads).toBe(1);
   });
 
-  it('Manifest の JSON・read・File 参照不整合（reconcile 以外）を型付きで拒否する', async () => {
+  it('Manifest の JSON・read 失敗と、Manifest 無しの managed File 残存を型付きで拒否する', async () => {
     const invalidJson = harness();
     invalidJson.fileStore.manifestText = '{';
     await expectLifecycleError(
@@ -504,20 +504,20 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
     expect(
       missingManifestWithPayload.fileStore.privateFiles.has(orphanUri)
     ).toBeTrue();
+  });
 
-    const missing = harness();
-    const model = await importModel(missing);
-    missing.fileStore.privateFiles.delete(model.privateUri);
-    const reloaded = createLocalModelLifecycle({
-      fileStore: missing.fileStore,
-      inspector: missing.inspector,
-      telemetry: missing.telemetry,
-      clock: missing.clock,
-    });
-    await expectLifecycleError(reloaded.load(), 'MANIFEST_READ_FAILED');
-
+  /**
+   * ADR-0055 選択肢 2（advisor 指摘）: `modelFileInfo` が例外を投げるケース
+   * （`!exists`/Size 不一致という積極的な証拠が無い transient failure）は
+   * self-heal の対象にしない。`ensureLoaded` の毎回の入口で呼ばれるため、
+   * 1 回の一時的な FS 障害だけで正常な Model を Manifest から失う経路を
+   * 新設しないための判断（`selfHealManagedPrivateUris` が
+   * `resolveManagedModelUri` 失敗時に保存値へフォールバックするのと同じ
+   * 理由）。保存済み Model をそのまま維持し、以降の integrity 検証に委ねる。
+   */
+  it('modelFileInfo 自体の例外は self-heal の対象にせず、保存済み Model をそのまま維持する', async () => {
     const infoFailure = harness();
-    await importModel(infoFailure);
+    const model = await importModel(infoFailure);
     infoFailure.fileStore.modelInfoFailure = true;
     const infoFailureReloaded = createLocalModelLifecycle({
       fileStore: infoFailure.fileStore,
@@ -525,10 +525,11 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
       telemetry: infoFailure.telemetry,
       clock: infoFailure.clock,
     });
-    await expectLifecycleError(
-      infoFailureReloaded.load(),
-      'MANIFEST_READ_FAILED'
-    );
+
+    const loaded = await infoFailureReloaded.load();
+
+    expect(loaded.models).toHaveLength(1);
+    expect(loaded.models[0]?.sha256).toBe(model.sha256);
   });
 
   describe('孤立 File 掃除（reconcile）の失敗は load を失敗させない（owner 実機観測、ADR-0054）', () => {
@@ -600,6 +601,194 @@ describe('Local Model Lifecycle: private import・risk・transaction', () => {
 
       expect(reloaded.models).toEqual([]);
       expect(state.fileStore.privateFiles.has(stagedUri)).toBeFalse();
+    });
+  });
+
+  /**
+   * ADR-0055: owner が TestFlight v1.1.2 の実機で報告した「Local Model を
+   * DL したら Manifest error になる」blocker。原因は v1.1.1 の削除バグ
+   * （`File.move` の uri 付け替えによる誤 throw、PR #178 で修正済み）が
+   * 実機に残した状態そのもの——Manifest はモデルを参照したまま、実体は
+   * `${sha256}.deleting.gguf` に取り残し（または消失）。旧
+   * `assertManifestFilesPresent` は「参照先の final File が無い/Size 不一致 →
+   * 即 `MANIFEST_READ_FAILED`」の fail-hard だったため、この状態に一度入ると
+   * 全ての load・enable・import が `ensureLoaded` の入口で恒久的に失敗した
+   * （新しい DL を試みても import 自体が同じ入口を通るためブリックする）。
+   */
+  describe('参照済み Model の final File 欠落・Size 不一致を self-heal する（owner 実機観測、v1.1.1 削除バグ残骸、ADR-0055）', () => {
+    it('(a) 実機の削除バグ残骸そのもの: 参照あり + final 無し + staged 残置は、reconcile 経由で復元され active を維持する', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+      const bytes = state.fileStore.privateFiles.get(model.privateUri);
+      if (!bytes)
+        throw new Error('fixture の前提（final File 実在）が崩れています。');
+      // v1.1.1 の削除バグ残骸を模す: 本来の delete は Manifest から参照を外して
+      // から staging するが、このバグは参照を外さないまま実体だけを staged 名へ
+      // 取り残した。
+      const stagedUri = `${PRIVATE_ROOT}/${model.sha256}.deleting.gguf`;
+      state.fileStore.privateFiles.set(stagedUri, bytes);
+      state.fileStore.privateFiles.delete(model.privateUri);
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models).toHaveLength(1);
+      expect(loaded.models[0]?.sha256).toBe(model.sha256);
+      expect(loaded.activeModelSha256).toBe(model.sha256);
+      // 復元が実際に起きたことを、除去されずに残ったことだけでなく final URI が
+      // 実在することでも確認する（fixture が別の理由で偶然通る回帰を防ぐ）。
+      expect(state.fileStore.privateFiles.has(model.privateUri)).toBeTrue();
+      expect(state.fileStore.privateFiles.has(stagedUri)).toBeFalse();
+    });
+
+    it('(b) 参照あり + final 無し + staged も無い場合、そのモデルを除去し active を null にして load を成功させる（ブリックしない）', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      await state.lifecycle.activate(model.sha256);
+      await state.lifecycle.appendBenchmarkReport(
+        report('2026-07-28T00:00:00.000Z')
+      );
+      state.fileStore.privateFiles.delete(model.privateUri);
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models).toEqual([]);
+      expect(loaded.activeModelSha256).toBeNull();
+      expect(loaded.benchmarkReports).toEqual([]);
+      const persisted = JSON.parse(state.fileStore.manifestText ?? 'null');
+      expect(persisted.models).toEqual([]);
+      expect(persisted.activeModelSha256).toBeNull();
+      expect(persisted.benchmarkReports).toEqual([]);
+    });
+
+    it('(c) Size 不一致（部分書き等）も同様にそのモデルだけ除去する', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      state.fileStore.privateFiles.set(
+        model.privateUri,
+        new TextEncoder().encode('abcdef')
+      );
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models).toEqual([]);
+    });
+
+    it('(d) Manifest 自体が parse 不能な場合は引き続き fail-closed で MANIFEST_READ_FAILED を投げる（回帰）', async () => {
+      const state = harness();
+      state.fileStore.manifestText = '{';
+
+      await expectLifecycleError(
+        state.lifecycle.load(),
+        'MANIFEST_READ_FAILED'
+      );
+    });
+
+    it('(e) 除去後に同じ private storage へ新規 DL・import すると正常に完了する', async () => {
+      const state = harness();
+      const stale = await importModel(state);
+      state.fileStore.privateFiles.delete(stale.privateUri);
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      expect((await reloaded.load()).models).toEqual([]);
+
+      const reimported = await reloaded.importCandidate(CANDIDATE);
+
+      expect(reimported.sha256).toBe(stale.sha256);
+      expect((await reloaded.load()).models).toHaveLength(1);
+    });
+
+    /**
+     * code-reviewer 指摘（low・カバレッジ）: 単一 model の fixture だけでは
+     * `survivingSha256` による `models`/`benchmarkReports`/`activeModelSha256`
+     * のフィルタが「除去対象 1 件」に対して常に「残り 0 件」でしか検証されない。
+     * 生存モデルが存在するケース（除去対象と非対象が混在）を固定する。
+     */
+    it('複数 Model が混在する場合、除去対象だけを除去し、生存モデルの active・Benchmark Report は維持する', async () => {
+      const state = harness();
+      const survivor = await importModel(state);
+      await state.lifecycle.activate(survivor.sha256);
+      await state.lifecycle.appendBenchmarkReport(
+        report('2026-07-28T00:00:00.000Z', survivor.sha256)
+      );
+      const staleCandidate: ModelImportCandidate = {
+        name: 'stale-model.gguf',
+        uri: 'content://selected/stale-model.gguf',
+        sizeBytes: 4,
+      };
+      state.fileStore.externalFiles.set(
+        staleCandidate.uri,
+        new TextEncoder().encode('abcd')
+      );
+      const stale = await state.lifecycle.importCandidate(staleCandidate);
+      await state.lifecycle.appendBenchmarkReport(
+        report('2026-07-28T00:00:01.000Z', stale.sha256)
+      );
+      state.fileStore.privateFiles.delete(stale.privateUri);
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models.map((model) => model.sha256)).toEqual([
+        survivor.sha256,
+      ]);
+      expect(loaded.activeModelSha256).toBe(survivor.sha256);
+      // 除去前は import 時の自動 Report（各 Model 1 件ずつ）+ 手動 append の
+      // 計 4 件。除去後は生存モデル（survivor）分の 2 件（自動 + 手動）だけが
+      // 残り、stale 分の 2 件は Benchmark Report からも消える。
+      expect(loaded.benchmarkReports).toHaveLength(2);
+      expect(
+        loaded.benchmarkReports.every(
+          (entry) => entry.modelSha256 === survivor.sha256
+        )
+      ).toBeTrue();
+    });
+
+    it('除去の永続化が失敗しても、in-memory の修復結果（除去済み）で load を成功させる', async () => {
+      const state = harness();
+      const model = await importModel(state);
+      state.fileStore.privateFiles.delete(model.privateUri);
+      state.fileStore.writeManifestFailures = 1;
+
+      const reloaded = createLocalModelLifecycle({
+        fileStore: state.fileStore,
+        inspector: state.inspector,
+        telemetry: state.telemetry,
+        clock: state.clock,
+      });
+      const loaded = await reloaded.load();
+
+      expect(loaded.models).toEqual([]);
+      const stillPersisted = JSON.parse(state.fileStore.manifestText ?? 'null');
+      expect(stillPersisted.models).toHaveLength(1);
+      expect(stillPersisted.models[0].sha256).toBe(model.sha256);
     });
   });
 

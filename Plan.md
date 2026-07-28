@@ -9994,3 +9994,130 @@ Provider・Resource Gate は作らない。診断用に一時的に入れた `co
   variance が大きく（今回はターン 3 で無限ハングを踏んだ）、行き詰まった場合は
   advisor 相談の上、決定的な単体テスト（既存 fake harness の活用）による
   検証へ早めに切り替える判断が有効だった。
+
+### DL 後の Manifest error（v1.1.1 削除バグ残骸）を fail-hard から self-heal へ - 2026-07-28
+
+目的: owner が TestFlight v1.1.2 の実機で「モデルをダウンロードしたら Manifest
+error」を報告した。コードから確認済みの機構: v1.1.1 の削除バグ（`File.move` の
+uri 付け替えによる誤 throw、PR #178 で修正済み）が実機に残した状態は、
+「Manifest はモデルを参照したまま、実体は `${sha256}.deleting.gguf` に取り残し
+（または消失）」。現行の `ensureLoaded` → `assertManifestFilesPresent` は
+「参照先の final file が無い / Size 不一致 → 即 `MANIFEST_READ_FAILED`」の
+fail-hard 契約であり、この状態に一度入ると全ての load・enable・import が
+恒久的に失敗する（ブリック）。新しい DL を試みても、取り込み冒頭の
+`ensureLoaded` が同じ経路で必ず失敗するため、owner の「DL したら Manifest
+error」という観測と一致する。`reconcilePrivateStore`（ADR-0054 で best-effort
+化済み）は staged File が在って初めて復元を試みるため、staged も無い・復元
+自体が失敗したケースはこの fail-hard へ落ちる。
+
+制約: `parseLocalModelManifest` が拒否する「Manifest 自体が parse 不能」
+（JSON.parse 失敗）だけは fail-closed を維持する（invariant・ADR-0045 の
+self-heal 前提を壊さない）。`modelFileInfo` の呼び出し自体が例外を投げる
+ケース（transient FS error 等、`!exists`/Size 不一致という積極的な証拠が
+無い）は self-heal の対象にしない。`selfHealManagedPrivateUris`
+（ADR-0045）が `resolveManagedModelUri` 失敗時に保存値へ fallback して
+判断を保留する既存の設計と同じ理由（「情報が取れない」ことを「壊れている」
+の証拠として扱わない）。advisor 相談でこの境界を確認済み。
+
+タスク:
+1. `assertManifestFilesPresent`（fail-hard）を self-heal 関数へ置き換える。
+   参照先 Model ごとに `modelFileInfo` を呼び、(a) 例外時は保存値のまま
+   継続（既存 `infoFailure` テストの契約を維持）、(b) `!exists` または
+   Size 不一致なら該当 Model を `models`・`benchmarkReports` から除去し、
+   `activeModelSha256` がそれを指していれば null にする。除去が発生したら
+   `atomicWriteManifest` で best-effort 永続化する（失敗しても in-memory
+   の修復結果で続行、ADR-0045 と同じ tolerance）。
+2. `ensureLoaded` の呼び出し順を `readManifest` → `reconcilePrivateStore`
+   （staged 復元の既存責務） → 新 self-heal 関数 → `verifyActiveModelAtLoad`
+   に変更する。
+3. Red→Green:
+   - 既存「Manifest の JSON・read・File 参照不整合（reconcile 以外）を
+     型付きで拒否する」から `missing`（final 無し・staged 無し）の
+     sub-case だけを除去し、タイトルを実態に合わせて改める
+     （`infoFailure`・invalid JSON・read 失敗・orphan payload は fail-hard の
+     まま残す）。
+   - 新規 describe: (a) 実機の v1.1.1 削除バグ残骸そのもの（参照あり + final
+     無し + `${sha256}.deleting.gguf` 残置）を fixture 化し、`reconcilePrivateFiles`
+     経由で復元されて active 維持を確認する（復元後の final URI が
+     `privateFiles` に実在することも assert する）。(b) final 無し・staged 無し
+     → 除去 + active null + 空 manifest で load 成功 + 永続化まで確認する。
+     (c) Size 不一致 → 除去。(d) parse 不能 manifest は既存テストで fail-hard
+     のまま（回帰確認のみ、変更なし）。(e) 除去後に新規 DL の import が正常
+     完了する。加えて、除去 + `writeManifestFailures` を組み合わせ、永続化
+     失敗時も in-memory の修復結果で load が成功することを確認する
+     （既存 1356 行目の self-heal 永続化失敗テストと対の契約）。
+4. ADR-0055 を書く（fail-hard → self-heal の判断、`modelInfoFailure` を
+   対象外にする理由、fail-closed を維持する範囲）。
+5. `bun test src --coverage`（100% 維持）、`bunx tsc --noEmit -p .`、
+   `bun scripts/architecture-harness.ts --staged --fail-on=error`、
+   `make before-commit` を通す。
+
+検証手順: 上記タスク 5 のコマンド一式。シミュレーター確認は並行エージェントが
+使用中のため今回は行わず、bun test の決定的な fake harness（`PrivateModelStore`）
+検証に閉じる（呼び出し元が別途 e2e を行う）。
+
+進捗ログ:
+- 2026-07-28: `model-lifecycle.ts`・ADR-0045・ADR-0054・既存テストを読み、
+  `assertManifestFilesPresent` が唯一の fail-hard 経路であることと、
+  `reconcilePrivateFiles` の test double が file 名 basename で staged
+  ファイルを復元する挙動を確認した。advisor 相談で「`modelFileInfo` が
+  例外を投げるケースは self-heal 対象にしない（transient failure で
+  正常な Model を消してしまうリスクの方が大きい、`selfHealManagedPrivateUris`
+  と同じ判断）」を確定し、既存 `infoFailure` テストは変更しない方針にした。
+- 2026-07-28: `git worktree add` で `fix/self-heal-missing-model-files`
+  （origin/main 基点）を作成し、`bun install --ignore-scripts` を実行。
+  Red: 既存テストの `missing` sub-case を除去し、`infoFailure` を単独テストへ
+  昇格、新規 describe（(a) 実機の v1.1.1 削除バグ残骸 fixture・(b) final 無し
+  + staged 無し除去・(c) Size 不一致除去・(d) parse 不能の回帰・(e) 除去後の
+  再 import）+ 永続化失敗テストを追加し、5 件 fail・既存 43 件は無傷を確認。
+  Green: `assertManifestFilesPresent` を `modelFilePresence`
+  （`'present'|'missing'|'unknown'` の 3 値判定）+ `selfHealMissingModelFiles`
+  へ置き換え、`ensureLoaded` の呼び出し順を `reconcilePrivateStore` →
+  self-heal → `verifyActiveModelAtLoad` に変更。49 件 全 green、
+  `bun test src --coverage` 100% 維持。
+- 2026-07-28: `code-reviewer` subagent（`/review` は GitHub PR 番号必須のため
+  代替、AGENTS.md の gate 相当）でレビュー。blocker/high/medium 指摘なし。
+  low 2 件（doc comment の言い過ぎ、複数 model 混在ケースのテスト不足）を
+  反映し、doc comment を修正、`survivor`/`stale` 2 Model 混在テストを追加
+  （benchmarkReports の按分・active 維持を固定）。`/security-review` は
+  git status がリポジトリの元 working directory（並行エージェントが
+  `feat/no-model-guidance` で作業中）を誤って参照したため、worktree の実 diff
+  （`model-lifecycle.ts`/テスト/ADR/Plan.md のみ）に対して手動でセキュリティ
+  観点（入力検証・認可・crypto・injection・情報露出）を確認し、対象なしと
+  判断した。
+- 2026-07-28: `/simplify` を 4 観点（reuse/simplification/efficiency/
+  altitude）並列 Explore agent で実行。reuse（`selfHealManagedPrivateUris`
+  と重複する best-effort 永続化の try/catch）と altitude（`deleteModel` と
+  重複する「models/benchmarkReports/activeModelSha256 を除去する」3 field
+  変更）の 2 件を採用し、共有 helper `persistHealedManifestBestEffort`・
+  `withoutModels` へ抽出。simplification（`changed` フラグの冗長性）も採用し
+  `missingSha256.size === 0` 判定へ統一。efficiency は「二重書き込みの懸念は
+  実害無し（best-effort/fail-hard の契約が異なるため統合は設計変更になる）」
+  という所見のみで変更なし。advisor 相談で「`withoutModels` へ寄せた後、
+  `purgeManagedStore`/`unload` が個別に models/benchmarkReports を
+  filter していないか」を確認するよう指摘され、grep で該当箇所が
+  `withoutModels` の 1 か所に収束していることを確認した
+  （`purgeManagedStore` は `fileStore.purgeManagedFiles()` で全消去して
+  空 Manifest を再導出するだけで、field 単位の手組み filter を持たない）。
+  リファクタ後も 49 件 全 green・100% coverage・`bunx tsc --noEmit`・
+  `bun scripts/architecture-harness.ts --staged --fail-on=error`・
+  `make before-commit` を再実行し exit 0 を確認した（計 4 回グリーン確認）。
+
+振り返り:
+- 問題: 「参照済み Model の File が無い/Size 不一致」という 1 つの fail-hard
+  チェックが `ensureLoaded` の入口にあるだけで、load・enable・import 全ての
+  入口を道連れにしていた。DL 後の import も同じ入口を通るため、owner が
+  「壊れたら DL しなおせば直る」と期待する自然な復旧経路そのものが塞がれて
+  いた。
+- 根本原因: 「Manifest 全体の読み取り不能」（parse 失敗）と「参照済み 1 Model
+  の File 不在」という性質の異なる 2 つの失敗を、同じ `MANIFEST_READ_FAILED`
+  で一枚岩に fail-hard 扱いしていたこと。後者は Manifest 自体は正しく読めて
+  いるため、本来は「その Model だけの問題」として扱える。
+- 予防策: 「情報が取れないこと」と「壊れているという積極的な証拠があること」
+  を意識して区別する（advisor 指摘、ADR-0045 の `resolveManagedModelUri`
+  失敗時のフォールバックと同じ判断軸）。この区別を最初に明確化できたことで、
+  `modelInfoFailure`（transient failure）を誤って self-heal 対象にする
+  half-fix を避けられた。`/simplify` の 4 観点並列レビューは、実装が
+  Green になった直後に「もう 1 つの除去経路（`deleteModel`）と重複していない
+  か」を機械的に洗い出すのに有効だった（自分で書いたコードの重複には
+  気づきにくい）。
