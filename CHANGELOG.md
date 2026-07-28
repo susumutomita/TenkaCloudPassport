@@ -7,7 +7,9 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
-## [1.1.5] - 2026-07-28
+## [1.1.6] - 2026-07-28
+
+v1.1.5 はタグ運用ミス（version 不一致ガードが正しく停止）により欠番です。
 
 ### Fixed
 
