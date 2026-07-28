@@ -69,6 +69,21 @@ export interface UseConversationAgentFlowInput {
 
 export interface ConversationAgentFlow {
   readonly hasSelfIntroCard: boolean;
+  /**
+   * Issue 180: provider が Rules フォールバックではなく実際に Local Agent
+   * として動いているかを screen 側へ渡す。下の `conversationExampleGenerator`
+   * （Provider Identity から optional Generator capability を取得した結果）が
+   * 非 null かどうかで判定する。Rules 実装は Generator を登録できず
+   * （`registerConversationExampleGenerator` が投げる）、Local Agent は生成直後に
+   * 必ず登録される（`default-local-model-management.native.ts` の
+   * `createProvider`）ため、この 1 値で「オンデバイス AI が今まさに使えているか」を
+   * 判定できる。生の Provider kind 文字列比較（`'local-agent'` 等）は
+   * `INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY`（`agent-provider-session.ts` 以外での
+   * 直接比較を禁じる harness rule）に抵触するため使わない。`onDeviceAiStatus`
+   * （信頼済み Model の Manifest 状態）は手動 GGUF import で別 Model が active な
+   * 端末では乖離しうるため、どちらにせよ使わない。
+   */
+  readonly onDeviceAiActive: boolean;
   readonly peers: readonly ConversationAgentPeerView[];
   /**
    * Step B: `MAX_BRIDGE_SELECTION_PARTICIPANTS`（自分を含む）に達していないか。
@@ -393,6 +408,7 @@ export function useConversationAgentFlow({
 
   return {
     hasSelfIntroCard: session !== null,
+    onDeviceAiActive: conversationExampleGenerator !== null,
     peers: (session?.peers ?? []).map((peer) => ({
       name: peer.introCard.name,
       participantId: peer.participantId,

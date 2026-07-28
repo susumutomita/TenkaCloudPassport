@@ -2332,8 +2332,13 @@ export default function PassportApp({
           canAddPeer: conversationAgentFlow.canAddPeer,
           errorMessage: conversationAgentFlow.errorMessage,
           hasSelfIntroCard: conversationAgentFlow.hasSelfIntroCard,
+          // Issue 180: 常設ノートからその場で consent → DL フローへ入るため、
+          // Settings と同じ共有 State（`localModels.view`）をそのまま渡す
+          // （新しい instance は作らない）。
+          modelManagement: localModels.view,
           onBack: conversationAgentFlow.close,
           onChangePasteInput: conversationAgentFlow.onChangePasteInput,
+          onDeviceAiActive: conversationAgentFlow.onDeviceAiActive,
           // Codex 指摘（blocker、Issue 104 PR #132）: Settings footer が
           // `openSettings`（stage 変更のみ）を呼んでいたため、受信済み相手カード・
           // 貼り付け中の URL・実行結果が hook state に残ったまま Settings 経由で

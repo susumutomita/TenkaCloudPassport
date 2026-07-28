@@ -6,6 +6,10 @@ import {
 } from '../domain/conversation-session';
 import { createIntroCard, type IntroCard } from '../domain/intro-card';
 import {
+  expectInOrder,
+  readSourceFile,
+} from '../screens/accessibility-test-kit';
+import {
   conversationAgentScanErrorMessage,
   performConversationAgentCleanup,
   planConversationAgentStart,
@@ -14,6 +18,10 @@ import {
 } from './conversation-agent-flow-controller';
 import { MESSAGES } from './i18n/messages';
 import { QrScanError } from './qr-scanner-port';
+
+function hookSource(): Promise<string> {
+  return readSourceFile(import.meta.url, 'use-conversation-agent-flow.ts');
+}
 
 /**
  * Issue 104 PR #132（Codex 指摘 major）: `use-conversation-agent-flow.ts` の
@@ -529,5 +537,18 @@ describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選
         })
       ).toEqual({ kind: 'no-signal' });
     });
+  });
+});
+
+describe('onDeviceAiActive（Issue 180: Rules フォールバックかどうかを公開する）', () => {
+  it('返り値は conversationExampleGenerator（capability ベースの判定）から直接導出し、生の provider.kind 比較は使わない（INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY）', async () => {
+    const text = await hookSource();
+
+    expectInOrder(text, [
+      'return {',
+      'hasSelfIntroCard: session !== null,',
+      'onDeviceAiActive: conversationExampleGenerator !== null,',
+    ]);
+    expect(text).not.toContain("provider.kind === 'local-agent'");
   });
 });

@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ConversationAgentPresentedResultState } from '../app/conversation-agent-flow';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
+import type { LocalModelManagementView } from '../app/use-local-model-management';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import SettingsLinkFooter from '../components/SettingsLinkFooter';
@@ -9,6 +10,7 @@ import type { ParticipantId } from '../domain/session-identifiers';
 import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 import ConversationExampleSection from './ConversationExampleSection';
+import ModelAcquisitionSection from './ModelAcquisitionSection';
 
 /**
  * Issue 104 / ADR-0036 + ADR-0041: 端末内会話エージェントの画面。相手の
@@ -27,6 +29,16 @@ export interface ConversationAgentPeerView {
 
 export interface ConversationAgentScreenProps {
   readonly hasSelfIntroCard: boolean;
+  /**
+   * Issue 180: provider が Rules フォールバックではなく実際に Local Agent として
+   * 動いているか（`useConversationAgentFlow` が公開する `onDeviceAiActive`、
+   * Provider Identity から取得した会話例 Generator capability の有無で判定する）。
+   * `false`（Rules フォールバック）のときだけ、オンデバイス AI 未取得を明示し、
+   * その場から取得フローへ入れる常設ノートを表示する。
+   */
+  readonly onDeviceAiActive: boolean;
+  /** Issue 180: 常設ノートからその場で consent → DL フローへ入るための共有 State。 */
+  readonly modelManagement: LocalModelManagementView;
   readonly peers: readonly ConversationAgentPeerView[];
   /** 参加者上限に未達か。`false` のとき取り込み導線を隠し、満席である旨だけを伝える。 */
   readonly canAddPeer: boolean;
@@ -205,6 +217,8 @@ function ParticipantsSection({
 
 export default function ConversationAgentScreen({
   hasSelfIntroCard,
+  onDeviceAiActive,
+  modelManagement,
   peers,
   canAddPeer,
   pasteInput,
@@ -240,6 +254,25 @@ export default function ConversationAgentScreen({
       )}
       {hasSelfIntroCard ? (
         <>
+          {/*
+            Issue 180: provider が Rules フォールバックのとき（`onDeviceAiActive`
+            が false のとき）だけ、常設ノートで現在の動作モードとその場のモデル
+            取得導線を示す。取得済み・有効化済み（`onDeviceAiActive` が true）に
+            なった時点でこのノート自体を mount しない（`ModelAcquisitionSection`
+            は Settings と共有する状態機械だが、ここでは「未取得の説明」だけが
+            目的のため、有効化後は表示する理由が無い）。
+          */}
+          {onDeviceAiActive ? null : (
+            <ModelAcquisitionSection
+              locale={locale}
+              modelManagement={modelManagement}
+              notAcquiredCopy={{
+                buttonHint: t.onDeviceAiNoticeButtonHint,
+                buttonLabel: t.onDeviceAiNoticeButton,
+                description: () => t.onDeviceAiNoticeBody,
+              }}
+            />
+          )}
           {hasPeers ? (
             <ParticipantsSection
               onRemovePeer={onRemovePeer}

@@ -288,6 +288,18 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(call).not.toContain('provider: RULES_MODEL_PROVIDER');
   });
 
+  it('Issue 180: 会話エージェント画面へ localModels.view と onDeviceAiActive を配線し、その場のモデル取得ノートが Settings と同じ共有 State を使えるようにする', async () => {
+    const text = await source();
+    const callStart = text.indexOf('conversationAgent={{');
+    const callEnd = text.indexOf('}}', callStart);
+    const call = text.slice(callStart, callEnd);
+
+    expect(call).toContain('modelManagement: localModels.view');
+    expect(call).toContain(
+      'onDeviceAiActive: conversationAgentFlow.onDeviceAiActive'
+    );
+  });
+
   it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {
     const text = await source();
     // Issue 79: 起動時 effect が Intro Card Storage も `Promise.all` で束ねるように

@@ -150,6 +150,21 @@ describe('端末内会話エージェント画面の Accessibility 契約', () =
     ]);
   });
 
+  it('Issue 180: provider が Rules フォールバック（onDeviceAiActive が false）のときだけ、共有の ModelAcquisitionSection を会話エージェント向けの文言で描画する', async () => {
+    const text = await source();
+
+    expect(text).toContain("from './ModelAcquisitionSection'");
+    expectInOrder(text, [
+      'hasSelfIntroCard ? (',
+      'onDeviceAiActive ? null : (',
+      '<ModelAcquisitionSection',
+      'notAcquiredCopy={{',
+      'buttonHint: t.onDeviceAiNoticeButtonHint,',
+      'buttonLabel: t.onDeviceAiNoticeButton,',
+      'description: () => t.onDeviceAiNoticeBody,',
+    ]);
+  });
+
   it('code-reviewer 指摘（minor、Issue 104 PR #132）: 汎用の戻るボタンは hasSelfIntroCard のときだけ表示し、CTA と同じ操作が重複表示されない', async () => {
     const text = await source();
     const ctaIndex = text.indexOf('label={t.selfCardMissingCtaButton}');
