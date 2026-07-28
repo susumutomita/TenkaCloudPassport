@@ -150,18 +150,25 @@ describe('端末内会話エージェント画面の Accessibility 契約', () =
     ]);
   });
 
-  it('Issue 180: provider が Rules フォールバック（onDeviceAiActive が false）のときだけ、共有の ModelAcquisitionSection を会話エージェント向けの文言で描画する', async () => {
+  it('ADR-0057 / ADR-0058（Follow-up F-056000）: 旧 ModelAcquisitionSection（Qwen「モデルを取得する」導線）は撤去済み', async () => {
     const text = await source();
 
-    expect(text).toContain("from './ModelAcquisitionSection'");
+    expect(text).not.toContain("from './ModelAcquisitionSection'");
+    expect(text).not.toContain('<ModelAcquisitionSection');
+    expect(text).not.toContain('onDeviceAiActive,');
+    expect(text).not.toContain('modelManagement,');
+    expect(text).not.toContain('t.onDeviceAiNoticeButtonHint');
+    expect(text).not.toContain('t.onDeviceAiNoticeButton');
+    expect(text).not.toContain('t.onDeviceAiNoticeBody');
+  });
+
+  it('Follow-up F-056000: appleIntelligenceUnavailable が true のときだけ、非対応端末向けの簡潔な案内を表示する（対応端末では何も出さない）', async () => {
+    const text = await source();
+
     expectInOrder(text, [
       'hasSelfIntroCard ? (',
-      'onDeviceAiActive ? null : (',
-      '<ModelAcquisitionSection',
-      'notAcquiredCopy={{',
-      'buttonHint: t.onDeviceAiNoticeButtonHint,',
-      'buttonLabel: t.onDeviceAiNoticeButton,',
-      'description: () => t.onDeviceAiNoticeBody,',
+      'appleIntelligenceUnavailable ? (',
+      '{t.appleIntelligenceUnavailableNotice}',
     ]);
   });
 

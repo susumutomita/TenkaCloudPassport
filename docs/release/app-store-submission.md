@@ -28,7 +28,7 @@ Section 1-4（App 名・説明文・キーワード・プロモーションテ�
 | 3 | 無料・アカウント不要の自己紹介 | QR intro cards, zero setup |
 
 owner が 1 案を選びます。3 案とも実装済みの機能（名刺不要・アカウント不要・QR）だけを述べており、
-任意ダウンロードの端末内 AI はサブタイトルには含めていません。
+対応端末だけで動く Apple Intelligence 連携はサブタイトルには含めていません。
 
 ## 2. 説明文（Description）
 
@@ -52,14 +52,16 @@ Instagram などの SNS アプリ内ブラウザでは、ファイルの保存�
 自己紹介データは QR コードの URL フラグメントに埋め込まれ、相手のブラウザ内だけで復号されます。
 このデータがサーバーへ送信されることはありません。
 
-■ 端末内で会話の共通点を見つける（任意）
+■ 端末内で会話の共通点を見つける
 相手の自己紹介ページを取り込むと、確認済みの会話テーマから共通点と最初の質問を端末内だけで
 見つけます。この基本機能はモデルのダウンロードなしで動作します。
 
-Settings で端末内 AI を明示的に有効化した場合は、自己紹介文にある共通点を補助的に見つけたり、
-共通点の下に短い会話例を任意生成したりできます。会話例には「AI が作った例で、実際のやり取りでは
-ない」ことを常時表示します。入力と生成結果は端末内のメモリにだけ置かれ、保存もサーバー送信も
-されません。
+対応端末（iPhone 15 Pro 以降・iOS 26 以降で Apple Intelligence を有効にしている場合）では、
+OS 内蔵の Apple Intelligence が自動的に働き、自己紹介文にある共通点を補助的に見つけたり、
+共通点の下に短い会話例を生成したりできます。ダウンロードや同意画面はなく、送信も一切ありません。
+会話例には「AI が作った例で、実際のやり取りではない」ことを常時表示します。入力と生成結果は
+端末内のメモリにだけ置かれ、保存もサーバー送信もされません。非対応端末では従来どおり確認済み
+テーマからの一致だけで動作します。
 
 データを預からない、アカウントを作らない、名刺を用意しない。まずは自分の自己紹介カードを
 作ってみてください。
@@ -84,15 +86,17 @@ in-app browsers inside apps like LINE, X, or Instagram may fail to save the file
 Your intro data lives in the QR code's URL fragment and is decoded entirely inside the other
 person's browser. It is never sent to a server.
 
-- Optional on-device way to find common ground
+- Find common ground on-device
 Import the other person's intro page and the app finds a shared conversation topic and a first
 question entirely on your device. This base flow works without downloading a model.
 
-If you explicitly enable the optional on-device AI in Settings, it can additionally use the intro
-text to help identify common ground and, on request, create a short hypothetical conversation
-example. The app always labels that example as AI-generated and not a record of a real exchange.
-The inputs and generated example stay only in device memory; they are never saved or sent to a
-server.
+On supported devices (iPhone 15 Pro or later, iOS 26 or later, with Apple Intelligence enabled),
+the OS's built-in Apple Intelligence automatically helps identify common ground from the intro
+text and, on request, creates a short hypothetical conversation example. There is no download or
+consent screen, and nothing is ever transmitted. The app always labels that example as AI-generated
+and not a record of a real exchange. The inputs and generated example stay only in device memory;
+they are never saved or sent to a server. On unsupported devices, the app continues to work from
+confirmed conversation themes only.
 
 No data collected. No account required. No business card needed. Create your Intro Card and try it.
 ```
@@ -121,16 +125,17 @@ season 施策やキャンペーンに応じて owner が自由に書き換えら
 日本語版は次のとおりです。
 
 ```
-名刺不要、アカウント不要。QR を見せるだけで自己紹介ページが開きます。データはサーバーへ送信されません。相手カードを取り込めば端末内で共通点を見つけ、任意の端末内 AI で短い会話例も作れます。
+名刺不要、アカウント不要。QR を見せるだけで自己紹介ページが開きます。データはサーバーへ送信されません。相手カードを取り込めば端末内で共通点を見つけ、対応端末では Apple Intelligence で短い会話例も作れます。
 ```
 
 English 版は次のとおりです。
 
 ```
-No business card or account. Share an intro by QR with zero server data. Find common ground on-device and optionally create a clearly labeled AI conversation example.
+No business card or account. Share an intro by QR with zero server data. Find common ground on-device, with Apple Intelligence creating a clearly labeled conversation example on supported devices.
 ```
 
-ASC の実画面で文字数を再確認し、上限を超える場合は「任意の端末内 AI / optionally」を削って
+ASC の実画面で文字数を再確認し、上限を超える場合は「対応端末では Apple Intelligence で / with Apple
+Intelligence creating a clearly labeled conversation example on supported devices」を削って
 基本価値を優先します。
 
 ## 5. URL
@@ -157,12 +162,15 @@ ASC の実画面で文字数を再確認し、上限を超える場合は「任�
   [Privacy データ台帳](../privacy/data-inventory.md) の「データ最小化の契約」を正本とする。
 - 自己紹介データは QR コードの URL フラグメントに埋め込むだけであり、HTTP リクエストとして
   サーバーへ送信されない（相手のブラウザ内だけで復号する静的ページ、外部リクエストゼロ）。
-- 会話エージェントが取り込んだ相手カード、端末内モデルの Prompt / token / 検証前 Output、
-  検証済みの会話例は `L3` の短命データである。アプリと GGUF runtime のメモリにだけ存在し、
-  File、AsyncStorage、Benchmark 本文、Diagnostic Report、Pilot Aggregate、Log、Share Sheet、
-  Clipboard、外部 Endpoint へ複製しない。
-- Local Model Benchmark が保持するのは Model digest と時間・Memory・Thermal・Battery の数値だけで、
-  Prompt、会話内容、氏名、端末識別子を含まない。
+- 会話エージェントが取り込んだ相手カード、Prompt / token / 検証前 Output、検証済みの会話例は
+  `L3` の短命データである。アプリのメモリと、対応端末では OS 内蔵の Apple Intelligence（`FoundationModels`
+  framework）にだけ存在する。File、AsyncStorage、Benchmark 本文、Diagnostic Report、Pilot
+  Aggregate、Log、Share Sheet、Clipboard、外部 Endpoint へは複製しない。Apple Intelligence 自体は
+  OS が管理し、アプリから推論内容へ外部送信はできない。
+- 開発者向け診断機能として残置している旧オンデバイス Model（Qwen・`llama.rn`）の
+  Local Model Benchmark が保持するのは Model digest と時間・Memory・Thermal・Battery の
+  数値だけで、Prompt、会話内容、氏名、端末識別子を含まない。この経路は消費者向け導線から
+  撤去済みで、開発者が診断目的で明示的に操作した場合だけ動く。
 
 iOS の Privacy Manifest（`PrivacyInfo.xcprivacy`）は `expo prebuild` や EAS Build のたびに、
 インストール済みの Native package から自動集約されるファイルです。`ios/` ディレクトリは
@@ -196,33 +204,39 @@ ASC へ貼り付けます。
 ```
 This app is free, requires no account, and does not run any server that receives user data.
 
-(a) On-device conversation agent and optional AI conversation example
+(a) On-device conversation agent and Apple Intelligence conversation example
 The app includes an on-device conversation agent that finds common ground between intro cards.
 By default it runs fully offline with no model download, no account, and no network: it selects a
 shared conversation topic and a first question from a fixed, pre-reviewed catalog shipped inside
-the app.
+the app. This base flow runs on every device, including devices and Simulators that do not support
+Apple Intelligence.
 
-A user may explicitly enable an optional on-device language model from Settings. No model is
-bundled in the app binary, the download does not start without that opt-in, and inference makes no
-network calls. When enabled, the model may point out an overlap between the two intro-card
-free-text descriptions. For that factual common-ground result, it may only return substrings copied
-from the corresponding input, and the app verifies each substring character-for-character before
-showing it.
+On supported devices (iPhone 15 Pro or later, iOS 26 or later, with Apple Intelligence enabled in
+Settings > Apple Intelligence & Siri), the app automatically uses the OS's built-in Apple
+Intelligence (the `FoundationModels` framework) to help find common ground. There is no separate
+opt-in screen, no model bundled in the app binary, no download, and inference makes no network
+calls — it runs entirely through the OS's own on-device model. When available, the model may point
+out an overlap between the two intro-card free-text descriptions. For that factual common-ground
+result, it may only return substrings copied from the corresponding input, and the app verifies
+each substring character-for-character before showing it. On devices that do not support Apple
+Intelligence, the app shows a brief, permanent notice that conversation openers come from confirmed
+themes only, and continues to work from the base flow above.
 
-After a local-model bridge is displayed, the user may tap "Show an AI conversation example." This
-is a separate, optional surface. The app always shows a non-dismissible notice that the output is
-AI-generated and not a record of a real exchange. The prompt has no fields for either person's
-name, email, phone number, or links. The output is restricted to one JSON object containing 2-6
-alternating owner/peer turns, with the owner first and each line limited to 80 characters. Extra
-fields, invalid speaker order, control characters, line breaks, email addresses, URLs, and
-phone-like number sequences are rejected. The complete JSON object is validated before the first
-bubble is shown; partial unvalidated output is never rendered. The user can cancel, retry, or
-regenerate, and the original common-ground result remains visible if generation fails or times out.
+After a bridge is displayed on a supported device, the user may tap "Show an AI conversation
+example." This is a separate, optional surface. The app always shows a non-dismissible notice that
+the output is AI-generated and not a record of a real exchange. The prompt has no fields for
+either person's name, email, phone number, or links. The output is restricted to one JSON object
+containing 2-6 alternating owner/peer turns, with the owner first and each line limited to 80
+characters. Extra fields, invalid speaker order, control characters, line breaks, email addresses,
+URLs, and phone-like number sequences are rejected. The complete JSON object is validated before
+the first bubble is shown; partial unvalidated output is never rendered. The user can cancel,
+retry, or regenerate, and the original common-ground result remains visible if generation fails or
+times out.
 
 The prompt, tokens, unvalidated output, and validated example stay only in app/runtime memory. They
 are not logged, persisted, exported, copied to the clipboard, shared with the counterpart, or sent
-to any server. The feature is absent in the rules-only, web, Expo Go, model-unavailable, and
-provider-fallback paths.
+to any server. The AI conversation example feature is absent on devices without Apple Intelligence,
+and on the rules-only, web, and Expo Go paths.
 
 You can test the base agent single-handed on one device. When creating your test Intro Card,
 select at least one conversation theme that the built-in sample also has — for example
@@ -231,10 +245,12 @@ conversation agent from the home screen button and tap "Try with a sample" ("サ
 This injects a fixed fictional counterpart card, with no real person or real contact information,
 and the agent surfaces the shared theme as common ground with a first question. If you create a
 card with only a name (no theme, no self introduction), the agent correctly reports that no common
-ground was found — that is the designed no-signal state, not a malfunction. To test the optional
-AI-to-AI icebreaker chat, first enable the trusted on-device model in Settings and wait until
-activation completes, run the sample bridge, and tap the AI chat button below the common ground
-and first question.
+ground was found — that is the designed no-signal state, not a malfunction. If your review device
+or Simulator supports Apple Intelligence, run the sample bridge and tap the AI chat button below
+the common ground and first question to test the AI-to-AI icebreaker chat — no setup step is
+required. If Apple Intelligence is not available on your review device or Simulator, the app
+instead shows the permanent "confirmed themes only" notice mentioned above, and the AI chat button
+is absent; that is the designed fallback, not a malfunction.
 
 (b) QR intro flow
 Create an Intro Card (name is the only required field), then show its QR code. Scanning it with a
@@ -250,7 +266,8 @@ NSPrivacyTracking must be false.
 
 Guideline 4.2 (native functionality beyond a repackaged website): the app provides on-device
 storage of the user's own Intro Card, fully offline QR generation, camera-based QR intake, and
-optional on-device AI inference. None of these depend on a server-hosted backend.
+on-device AI inference through Apple Intelligence on supported devices. None of these depend on a
+server-hosted backend.
 
 Guidelines 1.1 / 1.2 (user-generated / AI-generated content): the app does not provide a public
 feed, community, messaging service, shared AI history, or a way to publish the generated example.
@@ -295,10 +312,16 @@ owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC 
 - [ ] スクリーンショットを取得する。ASC が要求する必須サイズを申請時点のアップロード画面で
       確認し、Simulator または実機で撮る。
 - [ ] 基本の Intro Card 作成、QR 表示、相手ブラウザ表示を実機で確認する。
-- [ ] Rules / Model 無効状態で、会話エージェントの共通点と最初の質問が動き、AI 会話例 Section が
-      表示されないことを確認する。
-- [ ] Settings で信頼済み端末内 Model を明示的に有効化し、Download、Import、Activate を完了する。
-- [ ] Local primary Bridge の下にだけ AI 会話例ボタンと Disclosure が表示されることを確認する。
+- [ ] Apple Intelligence 非対応の端末 / Simulator で、会話エージェントの共通点と最初の質問が
+      確認済みテーマの一致だけで動くことを確認する。「現在 Apple Intelligence を利用できない
+      ため、会話のきっかけは確認済みテーマから探します」という案内が表示され、AI 会話例
+      ボタンが出ないことも確認する。
+- [ ] Apple Intelligence 対応端末（iPhone 15 Pro 以降・iOS 26 以降、Settings > Apple
+      Intelligence & Siri で有効化済み）で会話エージェントを開き、上記の案内が出ないこと、
+      共通点抽出が Apple Intelligence 経由で動くことを確認する。有効化・ダウンロードの
+      明示操作は不要（OS が管理するため）。
+- [ ] 対応端末で Local primary Bridge の下にだけ AI 会話例ボタンと Disclosure が表示されることを
+      確認する。
 - [ ] Generate、Cancel、Retry、Regenerate、60 秒 Timeout、画面離脱、Reset、相手削除を確認し、
       どの経路でも Bridge が消えず、古い会話例が復活しないことを確認する。
 - [ ] 日本語・英語で Disclosure、Privacy 文、左右の話者ラベル、VoiceOver の読み上げを確認する。
@@ -317,26 +340,36 @@ owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC 
       届いていることを確認し、実機（自分の端末、可能なら友人の端末も）で一通り操作確認する。
 - [ ] 上記すべてが揃った状態で Submit for Review する。
 
-### 端末内 LLM と preview entitlement
+### Apple Intelligence（OS 内蔵）とエンタイトルメント不要の理由
 
-v1.1.0 で会話エージェントの端末内 LLM を再有効化しました（根拠
-[ADR-0043](../adr/0043-grounded-quote-bridge-and-local-llm-reenablement.md)。ADR-0038 が
-v1.0 の暫定措置として置いていた Provider の Rules 固定を supersede します）。会話例の限定された
-自由生成面は [ADR-0049](../adr/0049-labeled-on-device-conversation-examples.md) を正本とします。
+ADR-0057・ADR-0058 で、会話エージェントの Primary Provider を OS 内蔵の Apple Intelligence
+（`FoundationModels` framework）へ一本化しました。対応端末（iPhone 15 Pro 以降・iOS 26 以降・
+Apple Intelligence 有効）では OS が推論を担うため、モデルの同梱・ダウンロード・同意画面・
+特別な entitlement のいずれも不要です。`modules/apple-foundation-models/` の native module は
+`weak_frameworks = ['FoundationModels']` で弱リンクしており、iOS 26 未満・非対応端末でも
+起動時クラッシュせず、確認済みテーマからの一致（Rules）へ自動的に切り替わります。
 
-モデルはアプリに同梱せず、利用者が Settings で明示的に有効化したときにだけダウンロードします。
-モデルを入れていない端末では従来どおり Rules 方式で動作し、会話例 Section は表示しません。
-したがって production（App Store へ提出する Build）にモデルを同梱する必要はありません。
+### 旧 端末内 LLM（Qwen・llama.rn）と preview entitlement（再導入口として残置・現在は未使用）
+
+v1.1.0 で会話エージェントの端末内 LLM（Qwen・`llama.rn`）を一度再有効化しましたが（根拠
+[ADR-0043](../adr/0043-grounded-quote-bridge-and-local-llm-reenablement.md)）、v1.1.1〜v1.1.6
+の実機不具合の大半がこの経路のダウンロード・検証・削除起因だったため、ADR-0057・ADR-0058 で
+消費者導線から撤去し、上記の Apple Intelligence へ置き換えました。実装（`use-local-model-management.ts`
+/ `trusted-model-download.ts` 等）は再導入口としてリポジトリに残していますが、Settings・会話画面の
+どこからも呼び出されず、production Build の実行結果には影響しません。
 
 `app.json` の `llama.rn` plugin は `entitlementsProfile: ["preview"]` のみを持ち、production Build
-には extended memory entitlement を適用しません。この entitlement を要する実機テストには Apple
-Developer Portal 側の capability 有効化と Provisioning Profile の再生成という別の owner 作業が
-必要です。
+には extended memory entitlement を適用しません（この記述は Qwen 経路が呼び出し不能な現在も、
+plugin 設定自体は build に残っているため、事実として維持しています）。この entitlement を要する
+実機テストには Apple Developer Portal 側の capability 有効化と Provisioning Profile の再生成という
+別の owner 作業が必要です。
 
 手順と根拠は
 [`llama-provider-development-build.md`](../design/llama-provider-development-build.md) の
 該当節、[Issue 104 設計文書](../design/2026-07-23-on-device-conversation-agent.md)、
-[会話例設計](../design/2026-07-26-conversation-example.md) を正本とします。
+[会話例設計](../design/2026-07-26-conversation-example.md)、
+[ADR-0057](../adr/0057-apple-intelligence-primary-provider.md)、
+[ADR-0058](../adr/0058-apple-intelligence-startup-gate-and-consumer-ui-removal.md) を正本とします。
 
 ## 10. TestFlight ビルドの起動方法
 

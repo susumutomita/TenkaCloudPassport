@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ConversationAgentPresentedResultState } from '../app/conversation-agent-flow';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
-import type { LocalModelManagementView } from '../app/use-local-model-management';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import SettingsLinkFooter from '../components/SettingsLinkFooter';
@@ -10,7 +9,6 @@ import type { ParticipantId } from '../domain/session-identifiers';
 import { colors, primaryEmphasisBorder, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 import ConversationExampleSection from './ConversationExampleSection';
-import ModelAcquisitionSection from './ModelAcquisitionSection';
 
 /**
  * Issue 104 / ADR-0036 + ADR-0041: 端末内会話エージェントの画面。相手の
@@ -30,15 +28,13 @@ export interface ConversationAgentPeerView {
 export interface ConversationAgentScreenProps {
   readonly hasSelfIntroCard: boolean;
   /**
-   * Issue 180: provider が Rules フォールバックではなく実際に Local Agent として
-   * 動いているか（`useConversationAgentFlow` が公開する `onDeviceAiActive`、
-   * Provider Identity から取得した会話例 Generator capability の有無で判定する）。
-   * `false`（Rules フォールバック）のときだけ、オンデバイス AI 未取得を明示し、
-   * その場から取得フローへ入れる常設ノートを表示する。
+   * ADR-0057 / Follow-up F-056000: 起動時の Availability Gate が確定した
+   * 「この端末は Apple Intelligence を使えないか」。`true` のときだけ、
+   * テーマ照合（Rules）で会話のきっかけを探す旨の簡潔な案内を表示する。
+   * 対応端末では何も表示しない。Encounter ごとに揺れる旧 `onDeviceAiActive`
+   * とは異なり、起動時に 1 回だけ確定する値のため、ちらつきが起きない。
    */
-  readonly onDeviceAiActive: boolean;
-  /** Issue 180: 常設ノートからその場で consent → DL フローへ入るための共有 State。 */
-  readonly modelManagement: LocalModelManagementView;
+  readonly appleIntelligenceUnavailable: boolean;
   readonly peers: readonly ConversationAgentPeerView[];
   /** 参加者上限に未達か。`false` のとき取り込み導線を隠し、満席である旨だけを伝える。 */
   readonly canAddPeer: boolean;
@@ -217,8 +213,7 @@ function ParticipantsSection({
 
 export default function ConversationAgentScreen({
   hasSelfIntroCard,
-  onDeviceAiActive,
-  modelManagement,
+  appleIntelligenceUnavailable,
   peers,
   canAddPeer,
   pasteInput,
@@ -255,24 +250,18 @@ export default function ConversationAgentScreen({
       {hasSelfIntroCard ? (
         <>
           {/*
-            Issue 180: provider が Rules フォールバックのとき（`onDeviceAiActive`
-            が false のとき）だけ、常設ノートで現在の動作モードとその場のモデル
-            取得導線を示す。取得済み・有効化済み（`onDeviceAiActive` が true）に
-            なった時点でこのノート自体を mount しない（`ModelAcquisitionSection`
-            は Settings と共有する状態機械だが、ここでは「未取得の説明」だけが
-            目的のため、有効化後は表示する理由が無い）。
+            ADR-0057 / Follow-up F-056000: 起動時に確定した Availability だけを
+            判定源にする（Encounter ごとに揺れる旧 `onDeviceAiActive` は使わない）。
+            対応端末（`appleIntelligenceUnavailable === false`）では何も表示せず、
+            そのまま Apple Intelligence が動く。
           */}
-          {onDeviceAiActive ? null : (
-            <ModelAcquisitionSection
-              locale={locale}
-              modelManagement={modelManagement}
-              notAcquiredCopy={{
-                buttonHint: t.onDeviceAiNoticeButtonHint,
-                buttonLabel: t.onDeviceAiNoticeButton,
-                description: () => t.onDeviceAiNoticeBody,
-              }}
-            />
-          )}
+          {appleIntelligenceUnavailable ? (
+            <View accessibilityRole="summary" style={styles.notice}>
+              <Text style={styles.noticeText}>
+                {t.appleIntelligenceUnavailableNotice}
+              </Text>
+            </View>
+          ) : null}
           {hasPeers ? (
             <ParticipantsSection
               onRemovePeer={onRemovePeer}

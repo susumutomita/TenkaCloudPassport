@@ -10770,3 +10770,173 @@ owner 方針で 1 PR 可・大きければ native+provider を先行、UI 撤去
     テスト値は直したが、ADR 本文の転記までは直していなかった）。
     `bunx textlint docs/adr/0057-apple-intelligence-primary-provider.md`
     で clean を確認した。
+
+### [ADR-0057 仕上げ: 起動時 Availability Gate と Qwen 消費者 UI 撤去] - 2026-07-28
+
+#### 目的
+
+ADR-0057（Apple Intelligence Primary Provider 化、Issue 171、#188 マージ済み）が明示的に
+scope 外へ切り出した 2 件の Follow-up（`.claude/state/follow-ups.jsonl` の
+`1785236363635983000` severity high、`1785232798269056000` severity medium）を仕上げる。
+非対応端末で毎 Encounter 発生する Provider 状態通知のちらつきと会話例生成の恒常スキップを
+起動時 1 回の Availability 事前判定で解消し、Settings / 会話画面から Qwen（GGUF ダウンロード型・
+`llama.rn`）の消費者向け UI を撤去して、非対応端末向けの簡潔な案内へ置き換える。
+`docs/release/app-store-submission.md` のメタデータと ADR-0058（本追記の正本）でこの判断を記録する。
+
+#### 制約
+
+- `rm` / `npx` 禁止、`ios/` と `node_modules` 不触、8081 kill 禁止、モック禁止、型エスケープ禁止、
+  空 catch 禁止（AGENTS.md 制約節）。
+- Qwen の lifecycle / DL 実装（`use-local-model-management.ts`、`trusted-model-download.ts`、
+  `model-lifecycle.ts`、`ModelAcquisitionSection.tsx` 等）とそのテストは削除しない。配線
+  （Settings / 会話画面からの呼び出しと Provider 選定への合流）だけを切る。
+- `App.tsx` の Composition Root が async になってよい（Follow-up 明記のとおり）が、`PassportApp`
+  マウント後に Provider が後から差し替わる設計は禁止する（`useLocalModelManagement` の
+  `useState(fallbackProvider)` は初期値のみ反映し、mount 後の prop 変化に追従しないため、
+  遅延解決した Provider を後から prop 経由で渡しても実際には効かない。advisor 指摘）。
+- テストは TDD・日本語 BDD・カバレッジ 100%。既存の `readSourceFile` によるソーステキスト検証
+  という repo 既存の慣習（`default-agent-model-provider.test.ts` 等）に新規ケースも合わせる。
+
+#### 設計判断
+
+**起動時 Availability Gate の置き場所**: `App.tsx` トップレベルで
+`createDefaultAgentModelProvider(localDataLeases)` を Promise 化し、解決するまで
+`<PassportApp>` 自体をマウントしない（`useState<AgentModelProviderStartupResult | null>` +
+`useEffect` で 1 回だけ待つ）案を採用した。対案（PassportApp 内の起動 Promise.all へ合流させる、
+または Rules を即時値にしてマウント後に Apple 版へ差し替える）は、後者が
+`useLocalModelManagement` の `provider` state が mount 時の `fallbackProvider` 引数だけを
+初期値として持ち、prop の再変化を購読しない既存実装（`management` が null、または manifest に
+active model が無い経路では特に）と噛み合わず、「対応端末で Apple が primary になる」を
+実際には満たせない可能性があったため不採用にした（advisor 指摘）。App.tsx 側でマウント自体を
+1 回だけ遅らせれば、PassportApp 配下のどの hook も「最初から確定済みの Provider」しか
+観測しないため、この不整合が構造的に起きない。可視コストは初回フレームが 1 回分遅れることのみで、
+Native の `availability()` 呼び出し（モデル読み込みを伴わない軽量呼び出し）1 回分に留まる。
+
+**Provider 選定ロジックの置き場所**: 実際の判定（Expo Go / Availability 分岐 / Rules vs Apple
+Provider の組み立て）は `native-agent-model-provider-composition.ts` に追加した純粋な非同期関数
+`resolveNativeAgentModelProviderAtStartup`（引数として `checkAvailability: () => Promise<unknown>`
+を注入）に持たせ、bun test で実行検証できるようにした。`default-agent-model-provider.native.ts`
+自体は既存の repo 慣習どおり `readSourceFile` のソーステキスト検証だけで担保する薄いラッパーに
+留める（Native Module 解決が bun 実行環境と噛み合わないため、この設計は ADR-0057 以前から
+一貫している）。
+
+**会話エージェントの Provider 供給元を変更（advisor 指摘、当初計画になかった修正）**:
+`useConversationAgentFlow` は `localModels.provider`（`useLocalModelManagement` が Settings 経由の
+手動 GGUF import/activate で書き換わる state）を渡していた。v1.1.1〜v1.1.6 で既に Qwen を
+有効化・activate 済みの端末がアップグレードした場合、Settings の削除導線を撤去した後もこの
+Provider は Qwen のまま固定され、消費者は二度と外せなくなる（ADR-0057 §4 の「消費者向け会話
+エージェントの実行経路からは到達不能になる」という主張も、この経路の存在によって実際には
+偽だった）。`useConversationAgentFlow` へ渡す `provider` を `localModels.provider` から
+`PassportApp` が受け取る `agentModelProvider`（起動時に確定した Apple-or-Rules Provider）へ
+差し替え、Qwen の manifest 状態に関わらず会話エージェントは常に Apple Intelligence / Rules だけを
+使うようにする。`localModels`（`useLocalModelManagement` 自体）は `invalidateAfterExternalPurge` /
+`isMutationPending` に引き続き必要なため呼び出しは残すが、`.view` は Settings / 会話画面の
+どちらにも渡さなくなるため、`.view.reload()` を起動する既存 `useEffect`（Settings を開いたときの
+manifest 再読込、表示先が無くなり無意味化する）も併せて削除する。
+
+**非対応端末向け案内の判定源**: 会話画面の新しい案内は、Encounter ごとに揺れうる
+`onDeviceAiActive`（`conversationExampleGeneratorForProvider(provider) !== null`）ではなく、
+起動時に 1 回確定した `appleIntelligenceUnavailable`（Availability Gate の結果そのもの）を
+判定源にする。Web / Android / Expo Go も Native Module が存在せず Availability は
+`unavailable` に丸まるため、これらのプラットフォームでも同じ案内を表示する。これは意図した
+挙動であり（実際に Apple Intelligence を使えない端末である以上、案内は事実と一致する）、
+ADR-0058 に明記する。
+
+#### タスク
+
+1. `native-agent-model-provider-composition.ts` に `resolveNativeAgentModelProviderAtStartup`
+   と `AgentModelProviderStartupResult` を追加する（TDD、Expo Go / unavailable 各 reason /
+   available の分岐を実行テストで固定）。
+2. `default-agent-model-provider.{native,web,ts}.ts` の戻り値を
+   `Promise<AgentModelProviderStartupResult>` へ統一する。
+3. `App.tsx` を Promise 解決までマウントを遅らせる構成へ変更する。
+4. `PassportApp.tsx`: `appleIntelligenceUnavailable` prop を追加、
+   `useConversationAgentFlow` への `provider` を `agentModelProvider` へ差し替え、
+   `localModels.view` の UI 側配線（Settings / 会話画面への prop・`.view.reload()` effect）を削除する。
+5. `SettingsScreen.tsx` から `ModelAcquisitionSection` の呼び出しと `modelManagement` prop を削除する。
+6. `ConversationAgentScreen.tsx` から `ModelAcquisitionSection` 呼び出し・`modelManagement`・
+   `onDeviceAiActive` prop を削除し、`appleIntelligenceUnavailable` 案内（plain Text、新規 Card
+   を作らず jscpd baseline を超えない）へ置き換える。
+7. i18n: `conversationAgent.onDeviceAiNotice*`（ja/en）を削除し、新しい案内文言を追加する
+   （`messages.test.ts` の ja/en Leaf Key 一致テストで整合を機械確認する）。
+8. `docs/release/app-store-submission.md` を Apple Intelligence 前提へ書き換える
+   （サブタイトル根拠・説明文・プロモーションテキスト・App Privacy 根拠・App Review Notes (a)・
+   審査官手順・owner チェックリスト・「端末内 LLM と preview entitlement」節）。
+9. ADR-0058 を新規作成し、上記設計判断を記録する。
+10. 既存テスト（`default-agent-model-provider.test.ts`、`passport-app-stage-flow.test.ts`、
+    `settings-accessibility.test.ts`、`conversation-agent-accessibility.test.ts`、
+    `model-acquisition-section-accessibility.test.ts` の該当箇所）を新しい配線に合わせて更新する。
+
+#### 検証手順
+
+- `bun test src --coverage`（100% 維持）。
+- `bunx tsc --noEmit -p .`。
+- `bun scripts/architecture-harness.ts --staged --fail-on=error`。
+- `make before-commit`（harness + harness_test + dup_check + lint_text + lint）。
+- `/review` / `/security-review` / `/simplify`。
+- (a) 非対応端末: `createAgentProviderSessionRunner().run(...)` に unavailable 経路が返す
+  Provider（`RULES_MODEL_PROVIDER`）を渡し、`onStateChange` が一度も呼ばれない（`local-started`
+  へ遷移しない）ことを実行テストで確認する。
+- (b) 対応端末: `resolveNativeAgentModelProviderAtStartup` の available 経路が返す Provider で
+  `conversationExampleGeneratorForProvider(provider) !== null` を確認する。
+- (c) 撤去した UI: `readSourceFile` によるソーステキスト不在確認。
+- (d) メタデータ: `bunx textlint docs/release/app-store-submission.md docs/adr/0058-*.md`。
+
+#### 進捗ログ
+
+- 2026-07-28: 既存コード（ADR-0057、`agent-provider-session.ts`、`use-local-model-management.ts`、
+  `use-conversation-agent-flow.ts`、`SettingsScreen.tsx`、`ConversationAgentScreen.tsx`、
+  `docs/release/app-store-submission.md`）を読み、advisor に設計を相談した。当初案（App.tsx を
+  async 化するだけ）に対し、`useConversationAgentFlow` が `localModels.provider` を受け取っており
+  Qwen manifest が残る端末では Apple 一本化が実際には効かないという blocker 級の抜けを指摘され、
+  設計に組み込んだ。ブランチ `feat/apple-intelligence-ui` を `origin/main`（`641c272`）から作成した。
+
+- 2026-07-28: 実装完了後、advisor に `.catch()` 未設置（起動 Promise が reject すると
+  `PassportApp` が永久にマウントされず白画面のまま止まる）・Qwen の個別削除導線消失・
+  `/follow-up` 未整備の 3 点を指摘され、`.catch()` で `rulesOnlyAgentModelProviderStartupResult()`
+  へ fail-open する実装とソーステキスト検証テストを追加した。あわせて `code-reviewer` サブ
+  エージェントと `/simplify` の 4 並列レビュー（reuse / simplification / efficiency / altitude）
+  を実行した。
+- 2026-07-28: レビュー結果を triage した。適用: (1) `onDeviceAiActive`（唯一の消費者を本 PR で
+  削除済みの孤児 API）を `use-conversation-agent-flow.ts` から削除、(2)
+  `AgentModelProviderStartupInput` を `NativeAgentModelProviderComposition` の extends にして
+  フィールド重複を解消、(3) `ModelAcquisitionSection.tsx` の「Settings と会話画面が共有する」
+  という古いコメントを撤去済みの事実に合わせて修正、(4) `PassportApp.tsx` の
+  `appleIntelligenceUnavailable` 既定値を `false` から `true` へ変更し
+  `rulesOnlyAgentModelProviderStartupResult()` と同じ組にした（code-reviewer 指摘: 既定値が
+  独立していると矛盾する組み合わせになりうる）、(5) `code-reviewer` の major 指摘
+  （`AppleFoundationModelsUnavailableReason` 5 種のうち 2 種はセッション中に変わりうるのに
+  ADR・案内文が「端末の不変の性質」と断定していた）を受け、通知文言を「この端末では」から
+  「現在」へ弱め、ADR-0058 に既知の制約として明記した。見送り（follow-up 化）:
+  `appleIntelligenceUnavailable` と `provider.kind === 'rules'` の重複は `/simplify` の 2 エージェント
+  （simplification・altitude）が指摘したが、advisor 判断により見送った——両者は「起動時に確定した
+  Availability 判定結果」と「現在配線されている Provider の種別」という別概念であり、
+  `INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY` を守るため Provider の `kind` を UI 層で直接比較する
+  慣習を新設したくない（既存は `agent-provider-session.ts` 以外で行わない）。efficiency
+  エージェントが提案した「起動 gate 自体を撤去し即時マウント + 後から prop 差し替え」も見送った
+  ——対応端末で `onStart` が解決前に発火すると `settledBy: 'primary'` を取り損ね、F-983000 が
+  修正する会話例生成スキップを別の経路で再発させるため。`useLocalModelManagement` の
+  `provider`/`configureProvider`（本 PR で無 consumer 化）は hook 自体の公開契約変更を伴う
+  scope 外の改修のため follow-up へ回した。stranded Qwen model files（Settings の削除導線消失）も
+  follow-up 化した。
+
+#### 振り返り
+
+- 問題: ADR-0057 の Consequences は「Qwen は消費者導線から到達不能」と書いていたが、
+  `useConversationAgentFlow` の Provider 供給元が `localModels.provider` のままだったため、
+  Settings 経由で Qwen を有効化済みの端末では実際には到達可能だった。
+- 根本原因: Provider の「選定」（Composition Root、起動時 1 回）と「供給」（会話エージェントへ
+  実際に渡す値）が別の 2 経路に分かれており、ADR-0057 のレビューは前者だけを検証して後者を
+  見落とした。
+- 予防策: Provider Contract のような「唯一の決定点」を持つ設計では、決定点を変えた PR で
+  「その決定点を実際に使っている全消費者」を `grep` で洗い出し、変更後も 1 対 1 で対応するかを
+  レビューチェックリスト化する。
+- 問題（2 周目レビューで判明）: 起動時 1 回だけ確定する Availability 判定を「端末の不変の性質」と
+  誤って一般化し、ADR の文言も案内文も同じ誤りを継承していた。
+- 根本原因: `AppleFoundationModelsUnavailableReason` の 5 種類のうち 2 種類
+  （`apple-intelligence-not-enabled` / `model-not-ready`）は端末固有ではなく、アプリ再起動なしに
+  セッション中に変わりうる状態である、という区別を設計時に見落とした。
+- 予防策: 「起動時に 1 回だけ確定させる」という実装判断をする際は、判定対象の値が本当に
+  不変（再起動しないと変わらない）か、それとも「今は」という時点情報に過ぎないかを reason
+  ごとに列挙して確認する。ユーザー向け文言は後者の可能性がある限り、恒久的な断定
+  （「この端末は」）ではなく時点を示す表現（「現在」）に倒す。

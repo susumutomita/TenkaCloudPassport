@@ -176,10 +176,7 @@ import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
 } from './use-local-diagnostics-flow';
-import {
-  type LocalModelManagementView,
-  useLocalModelManagement,
-} from './use-local-model-management';
+import { useLocalModelManagement } from './use-local-model-management';
 import {
   type PilotMeasurementFlow,
   usePilotMeasurementFlow,
@@ -195,10 +192,18 @@ interface PassportAppProps {
   /** Issue 111: 明示切替（Settings / ヘッダートグル）の永続化先。 */
   readonly localePreferenceStorage: LocalePreferenceStoragePort;
   /**
-   * v1.0（ADR-0038）: `createDefaultAgentModelProvider` 経由でも常に
-   * `RULES_MODEL_PROVIDER` になる（Native も含め、オンデバイス LLM は無効化した）。
+   * ADR-0057 / Follow-up F-983000: Native では起動時に 1 回確定した
+   * Apple Intelligence Primary Provider（非対応端末では最初から Rules）。
+   * Web / Expo Go は常に `RULES_MODEL_PROVIDER`。
    */
   readonly agentModelProvider?: AgentModelProvider;
+  /**
+   * Follow-up F-983000 / F-056000: 起動時の Availability Gate が確定した
+   * 「この端末は Apple Intelligence を使えないか」。会話エージェント画面が
+   * 非対応端末向けの簡潔な案内を出すかどうかの唯一の判定源にする
+   * （Encounter ごとに揺れる `onDeviceAiActive` は使わない）。
+   */
+  readonly appleIntelligenceUnavailable?: boolean;
   /** Development Build だけが app-private GGUF lifecycle を注入する。 */
   readonly localModelManagement?: LocalModelManagementPort | null;
   readonly localModelMutationLeases?: LocalModelMutationLeasePort | null;
@@ -598,8 +603,6 @@ interface UtilityStageGateProps {
    * （自己紹介カード、`introCard !== null`）。
    */
   readonly hasIntroCard: boolean;
-  /** ADR-0043: Settings へ戻した Local Model 管理 UI の状態と操作。 */
-  readonly modelManagement: LocalModelManagementView;
 }
 
 function UtilityStageGate({
@@ -615,7 +618,6 @@ function UtilityStageGate({
   conversationAgent,
   cameraQrCapturePort,
   hasIntroCard,
-  modelManagement,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
     return (
@@ -678,7 +680,6 @@ function UtilityStageGate({
         }}
         hasIntroCard={hasIntroCard}
         locale={locale}
-        modelManagement={modelManagement}
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
         onOpenConversationAgent={onOpenConversationAgent}
@@ -806,6 +807,10 @@ export default function PassportApp({
   initialLocalePort,
   localePreferenceStorage,
   agentModelProvider = RULES_MODEL_PROVIDER,
+  // code-reviewer 指摘（minor）: 既定値は rulesOnlyAgentModelProviderStartupResult()
+  // と同じ組（rules provider には常に true）にし、片方だけ省略されても矛盾する
+  // 組み合わせにならないようにする。
+  appleIntelligenceUnavailable = true,
   localModelManagement = null,
   localModelMutationLeases = null,
   localDataControl,
@@ -1128,12 +1133,12 @@ export default function PassportApp({
       false
     ).catch(() => undefined);
   }, [providerRunner, trackProviderTeardown]);
-  // v1.0（ADR-0038、/simplify 指摘）: `localModels.view` は Settings から
-  // Local Model 管理 UI を除去したため、どこからも読まれなくなった。以前は
-  // Settings 再訪時に Local Model の manifest を再読込して表示を最新化する
-  // effect があったが、表示先自体が無いため、その effect ごと削除した
-  // （`localModels.invalidateAfterExternalPurge` / `isMutationPending()` は
-  // 全データ削除の lease 調整に引き続き使うため、hook 自体は維持する）。
+  // ADR-0057 / Follow-up F-056000: Settings・会話エージェント画面のどちらも
+  // `localModels.view`（Local Model 管理 UI 用の state・操作）を消費者向けには
+  // 表示しなくなった（Qwen の有効化・DL 進捗・削除 UI を消費者導線から撤去した）。
+  // `invalidateAfterExternalPurge` / `isMutationPending()` は全データ削除の
+  // lease 調整に引き続き使うため hook 自体は維持するが、表示先が無くなった
+  // Settings 再訪時の manifest 再読込 effect（旧 ADR-0043）はここで削除する。
   const localModels = useLocalModelManagement({
     management: localModelManagement,
     mutationLeases: localModelMutationLeases,
@@ -1142,14 +1147,6 @@ export default function PassportApp({
     hasActiveProviderRun: providerRunPending,
     ready: !restoring,
   });
-
-  // ADR-0043: Settings を開いたときに manifest を読み直し、ダウンロード完了や
-  // 外部削除を UI へ反映する。実行中の Provider があるときは待つ。
-  useEffect(() => {
-    if (stage === 'settings' && !providerRunPending) {
-      localModels.view.reload();
-    }
-  }, [localModels.view.reload, providerRunPending, stage]);
 
   useEffect(() => {
     return () => {
@@ -1175,17 +1172,24 @@ export default function PassportApp({
     onClose: () => setStage('settings'),
   });
   // Issue 104 / ADR-0036: 端末内会話エージェント。`providerRunner` は Pet
-  // Interaction と同じ共有 instance をそのまま渡す。ADR-0043（Issue 147）:
-  // ADR-0038 が Rules 固定にしていたこの 1 か所を戻す。自己紹介カードの自由記述を
-  // 読んで共通点を見つけるのがこの機能の目的であり、Rules 固定のままでは
-  // カタログ checkbox の共通集合しか出せないため。Model を持たない端末では
-  // `localModels.provider` がそのまま Rules になり、実行時失敗も
-  // `runProviderOnce` の Fallback-once が Rules へ倒す。
+  // Interaction と同じ共有 instance をそのまま渡す。
+  //
+  // ADR-0057 / Follow-up F-056000（advisor 指摘）: `provider` には
+  // `localModels.provider` ではなく、起動時に確定した `agentModelProvider`
+  // （Apple Intelligence Primary、非対応端末では Rules）をそのまま渡す。
+  // `localModels.provider` は Settings 経由の手動 GGUF import/activate
+  // （旧 ADR-0043 の再導入口、消費者導線からは撤去済み）で書き換わる state の
+  // ため、v1.1.1〜v1.1.6 で既に Qwen を有効化・activate 済みの端末では
+  // manifest がそのまま残り、Settings の削除導線が無くなった後もそちらへ
+  // 固定されてしまう（ADR-0057 が「消費者向け会話エージェントの実行経路からは
+  // 到達不能になる」と書いた前提が、この経路の存在によって実際には崩れていた）。
+  // `agentModelProvider` を直接渡すことで、Qwen の manifest 状態に関わらず
+  // 会話エージェントは常に Apple Intelligence / Rules だけを使う。
   const conversationAgentFlow = useConversationAgentFlow({
     locale,
     cameraQrCapturePort,
     providerRunner,
-    provider: localModels.provider,
+    provider: agentModelProvider,
     onNavigateToConversationAgent: () => setStage('conversation-agent'),
     onNavigateToSettings: () => setStage('settings'),
   });
@@ -2329,16 +2333,15 @@ export default function PassportApp({
       <UtilityStageGate
         cameraQrCapturePort={cameraQrCapturePort}
         conversationAgent={{
+          // Follow-up F-056000: 起動時に確定した「この端末は Apple Intelligence
+          // を使えないか」だけを渡す。旧 `modelManagement` / `onDeviceAiActive`
+          // （Qwen 未取得ノート、Issue 180）は消費者導線から撤去した。
+          appleIntelligenceUnavailable,
           canAddPeer: conversationAgentFlow.canAddPeer,
           errorMessage: conversationAgentFlow.errorMessage,
           hasSelfIntroCard: conversationAgentFlow.hasSelfIntroCard,
-          // Issue 180: 常設ノートからその場で consent → DL フローへ入るため、
-          // Settings と同じ共有 State（`localModels.view`）をそのまま渡す
-          // （新しい instance は作らない）。
-          modelManagement: localModels.view,
           onBack: conversationAgentFlow.close,
           onChangePasteInput: conversationAgentFlow.onChangePasteInput,
-          onDeviceAiActive: conversationAgentFlow.onDeviceAiActive,
           // Codex 指摘（blocker、Issue 104 PR #132）: Settings footer が
           // `openSettings`（stage 変更のみ）を呼んでいたため、受信済み相手カード・
           // 貼り付け中の URL・実行結果が hook state に残ったまま Settings 経由で
@@ -2361,7 +2364,6 @@ export default function PassportApp({
         }}
         diagnosticsFlow={diagnosticsFlow}
         hasIntroCard={introCard !== null}
-        modelManagement={localModels.view}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}

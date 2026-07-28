@@ -44,15 +44,28 @@ describe('端末内 Diagnostic と削除の配線契約', () => {
       'const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(',
       'createDefaultLocalProfileStorage()',
       'const backupSharePort = createDefaultBackupSharePort()',
-      'const agentModelProvider = createDefaultAgentModelProvider(localDataLeases)',
+      'const agentModelProviderStartupPromise =',
+      'createDefaultAgentModelProvider(localDataLeases)',
       'const localDataControl = createLocalDataControl({',
       'profileStorage: localProfileStorage',
       'modelContexts: localDataLeases',
       'deletionJournal: localDeletionJournal',
-      'agentModelProvider={agentModelProvider}',
+      'agentModelProvider={agentModelProviderStartup.provider}',
       'localDataControl={localDataControl}',
     ]);
     expect(text).toContain('appVersion={packageManifest.version}');
+  });
+
+  it('advisor 指摘: agentModelProviderStartupPromise が reject しても白画面のまま止まらず、rulesOnlyAgentModelProviderStartupResult() で fail-open する', async () => {
+    const text = await compositionSource();
+    const catchBranch = text.slice(text.indexOf('.catch(() => {'));
+
+    expectInOrder(text, ['.then((result) => {', '.catch(() => {']);
+    expectInOrder(catchBranch, [
+      '.catch(() => {',
+      'setAgentModelProviderStartup(',
+      'rulesOnlyAgentModelProviderStartupResult()',
+    ]);
   });
 
   it('起動時は tombstone recovery を Profile load より先に完了する', async () => {

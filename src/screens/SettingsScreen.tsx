@@ -8,26 +8,22 @@ import {
   type Locale,
 } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
-import type { LocalModelManagementView } from '../app/use-local-model-management';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import Card from '../components/Card';
 import { colors, spacing } from '../ui/theme';
-import ModelAcquisitionSection, {
-  readableBytes,
-} from './ModelAcquisitionSection';
 import { modelCardOverride, modelCardStyles } from './model-card-styles';
 
 /**
- * v1.0（ADR-0038、owner 実機 TestFlight フィードバック）: オンデバイス LLM
- * （Qwen ダウンロード + llama.rn 推論）は、ダウンロードが 100% で完了せず固まる・
- * 未完了のまま会話 Agent を開くと native crash する（Error Boundary で捕まらない）
- * の 2 件が実機で確認され、呼び出し元を実機テストできないため v1.0 では消費者へ
- * 一切見せない。`modelManagement` prop・Local Model 管理 UI（旧
- * `OnDeviceAiSection` / `ModelManagementSection`）はこの Props からも下記
- * `SettingsScreen` 本体からも完全に除去した（`__DEV__` ゲートではなく削除）。
- * 実装（`use-local-model-management.ts` / `trusted-model-download.ts` 等）は
- * リポジトリに残し、v1.1 で実機テストして再有効化する。
+ * ADR-0057 / ADR-0058（Follow-up F-056000）: Apple Intelligence 一本化に伴い、
+ * Qwen（GGUF ダウンロード型・`llama.rn`）の消費者向け UI（有効化・DL 進捗・
+ * 削除・メモリ注意、旧 `ModelAcquisitionSection` 呼び出し）を Settings から
+ * 撤去した。Apple Intelligence は OS 内蔵でダウンロード導線自体が無く、対応可否は
+ * 起動時の Availability Gate（`native-agent-model-provider-composition.ts`）が
+ * 自動判定するため、消費者が明示的に有効化する UI は不要になった。実装
+ * （`use-local-model-management.ts` / `trusted-model-download.ts` /
+ * `ModelAcquisitionSection.tsx` 等）は再導入口として残し、削除しない
+ * （配線からのみ切断する）。
  */
 interface SettingsScreenProps {
   readonly locale?: Locale;
@@ -40,13 +36,6 @@ interface SettingsScreenProps {
    * （session が作れず intake 導線が no-op になる画面を開かせない）。
    */
   readonly hasIntroCard: boolean;
-  /**
-   * ADR-0043（Issue 147）: ADR-0038 が除去した Local Model 管理 UI を戻す。
-   * 端末内モデルが実際に共通点を見つけられるようになった以上、消費者が Model を
-   * 入手する導線が無ければ機能へ到達できない。`available` が false の Platform
-   * （Expo Go / Web）では従来どおり何も表示しない。
-   */
-  readonly modelManagement?: LocalModelManagementView;
   readonly onBack: () => void;
   /**
    * Issue 138（実機 blocker B）: 診断画面（開発者向け Preview・Share・個別削除）は
@@ -179,7 +168,6 @@ export default function SettingsScreen({
   onChangeLocale,
   onOpenConversationAgent,
   hasIntroCard,
-  modelManagement,
   onBack,
   dataErasure,
 }: SettingsScreenProps) {
@@ -204,21 +192,6 @@ export default function SettingsScreen({
           );
         })}
       </View>
-      {modelManagement?.available ? (
-        <ModelAcquisitionSection
-          locale={locale}
-          modelManagement={modelManagement}
-          notAcquiredCopy={{
-            buttonHint: t.onDeviceAiEnableButtonHint,
-            buttonLabel: t.onDeviceAiEnableButton,
-            description: (source) =>
-              t.onDeviceAiDescription(
-                source.displayName,
-                readableBytes(source.sizeBytes)
-              ),
-          }}
-        />
-      ) : null}
       <ActionButton
         accessibilityHint={
           hasIntroCard
