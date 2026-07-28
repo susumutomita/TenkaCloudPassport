@@ -13,10 +13,7 @@ import {
 import { createLlamaModelInspector } from '../local-agent/llama-model-inspector.native';
 import { loadLlamaModule } from '../local-agent/llama-module-loader.native';
 import { createModelBenchmarkRecorder } from '../local-agent/model-benchmark';
-import {
-  createLocalModelLifecycle,
-  ModelLifecycleError,
-} from '../local-agent/model-lifecycle';
+import { createLocalModelLifecycle } from '../local-agent/model-lifecycle';
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
 import {
   QWEN2_5_1_5B_INSTRUCT_Q4_K_M,
@@ -25,6 +22,7 @@ import {
 import { registerConversationExampleGenerator } from './conversation-example-capability';
 import type { DefaultLocalModelManagementComposition } from './default-local-model-management-contract';
 import { createLocalModelLifecycleStorageAdapter } from './local-model-lifecycle-storage-adapter';
+import { mutationLeaseBusyError } from './local-model-management-controller';
 import type { LocalModelManagementPort } from './local-model-management-port';
 import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
 
@@ -83,11 +81,8 @@ function createNativeManagement(
       acquireMutation() {
         try {
           return executionLeases.acquireMutation();
-        } catch {
-          throw new ModelLifecycleError(
-            'NATIVE_CONTEXT_UNAVAILABLE',
-            'Native Context の解放を確認できないため Model を変更できません。'
-          );
+        } catch (error: unknown) {
+          throw mutationLeaseBusyError(error);
         }
       },
     },

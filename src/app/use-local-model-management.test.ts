@@ -16,6 +16,7 @@ import {
   confirmLocalModelCaution,
   createLocalModelOperationLane,
   importLocalModelCandidate,
+  mutationLeaseBusyError,
   performLocalModelActivation,
   withLocalModelMutationLease,
 } from './local-model-management-controller';
@@ -207,6 +208,53 @@ describe('Local Model 管理 Hook の Owner 操作契約', () => {
 
     expect(await attemptImport(activeContexts)).toBe(MODEL);
     expect(importCalls).toBe(1);
+  });
+
+  it('実機 blocker（owner フィードバック）: acquireMutation の busy 理由ごとに非致命的な ModelLifecycleError コードへ変換し、Native Context 破損（NATIVE_CONTEXT_UNAVAILABLE）を騙らない', () => {
+    const capturedError = (
+      contexts: LocalModelContextLeaseRegistry
+    ): unknown => {
+      try {
+        contexts.acquireMutation();
+        throw new Error('acquireMutation は busy のはずが成功した');
+      } catch (error: unknown) {
+        return error;
+      }
+    };
+
+    const recoveryPending = new LocalModelContextLeaseRegistry();
+    expect(
+      mutationLeaseBusyError(capturedError(recoveryPending))
+    ).toMatchObject({ code: 'STARTUP_RECOVERY_PENDING' });
+
+    const modelContextBusy = new LocalModelContextLeaseRegistry(false);
+    const contextLease = modelContextBusy.acquire();
+    expect(
+      mutationLeaseBusyError(capturedError(modelContextBusy))
+    ).toMatchObject({ code: 'MODEL_CONTEXT_BUSY' });
+    contextLease.release();
+
+    const profileWriteBusy = new LocalModelContextLeaseRegistry(false);
+    const profileWriteLease = profileWriteBusy.acquireProfileWrite();
+    expect(
+      mutationLeaseBusyError(capturedError(profileWriteBusy))
+    ).toMatchObject({ code: 'MODEL_CONTEXT_BUSY' });
+    profileWriteLease.release();
+
+    const exclusiveBusy = new LocalModelContextLeaseRegistry(false);
+    const exclusiveAttempt = exclusiveBusy.tryAcquireExclusiveForRecovery();
+    expect(exclusiveAttempt.kind).toBe('acquired');
+    expect(mutationLeaseBusyError(capturedError(exclusiveBusy))).toMatchObject({
+      code: 'MODEL_CONTEXT_BUSY',
+    });
+    if (exclusiveAttempt.kind === 'acquired') exclusiveAttempt.lease.release();
+
+    expect(mutationLeaseBusyError(new Error('unrelated'))).toMatchObject({
+      code: 'MODEL_CONTEXT_BUSY',
+    });
+
+    const restartEquivalent = new LocalModelContextLeaseRegistry(false);
+    expect(() => restartEquivalent.acquireMutation().release()).not.toThrow();
   });
 
   it('Risk assessment の supported / caution / blocked を実行し、永続化後の表示 refresh を必ず行う', async () => {

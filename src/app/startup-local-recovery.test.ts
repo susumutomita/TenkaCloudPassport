@@ -135,7 +135,7 @@ describe('起動時 Local Data Recovery Gate', () => {
     });
   });
 
-  it('journal の一時読取失敗後に再試行すると実 File の既存 Profile を復元する', async () => {
+  it('code-reviewer 指摘（blocker）由来の修正: journal の 1 回だけの一時読取失敗は内部 retry で吸収し、1 回目の呼び出しだけで実 File の既存 Profile を復元する', async () => {
     const root = temporaryDirectories.create();
     const files = new FileBackedWebStorage(root);
     const profileStorage = new WebLocalProfileStorageAdapter(files);
@@ -152,16 +152,19 @@ describe('起動時 Local Data Recovery Gate', () => {
       profileStorage,
       modelStorage: new NoLocalModelStorageAdapter(),
       modelContexts: new LocalModelContextLeaseRegistry(),
+      // `OneReadFailureWebStorage` は最初の 1 回だけ読み取りに失敗する。
+      // `recoverPendingDeletion()` 内の即時 retry（`readPendingWithRetry`）が
+      // これを吸収するため、`recoverLocalStateAtStartup` を 1 回呼ぶだけで
+      // Recovery が完了し Profile を復元できる（以前は 1 回目が
+      // `recovery-failed` になり、呼び出し側の再試行が必須だった）。
       deletionJournal: new WebDeletionJournalAdapter(
         new OneReadFailureWebStorage(files)
       ),
     });
 
-    const initial = await recoverLocalStateAtStartup(localData, profileStorage);
-    const retried = await recoverLocalStateAtStartup(localData, profileStorage);
+    const result = await recoverLocalStateAtStartup(localData, profileStorage);
 
-    expect(initial.kind).toBe('recovery-failed');
-    expect(retried).toEqual({
+    expect(result).toEqual({
       kind: 'loaded',
       profile: existing,
       recovery: 'not-pending',

@@ -37,10 +37,53 @@ export interface LocalModelContextLease {
   release(): void;
 }
 
+/**
+ * 実機 blocker（owner フィードバック）: 以前は理由を持たない単一 Error だったため、
+ * `default-local-model-management.native.ts` 側で「起動確認待ち」「他操作と衝突中」
+ * どちらも一律 `NATIVE_CONTEXT_UNAVAILABLE`（「App を完全に終了して再起動してください」）
+ * へ丸めてしまい、ありふれた一時的な衝突までユーザーに致命的な文言を見せていた。
+ * 呼び出し元が「待てば解消する一時的な busy」か「Native Context 自体が壊れた」かを
+ * 区別できるよう、Block の理由を型で保持する。
+ */
+export type LocalDataAccessBlockedReason =
+  | 'recovery'
+  | 'model-context'
+  | 'profile-write'
+  | 'exclusive'
+  | 'pending-deletion';
+
+/**
+ * code-reviewer 指摘（medium）: `reason` を持つようになった後も `.message` が
+ * 全 `reason` で固定文言のままだと、Log・診断出力を読む側にとって
+ * 「実際には削除 transaction が進行中ではない」場合（起動確認待ち・他操作との
+ * 衝突・排他ロック中）まで削除中と誤認させる。この PR の主題（実態より深刻・
+ * 的外れな理由を騙らない）を Error の `.message` 自身でも守る。
+ */
+/**
+ * /simplify 指摘（simplification）: switch + `default` の exhaustiveness 分岐は
+ * 単純な reason → 文言の対応表に対しては冗長。Record リテラルなら、
+ * `LocalDataAccessBlockedReason` にキーを追加・削除したとき TypeScript が
+ * この対応表自体の過不足を直接検出するため、同じ網羅性を短く保証できる。
+ */
+const BLOCKED_REASON_MESSAGES: Record<LocalDataAccessBlockedReason, string> = {
+  'pending-deletion': '端末内 Data の削除 transaction が進行中です。',
+  'model-context': 'Local Model が他の処理で使用中です。',
+  'profile-write': 'Profile の書込みが他の処理で進行中です。',
+  exclusive: '端末内 Data の排他操作が他の処理で進行中です。',
+  recovery: '起動時の復旧確認が完了していません。',
+};
+
+function messageForBlockedReason(reason: LocalDataAccessBlockedReason): string {
+  return BLOCKED_REASON_MESSAGES[reason];
+}
+
 export class LocalDataAccessBlockedError extends Error {
-  constructor() {
-    super('端末内 Data の削除 transaction が進行中です。');
+  readonly reason: LocalDataAccessBlockedReason;
+
+  constructor(reason: LocalDataAccessBlockedReason) {
+    super(messageForBlockedReason(reason));
     this.name = 'LocalDataAccessBlockedError';
+    this.reason = reason;
   }
 }
 
@@ -80,17 +123,19 @@ export class LocalModelContextLeaseRegistry {
 
   acquireMutation(): LocalModelMutationLease {
     const attempt = this.tryAcquireExclusive();
-    if (attempt.kind === 'busy') throw new LocalDataAccessBlockedError();
+    if (attempt.kind === 'busy') {
+      throw new LocalDataAccessBlockedError(attempt.activeUse);
+    }
     return attempt.lease;
   }
 
   private acquireUse(use: LocalDataUse): LocalModelContextLease {
-    if (
-      this.#exclusive ||
-      this.#useAcquisitionBlocked ||
-      (use === 'model-context' && this.#activeModelContextCount > 0)
-    ) {
-      throw new LocalDataAccessBlockedError();
+    if (this.#exclusive) throw new LocalDataAccessBlockedError('exclusive');
+    if (this.#useAcquisitionBlocked) {
+      throw new LocalDataAccessBlockedError('recovery');
+    }
+    if (use === 'model-context' && this.#activeModelContextCount > 0) {
+      throw new LocalDataAccessBlockedError('model-context');
     }
     if (use === 'model-context') this.#activeModelContextCount += 1;
     else this.#activeProfileWriteCount += 1;
@@ -168,9 +213,11 @@ export class DeletionCoordinatedLocalProfileStorageAdapter
       try {
         deletionPending = await this.deletionJournal.isPending();
       } catch {
-        throw new LocalDataAccessBlockedError();
+        throw new LocalDataAccessBlockedError('pending-deletion');
       }
-      if (deletionPending) throw new LocalDataAccessBlockedError();
+      if (deletionPending) {
+        throw new LocalDataAccessBlockedError('pending-deletion');
+      }
       await this.delegate.save(profile);
     } finally {
       lease.release();
@@ -245,6 +292,33 @@ function previewFrom(
 
 function storageFailure(): LocalDataControlError {
   return new LocalDataControlError('STORAGE_FAILURE', false);
+}
+
+/**
+ * code-reviewer 指摘（blocker）: 起動確認は毎回 fresh process の 1 回きりで、
+ * その回の `deletionJournal.isPending()` が読み取れるかどうかは前回 process の
+ * 確定 pending 有無と無関係（`committedDeletionLease` は process local で
+ * 再起動を跨がない）。1 回の一時的な読み取り失敗だけで「判定不能」と結論し
+ * Block を解放すると、直前の process が本当に確定 pending（`markPending()`
+ * 成功済み）を残したまま落ちていた場合に、それを見逃して解放してしまう
+ * リスクがある。即時（timer 無し）で複数回読み直し、真に一時的な glitch は
+ * ここで吸収したうえで、全試行が失敗したときだけ「判定不能」の扱いに落ちる
+ * ようにして、そのリスクを下げる。
+ */
+const PENDING_CHECK_ATTEMPTS = 3;
+
+async function readPendingWithRetry(
+  deletionJournal: LocalDeletionJournalPort
+): Promise<boolean> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < PENDING_CHECK_ATTEMPTS; attempt += 1) {
+    try {
+      return await deletionJournal.isPending();
+    } catch (error: unknown) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 export function createLocalDataControl({
@@ -361,11 +435,19 @@ export function createLocalDataControl({
       const lease = committedDeletionLease ?? acquireRecoveryExclusive();
       let pending: boolean;
       try {
-        pending = await deletionJournal.isPending();
+        pending = await readPendingWithRetry(deletionJournal);
       } catch {
         if (committedDeletionLease) {
+          // 既に markPending 済み（確定 pending）で読み直しにも失敗した場合だけ、
+          // Model File が中途半端な状態のままかもしれないため Block を維持する。
           throw new LocalDataControlError('DELETE_INTERRUPTED', true);
         }
+        // 実機 blocker（owner フィードバック）: pending かどうかを確定できなかった
+        // だけで、削除が実際に進行中だと確認したわけではない。判定不能（かつ
+        // 確定 pending 未検出）は fail-open で Block を解放する。設計判断・
+        // 選択肢・受け入れる risk の詳細は
+        // `docs/adr/0056-recovery-gate-fail-open-on-indeterminate-read.md` を参照。
+        modelContexts.allowUsesAfterRecovery();
         lease.release();
         throw storageFailure();
       }

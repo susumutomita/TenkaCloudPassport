@@ -1072,7 +1072,13 @@ const ja: AppMessages = {
       `内容を保存しない計測 ${count} 件。直近: Import ${importMs ?? '-'} ms、Load ${loadMs ?? '-'} ms、First Token ${firstTokenMs ?? '-'} ms、完了 ${completionMs ?? '-'} ms、Peak Memory ${peakMemory}、Thermal ${thermalBefore} → ${thermalAfter}、Battery ${batteryDeltaPermille ?? '-'} permille、結果 ${outcome}。`,
     modelError: (code) => {
       if (code === 'NATIVE_CONTEXT_UNAVAILABLE') {
-        return 'Native Context の解放を確認できません。Model File は変更していません。App を完全に終了して再起動してください。';
+        return 'Local Model の終了処理を確認できませんでした。Model File は変更していません。念のため、この App を完全に終了してから開き直してください。';
+      }
+      if (code === 'MODEL_CONTEXT_BUSY') {
+        return 'Local Model は他の処理で使用中です。少し待ってからもう一度お試しください。現在の設定は変更していません。';
+      }
+      if (code === 'STARTUP_RECOVERY_PENDING') {
+        return '起動時の確認が完了するまでお待ちください。解消しない場合は、この App を再起動してからもう一度お試しください。';
       }
       if (code === 'INSUFFICIENT_STORAGE') {
         return 'この端末の空き容量が不足しています。空き容量を確保してからもう一度お試しください。現在の設定は変更していません。';
@@ -1831,7 +1837,13 @@ const en: AppMessages = {
       `${count} content-free measurements. Latest: import ${importMs ?? '-'} ms, load ${loadMs ?? '-'} ms, first token ${firstTokenMs ?? '-'} ms, completion ${completionMs ?? '-'} ms, peak memory ${peakMemory}, thermal ${thermalBefore} → ${thermalAfter}, battery ${batteryDeltaPermille ?? '-'} permille, outcome ${outcome}.`,
     modelError: (code) => {
       if (code === 'NATIVE_CONTEXT_UNAVAILABLE') {
-        return 'Native context teardown could not be confirmed. No model file was changed. Fully quit and restart the app.';
+        return "We couldn't confirm the local model shut down cleanly. No model file was changed. Just to be safe, fully quit and reopen the app.";
+      }
+      if (code === 'MODEL_CONTEXT_BUSY') {
+        return 'The local model is busy with another operation. Please wait a moment and try again. Your current setting has not changed.';
+      }
+      if (code === 'STARTUP_RECOVERY_PENDING') {
+        return "Please wait for the startup check to finish. If this doesn't clear up, restart the app and try again.";
       }
       if (code === 'INSUFFICIENT_STORAGE') {
         return 'This device does not have enough free storage. Free up space and try again. Your current setting has not changed.';
