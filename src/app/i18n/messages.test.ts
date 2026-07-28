@@ -184,6 +184,8 @@ describe('Message Catalog（src/app/i18n/messages.ts）', () => {
       const { modelError } = MESSAGES[locale].settings;
       const messages = {
         nativeContextUnavailable: modelError('NATIVE_CONTEXT_UNAVAILABLE'),
+        modelContextBusy: modelError('MODEL_CONTEXT_BUSY'),
+        startupRecoveryPending: modelError('STARTUP_RECOVERY_PENDING'),
         insufficientStorage: modelError('INSUFFICIENT_STORAGE'),
         downloadFailed: modelError('DOWNLOAD_FAILED'),
         downloadCancelled: modelError('DOWNLOAD_CANCELLED'),
@@ -197,6 +199,51 @@ describe('Message Catalog（src/app/i18n/messages.ts）', () => {
       const distinctMessages = new Set(Object.values(messages));
       expect(distinctMessages.size).toBe(Object.values(messages).length);
       expect(messages.unknown).toContain('UNKNOWN');
+    }
+  });
+
+  it('実機 blocker（owner フィードバック）: MODEL_CONTEXT_BUSY は他操作との一時的な衝突であり再起動も Native Context 破損の文言も使わない。STARTUP_RECOVERY_PENDING は起動確認待ちを案内し、解消しない場合だけ再起動を fallback として案内するが Native Context 破損の文言は使わない。NATIVE_CONTEXT_UNAVAILABLE だけが Native Context 破損確定の文言（終了処理の確認失敗）と再起動指示を両方使う', () => {
+    for (const locale of LOCALES) {
+      const { modelError } = MESSAGES[locale].settings;
+      const restartHints = ['完全に終了', 'restart', 'reopen'];
+      const nativeContextFailureHints = [
+        '終了処理を確認できませんでした',
+        'shut down cleanly',
+      ];
+      const containsAny = (text: string, hints: readonly string[]): boolean =>
+        hints.some((hint) => text.includes(hint));
+
+      // MODEL_CONTEXT_BUSY: 他操作が終われば自然に解消する一時的な衝突であり、
+      // 再起動を促す文言・Native Context 破損の文言のどちらも含まない。
+      expect(
+        containsAny(modelError('MODEL_CONTEXT_BUSY'), restartHints)
+      ).toBeFalse();
+      expect(
+        containsAny(modelError('MODEL_CONTEXT_BUSY'), nativeContextFailureHints)
+      ).toBeFalse();
+
+      // STARTUP_RECOVERY_PENDING: 起動確認待ちの通常ケースは自然に解消するが、
+      // `commitDeletion()` の fail-safe（`blockUsesUntilRecovery()`）経由の稀な
+      // ケースでは自動解消しないため、再起動を fallback として案内してよい。
+      // ただし Native Context 破損の文言は使わない（実際に壊れたわけではない）。
+      expect(
+        containsAny(
+          modelError('STARTUP_RECOVERY_PENDING'),
+          nativeContextFailureHints
+        )
+      ).toBeFalse();
+
+      // NATIVE_CONTEXT_UNAVAILABLE: 本当に Native Context の解放を確認できなかった
+      // 確定ケースだけが、この重い文言と再起動指示を両方使う。
+      expect(
+        containsAny(modelError('NATIVE_CONTEXT_UNAVAILABLE'), restartHints)
+      ).toBeTrue();
+      expect(
+        containsAny(
+          modelError('NATIVE_CONTEXT_UNAVAILABLE'),
+          nativeContextFailureHints
+        )
+      ).toBeTrue();
     }
   });
 

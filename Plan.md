@@ -10294,3 +10294,126 @@ consent → DL フロー（`use-local-model-management.ts` の
   再修正後、`bun test src --coverage`（1703 pass, 100%）・
   `bunx tsc --noEmit -p .`・harness（full/--staged）・`dup_check`
   （baseline 以下）を全て green で確認済み。
+
+### Native Context 復旧 Block の恒久化バグ修正 - 2026-07-28
+
+目的: TestFlight v1.1.4 実機で owner が踏んだ blocker（「Native Context の解放を
+確認できません。App を完全に終了して再起動してください。」というエラー表示後、
+指示どおり再起動しても On-device AI が使えなくなる）を再現・修正する。PR 作成
+まで（マージしない）。
+
+制約: `rm`/`npx` 禁止・ios/ node_modules 不触・8081 の既存 Metro を kill しない
+（作業中に Metro が exit 7 で落ちたため `bunx expo start --port 8081` を自分で
+再起動した）。モック禁止・型エスケープ禁止・空 catch 禁止。一時ログ除去。ADR
+（連番最新 + 1）。TDD・日本語 BDD・カバレッジ 100%。
+
+タスク:
+1. シミュレーターで実機症状を再現する。
+2. 根本原因を実測で特定する。
+3. 修正（Red → Green）。
+4. `/security-review`・code-reviewer subagent（2 周）・`/simplify`（4 観点
+   並列）で品質ゲートを通す。
+5. シミュレーター e2e で修正後の挙動を確認する。
+6. PR 作成（マージしない）。
+
+検証手順: `bun scripts/architecture-harness.ts --staged --fail-on=error` →
+`make before-commit`（exit 0）→ シミュレーターで
+`xcrun simctl get_app_container` 経由の container 直接操作による repro と
+再起動確認。
+
+進捗ログ:
+- 2026-07-28: コード読解と advisor 相談により、2 つの独立したバグを特定した。
+  (1) `src/app/local-data-control.ts` の `recoverPendingDeletion()`
+  （起動時 1 回、tombstone の確認・回復を Profile load より先に完了する Gate）
+  が、`deletionJournal.isPending()` の読み取りに失敗したとき
+  `LocalModelContextLeaseRegistry` の `#useAcquisitionBlocked`
+  （コンストラクタ既定 `true`）を解除しないまま `STORAGE_FAILURE` を投げて
+  いた。判定不能（一時的な読み取り失敗）が確定 pending と誤って扱われ、
+  On-device AI がそのプロセスの残り全体で恒久的に使えなくなる。
+  (2) `src/app/default-local-model-management.native.ts` が
+  `LocalModelContextLeaseRegistry.acquireMutation()` の失敗（busy の理由に
+  関わらず）を一律 `ModelLifecycleError('NATIVE_CONTEXT_UNAVAILABLE', ...)`
+  （「App を完全に終了して再起動してください」）へ丸めており、ありふれた
+  一時的な衝突（起動確認待ち・他操作が Model を使用中）まで致命的な文言で
+  表示していた。
+- 2026-07-28: シミュレーターで (1) を実測再現した。container 内に
+  deletion journal marker（`tenkacloud-passport-delete-all-pending`）を
+  直接作成し、model file を `chflags uchg` で不変化したうえで再起動すると、
+  `DELETE_INTERRUPTED` で Diagnostics 画面の「中断した全削除を再試行」に
+  固定される状態を screenshot 付きで確認した（`chflags nouchg` で解除後の
+  Maestro 操作で再試行が正しく成功することも確認済み）。「isPending() 自体が
+  読み取り不能で throw する」という、より直接的な repro は host 側の
+  ファイル権限操作では安定して再現できなかった（iOS Simulator は host user が
+  container を直接読み書きするため、iOS の sandbox 由来の EACCES/ENOENT を
+  意図的に起こすのが難しい）。マーカーをファイルではなく Directory にして
+  みたが `document.exists` は素直に `false` を返しただけで throw を再現
+  できなかった。この特定の分岐は、実 `LocalModelContextLeaseRegistry` /
+  `WebDeletionJournalAdapter` / `FileBackedWebStorage` を使う単体テスト
+  （No Mock）で実行検証する方針に切り替えた。
+- 2026-07-28: 修正を実装した。`recoverPendingDeletion()` の
+  isPending() 失敗を「確定 pending（`committedDeletionLease` 保有）」と
+  「判定不能（未保有）」に分岐し、判定不能かつ確定情報が無い場合だけ
+  `allowUsesAfterRecovery()` を呼んで fail-open にする。確定 pending の
+  未解決（`removeCommittedData()` 失敗）は引き続き fail-closed のまま
+  （Diagnostics の再試行導線に委ねる、変更なし）。
+  `LocalDataAccessBlockedError` に `reason` を追加し、
+  `default-local-model-management.native.ts` の一律マッピングを
+  `mutationLeaseBusyError()`（`local-model-management-controller.ts`、
+  Native import を持たないため直接単体テスト可能）に置き換え、
+  `MODEL_CONTEXT_BUSY` / `STARTUP_RECOVERY_PENDING` という非致命的な
+  新 code へ分岐させた。「App を完全に終了して再起動してください」という
+  重い文言は、`agent-provider-session.ts` の `nativeLaneQuarantined`
+  （Native Context の解放を実際に確認できなかった確定ケース）だけに限定した。
+- 2026-07-28: 1 回目の code-reviewer subagent レビューで blocker を指摘
+  された。`committedDeletionLease` は process local で再起動を跨がないため、
+  「前回 process が確定 pending を残したまま落ち、今回 process の読み取りが
+  たまたま失敗する」という複合失敗では fail-open が誤って安全側を破る
+  可能性がある。また、新設した regression test が実際には別の（既存の）
+  code path を検証していただけという指摘も受けた。対応として
+  `readPendingWithRetry()`（timer 無し即時 3 回 retry）を追加してこの
+  risk の発生確率を下げ、`ScheduledFailureJournal`（後に /simplify で
+  `FlakyThenDelegateJournal`/`PendingOnceThenUnreadableJournal` から統合）
+  で該当分岐を正しく踏む regression test を追加し、`STARTUP_RECOVERY_PENDING`
+  の文言が過剰に楽観的だった点も修正した。この残余 risk は
+  ADR-0056（`docs/adr/0056-recovery-gate-fail-open-on-indeterminate-read.md`）
+  に選択肢・受け入れる Tradeoff として明記した。2 回目の code-reviewer
+  レビューで blocker 解消（残余 risk の正直な文書化として許容）を確認した。
+  1 回目のネットワーク断で review agent が中断したため、再開後に同じ観点で
+  再実行して確認を完了させた。
+- 2026-07-28: `/simplify`（4 観点並列）を実行。適用した指摘: (1)
+  simplification — `messageForBlockedReason()` の switch + `never`
+  exhaustiveness を `Record` literal へ簡略化。(2) simplification —
+  `recoverPendingDeletion()` 内の ADR 内容を再説明する長大なコメントを、
+  ADR 参照へ短縮（二重の情報源による drift を防ぐ）。(3) simplification —
+  2 つの regression test が個別に組み立てていた「確定 pending +
+  Profile 削除失敗」の fixture を `createInterruptedDeletionFixture()`
+  helper へ統合。(4) reuse — 新設した 2 つの fake journal class
+  （`FlakyThenDelegateJournal`/`PendingOnceThenUnreadableJournal`）を
+  `ScheduledFailureJournal`（呼び出し回数の述語で失敗パターンを指定する
+  1 クラス）へ統合。見送った指摘（`/follow-up add` で記録）: 既存の
+  `UnconfirmedMarkerJournal`/`OneReadFailureWebStorage` まで統合対象に
+  含める一般化（既存テストへの影響範囲が本 bugfix PR の scope を超える）、
+  `LocalModelContextLeaseRegistry.allowUsesAfterRecovery()` が「確認済み
+  安全」と「fail-open で未確認のまま解放」の 2 つの意味を持つ API 命名の
+  不整合（journal スキーマの拡張を伴う、より深い設計変更が必要）。
+  再修正後、`bun test src --coverage`（1717 pass, 100%）・
+  `bunx tsc --noEmit -p .`・harness（full/--staged）・`make before-commit`
+  （exit 0）を全て green で確認済み。
+
+振り返り:
+- 問題: 実機で報告された単一のエラー文言から、実際には独立した 2 つの
+  バグ（起動時 recovery gate の恒久 Block、busy 理由の一律致命的表示）が
+  重なっていたことが分かるまでに、コードの静的読解だけでは確信が持てず、
+  advisor 相談とシミュレーター実測の両方が必要だった。
+- 根本原因: `recoverPendingDeletion()` の「pending かどうか確定できない」
+  という判定不能状態を、既存の 2 択（confirmed pending / not pending）の
+  どちらにも属さない第 3 の状態として明示的に扱っていなかった。fail-safe の
+  既定値（`blockedUntilRecovery = true`）を「解除する成功パスが 2 か所しか
+  無い」という設計のまま放置すると、その 2 か所のどちらにも到達しない
+  異常系が必ず恒久 Block になる、という一般化可能な教訓。
+- 予防策: fail-safe な既定値を持つ状態機械を書くときは、「成功で解除」
+  だけでなく「失敗の性質ごとに解除するかどうか」を明示的に列挙し、
+  『判定不能』を『確定した危険』と同一視しない設計を最初から検討する。
+  また、致命的なユーザー向け文言を投げる箇所は、その文言が正しい場面
+  （本当に回復不能）とそれ以外（一時的な busy）を型（`reason`）で区別
+  できる設計を最初から選ぶと、後から見つかる「過大な文言」バグを防げる。

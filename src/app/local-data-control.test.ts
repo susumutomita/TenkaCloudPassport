@@ -13,6 +13,7 @@ import {
   createLocalDataControl,
   DeletionCoordinatedLocalProfileStorageAdapter,
   LocalDataAccessBlockedError,
+  type LocalDataControl,
   LocalDataControlError,
   LocalModelContextLeaseRegistry,
   type LocalModelInstallation,
@@ -150,6 +151,38 @@ class UnconfirmedMarkerJournal implements LocalDeletionJournalPort {
   }
 }
 
+/**
+ * /simplify 指摘（reuse）: 「N 回目まで失敗して以降は delegate」「1 回目だけ delegate
+ * して以降は失敗」という 2 つの schedule を、別クラスとして複製しない。
+ * 何回目の呼び出し（0 始まり）を失敗させるかを呼び出し側の述語で指定する
+ * 1 つの fake へ統合する。
+ */
+class ScheduledFailureJournal implements LocalDeletionJournalPort {
+  private calls = 0;
+
+  constructor(
+    private readonly delegate: LocalDeletionJournalPort,
+    private readonly shouldFail: (callIndex: number) => boolean
+  ) {}
+
+  isPending(): Promise<boolean> {
+    const callIndex = this.calls;
+    this.calls += 1;
+    if (this.shouldFail(callIndex)) {
+      return Promise.reject(new Error('scheduled read failure'));
+    }
+    return this.delegate.isPending();
+  }
+
+  markPending(): Promise<void> {
+    return this.delegate.markPending();
+  }
+
+  clear(): Promise<void> {
+    return this.delegate.clear();
+  }
+}
+
 class LateProfileWriteJournal implements LocalDeletionJournalPort {
   blockedError: unknown = null;
 
@@ -276,6 +309,38 @@ async function expectControlError(
       expect(error.message).not.toContain('こむぎ');
     }
   }
+}
+
+/**
+ * /simplify 指摘（simplification）: 「確定 pending（実 journal へ markPending
+ * 済み）＋ Profile 削除本体が失敗する」という fixture を、2 つの実機 blocker
+ * 回帰テストが個別に組み立てていたのを 1 つの helper へ集約する。
+ * `wrapJournal` で journal 自体の読み取り挙動（正常 / retry 尽き）だけを
+ * テストごとに差し替える。
+ */
+async function createInterruptedDeletionFixture(
+  wrapJournal: (plain: LocalDeletionJournalPort) => LocalDeletionJournalPort = (
+    plain
+  ) => plain
+): Promise<{
+  readonly contexts: LocalModelContextLeaseRegistry;
+  readonly interrupted: LocalDataControl;
+}> {
+  const root = temporaryDirectories.create();
+  const storage = new FileBackedWebStorage(root);
+  await new WebLocalProfileStorageAdapter(storage).save(profile());
+  await new WebDeletionJournalAdapter(storage).markPending();
+  const failingProfileStorage = new WebLocalProfileStorageAdapter(
+    new DeleteFailingWebStorage(root, new Error('private path failure'))
+  );
+  const contexts = new LocalModelContextLeaseRegistry();
+  const interrupted = createLocalDataControl({
+    profileStorage: failingProfileStorage,
+    modelStorage: new NoLocalModelStorageAdapter(),
+    modelContexts: contexts,
+    deletionJournal: wrapJournal(new WebDeletionJournalAdapter(storage)),
+  });
+  return { contexts, interrupted };
 }
 
 describe('Local Data の Preview と個別削除', () => {
@@ -481,6 +546,110 @@ describe('Local Data の Preview と個別削除', () => {
       () => journalFailure.recoverPendingDeletion(),
       'STORAGE_FAILURE',
       false
+    );
+  });
+
+  it('実機 blocker（owner フィードバック）: 起動直後の復旧確認が pending 判定不能で失敗しても、確定 pending が無ければ Model Context の Block を解除する', async () => {
+    const storage = new FileBackedWebStorage(temporaryDirectories.create());
+    // fresh boot 相当（`blockedUntilRecovery` 既定 true）。復旧確認そのものは
+    // まだ 1 度も成功していないが、判定不能（journal 読み取りが retry を尽くしても
+    // 失敗）を確定 pending と混同してはいけない。
+    const contexts = new LocalModelContextLeaseRegistry();
+    const localData = createLocalDataControl({
+      profileStorage: new WebLocalProfileStorageAdapter(storage),
+      modelStorage: new NoLocalModelStorageAdapter(),
+      modelContexts: contexts,
+      // `null` storage は `isPending()` を毎回 reject する（`WebDeletionJournalAdapter`
+      // 参照）。retry 回数を超えて常に失敗するため、判定不能に落ちる。
+      deletionJournal: new WebDeletionJournalAdapter(null),
+    });
+
+    expect(() => contexts.acquire()).toThrow(LocalDataAccessBlockedError);
+    await expectControlError(
+      () => localData.recoverPendingDeletion(),
+      'STORAGE_FAILURE',
+      false
+    );
+
+    // 修正前は判定不能のまま Block が残り、再起動しても On-device AI が
+    // 永久に使えなくなっていた。判定不能は「起動確認は完了した」として解放する。
+    const context = contexts.acquire();
+    context.release();
+    const mutation = contexts.acquireMutation();
+    mutation.release();
+  });
+
+  it('code-reviewer 指摘（blocker）: pending 判定の一時的な読み取り失敗は即時 retry で吸収し、確定 pending が実在するときは判定不能へ Fallback する前に解決する', async () => {
+    const storage = new FileBackedWebStorage(temporaryDirectories.create());
+    // retry 予算（3 回）未満の一時的な glitch（callIndex 0, 1 だけ失敗）は
+    // 「判定不能」に落ちる前に解決する。
+    const journal = new ScheduledFailureJournal(
+      new WebDeletionJournalAdapter(storage),
+      (callIndex) => callIndex < 2
+    );
+    const contexts = new LocalModelContextLeaseRegistry();
+    const localData = createLocalDataControl({
+      profileStorage: new WebLocalProfileStorageAdapter(storage),
+      modelStorage: new NoLocalModelStorageAdapter(),
+      modelContexts: contexts,
+      deletionJournal: journal,
+    });
+
+    expect(await localData.recoverPendingDeletion()).toBe('not-pending');
+    contexts.acquire().release();
+  });
+
+  it('実機 blocker（owner フィードバック）: 確定 pending 後に removeCommittedData が失敗した場合（DELETE_INTERRUPTED）は fresh boot 相当でも Model Context の Block を維持する', async () => {
+    // fresh boot 相当。`deleteAll()` 自体はこの Control では起こらないが、
+    // 前回 process が commit 済み marker を残したまま落ちた状況を
+    // 新しい `LocalDataControl`（`committedDeletionLease` 未保持）から
+    // 復旧しようとする、実機の「再起動しても直らない」状況を再現する。
+    // journal 自体の読み取りは成功する（pending=true が確定で読める）が、
+    // 削除本体（`profileStorage.remove()`）が失敗するケース。
+    const { contexts, interrupted } = await createInterruptedDeletionFixture();
+
+    await expectControlError(
+      () => interrupted.recoverPendingDeletion(),
+      'DELETE_INTERRUPTED',
+      true
+    );
+    // Model File が中途半端な状態のままかもしれない、確定 pending の未解決。
+    // ここは意図的に Block を維持し、Diagnostics 画面の「再試行」導線に委ねる。
+    expect(() => contexts.acquire()).toThrow(LocalDataAccessBlockedError);
+    expect(() => contexts.acquireMutation()).toThrow(
+      LocalDataAccessBlockedError
+    );
+  });
+
+  it('code-reviewer 指摘（blocker）: 確定 pending を一度読み取った後、再確認が retry を尽くしても判定不能なときは判定不能を「未確定」と誤認せず Block を維持する', async () => {
+    // 1 回目の isPending()（callIndex 0）だけ実 storage へ委譲し（pending=true を
+    // 確定で読める）、2 回目以降（callIndex >= 1）は常に読み取り失敗にする。
+    const { contexts, interrupted } = await createInterruptedDeletionFixture(
+      (plain) =>
+        new ScheduledFailureJournal(plain, (callIndex) => callIndex >= 1)
+    );
+
+    // 1 回目: pending=true を確定で読み取るが、removeCommittedData() が失敗して
+    // committedDeletionLease が保持されたまま DELETE_INTERRUPTED になる。
+    await expectControlError(
+      () => interrupted.recoverPendingDeletion(),
+      'DELETE_INTERRUPTED',
+      true
+    );
+
+    // 2 回目: 同じ Control instance（committedDeletionLease 保有）で、今度は
+    // isPending() の再読取りが retry を尽くしても失敗する（判定不能）。既に
+    // 確定 pending だと分かっているため、判定不能でも Block を解放してはいけない
+    // （committedDeletionLease が無い場合とは異なり、ここは「解放前提の process
+    // local 変数」に頼らず、確定済みの pending 情報を優先する）。
+    await expectControlError(
+      () => interrupted.recoverPendingDeletion(),
+      'DELETE_INTERRUPTED',
+      true
+    );
+    expect(() => contexts.acquire()).toThrow(LocalDataAccessBlockedError);
+    expect(() => contexts.acquireMutation()).toThrow(
+      LocalDataAccessBlockedError
     );
   });
 });

@@ -6,6 +6,7 @@ import {
   ModelLifecycleError,
   type TrustedImportVerification,
 } from '../local-agent/model-lifecycle';
+import { LocalDataAccessBlockedError } from './local-data-control';
 import type {
   LocalModelMutationLease,
   LocalModelMutationLeasePort,
@@ -58,6 +59,35 @@ export function createLocalModelOperationLane(
       disposed = true;
     },
   };
+}
+
+/**
+ * 実機 blocker（owner フィードバック）: `LocalModelContextLeaseRegistry.acquireMutation()`
+ * の失敗は常に `LocalDataAccessBlockedError` であり、その大半（起動確認待ち・他操作が
+ * Model を使用中）は待てば・別操作が終われば自然に解消する一時的な衝突で、Native
+ * Context 自体が壊れたわけではない。Native Composition
+ * （`default-local-model-management.native.ts`）が一律 `NATIVE_CONTEXT_UNAVAILABLE`
+ * （「App を完全に終了して再起動してください」）へ丸めていたのを、理由ごとに
+ * 分けて非致命的な文言へ変える。Native import を持たないためここへ置き、
+ * `use-local-model-management.test.ts` から直接実行検証できる。
+ */
+export function mutationLeaseBusyError(error: unknown): ModelLifecycleError {
+  if (!(error instanceof LocalDataAccessBlockedError)) {
+    return new ModelLifecycleError(
+      'MODEL_CONTEXT_BUSY',
+      'Local Model の Process lease を取得できませんでした。'
+    );
+  }
+  if (error.reason === 'recovery') {
+    return new ModelLifecycleError(
+      'STARTUP_RECOVERY_PENDING',
+      '起動時の復旧確認が完了するまで Local Model を操作できません。'
+    );
+  }
+  return new ModelLifecycleError(
+    'MODEL_CONTEXT_BUSY',
+    `Local Model は他の処理（${error.reason}）で使用中のため操作できません。`
+  );
 }
 
 /** Native Context と排他な Process lease を mutation の最終 refresh まで保持する。 */
