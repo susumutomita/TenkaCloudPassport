@@ -7,6 +7,13 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
+## [1.1.4] - 2026-07-28
+
+### Fixed
+
+- モデルのメモリ注意画面の文言を、開発用語（Risk snapshot・Resource・Context・Thermal）から消費者に通じる平易な表現へ書き換えた（判定ロジックは不変）。
+- アプリのバージョン番号を実態（タグ）と同期した。v1.1.1〜v1.1.3 は TestFlight 上ですべて「1.1.0」のビルド番号違いとして表示されていた。release ワークフローにタグと `app.json` の一致ガードを追加し再発を防止する。
+
 ## [1.1.3] - 2026-07-28
 
 TestFlight v1.1.2 の実機で owner が確認した 2 件を解決した Release です。
