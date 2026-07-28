@@ -3,48 +3,44 @@ import {
   RULES_MODEL_PROVIDER,
 } from '../domain/agent-model-provider';
 import {
-  createConfiguredLocalModelCompletionPort,
-  type LocalModelEnvironment,
-} from '../local-agent/configured-agent-model-provider';
+  type AppleFoundationModelsNativePort,
+  createAppleFoundationModelsCompletionPort,
+} from '../local-agent/apple-foundation-models-provider';
 import { createConversationExampleGenerator } from '../local-agent/conversation-example-generator';
-import type {
-  LlamaModuleLoader,
-  LocalModelExecutionLeasePort,
-} from '../local-agent/llama-agent-model-provider';
 import { createSafetyBoundLocalModelProvider } from '../local-agent/model-safety-boundary';
 import { registerConversationExampleGenerator } from './conversation-example-capability';
 
 export interface NativeAgentModelProviderComposition {
   readonly runningInExpoGo: boolean;
-  readonly environment: LocalModelEnvironment;
-  readonly loadModule: LlamaModuleLoader;
-  readonly modelContexts: LocalModelExecutionLeasePort;
+  readonly appleFoundationModels: AppleFoundationModelsNativePort;
 }
 
 /**
- * Expo Go を常に Rules へ固定し、Development Build だけ設定済み Local Model を選ぶ。
+ * ADR-0057: Apple Intelligence（FoundationModels）を唯一の Primary Provider にする。
  *
- * ADR-0038（v1.0）はここを Rules 固定にしていた。オンデバイス LLM を消費者導線から
- * 外すためだったが、その状態では会話エージェントの「共通点」がカタログ checkbox の
- * 共通集合そのものになり、エージェントと呼べる実体が無かった（Issue 147）。
- * ADR-0043 でこの 1 点を supersede し、Model が実際に用意されている端末では
- * Local Model Completion Port を使う。Model が未設定なら従来どおり Rules を返し、
- * 実行時の Load Error / Timeout / Schema Error は `runProviderOnce` の
- * Fallback-once が Rules へ倒す（`provider-fallback.ts`）。
+ * ADR-0038（v1.0）はここを Rules 固定にしていた（オンデバイス LLM を消費者導線から
+ * 外すため）。ADR-0043 は Qwen（GGUF ダウンロード型・llama.rn）を再導入したが、
+ * v1.1.1〜v1.1.6 の実機不具合がほぼ全てダウンロード起因だったため、ADR-0057 で
+ * Qwen を消費者導線から外し、OS 内蔵の Apple Intelligence へ一本化した
+ * （`llama-agent-model-provider.ts` / `configured-agent-model-provider.ts` 等の
+ * 実装は再導入口として残置し、この Composition からは呼ばない）。
+ *
+ * Apple Intelligence が使えない端末・iOS バージョンでは、Native 側
+ * （`modules/apple-foundation-models/`）が型付き `AgentModelProviderError`
+ * （LOAD_ERROR）を投げるだけでよい。「使えるなら最優先、使えなければ Rules」は
+ * 新しい Availability 事前チェックを増設せず、既存の Fallback-once
+ * （`runProviderOnce` / `attemptProviderBeforeDeadline`）がそのまま実現する。
  */
 export function createNativeAgentModelProvider(
   composition: NativeAgentModelProviderComposition
 ): AgentModelProvider {
   if (composition.runningInExpoGo) return RULES_MODEL_PROVIDER;
-  const completionPort = createConfiguredLocalModelCompletionPort(
-    composition.environment,
-    composition.loadModule,
-    composition.modelContexts
+  const port = createAppleFoundationModelsCompletionPort(
+    composition.appleFoundationModels
   );
-  if (!completionPort) return RULES_MODEL_PROVIDER;
-  const provider = createSafetyBoundLocalModelProvider(completionPort);
+  const provider = createSafetyBoundLocalModelProvider(port);
   return registerConversationExampleGenerator(
     provider,
-    createConversationExampleGenerator(completionPort)
+    createConversationExampleGenerator(port)
   );
 }

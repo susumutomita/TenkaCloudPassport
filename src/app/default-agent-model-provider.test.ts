@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import { readSourceFile } from '../screens/accessibility-test-kit';
-import { LocalModelContextLeaseRegistry } from './local-data-control';
 import { createNativeAgentModelProvider } from './native-agent-model-provider-composition';
 
 function source(fileName: string): Promise<string> {
@@ -17,62 +16,51 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(web).not.toContain('loadLlamaModule');
   });
 
-  it('Native Composition は llama.rn を Top-level import せず関数内でだけ動的に読む', async () => {
+  it('ADR-0057: Native Composition は Apple Foundation Models Native Module を使い、llama.rn には触れない', async () => {
     const composition = await source('default-agent-model-provider.native.ts');
-    const loader = await source('../local-agent/llama-module-loader.native.ts');
 
-    expect(composition).not.toContain("from 'llama.rn'");
+    expect(composition).toContain('completeWithNativeAppleFoundationModels');
     expect(composition).toContain('createNativeAgentModelProvider');
     expect(composition).toContain('isRunningInExpoGo()');
-    expect(composition).toContain('process.env.EXPO_PUBLIC_LOCAL_MODEL_PATH');
-    expect(composition).not.toContain('} = process.env');
+    expect(composition).not.toContain("from 'llama.rn'");
+    expect(composition).not.toContain('loadLlamaModule');
+    expect(composition).not.toContain('process.env.EXPO_PUBLIC_LOCAL_MODEL');
+  });
+
+  it('llama.rn の動的 import loader は Model Lifecycle（残置コード）向けに引き続き Top-level import しない', async () => {
+    const loader = await source('../local-agent/llama-module-loader.native.ts');
+
     expect(loader).not.toContain("from 'llama.rn'");
     expect(loader).toContain("await import('llama.rn')");
   });
 
-  it('ADR-0043: Expo Go は Rules、Development Build は設定済み Local Model を選び、選定時点では Native Module を読まない', async () => {
-    const environment = {
-      modelPath: 'file:///data/model.gguf',
-      nCtx: '2048',
-      nGpuLayers: '0',
-      nPredict: '96',
-    } as const;
-    let moduleLoads = 0;
-    const loadModule = async () => {
-      moduleLoads += 1;
-      throw new Error(
-        'この Composition Test では Native Module を実行しません。'
-      );
+  it('ADR-0057: Expo Go は Rules、Development Build は Apple Intelligence Provider を選び、選定時点では Native Module を呼ばない', () => {
+    let completeCalls = 0;
+    const appleFoundationModels = {
+      complete: async () => {
+        completeCalls += 1;
+        throw new Error(
+          'この Composition Test では Native Module を実行しません。'
+        );
+      },
     };
-    const modelContexts = new LocalModelContextLeaseRegistry(false);
 
     const expoGo = createNativeAgentModelProvider({
       runningInExpoGo: true,
-      environment,
-      loadModule,
-      modelContexts,
+      appleFoundationModels,
     });
     const developmentBuild = createNativeAgentModelProvider({
       runningInExpoGo: false,
-      environment,
-      loadModule,
-      modelContexts,
-    });
-
-    const withoutModel = createNativeAgentModelProvider({
-      runningInExpoGo: false,
-      environment: {},
-      loadModule,
-      modelContexts,
+      appleFoundationModels,
     });
 
     expect(expoGo.kind).toBe('rules');
     expect(developmentBuild.kind).toBe('local-agent');
-    expect(withoutModel.kind).toBe('rules');
-    // Provider の選定は Model File を開かない。Native Module を読むのは
-    // 実際に `provide()` が呼ばれたときだけで、そこでの失敗は
-    // `runProviderOnce` の Fallback-once が Rules へ倒す。
-    expect(moduleLoads).toBe(0);
+    // Provider の選定は Native Module を呼ばない。Apple Intelligence の
+    // Availability 判定は実際に `provide()` が呼ばれたときの型付き失敗
+    // （LOAD_ERROR）として現れ、`runProviderOnce` の Fallback-once が
+    // Rules へ倒す。
+    expect(completeCalls).toBe(0);
   });
 
   it('App Composition Root は Platform Provider を PassportApp へ明示的に渡す（Issue 118: distributionCapability は SettingsScreen が使わなくなり App Composition からも外した）', async () => {

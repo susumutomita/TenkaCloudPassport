@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { LocalModelContextLeaseRegistry } from '../app/local-data-control';
 import type { AgentModelInput } from '../domain/agent-model-provider';
-import { AgentModelProviderError } from '../domain/agent-model-provider';
-import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
+import {
+  expectProviderError,
+  publicPassportWithClues as passport,
+} from '../domain/domain-test-kit';
 import { attemptProvider } from '../domain/provider-fallback';
 import {
   createLlamaCompletionPort,
@@ -102,21 +104,6 @@ class RecordingLlamaModule implements LlamaModulePort {
     this.initializations.push(parameters);
     if (this.initializationError) throw this.initializationError;
     return this.context;
-  }
-}
-
-async function expectProviderError(
-  action: () => Promise<unknown>,
-  code: AgentModelProviderError['code']
-): Promise<AgentModelProviderError> {
-  try {
-    await action();
-    throw new Error('AgentModelProviderError が必要です。');
-  } catch (error: unknown) {
-    expect(error).toBeInstanceOf(AgentModelProviderError);
-    if (!(error instanceof AgentModelProviderError)) throw error;
-    expect(error.code).toBe(code);
-    return error;
   }
 }
 
