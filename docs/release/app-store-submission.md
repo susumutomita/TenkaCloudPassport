@@ -313,9 +313,9 @@ owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC 
       確認し、Simulator または実機で撮る。
 - [ ] 基本の Intro Card 作成、QR 表示、相手ブラウザ表示を実機で確認する。
 - [ ] Apple Intelligence 非対応の端末 / Simulator で、会話エージェントの共通点と最初の質問が
-      確認済みテーマの一致だけで動くことを確認する。「この端末では Apple Intelligence を
-      利用できないため、会話のきっかけは確認済みテーマから探します」という案内が表示され、
-      AI 会話例ボタンが出ないことも確認する。
+      確認済みテーマの一致だけで動くことを確認する。「現在 Apple Intelligence を利用できない
+      ため、会話のきっかけは確認済みテーマから探します」という案内が表示され、AI 会話例
+      ボタンが出ないことも確認する。
 - [ ] Apple Intelligence 対応端末（iPhone 15 Pro 以降・iOS 26 以降、Settings > Apple
       Intelligence & Siri で有効化済み）で会話エージェントを開き、上記の案内が出ないこと、
       共通点抽出が Apple Intelligence 経由で動くことを確認する。有効化・ダウンロードの

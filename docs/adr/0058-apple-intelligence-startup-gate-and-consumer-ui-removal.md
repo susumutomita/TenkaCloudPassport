@@ -62,7 +62,7 @@ ADR-0057（Apple Intelligence を会話エージェントの Primary Provider �
 - **Bad / Tradeoff**: 起動時に `<PassportApp>` のマウントが 1 フレーム分遅れる（Native `availability()` 呼び出し 1 回分）。
 - **Bad / Tradeoff**: Web / Android / Expo Go でも「Apple Intelligence を利用できない」の案内が常に表示される。実態と一致するため意図した挙動だが、将来これらのプラットフォーム向けに文言を出し分けたくなった場合は別途検討する。
 - **Bad / Tradeoff**（code-reviewer 指摘）: Availability Gate は起動時 1 回だけ判定し、同一セッション中に再判定しない。`apple-intelligence-not-enabled` / `model-not-ready` はアプリ起動中に状態が変わりうるため、ユーザーが OS 設定でオンにしても案内が消えるには次回起動が必要になる。
-- **Bad / Tradeoff**（advisor 指摘、Follow-up 化）: v1.1.1〜v1.1.6 で Qwen を有効化していた端末は、本 PR で Settings の削除導線が無くなるため、既にダウンロード済みの GGUF（約 1GB）を個別に削除する消費者向け経路が無くなる（`LocalDiagnosticsScreen` の削除ボタンは Settings からの入口が Issue 138 で既に撤去済みで、起動時リカバリ経路以外から到達不能）。「全データ削除」は削除できるが Intro Card ごと消える。追跡: follow-up 参照。
+- **Bad / Tradeoff**（advisor 指摘、Follow-up 化）: v1.1.1〜v1.1.6 で Qwen を有効化していた端末は、本 PR で Settings の削除導線が無くなるため、既にダウンロード済みの GGUF（約 1GB）を個別に削除する消費者向け経路が無くなる（`LocalDiagnosticsScreen` の削除ボタンは Settings からの入口が Issue 138 で既に撤去済みで、起動時リカバリ経路以外から到達不能）。「全データ削除」は削除できるが Intro Card ごと消える。追跡: Follow-up F-171000。
 
 ## References
 
