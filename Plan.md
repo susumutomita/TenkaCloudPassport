@@ -10121,3 +10121,176 @@ self-heal 前提を壊さない）。`modelFileInfo` の呼び出し自体が例
   Green になった直後に「もう 1 つの除去経路（`deleteModel`）と重複していない
   か」を機械的に洗い出すのに有効だった（自分で書いたコードの重複には
   気づきにくい）。
+### モデル未取得時の会話系サイレント無反応を解消する（Issue 180） - 2026-07-28
+
+目的: owner 実機 v1.1.2 の報告どおり、オンデバイス AI が未取得（provider が
+Rules フォールバック）のとき、会話エージェント画面が「Rules で動いている・
+モデルを取得すればもっと使える」ことを説明せず、その場でモデル取得へ進む
+導線も無い。会話エージェント画面に常設ノートを追加し、その場から既存の
+consent → DL フロー（`use-local-model-management.ts` の
+`enable-on-device-ai` 経路）へ入れるようにする。
+
+制約: `rm`/`npx` 禁止、モック禁止、型エスケープ禁止、空 catch 禁止。TDD・
+日本語 BDD・カバレッジ 100%。i18n は ja/en 両方。既存の会話画面 accessibility
+契約テスト（ソーステキスト検査、この repo はレンダリング用テスト基盤を
+持たない）の流儀に合わせる。
+
+現状確認（実装前の調査）:
+- `provider.kind`（`'rules' | 'local-agent'`）は `agent-model-provider.ts` の
+  brand 付き Capability で、`conversationExampleGeneratorForProvider` が
+  `null` を返す条件（Rules 実装は `registerConversationExampleGenerator` を
+  呼べない、Local Agent は `default-local-model-management.native.ts` の
+  `createProvider` が生成直後に必ず登録する）と構造的に一致する
+  （`conversation-example-wiring.test.ts` が後者を pin 済み）。
+- 一方、`onDeviceAiStatusFromManifest`（`trusted-model-enablement-controller.ts`）
+  は「信頼済み Model（Qwen）の sha256 が active か」だけを見る。手動 GGUF
+  import（`selectCandidate`/`confirmImport`、`LocalModelManagementView` に
+  現存）で **別の** Model を active にした端末では、`provider.kind ===
+  'local-agent'` なのに `onDeviceAiStatus !== 'active'` になりうる
+  （advisor 指摘、要考慮）。ノートの表示可否は `onDeviceAiStatus` からではなく
+  `provider.kind`（`useConversationAgentFlow` が既に受け取っている `provider`
+  から直接導出できる `onDeviceAiActive: provider.kind === 'local-agent'`）で
+  判定する。これなら「Rules で動いている」という一次情報と 1 対 1 で対応する。
+- `SettingsScreen.tsx` の `OnDeviceAiSection`/`OnDeviceAiDownloadingCard`/
+  `ModelManagementSection`（consent → downloading → finalizing → verifying →
+  active/imported-not-active、および busy/error/cautionAssessment/
+  pendingProviderOperation の全カード）は既存の唯一の消費者向け Local Model
+  導線であり、この PR が会話エージェント画面にも同じ状態機械を出す以上、
+  そのまま JSX を複製すると jscpd（`minTokens: 50` / `minLines: 5`）に
+  確実に抵触する。「不揃いの `not-acquired` 文言」だけを画面ごとに変え、
+  それ以外（consent/downloading/finalizing/verifying/acquired/caution/
+  pendingOp/busy/error）を 1 つの共有 Component へ切り出す。
+
+代替案:
+1. 案 A: `ConversationAgentScreen` 専用に新しい JSX を書き下ろす。
+   - Pros: 他画面に触れず影響範囲が最小。
+   - Cons: consent/downloading/finalizing/verifying の JSX が
+     `SettingsScreen.tsx` とほぼ同一になり jscpd に抵触する。caution /
+     pendingProviderOperation カードを複製し忘れると、会話画面発の DL が
+     Resource Risk や競合操作で止まったときに何も出せない新しい無反応点を
+     作ってしまう（今回まさに解消したい種類のバグ）。
+2. 案 B（採用）: `src/screens/ModelAcquisitionSection.tsx` を新設し、
+   `not-acquired` の文言（description/button label/hint）だけを呼び出し側から
+   渡す関数・文字列として受け取り、残り全ての状態（consent-pending/
+   downloading/finalizing/verifying/acquired（active・imported-not-active）/
+   busy/error/cautionAssessment/pendingProviderOperation）を共通ロジックにする。
+   `SettingsScreen.tsx` と `ConversationAgentScreen.tsx` の両方がこれを呼ぶ。
+   状態遷移の分岐自体は `src/app/model-acquisition-view.ts` の純関数
+   `resolveModelAcquisitionViewState`（`onDeviceAiFlow`/`onDeviceAiStatus` →
+   discriminated union）へ切り出し、`bun test` で直接実行可能にする
+   （`conversation-agent-flow-controller.ts` と同じ「レンダリング不能な
+   分岐は純関数へ切り出す」既存方針）。
+   - Pros: 重複ゼロ。caution/pendingOp/busy/error が両画面で自動的に揃う
+     （会話画面発の DL がどの状態で止まっても、必ず対応する導線が出る）。
+     分岐ロジックが実行テストで担保される（source text pin だけに頼らない）。
+   - Cons: `SettingsScreen.tsx` と既存の `settings-accessibility.test.ts` の
+     一部（`OnDeviceAiSection`/`ModelManagementSection` が同ファイルに
+     存在することを固定していた pin）を新しいファイルへ移す必要がある。
+
+選定: 案 B。ADR-0043 が確立した「Settings から有効化・進捗・削除へ到達できる」
+契約はそのまま維持しつつ、pin の対象ファイルだけを実態に合わせて移す
+（契約自体を弱めない）。
+
+エッジケース:
+- Expo Go / Web（`localModelManagement` が `null` → `modelManagement.available`
+  が `false` → `trustedModelSource` も `null`）: `ModelAcquisitionSection` は
+  `source` が無ければ何も描画しない（既存 Settings の挙動と同じ）。会話画面
+  専用の「この環境では利用できません」文言は追加しない（advisor 指摘:
+  スコープを広げるだけで Issue 180 の本体ではない）。
+- 手動 GGUF import で信頼済み Model 以外が active な場合: `onDeviceAiActive`
+  （`provider.kind === 'local-agent'`）が真になり、会話画面側はノート自体を
+  外側で非表示にする（`ModelAcquisitionSection` を mount しない）。Settings
+  側は従来どおり常に mount するため、信頼済み Model の状態（この場合
+  `imported-not-active` か `not-acquired`）を表示し続ける。
+- 会話画面から DL を開始 → Resource Risk で `cautionAssessment` が立つ、または
+  Pet Interaction 側の Provider 実行中に重なって `pendingProviderOperation` に
+  なる: 共有 Component が両方のカードを持つため、会話画面でも確認・キャンセル
+  導線が出る（Settings 専用にしていたら会話画面はここで無反応になっていた）。
+- `requestEnableOnDeviceAi` は `hasActiveProviderRun` を握っているため、
+  ボタンは `disabled={modelManagement.busy || modelManagement.candidateSelectionBlocked}`
+  を必ず引き継ぐ（外すとタップしても何も起きない無反応点になる）。
+
+タスク:
+1. `src/app/model-acquisition-view.ts` を Red→Green で作る
+   （`resolveModelAcquisitionViewState`、6 分岐）。
+2. `use-conversation-agent-flow.ts` に `onDeviceAiActive: provider.kind ===
+   'local-agent'` を返り値へ追加する（hook はレンダリング不能なため既存の
+   `conversation-example-wiring.test.ts` と同じ source text pin で固定）。
+3. `src/screens/ModelAcquisitionSection.tsx` を新設し、`SettingsScreen.tsx`
+   から `readableBytes`/`OnDeviceAiDownloadingCard`/`OnDeviceAiSection`/
+   `ModelManagementSection` を移す。`settings-accessibility.test.ts` の
+   該当 pin を新ファイル向けの新規テストへ移し、Settings 側には
+   「`modelManagement?.available` のとき共有 Component を渡す」ことだけを
+   pin し直す。
+4. `ConversationAgentScreen.tsx` に `onDeviceAiActive`/`modelManagement` prop
+   を足し、`hasSelfIntroCard && !onDeviceAiActive` のときだけ
+   `ModelAcquisitionSection` を会話エージェント向けの文言で描画する。
+5. `conversationAgent` messages（ja/en）に `onDeviceAiNoticeBody` /
+   `onDeviceAiNoticeButton` / `onDeviceAiNoticeButtonHint` を追加する。
+6. `PassportApp.tsx` の `conversationAgent={{...}}` へ
+   `modelManagement: localModels.view` と
+   `onDeviceAiActive: conversationAgentFlow.onDeviceAiActive` を配線し、
+   `passport-app-stage-flow.test.ts` に pin を足す。
+7. サイレント無反応経路の監査（会話開始・サンプル・きっかけを見つける・
+   AI 会話セクションの hidden）を行い、結果を PR 本文へ列挙する。
+8. `bun test src --coverage`（100% 維持）、`bunx tsc --noEmit -p .`、
+   `bun scripts/architecture-harness.ts --staged --fail-on=error`、
+   `make before-commit`、シミュレーター e2e を実行する。
+
+検証手順: 上記タスク 8 のコマンド一式に加え、シミュレーターでモデル未取得
+状態（`Documents/local-models/` を空にする）から会話エージェントを開き、
+ノート表示 → 「モデルを取得する」→ consent → DL 開始までを目視確認する。
+
+進捗ログ:
+- 2026-07-28: 既存コードを読み、`provider.kind` と
+  `conversationExampleGeneratorForProvider` の null 条件が構造的に一致する
+  ことを確認（`default-local-model-management.native.ts` の `createProvider`
+  が生成直後に登録するため、Local Agent Provider は生成された瞬間から
+  Generator を必ず持つ）。当初 `onDeviceAiStatus` から判定する設計を検討したが、
+  advisor 指摘で手動 GGUF import との不一致（leak）を発見し、`provider.kind`
+  を直接 hook から公開する設計へ変更した。
+- 2026-07-28: `model-acquisition-view.ts`（Red→Green、6 分岐）→
+  `ModelAcquisitionSection.tsx`（新規）→ `SettingsScreen.tsx` の移行 →
+  `ConversationAgentScreen.tsx`/`PassportApp.tsx` の配線までを実装した後、
+  `bun scripts/architecture-harness.ts` が `use-conversation-agent-flow.ts` の
+  `onDeviceAiActive: provider.kind === 'local-agent'` を
+  `INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY` で error 検出した。原因は
+  harness の `localAgentSafetyFindings` が文字列 `'local-agent'` の生比較を
+  `src/app/agent-provider-session.ts`（`isAllowedSessionLiteral`）と
+  `src/domain/agent-model-provider.ts` の型宣言・Capability 実装以外の箇所では
+  一律禁止しているため（Provider kind の直接比較を散在させず Capability 経由に
+  強制する設計）。invariant 側は正しく機能しており、コードを直すのが第一手
+  （AGENTS.md）と判断し、既に import 済みの `conversationExampleGenerator`
+  （`conversationExampleGeneratorForProvider(provider)` の結果、生の文字列比較を
+  含まない）から `onDeviceAiActive: conversationExampleGenerator !== null` へ
+  実装を変更した。advisor が要求した「`conversationExampleGeneratorForProvider`
+  が null を返す条件と整合させる」を、構造的一致ではなく同一の式にすることで
+  より厳密に満たせた。harness full scan・`--staged`・`bun test src --coverage`
+  （1699 pass, 100%）・`bunx tsc --noEmit -p .` を全て green で確認済み。
+- 2026-07-28: `/simplify`（4 観点並列レビュー）を実行。適用した指摘: (1) reuse
+  — `model-card-styles.ts` の `modelCard`（角丸・枠線幅・padding）が既存
+  `../components/Card.tsx`（Issue 72 D で「5 箇所コピペされていたカード意匠」を
+  抽出済みのプリミティブ）と重複していたため、`Card` を実際に使い
+  `modelCardOverride`（背景・枠線色・gap の差分だけ）に絞った。(2)
+  simplification — `resolveModelAcquisitionViewState` の呼び出し側で
+  `modelManagement.onDeviceAiStatus ?? 'not-acquired'` という「実際には
+  到達しないが型上ありうる」フォールバックを外側で握りつぶしていたのを、
+  関数のシグネチャ自体に `OnDeviceAiStatus | null` を受け取らせて内部で
+  documented な形で扱うよう変更し、`null` 入力の分岐をテストに追加した
+  （到達しない分岐を隠さず実行テストで固定する）。(3) simplification /
+  altitude（2 名の reviewer が同じ箇所を別角度から指摘）—
+  `notAcquiredDescription`/`notAcquiredButtonLabel`/`notAcquiredButtonHint`
+  という「常に 3 つ揃って渡される」props を 1 つの `notAcquiredCopy` object
+  へ統合した。一方、altitude 指摘が示唆した「他の全状態（consent/downloading/
+  等）の文言も呼び出し側からカスタマイズ可能にする」までの一般化は、
+  実際に必要とする 2 つ目の呼び出し元がまだ無い時点での先取り一般化と判断し
+  見送った（YAGNI、必要になった時点で copy tree へ拡張する）。skip した指摘:
+  efficiency（該当 0 件）、altitude の
+  `isLocalAgentProvider` 新設 + harness allowlist 拡張（architecturally
+  significant な変更で本 PR の scope 外と判断、ADR 相当の検討が要る）、
+  `MESSAGES[locale].settings` の重複導出（トリビアルで prop 設計を悪化させる
+  ため見送り）。後者 2 件は follow-up 化しなかった（前者は現状の実装で
+  harness を満たせており必須ではない改善、後者は無視できるコスト）。
+  再修正後、`bun test src --coverage`（1703 pass, 100%）・
+  `bunx tsc --noEmit -p .`・harness（full/--staged）・`dup_check`
+  （baseline 以下）を全て green で確認済み。

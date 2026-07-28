@@ -109,7 +109,7 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).not.toContain('pilotMeasurementButton');
   });
 
-  it('ADR-0043: Settings から Local Model の有効化・進捗・削除へ到達できる', async () => {
+  it('ADR-0043: Settings から Local Model の有効化・進捗・削除へ到達できる（Issue 180 で ModelAcquisitionSection.tsx へ共有化、状態機械の pin は model-acquisition-section-accessibility.test.ts が持つ）', async () => {
     const text = await source();
 
     // ADR-0038 が除去した消費者導線を戻す。端末内モデルが共通点を見つけられる
@@ -117,14 +117,17 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).toContain(
       'readonly modelManagement?: LocalModelManagementView'
     );
-    expect(text).toContain('function OnDeviceAiSection(');
-    expect(text).toContain('function OnDeviceAiDownloadingCard(');
-    expect(text).toContain('function ModelManagementSection(');
-    expect(text).toContain('requestEnableOnDeviceAi');
-    expect(text).toContain('confirmEnableOnDeviceAiConsent');
-    expect(text).toContain('cancelEnableOnDeviceAiConsent');
-    expect(text).toContain('cancelOnDeviceAiDownload');
-    expect(text).toContain('removeOnDeviceAiModel');
+    expect(text).toContain("from './ModelAcquisitionSection'");
+    expect(text).toContain('ModelAcquisitionSection');
+    expect(text).toContain('readableBytes');
+    expectInOrder(text, [
+      'modelManagement?.available ? (',
+      '<ModelAcquisitionSection',
+      'notAcquiredCopy={{',
+      'buttonHint: t.onDeviceAiEnableButtonHint,',
+      'buttonLabel: t.onDeviceAiEnableButton,',
+      't.onDeviceAiDescription(',
+    ]);
   });
 
   it('ADR-0043: Local Model を扱えない Platform では管理 UI を描画しない', async () => {
