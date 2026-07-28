@@ -467,7 +467,7 @@ describe('Issue 29: Release Gate と Version の一致契約', () => {
     // Platform App Version は Source Candidate（package.json）とは別系統で、
     // TestFlight / App Store へ出すマーケティングバージョンを指す。
     expect(Reflect.get(Reflect.get(appMetadata, 'expo'), 'version')).toBe(
-      '1.1.0'
+      '1.1.4'
     );
 
     for (const relativePath of [
