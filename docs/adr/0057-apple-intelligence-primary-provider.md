@@ -18,7 +18,7 @@ v1.1.1〜v1.1.6 の TestFlight 実機不具合は、ほぼ全てが Qwen（GGUF 
 
 `modules/device-resource-telemetry/`（既存の Expo Modules API Swift モジュール）を先例に、iOS 専用の native module を新設した。
 
-- **`availability()`**: `SystemLanguageModel.default.availability`（`.available` / `.unavailable(reason)`）を bounded な文字列（`available` / `unavailable-device-not-eligible` / `unavailable-apple-intelligence-not-enabled` / `unavailable-model-not-ready` / `unavailable-unsupported-os` / `unavailable-unknown-reason`）へ正規化して返す。`UnavailableReason` は `@frozen` ではないため `@unknown default` で fail-closed に丸める。
+- **`availability()`**: `SystemLanguageModel.default.availability`（`.available` / `.unavailable(reason)`）を bounded な文字列（`available` / `unavailable-device-not-eligible` / `unavailable-apple-intelligence-not-enabled` / `unavailable-model-not-ready` / `unavailable-unsupported-os` / `unavailable-unknown`）へ正規化して返す。`UnavailableReason` は `@frozen` ではないため `@unknown default` で fail-closed に丸める。
 - **`complete(systemPrompt, userPrompt, schemaJson?)`**: `LanguageModelSession(instructions: systemPrompt)` で 1 回だけ生成する。`schemaJson` が無ければ自由文（`respond(to:options:)`）、あれば `DynamicGenerationSchema` から組み立てた `GenerationSchema` で guided generation（`respond(to:schema:options:)`）を行い、`GeneratedContent.jsonString` を返す。
 - **iOS 26 未満・非対応端末**: `@available(iOS 26.0, *)` ガードと `guard #available` で分岐し、クラッシュせず graceful に unavailable / 型付き Exception を返す。
 
@@ -48,6 +48,8 @@ API シグネチャは記憶に頼らず、この macOS に実在する Xcode 26
 
 Qwen（`llama-agent-model-provider.ts` / `configured-agent-model-provider.ts` / `local-model-configuration.ts` 等）は削除せず残置する。再導入口として、また Model Lifecycle・Diagnostics 等の既存機能（この PR の scope 外）がまだ参照しているため。`default-agent-model-provider.native.ts` はこれらを import しなくなり、消費者向け会話エージェントの実行経路からは到達不能になる。
 
+**advisor 指摘（起動時 availability 事前チェック省略の具体的な副作用、未修正・Follow-up 化）**:「新しい非同期 Availability 事前チェックを composition 層に増設しない」という判断は、`provider.kind` を常に `local-agent` にすることを意味する。これは `agent-provider-session.ts` の `executeAgentProviderSession` が `request.provider.kind === 'local-agent'` を条件に `local-started` / `local-failed` イベントを発火する既存ロジックと組み合わさり、Apple Intelligence 非対応端末（iPhone 15 Pro 未満・Apple Intelligence 無効・iOS 26 未満）では **毎 Encounter** で `ProviderRuntimeState` が `rules` → `loading-local-model` → `falling-back`（`reason: 'load-error'`）→ `rules` と遷移し、`providerStatusNotice` の通知（「Local Model を端末内で読み込んでいます」→「Rules Provider へ安全に切り替えています」）が毎回一瞬表示される。Qwen 未設定時代は `provider.kind` が最初から `rules` 固定だったため、この遷移自体が発生しなかった。加えて `use-conversation-agent-flow.ts` の `onStart` は `outcome.settledBy === 'primary'` のときだけ会話例（ADR-0050 icebreaker）を準備するため、非対応端末では常にこの機能がスキップされる。修正には `apple-foundation-models-availability.ts` の `checkAppleFoundationModelsAvailability` を起動時に 1 回呼び、unavailable なら `RULES_MODEL_PROVIDER` を返す構成が必要だが、`App.tsx` は現在 `createDefaultAgentModelProvider` を top-level 同期呼び出ししており、これを非同期化するのは「消費者 UI 変更はこの spike ではしない」という本 PR の制約を超える。Follow-up として記録した（`.claude/state/follow-ups.jsonl`、severity: high）。
+
 ### 5. 検証（macOS host 実行 + 実機 / Simulator 手順）
 
 この開発機は macOS 26.5.2（Xcode 26.6 同梱）であり、`FoundationModels.framework` は iOS だけでなく macOS 26+ でも同一 API を提供する。native module の Expo 経路（JSI/Swift bridge）そのものは prebuild を要するため実行できないが、`AppleFoundationModelsEngine.swift` / `AppleFoundationModelsSchemaConverter.swift`（ExpoModulesCore 非依存）はこの Mac 向けに直接コンパイル・実行でき、Apple Intelligence の実際の応答を得られた。`xcrun swiftc -sdk $(xcrun --sdk macosx --show-sdk-path) -target arm64-apple-macosx26.0` でこの 2 ファイルと検証用 `main.swift`（この PR には含めない一時検証物）をビルドし、実行した結果を次に示す。
@@ -60,14 +62,19 @@ Qwen（`llama-agent-model-provider.ts` / `configured-agent-model-provider.ts` / 
 
 これは実際の Apple Intelligence モデルに対する実行結果であり、Schema 変換器・`GenerationOptions` 分岐・guided generation の全体が机上の型検証を超えて実データで正しく動くことを示す。
 
-ただし、これは **macOS host 上での Engine/Converter 単体実行**にとどまる。Expo Modules の JSI 境界・iOS 実機/Simulator 上の挙動・`weak_frameworks` によるリンク動作・iOS 26 未満の端末での graceful degradation は未検証のまま残る。native module 追加により `bunx expo prebuild` 以降の再ビルドが要り、呼び出し元環境では完走しない実績があるため、この PR では実施しない。
+ただし、これは **macOS host 上での Engine/Converter 単体実行**にとどまる。native module 追加により `bunx expo prebuild` 以降の再ビルドが要り、呼び出し元環境では完走しない実績があるため、この PR では実施しない。特に次の 3 点は macOS host 実行では一切通っておらず、Engine/Converter の型検証や実行結果からは正しさを推論できない、Expo Modules の JSI 境界固有のリスクです。
+
+1. **JS `number` → Swift `Double` の marshalling**: 追加した `temperature` 引数（会話例は `0.7`、Bridge 判定は `0`）が Expo Modules API の JSI ブリッジを越えて往復し、Swift 側で意図した `Double` 値として届くかは実機/Simulator 上でしか確認できない。
+2. **オプショナル引数がオプショナルでない引数より前に並ぶ位置引数**: `AsyncFunction("complete") { (systemPrompt: String, userPrompt: String, schemaJson: String?, temperature: Double) -> String in ... }` は `schemaJson: String?`（省略可能）が `temperature: Double`（必須）より前にある。JS 側 `completeWithNativeAppleFoundationModels` は常に両方渡すため型上は問題ないが、Expo Modules API の引数バインディングがこの並びをどう解決するかは実機/Simulator の呼び出しでしか検証できない。
+3. **`weak_frameworks = ['FoundationModels']` の実機リンク挙動**: iOS 16.4（`ios/Podfile` の deployment target）〜25 の端末でアプリを起動した際、弱リンクされた `FoundationModels.framework` が存在しないことでロード自体が失敗しない（起動時クラッシュしない）ことは、実機/Simulator でのインストール・起動でしか確認できない。
 
 実機 / Simulator 検証手順（別途実施）を次に示す。
 
 1. `bunx expo prebuild --clean` で `ios/` を再生成する（既存の `ios/` は触らない前提のため、このコマンドの実行と検証自体は呼び出し元 / owner が行う）。
 2. Xcode で `TenkaCloudPassport.xcworkspace` を開き、iOS 26.5 Simulator（iPhone 16 系）または実機（iPhone 15 Pro 以降、Apple Intelligence 有効化済み、Settings > Apple Intelligence & Siri でモデル DL 済み）を選び実行する。
-3. 会話エージェント画面で Encounter を発生させ、`availability()` の戻り値と `complete()` の guided generation 結果を確認する。Simulator で Apple Intelligence が有効化できない場合は `unavailable-*` のいずれかが返り、Rules Provider へ自動的にフォールバックすることを確認する。
-4. 非対応端末（iOS 26 未満、または Apple Intelligence 無効な iPhone）で同じ画面を開き、クラッシュせず Rules で動作することを確認する。
+3. 会話エージェント画面で Encounter を発生させ、`availability()` の戻り値と `complete()` の guided generation 結果を確認する。上記 1（temperature marshalling）と 2（引数順序）はこの手順で間接的に確認できる（会話例が `0.7` らしい多様性のある文面になるか、Bridge 判定が決定的か）。Simulator で Apple Intelligence が有効化できない場合は `unavailable-*` のいずれかが返り、Rules Provider へ自動的にフォールバックすることを確認する。
+4. 非対応端末（iOS 26 未満、または Apple Intelligence 無効な iPhone）で同じ画面を開き、クラッシュせず Rules で動作することを確認する（上記 3、`weak_frameworks` のリンク挙動の確認を兼ねる）。
+5. 同じ非対応端末で、会話エージェント画面を数回操作し、Encounter 成立のたびに Provider 状態通知（「Local Model を端末内で読み込んでいます」等）が一瞬表示されないか確認する。表示される場合は本 ADR §4 に記録した Follow-up（起動時 availability 事前チェック）の優先度を上げる根拠になる。
 
 ## Consequences
 
@@ -77,6 +84,7 @@ Qwen（`llama-agent-model-provider.ts` / `configured-agent-model-provider.ts` / 
 - **Good**: `xcrun swiftc -typecheck` による型検証に加え、macOS host（この開発機、Apple Intelligence 有効）上で Engine / Schema Converter を実際にコンパイル・実行し、本番の 3 種類の Schema（no-signal-only / bridge / grounded-bridge）と会話例 Schema・自由文経路のすべてで、実際の Apple Intelligence から `model-safety-boundary.ts` の Validator がそのまま受理できる形の JSON を得られることを確認した。この過程で code-reviewer が発見した blocker（`const`/`enum` 単体ノードの変換失敗、Bridge 判定が常に失敗する不具合）と high（`temperature` 未転送）を修正済み。
 - **Bad / Tradeoff**: Apple 側の Native 呼び出しには真の取り消し手段が無く、`AbortSignal` による timeout/cancel は「結果を破棄する」だけで、実行中の推論自体は止められない（`llama.rn` の `stopCompletion()` に相当する API が無い）。実運用でリソース浪費が問題になった場合は Follow-up で再検討する。
 - **Bad / Tradeoff**: この PR は native module・provider 差し替え・ADR・テストのみを scope とし、Settings / 会話画面の Qwen UI 撤去と `docs/release/app-store-submission.md` のメタデータ更新は後続 PR に分割した。この PR がマージされた状態では、Settings の Qwen ダウンロード UI は表示され続けるが、会話エージェントの実行結果には反映されない（配線から外れているため）。クラッシュや data loss は起きないが、UI と実際の Provider 選定が一時的に乖離する。
+- **Bad / Tradeoff**: 起動時の非同期 Availability 事前チェックを composition 層に増設しなかったため、Apple Intelligence 非対応端末（installed base の相当割合を占めうる）では毎 Encounter で Provider が `local-agent` として起動を試み、`load-error` で Rules へ Fallback する。副作用として、Provider 状態通知（「Local Model を読み込んでいます」→「Rules Provider へ安全に切り替えています」）が毎回一瞬表示され、会話例（ADR-0050 icebreaker）生成が常にスキップされる（`outcome.settledBy !== 'primary'` のため）。詳細と修正方針は §4 参照。Follow-up（severity: high）として記録済みで、この PR の scope では対応しない。
 - **Bad / Tradeoff**: macOS host 実行で Engine / Schema Converter のロジックそのものは実データで検証できたが、Expo Modules の JSI 境界、iOS 実機 / Simulator 上の挙動、`weak_frameworks` によるリンク動作、iOS 26 未満の端末での graceful degradation は未検証のまま（native module 追加により `bunx expo prebuild` 以降の再ビルドが要り、呼び出し元環境では完走しない実績があるため）。
 
 ## References

@@ -10724,3 +10724,49 @@ owner 方針で 1 PR 可・大きければ native+provider を先行、UI 撤去
     `bun biome check`・`bun scripts/architecture-harness.ts --staged
     --fail-on=error`・`make before-commit`（exit 0）を全て green で
     再確認した。
+- 2026-07-28: コミット（`77eb59e`）後、advisor（独立レビュー）に相談した。
+  次の指摘を得た。
+  1. **設計上の副作用（未修正、Follow-up 化）**: 「新しい非同期
+     Availability 事前チェックを composition 層に増設しない」判断
+     （§4）は、`provider.kind` を常に `local-agent` にすることを
+     意味する。`agent-provider-session.ts` の `executeAgentProviderSession`
+     は `provider.kind === 'local-agent'` を条件に `local-started` /
+     `local-failed` イベントを発火するため、Apple Intelligence
+     非対応端末では毎 Encounter で `ProviderRuntimeState` が
+     `rules` → `loading-local-model` → `falling-back` → `rules` と
+     遷移し、`providerStatusNotice` の通知が毎回一瞬表示される
+     （Qwen 未設定時代は `provider.kind` が最初から `rules` 固定
+     だったため、この遷移自体が起きなかった）。加えて
+     `use-conversation-agent-flow.ts` の `onStart` は
+     `outcome.settledBy === 'primary'` のときだけ会話例
+     （ADR-0050）を準備するため、非対応端末では常にスキップされる。
+     `grep -n "switchReason\|settledBy" src/app/*.ts` で該当箇所
+     （`use-conversation-agent-flow.ts:355`）を特定し、
+     `provider-fallback.ts` / `agent-provider-session.ts` を実際に
+     読んで遷移経路を確認した。修正には
+     `apple-foundation-models-availability.ts` の
+     `checkAppleFoundationModelsAvailability` を起動時に 1 回呼ぶ
+     構成が必要だが、`App.tsx` は `createDefaultAgentModelProvider`
+     を top-level 同期呼び出ししており（`App.tsx:30`）、非同期化は
+     「消費者 UI 変更はこの spike ではしない」という制約を超える
+     ため、この PR では実装せず `/follow-up add` で記録した
+     （severity: high、`.claude/state/follow-ups.jsonl`）。ADR-0057
+     の §4・§5・Consequences に同内容を追記した。
+  2. **PR 本文への follow-up 反映**: `list-pr-body` の出力を PR 本文の
+     「Known follow-ups」節へ確実に貼ることの確認（AGENTS.md の手順）。
+  3. **検証手順の具体化**: ADR §5 の「JSI 境界は未検証」という
+     抽象的な記述を、(a) `temperature`（JS `number` → Swift `Double`）
+     の marshalling、(b) `schemaJson: String?` が必須の
+     `temperature: Double` より前に並ぶ位置引数の解決、(c)
+     `weak_frameworks` の iOS 16〜25 実機での起動時リンク挙動、の
+     3 点へ具体化した（レビュー可能な粒度にするため）。
+  - 対応: ADR-0057 に (1)(3) を追記し、実機 / Simulator 検証手順に
+    5 番目の手順（非対応端末での通知フラッシュ有無の確認）を追加した。
+    ついでに ADR 本文中の `availability()` 戻り値一覧が
+    `unavailable-unknown-reason` という、Swift 実装
+    （`AppleFoundationModelsEngine.swift`）の実際の rawValue
+    （`unavailable-unknown`）と一致しない stale な
+    値のままだったことに気づき修正した（`/simplify` で TS 側の
+    テスト値は直したが、ADR 本文の転記までは直していなかった）。
+    `bunx textlint docs/adr/0057-apple-intelligence-primary-provider.md`
+    で clean を確認した。
