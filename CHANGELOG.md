@@ -7,6 +7,17 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
+## [1.2.0] - 2026-07-28
+
+オンデバイス AI を Apple Intelligence（OS 内蔵、FoundationModels framework）へ全面切替した Release です（ADR-0057 / ADR-0058）。
+
+### Changed
+
+- 会話エージェントの AI を、ダウンロード型モデル（Qwen）から OS 内蔵の Apple Intelligence へ一本化した。モデルのダウンロード・検証・削除・復旧という工程が製品からなくなり、対応端末（iPhone 15 Pro 以降＋iOS 26、Apple Intelligence 有効）では何も設定せずに AI が動作する。推論はすべて端末内で行い、内容を送信しない性質は変わらない。
+- Apple Intelligence を利用できない端末では、確認済みテーマからの照合で動作し、その旨を会話画面に明示する。
+- Settings からモデルの取得・削除・メモリ注意の UI を撤去した（ダウンロード型モデルの実装は再導入口として残置）。
+- App Store 申請メタデータをモデルダウンロード無しの実態へ書き換えた。
+
 ## [1.1.6] - 2026-07-28
 
 v1.1.5 はタグ運用ミス（version 不一致ガードが正しく停止）により欠番です。
