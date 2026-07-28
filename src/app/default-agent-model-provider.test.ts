@@ -1,16 +1,34 @@
 import { describe, expect, it } from 'bun:test';
+import type { AgentModelInput } from '../domain/agent-model-provider';
+import { publicPassportWithClues as passport } from '../domain/domain-test-kit';
 import { readSourceFile } from '../screens/accessibility-test-kit';
-import { createNativeAgentModelProvider } from './native-agent-model-provider-composition';
+import {
+  createAgentProviderSessionRunner,
+  INITIAL_PROVIDER_RUNTIME_STATE,
+  type ProviderRuntimeState,
+} from './agent-provider-session';
+import { conversationExampleGeneratorForProvider } from './conversation-example-capability';
+import {
+  createNativeAgentModelProvider,
+  resolveNativeAgentModelProviderAtStartup,
+} from './native-agent-model-provider-composition';
 
 function source(fileName: string): Promise<string> {
   return readSourceFile(import.meta.url, fileName);
 }
 
+const SAMPLE_INPUT: AgentModelInput = {
+  ownerPassport: passport(['open-source']),
+  encounteredPassport: passport(['open-source']),
+  language: 'ja',
+  deadlineAtWallClockMs: 4_102_444_800_000,
+};
+
 describe('AgentModelProvider の Platform Composition', () => {
   it('Web は llama.rn を参照せず Rules Provider だけを公開する', async () => {
     const web = await source('default-agent-model-provider.web.ts');
 
-    expect(web).toContain('RULES_MODEL_PROVIDER');
+    expect(web).toContain('rulesOnlyAgentModelProviderStartupResult');
     expect(web).not.toContain("from 'llama.rn'");
     expect(web).not.toContain("import('llama.rn')");
     expect(web).not.toContain('loadLlamaModule');
@@ -20,7 +38,8 @@ describe('AgentModelProvider の Platform Composition', () => {
     const composition = await source('default-agent-model-provider.native.ts');
 
     expect(composition).toContain('completeWithNativeAppleFoundationModels');
-    expect(composition).toContain('createNativeAgentModelProvider');
+    expect(composition).toContain('resolveNativeAgentModelProviderAtStartup');
+    expect(composition).toContain('getNativeAppleFoundationModelsAvailability');
     expect(composition).toContain('isRunningInExpoGo()');
     expect(composition).not.toContain("from 'llama.rn'");
     expect(composition).not.toContain('loadLlamaModule');
@@ -67,13 +86,143 @@ describe('AgentModelProvider の Platform Composition', () => {
     const app = await source('../../App.tsx');
 
     expect(app).toContain('createDefaultAgentModelProvider(localDataLeases)');
-    expect(app).toContain('agentModelProvider={agentModelProvider}');
+    expect(app).toContain(
+      'agentModelProvider={agentModelProviderStartup.provider}'
+    );
     expect(app).not.toContain('DEFAULT_DISTRIBUTION_CAPABILITY');
     expect(app).not.toContain('distributionCapability');
     expect(app).toContain('createDefaultLocalModelManagement(localDataLeases)');
     expect(app).toContain(
       'localModelManagement={localModelComposition?.management ?? null}'
     );
+  });
+
+  it('Follow-up F-983000: App Composition Root は Provider を Promise で受け取り、解決するまで PassportApp をマウントしない', async () => {
+    const app = await source('../../App.tsx');
+
+    expect(app).toContain('AgentModelProviderStartupResult');
+    expect(app).toContain(
+      'const [agentModelProviderStartup, setAgentModelProviderStartup] ='
+    );
+    expect(app).toMatch(/agentModelProviderStartup \? \(/);
+    expect(app).toContain('appleIntelligenceUnavailable={');
+    expect(app).toContain(
+      'agentModelProviderStartup.appleIntelligenceUnavailable'
+    );
+  });
+
+  describe('Follow-up F-983000: 起動時 Availability Gate（resolveNativeAgentModelProviderAtStartup）', () => {
+    it('Expo Go では Availability を問い合わせず、常に Rules Provider を返す', async () => {
+      let checkCalls = 0;
+      const result = await resolveNativeAgentModelProviderAtStartup({
+        runningInExpoGo: true,
+        appleFoundationModels: { complete: async () => ({}) },
+        checkAvailability: async () => {
+          checkCalls += 1;
+          return 'available';
+        },
+      });
+
+      expect(result.provider.kind).toBe('rules');
+      expect(result.appleIntelligenceUnavailable).toBe(true);
+      expect(checkCalls).toBe(0);
+    });
+
+    it.each([
+      'unavailable-device-not-eligible',
+      'unavailable-apple-intelligence-not-enabled',
+      'unavailable-model-not-ready',
+      'unavailable-unsupported-os',
+      'unavailable-unknown',
+      'garbage-value-that-does-not-parse',
+    ])('Development Build かつ Availability が %s のとき Rules Provider へ倒す（通知フラッシュを起こさないため kind を最初から rules にする）', async (rawAvailability) => {
+      const result = await resolveNativeAgentModelProviderAtStartup({
+        runningInExpoGo: false,
+        appleFoundationModels: { complete: async () => ({}) },
+        checkAvailability: async () => rawAvailability,
+      });
+
+      expect(result.provider.kind).toBe('rules');
+      expect(result.appleIntelligenceUnavailable).toBe(true);
+    });
+
+    it('Development Build かつ Availability が available のとき Apple Intelligence Provider（local-agent）を返し、この時点では Native complete() を呼ばない', async () => {
+      let completeCalls = 0;
+      const result = await resolveNativeAgentModelProviderAtStartup({
+        runningInExpoGo: false,
+        appleFoundationModels: {
+          complete: async () => {
+            completeCalls += 1;
+            throw new Error('この Composition Test では呼ばれないはずです。');
+          },
+        },
+        checkAvailability: async () => 'available',
+      });
+
+      expect(result.provider.kind).toBe('local-agent');
+      expect(result.appleIntelligenceUnavailable).toBe(false);
+      expect(completeCalls).toBe(0);
+    });
+
+    it('Native Availability の読み取り自体が例外を投げても fail-closed に Rules Provider へ倒す', async () => {
+      const result = await resolveNativeAgentModelProviderAtStartup({
+        runningInExpoGo: false,
+        appleFoundationModels: { complete: async () => ({}) },
+        checkAvailability: async () => {
+          throw new Error('Native Module でエラーが発生しました。');
+        },
+      });
+
+      expect(result.provider.kind).toBe('rules');
+      expect(result.appleIntelligenceUnavailable).toBe(true);
+    });
+  });
+
+  describe('Follow-up F-983000: 起動時 Gate が実際の Encounter 実行へ与える効果（受入基準 a・b の実行検証）', () => {
+    it('(a) 非対応端末: 起動時 Gate が返す Provider を渡すと、Encounter を実行しても onStateChange が一度も呼ばれない（loading-local-model への遷移＝通知フラッシュが起きない）', async () => {
+      const { provider } = await resolveNativeAgentModelProviderAtStartup({
+        runningInExpoGo: false,
+        appleFoundationModels: { complete: async () => ({}) },
+        checkAvailability: async () => 'unavailable-device-not-eligible',
+      });
+      const stateChanges: ProviderRuntimeState[] = [];
+      const runner = createAgentProviderSessionRunner();
+
+      const result = await runner.run({
+        state: INITIAL_PROVIDER_RUNTIME_STATE,
+        encounterKey: 'encounter-unavailable-device',
+        provider,
+        input: SAMPLE_INPUT,
+        onStateChange: (state) => stateChanges.push(state),
+      });
+
+      expect(stateChanges).toEqual([]);
+      expect(result.outcome.settledBy).toBe('primary');
+      expect(result.outcome.providerKind).toBe('rules');
+    });
+
+    it('(b) 対応端末: 起動時 Gate が返す Provider は会話例 Generator を持ち、AI 同士の会話（settledBy === "primary"）に使える', async () => {
+      const { provider } = await resolveNativeAgentModelProviderAtStartup({
+        runningInExpoGo: false,
+        appleFoundationModels: {
+          complete: async () => JSON.stringify({ kind: 'no-signal' }),
+        },
+        checkAvailability: async () => 'available',
+      });
+
+      expect(conversationExampleGeneratorForProvider(provider)).not.toBeNull();
+
+      const runner = createAgentProviderSessionRunner();
+      const result = await runner.run({
+        state: INITIAL_PROVIDER_RUNTIME_STATE,
+        encounterKey: 'encounter-available-device',
+        provider,
+        input: SAMPLE_INPUT,
+      });
+
+      expect(result.outcome.settledBy).toBe('primary');
+      expect(result.outcome.providerKind).toBe('local-agent');
+    });
   });
 
   it('Issue 18: Web / Expo Go は管理を無効化し、Development Build だけが private lifecycle を組み立てる', async () => {

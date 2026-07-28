@@ -222,7 +222,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     // 読む材料が無い。実行経路を増やす利益が無いため Rules のままにする。
     expect(petInteractionBody).not.toContain('localModels.provider');
     expect(petInteractionBody).toContain('provider: RULES_MODEL_PROVIDER');
-    expect(text).toContain('provider: localModels.provider');
+    expect(text).toContain('provider: agentModelProvider');
   });
 
   it('Issue 18: 進行中の判定を伴う Model 操作は Native Context の解放完了を待つ', async () => {
@@ -278,26 +278,25 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerBusy={providerRunPending}');
   });
 
-  it('ADR-0043: 会話 Agent へは localModels.provider を渡し、Model を持つ端末では端末内モデルが動く', async () => {
+  it('ADR-0057 / Follow-up F-056000: 会話 Agent へは起動時に確定した agentModelProvider を渡し、localModels.provider（Qwen manifest 経由）は読まない', async () => {
     const text = await source();
     const callStart = text.indexOf('useConversationAgentFlow({');
     const callEnd = text.indexOf('});', callStart);
     const call = text.slice(callStart, callEnd);
 
-    expect(call).toContain('provider: localModels.provider');
-    expect(call).not.toContain('provider: RULES_MODEL_PROVIDER');
+    expect(call).toContain('provider: agentModelProvider');
+    expect(call).not.toContain('provider: localModels.provider');
   });
 
-  it('Issue 180: 会話エージェント画面へ localModels.view と onDeviceAiActive を配線し、その場のモデル取得ノートが Settings と同じ共有 State を使えるようにする', async () => {
+  it('Follow-up F-056000: 会話エージェント画面へは起動時確定の appleIntelligenceUnavailable だけを配線し、旧 modelManagement / onDeviceAiActive は渡さない', async () => {
     const text = await source();
     const callStart = text.indexOf('conversationAgent={{');
     const callEnd = text.indexOf('}}', callStart);
     const call = text.slice(callStart, callEnd);
 
-    expect(call).toContain('modelManagement: localModels.view');
-    expect(call).toContain(
-      'onDeviceAiActive: conversationAgentFlow.onDeviceAiActive'
-    );
+    expect(call).toContain('appleIntelligenceUnavailable,');
+    expect(call).not.toContain('modelManagement:');
+    expect(call).not.toContain('onDeviceAiActive:');
   });
 
   it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {
@@ -628,13 +627,13 @@ describe('PassportApp の Stage 遷移契約', () => {
       ]);
     });
 
-    it('ADR-0043: Settings を開き直したとき、実行中の Provider が無ければ manifest を読み直す', async () => {
+    it('Follow-up F-056000: Settings 再訪時の manifest 再読込 effect（旧 ADR-0043）は表示先が無くなったため存在しない', async () => {
       const text = await source();
 
-      expect(text).toContain(
+      expect(text).not.toContain('localModels.view.reload()');
+      expect(text).not.toContain(
         "if (stage === 'settings' && !providerRunPending)"
       );
-      expect(text).toContain('localModels.view.reload()');
     });
 
     it('Issue 118: Settings は配布能力デバッグ表示を受け取らない（distributionCapability prop を渡さない）', async () => {

@@ -5,10 +5,7 @@ import {
   createConversationSession,
 } from '../domain/conversation-session';
 import { createIntroCard, type IntroCard } from '../domain/intro-card';
-import {
-  expectInOrder,
-  readSourceFile,
-} from '../screens/accessibility-test-kit';
+import { readSourceFile } from '../screens/accessibility-test-kit';
 import {
   conversationAgentScanErrorMessage,
   performConversationAgentCleanup,
@@ -540,15 +537,11 @@ describe('planConversationAgentStart（Step B: 全ペア評価から 1 組を選
   });
 });
 
-describe('onDeviceAiActive（Issue 180: Rules フォールバックかどうかを公開する）', () => {
-  it('返り値は conversationExampleGenerator（capability ベースの判定）から直接導出し、生の provider.kind 比較は使わない（INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY）', async () => {
+describe('/simplify 指摘（simplification/altitude、Follow-up F-056000 の副産物）: onDeviceAiActive は撤去済み', () => {
+  it('唯一の消費者だった旧 ConversationAgentScreen 配線を Follow-up F-056000 で切ったため、公開 API からも撤去し、生の provider.kind 比較（INVARIANT_LOCAL_AGENT_SAFETY_BOUNDARY 対象）を導入しない', async () => {
     const text = await hookSource();
 
-    expectInOrder(text, [
-      'return {',
-      'hasSelfIntroCard: session !== null,',
-      'onDeviceAiActive: conversationExampleGenerator !== null,',
-    ]);
+    expect(text).not.toContain('onDeviceAiActive');
     expect(text).not.toContain("provider.kind === 'local-agent'");
   });
 });

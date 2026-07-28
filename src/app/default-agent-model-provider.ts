@@ -1,9 +1,16 @@
-import { RULES_MODEL_PROVIDER } from '../domain/agent-model-provider';
 import type { LocalModelExecutionLeasePort } from '../local-agent/llama-agent-model-provider';
+import {
+  type AgentModelProviderStartupResult,
+  rulesOnlyAgentModelProviderStartupResult,
+} from './native-agent-model-provider-composition';
 
-/** Bun Test / Expo Go の既定 Composition。Native Build だけが `.native.ts` へ差し替える。 */
+/**
+ * Bun Test 用の既定 Composition（Native Build は `.native.ts`、Web は `.web.ts` へ
+ * 差し替える）。Follow-up F-983000: 戻り値の形（`Promise<AgentModelProviderStartupResult>`）を
+ * Native / Web と揃える。
+ */
 export function createDefaultAgentModelProvider(
   _modelContexts: LocalModelExecutionLeasePort
-) {
-  return RULES_MODEL_PROVIDER;
+): Promise<AgentModelProviderStartupResult> {
+  return Promise.resolve(rulesOnlyAgentModelProviderStartupResult());
 }

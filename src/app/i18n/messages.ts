@@ -677,14 +677,13 @@ export interface AppMessages {
     readonly selfCardMissingCtaButton: string;
     readonly selfCardMissingCtaButtonHint: string;
     /**
-     * Issue 180: provider が Rules フォールバック（`onDeviceAiActive` が
-     * false）のときだけ表示する常設ノート。`ModelAcquisitionSection`（Settings
-     * と共有）の `notAcquiredDescription`/`notAcquiredButtonLabel`/
-     * `notAcquiredButtonHint` へそのまま渡す。
+     * ADR-0057 / Follow-up F-056000: 起動時の Availability Gate が
+     * `appleIntelligenceUnavailable` を確定させた端末（Apple Intelligence
+     * 非対応、または Web / Android / Expo Go）でだけ表示する簡潔な案内。
+     * 旧 `onDeviceAiNotice*`（Qwen の「モデルを取得する」導線、Issue 180）を
+     * 置き換える。
      */
-    readonly onDeviceAiNoticeBody: string;
-    readonly onDeviceAiNoticeButton: string;
-    readonly onDeviceAiNoticeButtonHint: string;
+    readonly appleIntelligenceUnavailableNotice: string;
     readonly peerSectionTitle: string;
     readonly participantsSectionTitle: string;
     readonly addMorePeerNotice: string;
@@ -1431,11 +1430,8 @@ const ja: AppMessages = {
     selfCardMissingCtaButton: '戻って自己紹介カードを作成する',
     selfCardMissingCtaButtonHint:
       '設定画面へ戻ります。自己紹介カードを作成すると、この機能を使えます。',
-    onDeviceAiNoticeBody:
-      'オンデバイス AI は未取得です。共通点は確認済みテーマから探します。モデルを取得すると、自己紹介文からの引用と AI 同士の会話が使えます。',
-    onDeviceAiNoticeButton: 'モデルを取得する',
-    onDeviceAiNoticeButtonHint:
-      'この画面から同意画面を開き、そのままダウンロードへ進めます。',
+    appleIntelligenceUnavailableNotice:
+      '現在 Apple Intelligence を利用できないため、会話のきっかけは確認済みテーマから探します。',
     peerSectionTitle: '相手のカード',
     participantsSectionTitle: '取り込んだ相手',
     addMorePeerNotice:
@@ -2188,11 +2184,8 @@ const en: AppMessages = {
     selfCardMissingCtaButton: 'Go back to create an intro card',
     selfCardMissingCtaButtonHint:
       'Returns to Settings. Creating an intro card unlocks this feature.',
-    onDeviceAiNoticeBody:
-      'On-device AI has not been downloaded yet. Shared topics are found from confirmed themes only. Downloading the model unlocks quotes from your intro text and an AI-to-AI conversation.',
-    onDeviceAiNoticeButton: 'Get the model',
-    onDeviceAiNoticeButtonHint:
-      'Opens the consent screen from here and continues straight into the download.',
+    appleIntelligenceUnavailableNotice:
+      "Apple Intelligence isn't available right now, so conversation openers are found from confirmed themes only.",
     peerSectionTitle: 'Their card',
     participantsSectionTitle: 'People you have added',
     addMorePeerNotice:

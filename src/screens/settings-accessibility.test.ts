@@ -109,32 +109,20 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
     expect(text).not.toContain('pilotMeasurementButton');
   });
 
-  it('ADR-0043: Settings から Local Model の有効化・進捗・削除へ到達できる（Issue 180 で ModelAcquisitionSection.tsx へ共有化、状態機械の pin は model-acquisition-section-accessibility.test.ts が持つ）', async () => {
+  it('ADR-0057 / ADR-0058（Follow-up F-056000）: Settings から Qwen（オンデバイス AI）の有効化・DL 進捗・削除 UI を撤去した', async () => {
     const text = await source();
 
-    // ADR-0038 が除去した消費者導線を戻す。端末内モデルが共通点を見つけられる
-    // ようになった以上、Model を入手する導線が無ければ機能へ到達できない。
-    expect(text).toContain(
-      'readonly modelManagement?: LocalModelManagementView'
-    );
-    expect(text).toContain("from './ModelAcquisitionSection'");
-    expect(text).toContain('ModelAcquisitionSection');
-    expect(text).toContain('readableBytes');
-    expectInOrder(text, [
-      'modelManagement?.available ? (',
-      '<ModelAcquisitionSection',
-      'notAcquiredCopy={{',
-      'buttonHint: t.onDeviceAiEnableButtonHint,',
-      'buttonLabel: t.onDeviceAiEnableButton,',
-      't.onDeviceAiDescription(',
-    ]);
-  });
-
-  it('ADR-0043: Local Model を扱えない Platform では管理 UI を描画しない', async () => {
-    const text = await source();
-
-    // Expo Go / Web は `available` が false になり、Settings に何も増えない。
-    expect(text).toContain('modelManagement?.available ? (');
+    // Apple Intelligence は OS 内蔵・対応可否は起動時 Availability Gate が自動判定
+    // するため、Settings に明示的な有効化 UI は不要になった（ModelAcquisitionSection
+    // 自体は再導入口としてリポジトリに残し、Settings からの呼び出しだけを切る）。
+    expect(text).not.toContain('modelManagement,');
+    expect(text).not.toContain('modelManagement?:');
+    expect(text).not.toContain("from './ModelAcquisitionSection'");
+    expect(text).not.toContain('<ModelAcquisitionSection');
+    expect(text).not.toContain('readableBytes');
+    expect(text).not.toContain('t.onDeviceAiEnableButtonHint');
+    expect(text).not.toContain('t.onDeviceAiEnableButton');
+    expect(text).not.toContain('t.onDeviceAiDescription(');
   });
 
   it('Issue 138（実機 blocker A、DL 完了後フリーズの是正 / v1.0 ADR-0038）: 会話 Agent・戻るは dataErasure.busy だけを disabled 条件にする（Local Model 管理 UI 自体が無いため busy 連動の過剰 disable も発生し得ない）', async () => {

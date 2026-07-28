@@ -10,8 +10,10 @@ import { spacing } from '../ui/theme';
 import { modelCardOverride, modelCardStyles } from './model-card-styles';
 
 /**
- * Issue 180: Settings（`SettingsScreen.tsx`）と会話エージェント画面
- * （`ConversationAgentScreen.tsx`）が共有する、信頼済み Model（Qwen）取得 UI。
+ * Issue 180: 信頼済み Model（Qwen）取得 UI。ADR-0057 / ADR-0058
+ * （Follow-up F-056000）で `SettingsScreen.tsx` / `ConversationAgentScreen.tsx`
+ * 両方からの呼び出しを撤去し、消費者導線からは到達不能にした（実装・テストは
+ * 再導入口として残置）。以下は撤去前の設計判断の記録として残す。
  * ADR-0043 が確立した「Settings から有効化・進捗・削除へ到達できる」契約
  * （consent → downloading → finalizing → verifying → active/imported-not-active、
  * および busy/error/cautionAssessment/pendingProviderOperation の全カード）を
