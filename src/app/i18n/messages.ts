@@ -1051,12 +1051,12 @@ const ja: AppMessages = {
       'この操作を続けると、現在の Lounge で実行中の Local Model 判定を Cancel し、Native Context の解放完了を待ってから Model を変更します。Lounge 自体は破棄しません。',
     confirmProviderOperationButton: '判定を終了して操作を続ける',
     cancelProviderOperationButton: '現在の判定を続ける',
-    cautionTitle: 'Resource 使用量を確認してください。',
+    cautionTitle: 'この端末にはやや大きめのモデルです。',
     cautionDescription:
-      '推定値は OS、他 App、GPU と共有されるため保証ではありません。現在の Risk snapshot に対してだけ確認します。',
-    confirmCautionButton: 'Risk を確認してこの Model を使用する',
+      'いま計測した空きメモリでは動く見込みですが、メモリは他のアプリとも共有されるため保証はできません。読み込み中や利用中にアプリが終了する場合があります。',
+    confirmCautionButton: '承知のうえで使用する',
     blockedDescription:
-      'Memory 情報、推定使用量、または Thermal 状態により Context 初期化を停止しました。File は削除できます。',
+      'この端末の空きメモリや発熱状態では、このモデルを安全に読み込めないため停止しました。モデルのファイルは削除できます。',
     benchmarkSummary: (
       count,
       importMs,
@@ -1810,12 +1810,12 @@ const en: AppMessages = {
       'Continuing cancels the local model decision running in the current Lounge, waits for native context teardown, and then changes the model. The Lounge itself is not discarded.',
     confirmProviderOperationButton: 'End the decision and continue',
     cancelProviderOperationButton: 'Keep the current decision running',
-    cautionTitle: 'Review resource usage.',
+    cautionTitle: 'This model is on the large side for this device.',
     cautionDescription:
-      'The estimate is not a guarantee because memory is shared with the OS, other apps, and the GPU. Confirmation applies only to the current risk snapshot.',
-    confirmCautionButton: 'Accept this risk and use the model',
+      'Based on the memory measured just now it should run, but memory is shared with other apps, so this is not a guarantee. The app may quit while loading or using the model.',
+    confirmCautionButton: 'I understand, use the model',
     blockedDescription:
-      'Context initialization was stopped because of memory information, estimated usage, or thermal state. You can still delete the file.',
+      'Loading was stopped because this device does not have enough free memory, or it is running hot, to load this model safely. You can still delete the model file.',
     benchmarkSummary: (
       count,
       importMs,
