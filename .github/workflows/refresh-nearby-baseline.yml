@@ -1,0 +1,83 @@
+name: refresh-nearby-baseline
+
+on:
+  push:
+    branches:
+      - agent/simplify-agent-harness
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: 1.3.14
+
+      - name: Refresh repository-bound Nearby Transport baseline
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+
+          const implementationPath = 'scripts/nearby-transport-static-screening.ts';
+          const manifestPath = 'docs/evidence/nearby-transport-static-screening.json';
+
+          const replaceExactlyOnce = (source, before, after, label) => {
+            const occurrences = source.split(before).length - 1;
+            if (occurrences !== 1) {
+              throw new Error(`${label}: expected one occurrence, found ${occurrences}`);
+            }
+            return source.replace(before, after);
+          };
+
+          let implementation = await readFile(implementationPath, 'utf8');
+          implementation = replaceExactlyOnce(
+            implementation,
+            "expoSdk: '57.0.8'",
+            "expoSdk: '57.0.9'",
+            'Expo baseline'
+          );
+          implementation = replaceExactlyOnce(
+            implementation,
+            "reactNative: '0.86.0'",
+            "reactNative: '0.86.2'",
+            'React Native baseline'
+          );
+          await writeFile(implementationPath, implementation);
+
+          const [packageSource, lockSource, manifestSource] = await Promise.all([
+            readFile('package.json', 'utf8'),
+            readFile('bun.lock', 'utf8'),
+            readFile(manifestPath, 'utf8'),
+          ]);
+          const sha256 = (source) =>
+            createHash('sha256').update(source).digest('hex');
+          const manifest = JSON.parse(manifestSource);
+          manifest.baseline.expoSdk = '57.0.9';
+          manifest.baseline.reactNative = '0.86.2';
+          manifest.baseline.packageJsonSha256 = sha256(packageSource);
+          manifest.baseline.bunLockSha256 = sha256(lockSource);
+          await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+          NODE
+
+      - name: Verify the bound baseline
+        run: bun test scripts/nearby-transport-static-screening.test.ts
+
+      - name: Commit generated baseline changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/nearby-transport-static-screening.ts docs/evidence/nearby-transport-static-screening.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'chore(deps): refresh Nearby Transport baseline'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
