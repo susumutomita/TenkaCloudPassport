@@ -1,20 +1,22 @@
 name: refresh-nearby-baseline
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/simplify-agent-harness
+      - main
 
 permissions:
   contents: write
 
 jobs:
   refresh:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'agent/simplify-agent-harness'
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out the branch
+      - name: Check out the PR branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
@@ -80,4 +82,4 @@ jobs:
             exit 0
           fi
           git commit -m 'chore(deps): refresh Nearby Transport baseline'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
