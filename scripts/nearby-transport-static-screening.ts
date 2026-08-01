@@ -44,8 +44,8 @@ const CANDIDATE_NAMES = {
 } as const;
 
 const REPOSITORY_BASELINE = {
-  expoSdk: '57.0.8',
-  reactNative: '0.86.0',
+  expoSdk: '57.0.9',
+  reactNative: '0.86.2',
   androidCompileSdk: 36,
   androidTargetSdk: 36,
   iosMinimum: '16.4',

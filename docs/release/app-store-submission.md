@@ -1,6 +1,6 @@
-# App Store 申請メタデータ（v1.1.0）
+# App Store 申請メタデータ（v1.2.0）
 
-本書は TenkaCloud Passport v1.1.0 を App Store Connect（ASC）へ申請するための、owner がそのまま
+本書は TenkaCloud Passport v1.2.0 を App Store Connect（ASC）へ申請するための、owner がそのまま
 コピーして使えるメタデータ一式です。誇張を避け、実装済みの範囲だけを事実として記述します
 （fail-closed）。文字数上限は Apple の一般的な既知の値を目安として付しますが、最終的な上限と
 入力欄の実際の文字数は申請時に ASC の画面上で確認してください。
@@ -27,8 +27,10 @@ Section 1-4（App 名・説明文・キーワード・プロモーションテ�
 | 2 | QR で自己紹介、アカウント不要 | Free intro cards, no account |
 | 3 | 無料・アカウント不要の自己紹介 | QR intro cards, zero setup |
 
-owner が 1 案を選びます。3 案とも実装済みの機能（名刺不要・アカウント不要・QR）だけを述べており、
-対応端末だけで動く Apple Intelligence 連携はサブタイトルには含めていません。
+v1.2.0 の申請では候補 1（日本語 `名刺不要の自己紹介カード`、英語
+`No card, no account needed`）を使用します。3 案とも実装済みの機能（名刺不要・
+アカウント不要・QR）だけを述べており、対応端末だけで動く Apple Intelligence 連携は
+サブタイトルには含めていません。
 
 ## 2. 説明文（Description）
 
@@ -44,9 +46,7 @@ TenkaCloud Passport は、名刺がなくても自己紹介を渡せる、無料
 ■ QR を見せるだけ
 保存した自己紹介カードは QR コードとして表示します。相手はこのアプリを入れなくても、標準の
 カメラで QR を読み取るだけでブラウザに自己紹介ページが開きます。連絡先への追加はページ内の
-ボタンを押した場合だけの任意操作です（連絡先への追加は iPhone / Safari で確認済みです。
-Android では保存した .vcf ファイルを開く一手間が必要で、この経路は未検証です。LINE、X、
-Instagram などの SNS アプリ内ブラウザでは、ファイルの保存自体が失敗する場合があります）。
+ボタンを押した場合だけの任意操作です。
 
 ■ サーバーへの送信ゼロ
 自己紹介データは QR コードの URL フラグメントに埋め込まれ、相手のブラウザ内だけで復号されます。
@@ -78,9 +78,7 @@ Enter your name (required), title, a short bio, and links, then save. No sign-up
 - Just show a QR code
 Your saved Intro Card displays as a QR code. The other person does not need to install anything —
 they scan it with their phone's stock Camera app, and their browser opens your intro page.
-Adding you to Contacts is a fully optional tap inside that page (verified working on iPhone /
-Safari; on Android, opening the downloaded .vcf takes one extra step and this path is unverified;
-in-app browsers inside apps like LINE, X, or Instagram may fail to save the file at all).
+Adding you to Contacts is a fully optional tap inside that page.
 
 - Zero server transmission
 Your intro data lives in the QR code's URL fragment and is decoded entirely inside the other
@@ -305,7 +303,8 @@ or sensitive-topic inputs.
 | 副候補 1 | ソーシャルネットワーキング（Social Networking） | 初対面の相手との交流を助ける目的だが、フィードや公開プロフィールなど SNS 的機能は持たない。 |
 | 副候補 2 | ユーティリティ（Utilities） | QR 生成・端末内保存という単機能ツールとしての側面。 |
 
-owner の判断で主カテゴリを 1 つ選びます。副カテゴリは ASC が許せば併用します。
+v1.2.0 の申請では主カテゴリに仕事効率化（Productivity）、副カテゴリに
+ソーシャルネットワーキング（Social Networking）を使用します。
 
 ## 9. owner 実施手順（チェックリスト）
 
@@ -373,13 +372,13 @@ plugin 設定自体は build に残っているため、事実として維持し
 
 ## 10. TestFlight ビルドの起動方法
 
-バージョンタグ `v1.1.0` を push すると、`.github/workflows/ios-release.yml`（`ios-release`
+バージョンタグ `v1.2.0` を push すると、`.github/workflows/ios-release.yml`（`ios-release`
 ワークフロー）が起動し、EAS の production プロファイルで Build から Submit（TestFlight への
 提出）までを非対話で実行します。owner が行う操作は以下だけです。
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 タグ push 後の運用（実行結果の確認、失敗時の再実行手順、`ios.buildNumber` は

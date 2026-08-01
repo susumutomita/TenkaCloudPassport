@@ -1,0 +1,85 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.2.0",
+    "copyright": "2026 BULL LLC",
+    "categories": ["PRODUCTIVITY", "SOCIAL_NETWORKING"],
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "ja": {
+        "title": "TenkaCloud Passport",
+        "subtitle": "名刺不要の自己紹介カード",
+        "description": "TenkaCloud Passport は、名刺がなくても自己紹介を渡せる、無料でアカウント不要のアプリです。\n\n■ 名刺不要、アカウント不要\n名前（必須）・肩書き・自己紹介・リンクなどを入力して保存するだけ。ログインもアカウント作成も要りません。\n\n■ QR を見せるだけ\n保存した自己紹介カードは QR コードとして表示します。相手はこのアプリを入れなくても、標準のカメラで QR を読み取るだけでブラウザに自己紹介ページが開きます。連絡先への追加はページ内のボタンを押した場合だけの任意操作です。\n\n■ サーバーへの送信ゼロ\n自己紹介データは QR コードの URL フラグメントに埋め込まれ、相手のブラウザ内だけで復号されます。このデータがサーバーへ送信されることはありません。\n\n■ 端末内で会話の共通点を見つける\n相手の自己紹介ページを取り込むと、確認済みの会話テーマから共通点と最初の質問を端末内だけで見つけます。この基本機能はモデルのダウンロードなしで動作します。\n\n対応端末（iPhone 15 Pro 以降・iOS 26 以降で Apple Intelligence を有効にしている場合）では、OS 内蔵の Apple Intelligence が自動的に働き、自己紹介文にある共通点を補助的に見つけたり、共通点の下に短い会話例を生成したりできます。ダウンロードや同意画面はなく、送信も一切ありません。会話例には「AI が作った例で、実際のやり取りではない」ことを常時表示します。入力と生成結果は端末内のメモリにだけ置かれ、保存もサーバー送信もされません。非対応端末では従来どおり確認済みテーマからの一致だけで動作します。\n\nデータを預からない、アカウントを作らない、名刺を用意しない。まずは自分の自己紹介カードを作ってみてください。",
+        "keywords": [
+          "名刺",
+          "自己紹介",
+          "QR",
+          "クラウド",
+          "会話",
+          "共通点",
+          "プライバシー",
+          "オフライン",
+          "アカウント不要",
+          "交流",
+          "人脈",
+          "無料"
+        ],
+        "promoText": "名刺もアカウントも不要。QRだけで自己紹介を共有し、データはサーバーへ送りません。相手カードを取り込むと、端末内で会話の共通点を見つけます。",
+        "marketingUrl": "https://card.tenkacloud.com",
+        "supportUrl": "https://github.com/susumutomita/TenkaCloudPassport",
+        "privacyPolicyUrl": "https://card.tenkacloud.com/privacy"
+      },
+      "en-US": {
+        "title": "TenkaCloud Passport",
+        "subtitle": "No card, no account needed",
+        "description": "TenkaCloud Passport is a free, account-free app for introducing yourself without a business card.\n\n- No card, no account\nEnter your name (required), title, a short bio, and links, then save. No sign-up, no login.\n\n- Just show a QR code\nYour saved Intro Card displays as a QR code. The other person does not need to install anything — they scan it with their phone's stock Camera app, and their browser opens your intro page. Adding you to Contacts is a fully optional tap inside that page.\n\n- Zero server transmission\nYour intro data lives in the QR code's URL fragment and is decoded entirely inside the other person's browser. It is never sent to a server.\n\n- Find common ground on-device\nImport the other person's intro page and the app finds a shared conversation topic and a first question entirely on your device. This base flow works without downloading a model.\n\nOn supported devices (iPhone 15 Pro or later, iOS 26 or later, with Apple Intelligence enabled), the OS's built-in Apple Intelligence automatically helps identify common ground from the intro text and, on request, creates a short hypothetical conversation example. There is no download or consent screen, and nothing is ever transmitted. The app always labels that example as AI-generated and not a record of a real exchange. The inputs and generated example stay only in device memory; they are never saved or sent to a server. On unsupported devices, the app continues to work from confirmed conversation themes only.\n\nNo data collected. No account required. No business card needed. Create your Intro Card and try it.",
+        "keywords": [
+          "business card",
+          "QR code",
+          "intro",
+          "networking",
+          "privacy",
+          "offline",
+          "conversation",
+          "no account",
+          "free"
+        ],
+        "promoText": "No business card or account. Share an intro by QR without sending profile data to a server, then find common ground on-device.",
+        "marketingUrl": "https://card.tenkacloud.com",
+        "supportUrl": "https://github.com/susumutomita/TenkaCloudPassport",
+        "privacyPolicyUrl": "https://card.tenkacloud.com/en/privacy"
+      }
+    },
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    }
+  }
+}

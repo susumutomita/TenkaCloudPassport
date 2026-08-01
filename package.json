@@ -50,13 +50,13 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~57.0.7",
+    "@expo/metro-runtime": "~57.0.8",
     "@noble/hashes": "2.2.0",
-    "expo": "~57.0.8",
-    "expo-build-properties": "~57.0.7",
+    "expo": "~57.0.9",
+    "expo-build-properties": "~57.0.8",
     "expo-camera": "~57.0.3",
     "expo-crypto": "~57.0.1",
-    "expo-dev-client": "~57.0.9",
+    "expo-dev-client": "~57.0.10",
     "expo-document-picker": "~57.0.1",
     "expo-file-system": "~57.0.1",
     "expo-localization": "~57.0.1",
@@ -64,7 +64,7 @@
     "llama.rn": "0.12.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.86.0",
+    "react-native": "0.86.2",
     "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0"
   },
