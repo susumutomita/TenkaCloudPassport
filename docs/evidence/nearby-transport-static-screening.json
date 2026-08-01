@@ -320,24 +320,17 @@
         "crossPlatformRoute": {
           "status": "Pass",
           "reason": "Both platforms use the same WebRTC DataChannel wire route and QR can carry the out-of-band signaling description.",
-          "sourceIds": [
-            "webrtc-basic-usage"
-          ]
+          "sourceIds": ["webrtc-basic-usage"]
         },
         "expoAndNewArchitecture": {
           "status": "Fail",
           "reason": "The official Expo note requires a Development Client and out-of-tree plugin but does not establish exact Expo SDK 57 and React Native 0.86 compatibility.",
-          "sourceIds": [
-            "webrtc-expo",
-            "expo-new-architecture"
-          ]
+          "sourceIds": ["webrtc-expo", "expo-new-architecture"]
         },
         "standardSecureChannel": {
           "status": "Fail",
           "reason": "DTLS protects DataChannel traffic, but the reviewed React Native API route does not expose a peer certificate fingerprint that can be bound to the QR proof.",
-          "sourceIds": [
-            "webrtc-basic-usage"
-          ]
+          "sourceIds": ["webrtc-basic-usage"]
         },
         "licenseAndMaintenance": {
           "status": "Fail",
@@ -351,17 +344,12 @@
         "applicationControlledTelemetry": {
           "status": "Fail",
           "reason": "The transitive Jitsi native artifacts and their application-controlled collection configuration are not fixed or evidenced by the reviewed route.",
-          "sourceIds": [
-            "webrtc-android-build",
-            "webrtc-ios-podspec"
-          ]
+          "sourceIds": ["webrtc-android-build", "webrtc-ios-podspec"]
         },
         "topologyAndDiscovery": {
           "status": "Pass",
           "reason": "A Host can maintain one DataChannel per Guest and QR signaling removes the need for a central signaling service or discovery service.",
-          "sourceIds": [
-            "webrtc-basic-usage"
-          ]
+          "sourceIds": ["webrtc-basic-usage"]
         }
       }
     },
@@ -394,18 +382,12 @@
         "officialSourceAndVersion": {
           "status": "Fail",
           "reason": "Official setup routes exist for Android and Swift, but the reviewed setup sources do not fix a shared exact release, source commit, and both lock resolutions.",
-          "sourceIds": [
-            "google-nearby-overview",
-            "google-nearby-swift"
-          ]
+          "sourceIds": ["google-nearby-overview", "google-nearby-swift"]
         },
         "crossPlatformRoute": {
           "status": "Pass",
           "reason": "Google documents Nearby Connections and a Swift package route, so this candidate does not combine unrelated Apple Multipeer and Android protocols.",
-          "sourceIds": [
-            "google-nearby-overview",
-            "google-nearby-swift"
-          ]
+          "sourceIds": ["google-nearby-overview", "google-nearby-swift"]
         },
         "expoAndNewArchitecture": {
           "status": "Fail",
@@ -419,32 +401,22 @@
         "standardSecureChannel": {
           "status": "Fail",
           "reason": "Google states that connections are encrypted and symmetrically authenticated, but the reviewed API does not provide the peer key or certificate fingerprint required by the QR binding contract.",
-          "sourceIds": [
-            "google-nearby-overview"
-          ]
+          "sourceIds": ["google-nearby-overview"]
         },
         "licenseAndMaintenance": {
           "status": "Fail",
           "reason": "Both native package versions, lock resolutions, source commit, and native artifact provenance remain unresolved.",
-          "sourceIds": [
-            "google-nearby-swift",
-            "google-nearby-overview"
-          ]
+          "sourceIds": ["google-nearby-swift", "google-nearby-overview"]
         },
         "applicationControlledTelemetry": {
           "status": "Fail",
           "reason": "The SDK collects performance and device information, and the official control is an end-user Google Usage and diagnostics setting rather than an application API or build configuration.",
-          "sourceIds": [
-            "google-nearby-overview"
-          ]
+          "sourceIds": ["google-nearby-overview"]
         },
         "topologyAndDiscovery": {
           "status": "Fail",
           "reason": "P2P_STAR is available, but a QR direct host hint cannot bypass Nearby endpoint advertising and discovery under the reviewed API route.",
-          "sourceIds": [
-            "google-nearby-strategies",
-            "google-nearby-overview"
-          ]
+          "sourceIds": ["google-nearby-strategies", "google-nearby-overview"]
         }
       }
     },
@@ -484,10 +456,7 @@
         "crossPlatformRoute": {
           "status": "Pass",
           "reason": "Both platforms can implement the same application-defined GATT service and characteristic framing.",
-          "sourceIds": [
-            "apple-core-bluetooth",
-            "android-ble"
-          ]
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
         },
         "expoAndNewArchitecture": {
           "status": "Pass",
@@ -501,18 +470,12 @@
         "standardSecureChannel": {
           "status": "Fail",
           "reason": "The common GATT route does not provide a standard end-to-end secure channel with a peer certificate fingerprint; meeting the contract would require a custom security protocol.",
-          "sourceIds": [
-            "apple-core-bluetooth",
-            "android-ble"
-          ]
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
         },
         "licenseAndMaintenance": {
           "status": "Pass",
           "reason": "No third-party transport package, native artifact, or downloader is added; both BLE APIs are maintained system frameworks.",
-          "sourceIds": [
-            "apple-core-bluetooth",
-            "android-ble"
-          ]
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
         },
         "applicationControlledTelemetry": {
           "status": "Not run",
@@ -522,10 +485,7 @@
         "topologyAndDiscovery": {
           "status": "Fail",
           "reason": "BLE service discovery remains required after QR scanning, so the candidate cannot provide the required QR direct hint recovery when discovery is disabled.",
-          "sourceIds": [
-            "apple-core-bluetooth",
-            "android-ble"
-          ]
+          "sourceIds": ["apple-core-bluetooth", "android-ble"]
         }
       }
     }
