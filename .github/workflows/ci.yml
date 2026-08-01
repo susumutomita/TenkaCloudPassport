@@ -17,65 +17,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  restore-nearby-baseline-format:
-    if: github.event_name == 'pull_request' && github.actor != 'github-actions[bot]' && github.head_ref == 'agent/simplify-agent-harness'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the PR branch
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-
-      - name: Restore baseline formatting and update bound values
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git show "${BASE_SHA}:docs/evidence/nearby-transport-static-screening.json" > /tmp/nearby-baseline.json
-          node --input-type=module <<'NODE'
-          import { readFile, writeFile } from 'node:fs/promises';
-
-          const source = await readFile('/tmp/nearby-baseline.json', 'utf8');
-          const replacements = [
-            ['"expoSdk": "57.0.8"', '"expoSdk": "57.0.9"'],
-            ['"reactNative": "0.86.0"', '"reactNative": "0.86.2"'],
-            [
-              '"packageJsonSha256": "bb23d9c6169973c6fe7f41b4522a340c6a1a4c1bc532ada5ff5990892bf753ee"',
-              '"packageJsonSha256": "af5ed0d2ebfe2f4ef1b4cca97fa63b987627b6635f3088cbb79fd10e44726dff"',
-            ],
-            [
-              '"bunLockSha256": "92e083ed88b7df6286fcce01709b830a3f3b2a312a9586837809947fb621d26a"',
-              '"bunLockSha256": "ebcc2ec8211e7ff225ef94194e76997612925c7831722c4a6e640c594e0fcf0f"',
-            ],
-          ];
-
-          let output = source;
-          for (const [before, after] of replacements) {
-            const occurrences = output.split(before).length - 1;
-            if (occurrences !== 1) {
-              throw new Error(`expected one baseline occurrence for ${before}, found ${occurrences}`);
-            }
-            output = output.replace(before, after);
-          }
-          await writeFile(
-            'docs/evidence/nearby-transport-static-screening.json',
-            output,
-          );
-          NODE
-
-      - name: Commit the minimally formatted baseline
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/evidence/nearby-transport-static-screening.json
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m 'chore(deps): preserve Nearby Transport baseline format'
-          git push origin "HEAD:${GITHUB_HEAD_REF}"
-
   ci:
     runs-on: ubuntu-latest
     steps:
