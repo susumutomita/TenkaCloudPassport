@@ -4,8 +4,10 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
   applyReviewedListing,
+  collectReviewVersionRows,
   summarizeAgeDeclaration,
   summarizePrivacyURLs,
+  summarizeReleaseEncryption,
   summarizeReviewDetails,
   verifySavedListing,
 } from './apply-store-listing.ts';
@@ -66,7 +68,7 @@ async function inspectReviewReadiness(
       attributes: Record<string, unknown>;
     } | null>;
   }[],
-  builds: { attributes: Record<string, unknown> }[],
+  builds: Parameters<typeof summarizeReleaseEncryption>[0],
   projectDir: string
 ) {
   const config = JSON.parse(
@@ -80,26 +82,21 @@ async function inspectReviewReadiness(
     .match(/## 審査用 Notes 案\s+([\s\S]*?)\n##/)?.[1]
     ?.trim();
   if (!preparedNotes) throw new Error('Prepared review notes are missing');
-  const review = [];
-  for (const version of versions.filter(
-    (item: { attributes: { versionString: string } }) =>
-      ['1.2.0', '1.3.0'].includes(item.attributes.versionString)
-  )) {
-    review.push({
-      version: version.attributes.versionString,
-      details: await optionalRead('review information', async () => {
-        const detail = await version.getAppStoreReviewDetailAsync();
-        return summarizeReviewDetails(
-          detail?.attributes ?? null,
-          preparedNotes
-        );
-      }),
-    });
-  }
+  const review = await collectReviewVersionRows(versions, (version) =>
+    optionalRead('review information', async () => {
+      const detail = await version.getAppStoreReviewDetailAsync();
+      return summarizeReviewDetails(detail?.attributes ?? null, preparedNotes);
+    })
+  );
   const appInfo = await optionalRead(
     'app information/age/privacy URLs',
     async () => {
       const infos = await app.getAppInfoAsync();
+      if (infos.length === 0)
+        return {
+          status: 'absent',
+          reason: 'No app-info records were returned',
+        };
       const output = [];
       for (const info of infos) {
         const declaration = await optionalRead('age rating', async () => {
@@ -124,21 +121,13 @@ async function inspectReviewReadiness(
       return output;
     }
   );
-  const appleBuild = builds.find((item) => item.attributes['version'] === '15');
   console.log(
     JSON.stringify({
       reviewReadinessReadOnly: {
         appId: app.id,
         review,
         appInfo,
-        exportCompliance: {
-          build: '15',
-          usesNonExemptEncryption:
-            typeof appleBuild?.attributes['usesNonExemptEncryption'] ===
-            'boolean'
-              ? appleBuild.attributes['usesNonExemptEncryption']
-              : null,
-        },
+        exportCompliance: summarizeReleaseEncryption(builds),
         privacyDataUsageLabels: {
           status: 'unavailable',
           reason:
@@ -267,6 +256,10 @@ class InspectStore extends MetadataPull {
     const versions = await app.getAppStoreVersionsAsync({
       query: { limit: 20, filter: { platform: 'IOS' } },
     });
+    if (action === 'inspect') {
+      stage = 'read-only review readiness audit';
+      await inspectReviewReadiness(app, versions, builds, projectDir);
+    }
     for (const version of versions) {
       console.log(
         JSON.stringify({
@@ -330,10 +323,6 @@ class InspectStore extends MetadataPull {
         projectDir,
         cliRoot,
       });
-    }
-    if (action === 'inspect') {
-      stage = 'read-only review readiness audit';
-      await inspectReviewReadiness(app, versions, builds, projectDir);
     }
     if (action === 'apply') {
       stage = 'reviewed listing application';

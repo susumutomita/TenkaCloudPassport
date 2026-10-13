@@ -554,6 +554,10 @@ export function summarizeReviewDetails(
       typeof attributes['demoAccountRequired'] === 'boolean'
         ? attributes['demoAccountRequired']
         : null,
+    demoCredentials: {
+      namePresent: present('demoAccountName'),
+      passwordPresent: present('demoAccountPassword'),
+    },
     notesPresent: notes.trim().length > 0,
     notesMatchPreparedCurrentDraft: notes.trim() === preparedNotes.trim(),
     legacyAIReferencesPresent:
@@ -604,6 +608,7 @@ const AGE_DECLARATION_FIELDS = [
   'ageAssurance',
   'ageRatingOverride',
   'ageRatingOverrideV2',
+  'developerAgeRatingInfoUrl',
   'alcoholTobaccoOrDrugUseOrReferences',
   'contests',
   'gambling',
@@ -633,17 +638,17 @@ export function summarizeAgeDeclaration(
   attributes: Record<string, unknown>,
   configured: Record<string, unknown>
 ) {
-  const configuredKeys = Object.keys(configured).filter(
-    (key) => key !== 'developerAgeRatingInfoUrl'
-  );
+  const configuredKeys = Object.keys(configured);
+  const normalizedURL = (value: unknown) =>
+    typeof value === 'string' && value.trim() ? value.trim() : null;
+  const equal = (key: string) =>
+    key === 'developerAgeRatingInfoUrl'
+      ? normalizedURL(attributes[key]) === normalizedURL(configured[key])
+      : attributes[key] === configured[key];
   return {
     status: 'available',
-    configuredFieldsMatch: configuredKeys.every(
-      (key) => attributes[key] === configured[key]
-    ),
-    differentConfiguredFieldNames: configuredKeys.filter(
-      (key) => attributes[key] !== configured[key]
-    ),
+    configuredFieldsMatch: configuredKeys.every(equal),
+    differentConfiguredFieldNames: configuredKeys.filter((key) => !equal(key)),
     unconfiguredSupportedFieldNames: AGE_DECLARATION_FIELDS.filter(
       (key) => !Object.hasOwn(configured, key)
     ),
@@ -661,14 +666,64 @@ export function summarizeAgeDeclaration(
     currentAnswers: Object.fromEntries(
       AGE_DECLARATION_FIELDS.map((key) => [
         key,
-        typeof attributes[key] === 'boolean' ||
-        attributes[key] === null ||
-        /^(NONE|INFREQUENT|FREQUENT|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|FOUR_PLUS|SIX_PLUS|NINE_PLUS|TWELVE_PLUS|THIRTEEN_PLUS|FIFTEEN_PLUS|SIXTEEN_PLUS|SEVENTEEN_PLUS|EIGHTEEN_PLUS|NINETEEN_PLUS|TWENTY_ONE_PLUS|UNRATED|FIVE_AND_UNDER|SIX_TO_EIGHT|NINE_TO_ELEVEN|AGES_5_AND_UNDER|AGES_6_TO_8|AGES_9_TO_11)$/.test(
-          String(attributes[key])
-        )
-          ? attributes[key]
-          : 'unrecognized or unavailable',
+        key === 'developerAgeRatingInfoUrl'
+          ? Boolean(normalizedURL(attributes[key]))
+          : typeof attributes[key] === 'boolean' ||
+              attributes[key] === null ||
+              /^(NONE|INFREQUENT|FREQUENT|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|FOUR_PLUS|SIX_PLUS|NINE_PLUS|TWELVE_PLUS|THIRTEEN_PLUS|FIFTEEN_PLUS|SIXTEEN_PLUS|SEVENTEEN_PLUS|EIGHTEEN_PLUS|NINETEEN_PLUS|TWENTY_ONE_PLUS|UNRATED|FIVE_AND_UNDER|SIX_TO_EIGHT|NINE_TO_ELEVEN|AGES_5_AND_UNDER|AGES_6_TO_8|AGES_9_TO_11)$/.test(
+                String(attributes[key])
+              )
+            ? attributes[key]
+            : 'unrecognized or unavailable',
       ])
     ),
+  };
+}
+
+export async function collectReviewVersionRows<
+  T extends { attributes: { versionString: string } },
+>(versions: T[], read: (version: T) => Promise<unknown>) {
+  const rows = [];
+  for (const version of ['1.2.0', '1.3.0']) {
+    const remote = versions.find(
+      (item) => item.attributes.versionString === version
+    );
+    rows.push({
+      version,
+      details: remote
+        ? await read(remote)
+        : {
+            status: 'unavailable',
+            reason: 'Requested version was not returned by the version query',
+          },
+    });
+  }
+  return rows;
+}
+export function summarizeReleaseEncryption(
+  builds: {
+    attributes: {
+      version: string;
+      preReleaseVersion?: { attributes: { version: string } };
+      usesNonExemptEncryption?: boolean;
+    };
+  }[]
+) {
+  const release = builds.find(
+    (item) =>
+      item.attributes.version === '15' &&
+      item.attributes.preReleaseVersion?.attributes.version === '1.3.0'
+  );
+  return {
+    version: '1.3.0',
+    build: '15',
+    status:
+      typeof release?.attributes.usesNonExemptEncryption === 'boolean'
+        ? 'available'
+        : 'unavailable',
+    usesNonExemptEncryption:
+      typeof release?.attributes.usesNonExemptEncryption === 'boolean'
+        ? release.attributes.usesNonExemptEncryption
+        : null,
   };
 }

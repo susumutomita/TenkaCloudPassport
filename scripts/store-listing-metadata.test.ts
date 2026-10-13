@@ -449,3 +449,82 @@ it('preserves current Apple frequency and age override answers without substitut
   expect(actual.currentAnswers['koreaAgeRatingOverride']).toBe('NINETEEN_PLUS');
   expect(actual.currentAnswers['kidsAgeBand']).toBe('SIX_TO_EIGHT');
 });
+
+it('binds export compliance to both release version and build string', async () => {
+  const { summarizeReleaseEncryption } = await import('./apply-store-listing');
+  const values = [
+    {
+      attributes: {
+        version: '15',
+        preReleaseVersion: { attributes: { version: '1.2.0' } },
+        usesNonExemptEncryption: true,
+      },
+    },
+    {
+      attributes: {
+        version: '15',
+        preReleaseVersion: { attributes: { version: '1.3.0' } },
+        usesNonExemptEncryption: false,
+      },
+    },
+  ];
+  expect(summarizeReleaseEncryption(values).usesNonExemptEncryption).toBe(
+    false
+  );
+  expect(summarizeReleaseEncryption(values.slice(0, 1)).status).toBe(
+    'unavailable'
+  );
+});
+it('reports missing baseline review version and reads the available target exactly once', async () => {
+  const { collectReviewVersionRows } = await import('./apply-store-listing');
+  const reads: string[] = [];
+  const result = await collectReviewVersionRows(
+    [{ attributes: { versionString: '1.3.0' } }],
+    async (version) => {
+      reads.push(version.attributes.versionString);
+      return { status: 'available' };
+    }
+  );
+  expect(result[0]).toEqual({
+    version: '1.2.0',
+    details: {
+      status: 'unavailable',
+      reason: 'Requested version was not returned by the version query',
+    },
+  });
+  expect(reads).toEqual(['1.3.0']);
+});
+it('reports required demo credential presence without emitting credential values', async () => {
+  const { summarizeReviewDetails } = await import('./apply-store-listing');
+  const secret = 'Synthetic credential never logged';
+  const result = summarizeReviewDetails(
+    {
+      demoAccountRequired: true,
+      demoAccountName: 'synthetic-account',
+      demoAccountPassword: secret,
+    },
+    'Current notes'
+  );
+  expect(result.demoCredentials).toEqual({
+    namePresent: true,
+    passwordPresent: true,
+  });
+  expect(JSON.stringify(result)).not.toContain(secret);
+  expect(JSON.stringify(result)).not.toContain('synthetic-account');
+  expect(
+    summarizeReviewDetails({ demoAccountRequired: true }, '').demoCredentials
+  ).toEqual({ namePresent: false, passwordPresent: false });
+});
+it('includes developer URL differences while keeping its raw value private', async () => {
+  const { summarizeAgeDeclaration } = await import('./apply-store-listing');
+  const url = 'https://example.invalid/private-owner';
+  const result = summarizeAgeDeclaration(
+    { developerAgeRatingInfoUrl: url },
+    { developerAgeRatingInfoUrl: null }
+  );
+  expect(result.configuredFieldsMatch).toBe(false);
+  expect(result.differentConfiguredFieldNames).toContain(
+    'developerAgeRatingInfoUrl'
+  );
+  expect(JSON.stringify(result)).not.toContain(url);
+});
