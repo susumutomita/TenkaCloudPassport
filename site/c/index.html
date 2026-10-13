@@ -100,6 +100,12 @@
     <p class="lang-en">Could not read the QR content. Please scan the QR code again.</p>
   </section>
 
+  <section id="history-error" class="state-message error" hidden>
+    <h2>カードを安全に表示できませんでした</h2>
+    <p>ブラウザの URL を消去できませんでした。このタブを閉じ、別のブラウザでもう一度 QR を読み取ってください。</p>
+    <p class="lang-en">Could not clear the card URL. Close this tab and scan again in another browser.</p>
+  </section>
+
   <article id="card" class="card" hidden>
     <p class="eyebrow">Intro Card</p>
     <h1 id="card-name"></h1>
@@ -450,7 +456,6 @@
   }
 
   function renderCard(card) {
-    document.title = `${card.name} さんの自己紹介 | TenkaCloud Passport`;
     document.getElementById('card-name').textContent = card.name;
 
     renderSubtitle(card);
@@ -458,19 +463,40 @@
     renderLinks(card);
     renderContacts(card);
 
-    document.getElementById('connect-button').addEventListener('click', () => {
+    document.getElementById('connect-button').onclick = () => {
       triggerVCardDownload(card);
-    });
+    };
     document.getElementById('card').hidden = false;
   }
 
+  function clearCard() {
+    document.title = '自己紹介 | TenkaCloud Passport';
+    for (const id of ['card', 'no-hash', 'decode-error', 'history-error']) {
+      document.getElementById(id).hidden = true;
+    }
+    for (const id of ['card-name', 'card-subtitle', 'card-self-intro', 'card-links', 'card-contacts']) {
+      const element = document.getElementById(id);
+      element.textContent = '';
+      if (id !== 'card-name') element.hidden = true;
+    }
+    document.getElementById('connect-button').onclick = null;
+  }
+
   function main() {
+    clearCard();
     const fragment = location.hash.length > 1 ? location.hash.slice(1) : '';
+    const card = fragment ? decodeFragment(fragment) : null;
+    // Clear even malformed payloads before showing any state. Never persist the card.
+    try {
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch {
+      document.getElementById('history-error').hidden = false;
+      return;
+    }
     if (!fragment) {
       document.getElementById('no-hash').hidden = false;
       return;
     }
-    const card = decodeFragment(fragment);
     if (!card) {
       document.getElementById('decode-error').hidden = false;
       return;
@@ -478,6 +504,16 @@
     renderCard(card);
   }
 
+  window.addEventListener('hashchange', main);
+  window.addEventListener('popstate', () => {
+    // Fragment traversal also emits hashchange; decode that payload only once.
+    if (!location.hash) main();
+  });
+  // A back/forward cache entry must not retain card DOM or its download closure.
+  window.addEventListener('pagehide', clearCard);
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) main();
+  });
   main();
 })();
 </script>
