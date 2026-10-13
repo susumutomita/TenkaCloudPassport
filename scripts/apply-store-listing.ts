@@ -19,7 +19,7 @@ type Shot = {
   };
 };
 type ShotSet = {
-  attributes: { screenshotDisplayType: string; appScreenshots?: Shot[] };
+  attributes: { screenshotDisplayType: string; appScreenshots: Shot[] };
 };
 type LocaleModel = {
   attributes: { locale: string } & Partial<Fields>;
@@ -43,6 +43,7 @@ type VersionModel = {
     releaseType: string;
   };
   getLocalizationsAsync(): Promise<LocaleModel[]>;
+  createLocalizationAsync(input: { locale: string }): Promise<LocaleModel>;
   updateBuildAsync(input: { buildId: string }): Promise<unknown>;
   getBuildAsync(): Promise<BuildModel | null>;
 };
@@ -236,19 +237,39 @@ function listingFields(local: Listing['info'][string]): Fields {
     whatsNew: local.releaseNotes,
   };
 }
-async function writeLocaleText(
+export async function writeLocaleText(
   version: VersionModel,
   listing: Listing
 ): Promise<void> {
   const locales = await version.getLocalizationsAsync();
   for (const localeName of ['ja', 'en-US']) {
     const local = listing.info[localeName];
-    const remote = locales.find(
+    const existing = locales.find(
       (locale) => locale.attributes.locale === localeName
     );
-    if (!local || !remote)
-      throw new Error('Expected existing localization is required');
+    if (!local) throw new Error('Expected approved localization is required');
+    const remote =
+      existing ??
+      (await version.createLocalizationAsync({ locale: localeName }));
     await remote.updateAsync(listingFields(local));
+  }
+}
+async function verifyFallbackLocalesBeforeWrite(
+  versions: VersionModel[]
+): Promise<void> {
+  for (const version of versions.filter(
+    (item) =>
+      item.attributes.versionString === '1.3.0' ||
+      item.attributes.appStoreState === 'READY_FOR_SALE'
+  )) {
+    for (const locale of await version.getLocalizationsAsync()) {
+      if (locale.attributes.locale === 'ja') continue;
+      const sets = await locale.getAppScreenshotSetsAsync();
+      if (sets.some((set) => set.attributes.appScreenshots.length > 0))
+        throw new Error(
+          'Unreviewed localized screenshots must be resolved before any listing write'
+        );
+    }
   }
 }
 function verifyScreenshotSet(
@@ -280,8 +301,14 @@ async function verifyLocale(
     if (Reflect.get(remote.attributes, key) !== expected)
       throw new Error('Listing text readback mismatch');
   }
-  if (!local.screenshots) return;
   const sets = await remote.getAppScreenshotSetsAsync();
+  if (!local.screenshots) {
+    if (sets.some((set) => set.attributes.appScreenshots.length > 0))
+      throw new Error(
+        'Unexpected localized screenshots require explicit replacement'
+      );
+    return;
+  }
   for (const [type, paths] of Object.entries(local.screenshots)) {
     const shots =
       sets.find((set) => set.attributes.screenshotDisplayType === type)
@@ -334,6 +361,7 @@ export async function applyReviewedListing(input: {
   if (app.id !== '6793516094') throw new Error('Target app identity mismatch');
   validateReviewedAssets(projectDir, listing);
   const appleBuild = verifiedAppleBuild(builds, releaseBuild);
+  await verifyFallbackLocalesBeforeWrite(versions);
   const version = await editableVersion(app, versions, cliRoot);
   await writeLocaleText(version, listing);
   await syncNativeScreenshots(app, version, listing, projectDir, cliRoot);

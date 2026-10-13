@@ -6,7 +6,7 @@ final class PassportStoreScreenshots: XCTestCase {
     continueAfterFailure = false
     app.launchArguments = ["-AppleLanguages", "(ja)", "-AppleLocale", "ja_JP"]
     app.launch()
-    XCTAssertTrue(app.textFields["名前"].waitForExistence(timeout: 60), app.debugDescription)
+    XCTAssertTrue(app.textFields["名前"].firstMatch.waitForExistence(timeout: 60), app.debugDescription)
   }
   func button(_ label: String) -> XCUIElement {
     let found = app.buttons[label].firstMatch
@@ -34,10 +34,12 @@ final class PassportStoreScreenshots: XCTestCase {
     attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
   }
   func testCurrentStoreScreens() throws {
-    let name = app.textFields["名前"]; name.tap(); name.typeText("Sample Creator")
-    app.staticTexts["自己紹介カードを作る。"].tap()
+    let name = app.textFields["名前"].firstMatch; name.tap(); name.typeText("Sample Creator")
+    tap("保存")
+    XCTAssertTrue(app.buttons["編集する"].firstMatch.waitForExistence(timeout: 30))
+    tap("編集する")
     top(); capture("01-intro-card-edit")
-    tap("保存"); XCTAssertTrue(app.buttons["編集する"].waitForExistence(timeout: 30))
+    tap("保存"); XCTAssertTrue(app.buttons["編集する"].firstMatch.waitForExistence(timeout: 30))
     top(); capture("02-intro-card-qr")
     tap("アルゴリズム・設計を学ぶ")
     tap("ダウンロードして保存")
@@ -50,13 +52,13 @@ final class PassportStoreScreenshots: XCTestCase {
     XCTAssertTrue(lesson.exists && lesson.isHittable)
     let lessonTitle = String(lesson.label.dropFirst("学習を始める：".count))
     lesson.tap()
-    XCTAssertTrue(app.staticTexts[lessonTitle].waitForExistence(timeout: 20))
+    XCTAssertTrue(app.staticTexts[lessonTitle].firstMatch.waitForExistence(timeout: 20))
     top(); capture("04-learning-study")
     tap("Passport に戻る")
     let settings = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "設定")).firstMatch
     for _ in 0..<20 { if settings.exists && settings.isHittable { break }; app.scrollViews.firstMatch.swipeUp() }
     XCTAssertTrue(settings.exists && settings.isHittable); settings.tap()
-    XCTAssertTrue(app.staticTexts["設定を確認する。"].waitForExistence(timeout: 20))
+    XCTAssertTrue(app.staticTexts["設定を確認する。"].firstMatch.waitForExistence(timeout: 20))
     top(); capture("05-settings")
   }
 }

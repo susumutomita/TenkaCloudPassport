@@ -6,6 +6,12 @@ import pathlib
 import sys
 
 root = pathlib.Path(sys.argv[1]).resolve()
+for name in ['ui-source-commit.txt', 'source-commit.txt', 'xcode.txt']:
+    path = root / name
+    if path.exists():
+        print('CAPTURE_PROVENANCE ' + json.dumps({'path': name, 'value': path.read_text().strip()}))
+for path in sorted(root.glob('*/device.txt')):
+    print('CAPTURE_PROVENANCE ' + json.dumps({'path': str(path.relative_to(root)), 'value': path.read_text().strip()}))
 for path in sorted(root.rglob('test.log')):
     print('CAPTURE_TEST_LOG', str(path.relative_to(root)))
     lines = path.read_text(errors='replace').splitlines()

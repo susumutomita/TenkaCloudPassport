@@ -32,6 +32,7 @@ for pair in 'iphone-medium|iPhone 17 Pro' 'iphone-6.9|iPhone 17 Pro Max' 'ipad-1
   xcrun simctl terminate "$identifier" cloud.tenka.passport || true
   if ! xcodebuild test -project /tmp/PassportStoreScreenshots/PassportStoreScreenshots.xcodeproj -scheme PassportStoreScreenshots -destination "platform=iOS Simulator,id=$identifier" -resultBundlePath "$destination/result.xcresult" CODE_SIGNING_ALLOWED=NO > "$destination/test.log" 2>&1; then
     tail -n 110 "$destination/test.log"
+    xcrun xcresulttool export attachments --path "$destination/result.xcresult" --output-path "$destination/attachments" || true
     diagnose_launch
     exit 1
   fi

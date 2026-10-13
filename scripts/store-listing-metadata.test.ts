@@ -83,3 +83,54 @@ it('cannot mutate ASC when native capture has not been prepared', async () => {
     rmSync(folder, { recursive: true, force: true });
   }
 });
+
+it('creates only approved locale records when a new version has no copied localization', async () => {
+  const { writeLocaleText } = await import('./apply-store-listing');
+  const writes: { locale: string; fields: Record<string, string> }[] = [];
+  const created: string[] = [];
+  await writeLocaleText(
+    {
+      id: 'new-version',
+      attributes: {
+        versionString: '1.3.0',
+        appStoreState: 'PREPARE_FOR_SUBMISSION',
+        releaseType: 'AFTER_APPROVAL',
+      },
+      async getLocalizationsAsync() {
+        return [];
+      },
+      async createLocalizationAsync({ locale }) {
+        created.push(locale);
+        return {
+          attributes: { locale },
+          async updateAsync(fields: Record<string, string>) {
+            writes.push({ locale, fields });
+          },
+          async getAppScreenshotSetsAsync() {
+            return [];
+          },
+        };
+      },
+      async updateBuildAsync() {
+        throw new Error(
+          'Locale text updates must not change the selected build'
+        );
+      },
+      async getBuildAsync() {
+        return null;
+      },
+    },
+    config.apple
+  );
+  expect(created).toEqual(['ja', 'en-US']);
+  expect(writes).toHaveLength(2);
+  for (const { locale, fields } of writes) {
+    const local = config.apple.info[locale];
+    expect(fields).toEqual({
+      description: local.description,
+      keywords: local.keywords.join(','),
+      promotionalText: local.promoText,
+      whatsNew: local.releaseNotes,
+    });
+  }
+});

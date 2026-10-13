@@ -11,10 +11,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: passport-store-listing-6793516094
+  cancel-in-progress: false
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
@@ -34,6 +37,9 @@ jobs:
       - name: Require normally merged source for application
         if: github.ref_name == 'release/sync-store-1.3.0'
         run: |
+          # The owner explicitly authorized this fixed 1.3.0 listing update.
+          # Collaborator or automation pushes cannot execute the authorized write.
+          test '${{ github.actor }}' = susumutomita
           git fetch origin main --depth=1
           test "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)"
       - name: Read or synchronize verified listing
