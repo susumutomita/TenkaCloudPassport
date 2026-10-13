@@ -21,7 +21,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         shell: python
         run: |
-          import json, os, urllib.request
+          import json, os, urllib.request, urllib.error
           build_id = 'd726ae3e-fe94-4042-bdfe-5975c5f2a930'
           query = '''query ExistingReleaseBuild($id: ID!) {
             builds { byId(buildId: $id) {
@@ -35,10 +35,13 @@ jobs:
               raise SystemExit('Existing EXPO_TOKEN is unavailable; no submission attempted')
           request = urllib.request.Request('https://api.expo.dev/graphql',
               data=json.dumps({'query': query, 'variables': {'id': build_id}}).encode(),
-              headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})
+              headers={'Content-Type': 'application/json', 'User-Agent': 'eas-cli/21.0.2', 'Authorization': 'Bearer ' + token})
           try:
               with urllib.request.urlopen(request, timeout=60) as response:
                   result = json.load(response)
+          except urllib.error.HTTPError as error:
+              print(json.dumps({'easHttpStatus': error.code}))
+              raise SystemExit('EAS read-only query HTTP failure; no submission attempted')
           except Exception:
               raise SystemExit('EAS read-only query failed; no submission attempted')
           if result.get('errors'):
