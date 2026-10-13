@@ -33,4 +33,4 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: 'true'
           EXPO_NO_TELEMETRY: '1'
-        run: bun scripts/inspect-store-listing.ts
+        run: node --experimental-strip-types scripts/inspect-store-listing.ts

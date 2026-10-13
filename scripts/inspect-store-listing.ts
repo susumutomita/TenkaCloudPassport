@@ -13,6 +13,7 @@ const { getAppStoreAuthAsync } = load('./build/metadata/auth');
 const { getProfilesAsync } = load('./build/utils/profiles');
 const { EasJsonAccessor } = load('@expo/eas-json');
 
+let stage = 'EAS context';
 class InspectStore extends MetadataPull {
   async runAsync() {
     const context = await Reflect.get(this, 'getContextAsync').call(
@@ -74,6 +75,7 @@ class InspectStore extends MetadataPull {
       freezeCredentials: true,
       vcsClient: context.vcsClient,
     });
+    stage = 'existing ASC authentication';
     const { app } = await getAppStoreAuthAsync({
       projectDir,
       profile: profiles[0].profile,
@@ -84,6 +86,7 @@ class InspectStore extends MetadataPull {
       projectId,
     });
     if (app.id !== '6793516094') throw new Error('Unexpected App Store app');
+    stage = 'Apple processing read';
     const builds = await app.getBuildsAsync({
       query: {
         limit: 10,
@@ -112,6 +115,7 @@ class InspectStore extends MetadataPull {
         ),
       })
     );
+    stage = 'ASC listing read';
     const versions = await app.getAppStoreVersionsAsync({
       query: { limit: 20, filter: { platform: 'IOS' } },
     });
@@ -172,9 +176,24 @@ try {
   await Reflect.get(InspectStore, 'run').call(InspectStore, [], root);
 } catch (error) {
   // Do not serialize request contexts or credential-bearing exceptions.
-  console.error(
-    'Store inspection failed; no listing mutation was attempted.',
-    error instanceof Error ? error.name : 'UnknownError'
-  );
+  const message = error instanceof Error ? error.message : '';
+  const reason = /401|UNAUTHORIZED/i.test(message)
+    ? 'unauthorized'
+    : /403|FORBIDDEN/i.test(message)
+      ? 'forbidden'
+      : /key type|key object|crypto|unsupported/i.test(message)
+        ? 'unsupported authentication runtime'
+        : /authState|Failed to authenticate/i.test(message)
+          ? 'authentication not established'
+          : /Failed to load app/i.test(message)
+            ? 'target app unavailable'
+            : /network|fetch|ENOTFOUND|ECONN|socket/i.test(message)
+              ? 'network failure'
+              : 'unclassified failure';
+  console.error('Store inspection failed; no listing mutation was attempted.', {
+    stage,
+    reason,
+    error: error instanceof Error ? error.name : 'UnknownError',
+  });
   process.exitCode = 1;
 }
