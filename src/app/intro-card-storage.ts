@@ -15,6 +15,7 @@ export interface IntroCardStoragePort {
   load(): Promise<IntroCard | null>;
   save(card: IntroCard): Promise<void>;
   inspect(): Promise<IntroCardStorageUsage>;
+  inspectDraft?(): Promise<IntroCardStorageUsage>;
   remove(): Promise<void>;
   /**
    * Issue 93: 保存前（未検証）の編集中の生入力を、確定カードとは別キーで

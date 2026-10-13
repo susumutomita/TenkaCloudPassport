@@ -306,6 +306,19 @@ describe('Intro Card Storage adapter', () => {
     expect(usage.bytes).toBeGreaterThan(0);
   });
 
+  it('Native draft metadata inspects existing, missing and unavailable files', async () => {
+    const document = new BunProfileDocument(
+      path.join(temporaryDirectory(), 'draft-metadata.json')
+    );
+    const storage = new ExpoFileSystemIntroCardStorageAdapter(null, document);
+    expect(await storage.inspectDraft()).toEqual({ count: 0, bytes: 0 });
+    await document.write('invalid JSON remains inspectable');
+    expect((await storage.inspectDraft()).count).toBe(1);
+    await expect(
+      new ExpoFileSystemIntroCardStorageAdapter(null, null).inspectDraft()
+    ).rejects.toThrow();
+  });
+
   it('isEmptyIntroCardDraft は全欄空のときだけ true を返す', () => {
     expect(isEmptyIntroCardDraft(EMPTY_INTRO_CARD_DRAFT_FIELDS)).toBe(true);
     expect(

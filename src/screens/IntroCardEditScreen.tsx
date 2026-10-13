@@ -11,6 +11,7 @@ import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import type { IntroCardNotice } from '../app/intro-card-notice';
 import { isEmptyIntroCardDraft } from '../app/intro-card-storage';
+import { LearningEntry } from '../app/learning/navigation';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import ClueSelector from '../components/ClueSelector';
@@ -462,6 +463,7 @@ export default function IntroCardEditScreen({
       onChangeLocale={onChangeLocale}
       title={t.editTitle}
     >
+      <LearningEntry locale={locale} />
       <Notice locale={locale} notice={notice} />
       <View style={styles.field}>
         <Text style={styles.label}>{t.nameLabel}</Text>

@@ -1,5 +1,7 @@
 import type { LocalPrivateProfile } from '../domain/passport';
 import type { DiagnosticModelArchitecture } from './diagnostic-report';
+import type { IntroCardStoragePort } from './intro-card-storage';
+import { serializeIntroCardDraft } from './intro-card-storage';
 import type { LocalDeletionJournalPort } from './local-deletion-journal';
 import type { LocalModelMutationLease } from './local-model-mutation-lease';
 import type {
@@ -193,6 +195,28 @@ export class LocalModelContextLeaseRegistry {
   }
 }
 
+export async function withLocalDataWrite(
+  leases: LocalModelContextLeaseRegistry,
+  deletionJournal: LocalDeletionJournalPort,
+  write: () => Promise<void>
+): Promise<void> {
+  const lease = leases.acquireProfileWrite();
+  try {
+    let deletionPending: boolean;
+    try {
+      deletionPending = await deletionJournal.isPending();
+    } catch {
+      throw new LocalDataAccessBlockedError('pending-deletion');
+    }
+    if (deletionPending) {
+      throw new LocalDataAccessBlockedError('pending-deletion');
+    }
+    await write();
+  } finally {
+    lease.release();
+  }
+}
+
 export class DeletionCoordinatedLocalProfileStorageAdapter
   implements LocalProfileStoragePort
 {
@@ -207,21 +231,9 @@ export class DeletionCoordinatedLocalProfileStorageAdapter
   }
 
   async save(profile: LocalPrivateProfile): Promise<void> {
-    const lease = this.leases.acquireProfileWrite();
-    try {
-      let deletionPending: boolean;
-      try {
-        deletionPending = await this.deletionJournal.isPending();
-      } catch {
-        throw new LocalDataAccessBlockedError('pending-deletion');
-      }
-      if (deletionPending) {
-        throw new LocalDataAccessBlockedError('pending-deletion');
-      }
-      await this.delegate.save(profile);
-    } finally {
-      lease.release();
-    }
+    await withLocalDataWrite(this.leases, this.deletionJournal, () =>
+      this.delegate.save(profile)
+    );
   }
 
   inspect(): Promise<LocalProfileStorageUsage> {
@@ -234,6 +246,7 @@ export class DeletionCoordinatedLocalProfileStorageAdapter
 }
 
 export interface LocalDataPreview {
+  readonly additionalCount?: number;
   readonly profileCount: number;
   readonly settingsCount: 0;
   readonly modelCount: number;
@@ -271,6 +284,11 @@ export interface LocalDataControl {
 }
 
 interface LocalDataControlDependencies {
+  readonly introCardStorage?: IntroCardStoragePort;
+  readonly learningStorage?: {
+    inspect(): Promise<{ readonly count: number; readonly bytes: number }>;
+    remove(): Promise<void>;
+  };
   readonly profileStorage: LocalProfileStoragePort;
   readonly modelStorage: LocalModelStoragePort;
   readonly modelContexts: LocalModelContextLeaseRegistry;
@@ -326,14 +344,50 @@ export function createLocalDataControl({
   modelStorage,
   modelContexts,
   deletionJournal,
+  learningStorage,
+  introCardStorage,
 }: LocalDataControlDependencies): LocalDataControl {
   let committedDeletionLease: LocalDataExclusiveLease | null = null;
 
+  async function inspectIntroData(): Promise<{
+    readonly count: number;
+    readonly bytes: number;
+  }> {
+    if (!introCardStorage) return { count: 0, bytes: 0 };
+    const card = await introCardStorage.inspect();
+    let draft: { readonly count: number; readonly bytes: number };
+    if (introCardStorage.inspectDraft)
+      draft = await introCardStorage.inspectDraft();
+    else {
+      const loaded = await introCardStorage.loadDraft();
+      draft = {
+        count: loaded === null ? 0 : 1,
+        bytes:
+          loaded === null
+            ? 0
+            : new TextEncoder().encode(serializeIntroCardDraft(loaded))
+                .byteLength,
+      };
+    }
+    return { count: card.count + draft.count, bytes: card.bytes + draft.bytes };
+  }
   async function preview(): Promise<LocalDataPreview> {
     try {
       const profile = await profileStorage.inspect();
       const model = await modelStorage.inspect();
-      return previewFrom(profile, model);
+      const learning = await learningStorage?.inspect();
+      const intro = await inspectIntroData();
+      return {
+        ...previewFrom(profile, model),
+        ...(intro.count + (learning?.count ?? 0) > 0
+          ? { additionalCount: intro.count + (learning?.count ?? 0) }
+          : {}),
+        totalBytes:
+          profile.bytes +
+          (model?.sizeBytes ?? 0) +
+          (learning?.bytes ?? 0) +
+          intro.bytes,
+      };
     } catch {
       throw storageFailure();
     }
@@ -380,6 +434,14 @@ export function createLocalDataControl({
     try {
       await profileStorage.remove();
       await modelStorage.remove();
+      await learningStorage?.remove();
+      await introCardStorage?.remove();
+      await introCardStorage?.clearDraft();
+      if ((await inspectIntroData()).count !== 0)
+        throw new Error('remaining intro card data');
+      const learningRemaining = await learningStorage?.inspect();
+      if (learningRemaining && learningRemaining.count !== 0)
+        throw new Error('remaining learning data');
       const remaining = await preview();
       if (remaining.profileCount !== 0 || remaining.model !== null) {
         throw new Error('remaining local data');

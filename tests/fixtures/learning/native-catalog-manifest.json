@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "fileName": "native-algorithms.json",
+      "catalogID": "interviewlab.algorithms.derivation",
+      "version": "2026.10.1301",
+      "sha256": "3a01ccb681e0fc5be94cf872dacdfb80139d7a56765314e94ed68dfd4fae2aee",
+      "lessons": 18
+    },
+    {
+      "fileName": "native-foundations.json",
+      "catalogID": "interviewlab.cs-math",
+      "version": "2026.10.1301",
+      "sha256": "c1b7a778335e5efa47f8b1b2825434795724e183832084110363fd932291d1ae",
+      "lessons": 14
+    },
+    {
+      "fileName": "native-design.json",
+      "catalogID": "interviewlab.system-design",
+      "version": "2026.10.1301",
+      "sha256": "60f45ff48cea0d78f8242cefbf09aceaf537e4eff9e22121d9e6f7f658fe0573",
+      "lessons": 6
+    },
+    {
+      "fileName": "native-implementation.json",
+      "catalogID": "interviewlab.algorithms.implementation",
+      "version": "2026.10.1301",
+      "sha256": "8995796aa96b9479ff01ca365d836c4510dc1a7ecc0a4e42bb149ce87981cfad",
+      "lessons": 23
+    },
+    {
+      "fileName": "native-warmups.json",
+      "catalogID": "interviewlab.warmups",
+      "version": "2026.10.1301",
+      "sha256": "1217d2eced9d3def3fa396a99ef14754bd5d55d19a25e4380299439477076e7e",
+      "lessons": 12
+    },
+    {
+      "fileName": "native-interview.json",
+      "catalogID": "interviewlab.interview-practice",
+      "version": "2026.10.1301",
+      "sha256": "cd7c069cafdc87c592bfb6c80f550992c3746bc8036b362cc3e8fc6462aad5c8",
+      "lessons": 14
+    }
+  ]
+}

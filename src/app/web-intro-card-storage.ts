@@ -48,10 +48,18 @@ export class WebIntroCardStorageAdapter implements IntroCardStoragePort {
     }
   }
 
-  async inspect(): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
+  inspect(): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
+    return this.inspectKey(INTRO_CARD_STORAGE_KEY);
+  }
+  inspectDraft(): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
+    return this.inspectKey(INTRO_CARD_DRAFT_STORAGE_KEY);
+  }
+  private async inspectKey(
+    key: string
+  ): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
     if (!this.storage) throw unavailableIntroCardStorageError();
     try {
-      const raw = this.storage.getItem(INTRO_CARD_STORAGE_KEY);
+      const raw = this.storage.getItem(key);
       return raw === null
         ? { count: 0, bytes: 0 }
         : { count: 1, bytes: new TextEncoder().encode(raw).byteLength };

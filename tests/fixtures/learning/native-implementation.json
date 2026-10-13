@@ -1,0 +1,817 @@
+{
+  "schemaVersion": 1,
+  "catalogID": "interviewlab.algorithms.implementation",
+  "version": "2026.10.1301",
+  "title": "アルゴリズム実装・説明",
+  "lessons": [
+    {
+      "id": "pair",
+      "title": "01 / Target Pair",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Hash map · Foundation",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "25分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"pair\",\n  \"title\": \"01 / Target Pair\",\n  \"topic\": \"Hash map\",\n  \"minutes\": 25,\n  \"level\": \"Foundation\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"整数配列 nums と整数 target が与えられます。合計が target となる異なる2要素のインデックスを昇順で返してください。解は最大1つです。なければ [] を返します。\\n制約: 0 ≤ nums.length ≤ 100,000。数値と合計は安全な整数範囲内。入力を変更しないでください。\",\n  \"example\": \"solve([4, 7, 2, 9], 11) → [0, 1]\",\n  \"hint\": \"左から1回走査するとき、すでに見た値から「不足分」を探せますか？\",\n  \"explain\": \"値→インデックスの Map を保持し、target - nums[i] を先に検索してから現在値を登録します。先に登録すると同じ要素を二度使う危険があります。時間 O(n)、追加領域 O(n)。\",\n  \"solution\": \"function solve(nums, target) {\\n  const seen = new Map();\\n  for (let i = 0; i < nums.length; i++) {\\n    const j = seen.get(target - nums[i]);\\n    if (j !== undefined) return [j, i];\\n    seen.set(nums[i], i);\\n  }\\n  return [];\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          4,\n          7,\n          2,\n          9\n        ],\n        11\n      ],\n      \"e\": [\n        0,\n        1\n      ]\n    },\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        6\n      ],\n      \"e\": [\n        0,\n        1\n      ]\n    },\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          0\n        ],\n        0\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          -4,\n          1,\n          9\n        ],\n        5\n      ],\n      \"e\": [\n        0,\n        2\n      ]\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "整数配列 nums と整数 target が与えられます。合計が target となる異なる2要素のインデックスを昇順で返してください。解は最大1つです。なければ [] を返します。\n制約: 0 ≤ nums.length ≤ 100,000。数値と合計は安全な整数範囲内。入力を変更しないでください。\n\nfunction solve(nums, target)\n\n例：solve([4, 7, 2, 9], 11) → [0, 1]",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n値→インデックスの Map を保持し、target - nums[i] を先に検索してから現在値を登録します。先に登録すると同じ要素を二度使う危険があります。時間 O(n)、追加領域 O(n)。",
+          "code": "function solve(nums, target)",
+          "hints": [
+            "左から1回走査するとき、すでに見た値から「不足分」を探せますか？"
+          ],
+          "reference": "function solve(nums, target) {\n  const seen = new Map();\n  for (let i = 0; i < nums.length; i++) {\n    const j = seen.get(target - nums[i]);\n    if (j !== undefined) return [j, i];\n    seen.set(nums[i], i);\n  }\n  return [];\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        4,\n        7,\n        2,\n        9\n      ],\n      11\n    ],\n    \"e\": [\n      0,\n      1\n    ]\n  },\n  {\n    \"a\": [\n      [\n        3,\n        3\n      ],\n      6\n    ],\n    \"e\": [\n      0,\n      1\n    ]\n  },\n  {\n    \"a\": [\n      [],\n      0\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        0\n      ],\n      0\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        -4,\n        1,\n        9\n      ],\n      5\n    ],\n    \"e\": [\n      0,\n      2\n    ]\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "window",
+      "title": "02 / Unique Window",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Sliding window · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"window\",\n  \"title\": \"02 / Unique Window\",\n  \"topic\": \"Sliding window\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"signature\": \"function solve(s)\",\n  \"statement\": \"ASCII 文字列 s の中で、同じ文字を含まない最長連続部分文字列の長さを返してください。\\n制約: 0 ≤ s.length ≤ 100,000。大文字と小文字は区別します。\",\n  \"example\": \"solve(\\\"abcaef\\\") → 5\",\n  \"hint\": \"重複した文字の直前の位置が分かれば、左端をどこまで動かせますか？左端を後ろに戻さないこと。\",\n  \"explain\": \"各文字の最終出現位置を Map に保存します。left = max(left, last + 1) とし、各右端で長さを更新。時間 O(n)、領域 O(min(n, ASCII の種類数))。\",\n  \"solution\": \"function solve(s) {\\n  const last = new Map();\\n  let left = 0, best = 0;\\n  for (let i = 0; i < s.length; i++) {\\n    if (last.has(s[i])) left = Math.max(left, last.get(s[i]) + 1);\\n    last.set(s[i], i);\\n    best = Math.max(best, i - left + 1);\\n  }\\n  return best;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        \"abcaef\"\n      ],\n      \"e\": 5\n    },\n    {\n      \"a\": [\n        \"abba\"\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        \"\"\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        \"aaaa\"\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        \"aA 1\"\n      ],\n      \"e\": 4\n    },\n    {\n      \"a\": [\n        \"dvdf\"\n      ],\n      \"e\": 3\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "ASCII 文字列 s の中で、同じ文字を含まない最長連続部分文字列の長さを返してください。\n制約: 0 ≤ s.length ≤ 100,000。大文字と小文字は区別します。\n\nfunction solve(s)\n\n例：solve(\"abcaef\") → 5",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n各文字の最終出現位置を Map に保存します。left = max(left, last + 1) とし、各右端で長さを更新。時間 O(n)、領域 O(min(n, ASCII の種類数))。",
+          "code": "function solve(s)",
+          "hints": [
+            "重複した文字の直前の位置が分かれば、左端をどこまで動かせますか？左端を後ろに戻さないこと。"
+          ],
+          "reference": "function solve(s) {\n  const last = new Map();\n  let left = 0, best = 0;\n  for (let i = 0; i < s.length; i++) {\n    if (last.has(s[i])) left = Math.max(left, last.get(s[i]) + 1);\n    last.set(s[i], i);\n    best = Math.max(best, i - left + 1);\n  }\n  return best;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      \"abcaef\"\n    ],\n    \"e\": 5\n  },\n  {\n    \"a\": [\n      \"abba\"\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      \"\"\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      \"aaaa\"\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      \"aA 1\"\n    ],\n    \"e\": 4\n  },\n  {\n    \"a\": [\n      \"dvdf\"\n    ],\n    \"e\": 3\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "interval",
+      "title": "03 / Merge Windows",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Intervals · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"interval\",\n  \"title\": \"03 / Merge Windows\",\n  \"topic\": \"Intervals\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"signature\": \"function solve(intervals)\",\n  \"statement\": \"閉区間 [start, end] の配列を統合してください。重なる区間と端点が接する区間を結合し、開始位置の昇順で返します。\\n制約: 0 ≤ intervals.length ≤ 100,000、start ≤ end。入力は未ソートです。入力を変更しないでください。\",\n  \"example\": \"solve([[5,8],[1,3],[3,6]]) → [[1,8]]\",\n  \"hint\": \"開始位置で並べると、比較対象を最後の統合済み区間に絞れます。\",\n  \"explain\": \"コピーをソートし、直前の終了位置以上まで区間が重なれば終了を更新。時間 O(n log n)、追加領域 O(n)。浅い配列コピーだけで内側の配列を変更しないよう注意。\",\n  \"solution\": \"function solve(intervals) {\\n  const sorted = intervals.map(x => [...x]).sort((a,b) => a[0]-b[0]);\\n  const out = [];\\n  for (const [a,b] of sorted) {\\n    const prev = out[out.length-1];\\n    if (prev && a <= prev[1]) prev[1] = Math.max(prev[1], b);\\n    else out.push([a,b]);\\n  }\\n  return out;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          [\n            5,\n            8\n          ],\n          [\n            1,\n            3\n          ],\n          [\n            3,\n            6\n          ]\n        ]\n      ],\n      \"e\": [\n        [\n          1,\n          8\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        []\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            10\n          ],\n          [\n            2,\n            3\n          ]\n        ]\n      ],\n      \"e\": [\n        [\n          1,\n          10\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [\n          [\n            0,\n            0\n          ],\n          [\n            2,\n            2\n          ]\n        ]\n      ],\n      \"e\": [\n        [\n          0,\n          0\n        ],\n        [\n          2,\n          2\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [\n          [\n            2,\n            4\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            9,\n            10\n          ]\n        ]\n      ],\n      \"e\": [\n        [\n          1,\n          4\n        ],\n        [\n          9,\n          10\n        ]\n      ]\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "閉区間 [start, end] の配列を統合してください。重なる区間と端点が接する区間を結合し、開始位置の昇順で返します。\n制約: 0 ≤ intervals.length ≤ 100,000、start ≤ end。入力は未ソートです。入力を変更しないでください。\n\nfunction solve(intervals)\n\n例：solve([[5,8],[1,3],[3,6]]) → [[1,8]]",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\nコピーをソートし、直前の終了位置以上まで区間が重なれば終了を更新。時間 O(n log n)、追加領域 O(n)。浅い配列コピーだけで内側の配列を変更しないよう注意。",
+          "code": "function solve(intervals)",
+          "hints": [
+            "開始位置で並べると、比較対象を最後の統合済み区間に絞れます。"
+          ],
+          "reference": "function solve(intervals) {\n  const sorted = intervals.map(x => [...x]).sort((a,b) => a[0]-b[0]);\n  const out = [];\n  for (const [a,b] of sorted) {\n    const prev = out[out.length-1];\n    if (prev && a <= prev[1]) prev[1] = Math.max(prev[1], b);\n    else out.push([a,b]);\n  }\n  return out;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        [\n          5,\n          8\n        ],\n        [\n          1,\n          3\n        ],\n        [\n          3,\n          6\n        ]\n      ]\n    ],\n    \"e\": [\n      [\n        1,\n        8\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      []\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        [\n          1,\n          10\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    ],\n    \"e\": [\n      [\n        1,\n        10\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      [\n        [\n          0,\n          0\n        ],\n        [\n          2,\n          2\n        ]\n      ]\n    ],\n    \"e\": [\n      [\n        0,\n        0\n      ],\n      [\n        2,\n        2\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      [\n        [\n          2,\n          4\n        ],\n        [\n          1,\n          2\n        ],\n        [\n          9,\n          10\n        ]\n      ]\n    ],\n    \"e\": [\n      [\n        1,\n        4\n      ],\n      [\n        9,\n        10\n      ]\n    ]\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "title": "04 / First At Least",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Binary search · Foundation",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "25分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"search\",\n  \"title\": \"04 / First At Least\",\n  \"topic\": \"Binary search\",\n  \"minutes\": 25,\n  \"level\": \"Foundation\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"昇順（重複あり）の nums で、target 以上の値が初めて出現するインデックスを返してください。存在しなければ nums.length を返します。\\n制約: 0 ≤ nums.length ≤ 1,000,000。時間 O(log n) を目指してください。\",\n  \"example\": \"solve([1,3,3,8], 3) → 1\",\n  \"hint\": \"[lo, hi) の半開区間を使い、答えが常に範囲内または hi にある不変条件を説明してください。\",\n  \"explain\": \"lo=0, hi=n。nums[mid] >= target なら hi=mid、そうでなければ lo=mid+1。lo==hi で終了。時間 O(log n)、領域 O(1)。小さなテストの通過だけでは計算量は証明できません。\",\n  \"solution\": \"function solve(nums, target) {\\n  let lo = 0, hi = nums.length;\\n  while (lo < hi) {\\n    const mid = lo + Math.floor((hi-lo)/2);\\n    if (nums[mid] >= target) hi = mid;\\n    else lo = mid + 1;\\n  }\\n  return lo;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          3,\n          3,\n          8\n        ],\n        3\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [],\n        2\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2\n        ],\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2,\n          2\n        ],\n        1\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          4,\n          7\n        ],\n        5\n      ],\n      \"e\": 2\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "昇順（重複あり）の nums で、target 以上の値が初めて出現するインデックスを返してください。存在しなければ nums.length を返します。\n制約: 0 ≤ nums.length ≤ 1,000,000。時間 O(log n) を目指してください。\n\nfunction solve(nums, target)\n\n例：solve([1,3,3,8], 3) → 1",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\nlo=0, hi=n。nums[mid] >= target なら hi=mid、そうでなければ lo=mid+1。lo==hi で終了。時間 O(log n)、領域 O(1)。小さなテストの通過だけでは計算量は証明できません。",
+          "code": "function solve(nums, target)",
+          "hints": [
+            "[lo, hi) の半開区間を使い、答えが常に範囲内または hi にある不変条件を説明してください。"
+          ],
+          "reference": "function solve(nums, target) {\n  let lo = 0, hi = nums.length;\n  while (lo < hi) {\n    const mid = lo + Math.floor((hi-lo)/2);\n    if (nums[mid] >= target) hi = mid;\n    else lo = mid + 1;\n  }\n  return lo;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        3,\n        3,\n        8\n      ],\n      3\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      [],\n      2\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        1,\n        2\n      ],\n      3\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        2,\n        2,\n        2\n      ],\n      1\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        1,\n        4,\n        7\n      ],\n      5\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "title": "05 / Shortest Hops",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Graph / BFS · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "35分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"graph\",\n  \"title\": \"05 / Shortest Hops\",\n  \"topic\": \"Graph / BFS\",\n  \"minutes\": 35,\n  \"level\": \"Core\",\n  \"signature\": \"function solve(graph, start, goal)\",\n  \"statement\": \"graph はノード 0〜n-1 の有向・非重み付きグラフの隣接リストです。start から goal への最短辺数を返し、到達できなければ -1 を返してください。\\n制約: 1 ≤ n ≤ 100,000。辺数 ≤ 200,000。start, goal は有効。自己ループやサイクルがあります。\",\n  \"example\": \"solve([[1,2],[3],[3],[]], 0, 3) → 2\",\n  \"hint\": \"最短の辺数を探すには幅優先探索。いつ訪問済みを付けると重複追加を避けられますか？\",\n  \"explain\": \"BFS でキュー追加時に距離を記録。Array.shift() の反復ではなく head インデックスを進める。時間 O(V+E)、領域 O(V)。\",\n  \"solution\": \"function solve(graph, start, goal) {\\n  const dist = Array(graph.length).fill(-1);\\n  const q = [start]; dist[start] = 0;\\n  for (let head=0; head<q.length; head++) {\\n    const u=q[head];\\n    if (u===goal) return dist[u];\\n    for (const v of graph[u]) if (dist[v]===-1) {\\n      dist[v]=dist[u]+1; q.push(v);\\n    }\\n  }\\n  return -1;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            3\n          ],\n          [\n            3\n          ],\n          []\n        ],\n        0,\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            1\n          ],\n          [\n            0\n          ],\n          []\n        ],\n        0,\n        2\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [\n          []\n        ],\n        0,\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          [\n            0,\n            1\n          ],\n          [\n            2\n          ],\n          []\n        ],\n        0,\n        2\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            3\n          ],\n          [\n            4\n          ],\n          [\n            4\n          ],\n          []\n        ],\n        0,\n        4\n      ],\n      \"e\": 2\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "graph はノード 0〜n-1 の有向・非重み付きグラフの隣接リストです。start から goal への最短辺数を返し、到達できなければ -1 を返してください。\n制約: 1 ≤ n ≤ 100,000。辺数 ≤ 200,000。start, goal は有効。自己ループやサイクルがあります。\n\nfunction solve(graph, start, goal)\n\n例：solve([[1,2],[3],[3],[]], 0, 3) → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\nBFS でキュー追加時に距離を記録。Array.shift() の反復ではなく head インデックスを進める。時間 O(V+E)、領域 O(V)。",
+          "code": "function solve(graph, start, goal)",
+          "hints": [
+            "最短の辺数を探すには幅優先探索。いつ訪問済みを付けると重複追加を避けられますか？"
+          ],
+          "reference": "function solve(graph, start, goal) {\n  const dist = Array(graph.length).fill(-1);\n  const q = [start]; dist[start] = 0;\n  for (let head=0; head<q.length; head++) {\n    const u=q[head];\n    if (u===goal) return dist[u];\n    for (const v of graph[u]) if (dist[v]===-1) {\n      dist[v]=dist[u]+1; q.push(v);\n    }\n  }\n  return -1;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        [\n          1,\n          2\n        ],\n        [\n          3\n        ],\n        [\n          3\n        ],\n        []\n      ],\n      0,\n      3\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        [\n          1\n        ],\n        [\n          0\n        ],\n        []\n      ],\n      0,\n      2\n    ],\n    \"e\": -1\n  },\n  {\n    \"a\": [\n      [\n        []\n      ],\n      0,\n      0\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        [\n          0,\n          1\n        ],\n        [\n          2\n        ],\n        []\n      ],\n      0,\n      2\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        [\n          1,\n          2\n        ],\n        [\n          3\n        ],\n        [\n          4\n        ],\n        [\n          4\n        ],\n        []\n      ],\n      0,\n      4\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "dp",
+      "title": "06 / Fewest Tokens",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Dynamic programming · Stretch",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "35分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"dp\",\n  \"title\": \"06 / Fewest Tokens\",\n  \"topic\": \"Dynamic programming\",\n  \"minutes\": 35,\n  \"level\": \"Stretch\",\n  \"signature\": \"function solve(coins, amount)\",\n  \"statement\": \"正整数の異なる額面 coins を何度でも使って amount を作ります。必要な最少枚数を返し、作れなければ -1 を返してください。\\n制約: 0 ≤ amount ≤ 10,000、0 ≤ coins.length ≤ 100。coins の要素は 1〜10,000。amount=0 なら 0。\",\n  \"example\": \"solve([1,3,4], 6) → 2\",\n  \"hint\": \"最大の額面から選ぶ貪欲法は [1,3,4],6 で失敗します。dp[x] を「x を作る最少枚数」とすると？\",\n  \"explain\": \"dp[0]=0、他は Infinity。各 x について dp[x]=min(dp[x-c]+1)。時間 O(amount × coins.length)、領域 O(amount)。到達不可能状態を区別します。\",\n  \"solution\": \"function solve(coins, amount) {\\n  const dp = Array(amount+1).fill(Infinity); dp[0]=0;\\n  for (let x=1; x<=amount; x++) {\\n    for (const c of coins) if (c<=x) dp[x]=Math.min(dp[x], dp[x-c]+1);\\n  }\\n  return Number.isFinite(dp[amount]) ? dp[amount] : -1;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          3,\n          4\n        ],\n        6\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          2\n        ],\n        3\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [\n          2\n        ],\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [],\n        5\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [\n          2,\n          5\n        ],\n        11\n      ],\n      \"e\": 4\n    },\n    {\n      \"a\": [\n        [\n          7\n        ],\n        14\n      ],\n      \"e\": 2\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "正整数の異なる額面 coins を何度でも使って amount を作ります。必要な最少枚数を返し、作れなければ -1 を返してください。\n制約: 0 ≤ amount ≤ 10,000、0 ≤ coins.length ≤ 100。coins の要素は 1〜10,000。amount=0 なら 0。\n\nfunction solve(coins, amount)\n\n例：solve([1,3,4], 6) → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\ndp[0]=0、他は Infinity。各 x について dp[x]=min(dp[x-c]+1)。時間 O(amount × coins.length)、領域 O(amount)。到達不可能状態を区別します。",
+          "code": "function solve(coins, amount)",
+          "hints": [
+            "最大の額面から選ぶ貪欲法は [1,3,4],6 で失敗します。dp[x] を「x を作る最少枚数」とすると？"
+          ],
+          "reference": "function solve(coins, amount) {\n  const dp = Array(amount+1).fill(Infinity); dp[0]=0;\n  for (let x=1; x<=amount; x++) {\n    for (const c of coins) if (c<=x) dp[x]=Math.min(dp[x], dp[x-c]+1);\n  }\n  return Number.isFinite(dp[amount]) ? dp[amount] : -1;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        3,\n        4\n      ],\n      6\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        2\n      ],\n      3\n    ],\n    \"e\": -1\n  },\n  {\n    \"a\": [\n      [\n        2\n      ],\n      0\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [],\n      5\n    ],\n    \"e\": -1\n  },\n  {\n    \"a\": [\n      [\n        2,\n        5\n      ],\n      11\n    ],\n    \"e\": 4\n  },\n  {\n    \"a\": [\n      [\n        7\n      ],\n      14\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "stack",
+      "title": "07 / Balanced Stream",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Stack · Foundation",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "20分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"stack\",\n  \"title\": \"07 / Balanced Stream\",\n  \"topic\": \"Stack\",\n  \"minutes\": 20,\n  \"level\": \"Foundation\",\n  \"signature\": \"function solve(s)\",\n  \"statement\": \"文字 ()[]{} だけからなる s の括弧が正しく対応しているかを boolean で返してください。空文字列は true。\\n制約: 0 ≤ s.length ≤ 100,000。\",\n  \"example\": \"solve(\\\"([]{})\\\") → true\",\n  \"hint\": \"最後に開いた括弧が最初に閉じる必要があります。\",\n  \"explain\": \"開始括弧をスタックへ。終了括弧では対応する開始括弧が pop されるか確認し、最後に空かを見る。時間 O(n)、領域 O(n)。\",\n  \"solution\": \"function solve(s) {\\n  const st=[], pairs={\\\")\\\":\\\"(\\\",\\\"]\\\":\\\"[\\\",\\\"}\\\":\\\"{\\\"};\\n  for (const c of s) {\\n    if (\\\"([{\\\".includes(c)) st.push(c);\\n    else if (st.pop()!==pairs[c]) return false;\\n  }\\n  return st.length===0;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        \"([]{})\"\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        \"([)]\"\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        \"\"\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        \"(\"\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        \")(\"\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        \"{}[]()\"\n      ],\n      \"e\": true\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "文字 ()[]{} だけからなる s の括弧が正しく対応しているかを boolean で返してください。空文字列は true。\n制約: 0 ≤ s.length ≤ 100,000。\n\nfunction solve(s)\n\n例：solve(\"([]{})\") → true",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n開始括弧をスタックへ。終了括弧では対応する開始括弧が pop されるか確認し、最後に空かを見る。時間 O(n)、領域 O(n)。",
+          "code": "function solve(s)",
+          "hints": ["最後に開いた括弧が最初に閉じる必要があります。"],
+          "reference": "function solve(s) {\n  const st=[], pairs={\")\":\"(\",\"]\":\"[\",\"}\":\"{\"};\n  for (const c of s) {\n    if (\"([{\".includes(c)) st.push(c);\n    else if (st.pop()!==pairs[c]) return false;\n  }\n  return st.length===0;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      \"([]{})\"\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      \"([)]\"\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      \"\"\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      \"(\"\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      \")(\"\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      \"{}[]()\"\n    ],\n    \"e\": true\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "tree",
+      "title": "08 / Tree Height",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Tree / DFS · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "25分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"tree\",\n  \"title\": \"08 / Tree Height\",\n  \"topic\": \"Tree / DFS\",\n  \"minutes\": 25,\n  \"level\": \"Core\",\n  \"signature\": \"function solve(root)\",\n  \"statement\": \"二分木 root の最大深さを返してください。ノードの形式は { val, left, right }、子がなければ null。空木の深さは 0、根だけなら 1 です。\\n制約: ノード数 ≤ 10,000。深い偏った木でもスタックオーバーフローしない方法を考えてください。\",\n  \"example\": \"solve({val:1,left:{val:2,left:null,right:null},right:null}) → 2\",\n  \"hint\": \"明示的なスタックに [node, depth] を積むと再帰の深さ制限を避けられます。\",\n  \"explain\": \"反復 DFS で深さを保持して最大値を更新。時間 O(n)、領域 O(h)（二分木のDFSの保留ノード数、最悪 O(n)）。\",\n  \"solution\": \"function solve(root) {\\n  if (!root) return 0;\\n  const stack=[[root,1]]; let best=0;\\n  while(stack.length) {\\n    const [node,d]=stack.pop(); best=Math.max(best,d);\\n    if(node.left) stack.push([node.left,d+1]);\\n    if(node.right) stack.push([node.right,d+1]);\\n  }\\n  return best;\\n}\",\n  \"tests\": [\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": null,\n          \"right\": null\n        }\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": null\n        }\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": null,\n          \"right\": {\n            \"val\": 2,\n            \"left\": {\n              \"val\": 3,\n              \"left\": null,\n              \"right\": null\n            },\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": 3\n    }\n  ],\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "二分木 root の最大深さを返してください。ノードの形式は { val, left, right }、子がなければ null。空木の深さは 0、根だけなら 1 です。\n制約: ノード数 ≤ 10,000。深い偏った木でもスタックオーバーフローしない方法を考えてください。\n\nfunction solve(root)\n\n例：solve({val:1,left:{val:2,left:null,right:null},right:null}) → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n反復 DFS で深さを保持して最大値を更新。時間 O(n)、領域 O(h)（二分木のDFSの保留ノード数、最悪 O(n)）。",
+          "code": "function solve(root)",
+          "hints": [
+            "明示的なスタックに [node, depth] を積むと再帰の深さ制限を避けられます。"
+          ],
+          "reference": "function solve(root) {\n  if (!root) return 0;\n  const stack=[[root,1]]; let best=0;\n  while(stack.length) {\n    const [node,d]=stack.pop(); best=Math.max(best,d);\n    if(node.left) stack.push([node.left,d+1]);\n    if(node.right) stack.push([node.right,d+1]);\n  }\n  return best;\n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      null\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": null,\n        \"right\": null\n      }\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": {\n          \"val\": 2,\n          \"left\": null,\n          \"right\": null\n        },\n        \"right\": null\n      }\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": null,\n        \"right\": {\n          \"val\": 2,\n          \"left\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": null\n        }\n      }\n    ],\n    \"e\": 3\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-complement",
+      "title": "01 / 不足分を覚える",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Hash / complement · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-complement\",\n  \"title\": \"01 / 不足分を覚える\",\n  \"topic\": \"Hash / complement\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-complement\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"整数配列から和がtargetになる異なる2要素の位置を返す。右側の位置が最小のペアを選び、左側も最小にする。なければ []。長さ0〜100000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([4,7,2,9],11) → [0,1]\",\n  \"hint\": \"Mapは過去だけを表す。検索してから登録し、既存値は上書きしない。同じ位置を再使用せず、同値なら最初の位置を残す。期待時間O(n)、領域O(n)。\",\n  \"explain\": \"過去の不足分をMap検索。検索→初回のみ登録の順が正しさを守る。Mapを平均O(1)として期待O(n)、領域O(n)。\",\n  \"solution\": \"function solve(nums,target){const m=new Map();for(let i=0;i<nums.length;i++){const y=target-nums[i];if(m.has(y))return [m.get(y),i];if(!m.has(nums[i]))m.set(nums[i],i)}return []}\",\n  \"starter\": \"function solve(nums, target) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          4,\n          7,\n          2,\n          9\n        ],\n        11\n      ],\n      \"e\": [\n        0,\n        1\n      ]\n    },\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        6\n      ],\n      \"e\": [\n        0,\n        1\n      ]\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          4,\n          7,\n          2,\n          9\n        ],\n        11\n      ],\n      \"e\": [\n        0,\n        1\n      ]\n    },\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        6\n      ],\n      \"e\": [\n        0,\n        1\n      ]\n    },\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          0\n        ],\n        0\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2,\n          5\n        ],\n        7\n      ],\n      \"e\": [\n        0,\n        2\n      ]\n    },\n    {\n      \"a\": [\n        [\n          -4,\n          1,\n          9\n        ],\n        5\n      ],\n      \"e\": [\n        0,\n        2\n      ]\n    }\n  ],\n  \"complexity\": \"期待時間 O(n)、追加領域 O(n)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          0\n        ],\n        0\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2,\n          5\n        ],\n        7\n      ],\n      \"e\": [\n        0,\n        2\n      ]\n    },\n    {\n      \"a\": [\n        [\n          -4,\n          1,\n          9\n        ],\n        5\n      ],\n      \"e\": [\n        0,\n        2\n      ]\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "整数配列から和がtargetになる異なる2要素の位置を返す。右側の位置が最小のペアを選び、左側も最小にする。なければ []。長さ0〜100000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, target)\n\n例：solve([4,7,2,9],11) → [0,1]",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n過去の不足分をMap検索。検索→初回のみ登録の順が正しさを守る。Mapを平均O(1)として期待O(n)、領域O(n)。",
+          "code": "function solve(nums, target) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "Mapは過去だけを表す。検索してから登録し、既存値は上書きしない。同じ位置を再使用せず、同値なら最初の位置を残す。期待時間O(n)、領域O(n)。"
+          ],
+          "reference": "function solve(nums,target){const m=new Map();for(let i=0;i<nums.length;i++){const y=target-nums[i];if(m.has(y))return [m.get(y),i];if(!m.has(nums[i]))m.set(nums[i],i)}return []}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        4,\n        7,\n        2,\n        9\n      ],\n      11\n    ],\n    \"e\": [\n      0,\n      1\n    ]\n  },\n  {\n    \"a\": [\n      [\n        3,\n        3\n      ],\n      6\n    ],\n    \"e\": [\n      0,\n      1\n    ]\n  },\n  {\n    \"a\": [\n      [],\n      0\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        0\n      ],\n      0\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        2,\n        2,\n        5\n      ],\n      7\n    ],\n    \"e\": [\n      0,\n      2\n    ]\n  },\n  {\n    \"a\": [\n      [\n        -4,\n        1,\n        9\n      ],\n      5\n    ],\n    \"e\": [\n      0,\n      2\n    ]\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-two-pointers",
+      "title": "02 / 両端から候補を捨てる",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Two pointers · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-two-pointers\",\n  \"title\": \"02 / 両端から候補を捨てる\",\n  \"topic\": \"Two pointers\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-two-pointers\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"昇順整数配列numsで、異なる2要素の和がtargetになるかbooleanを返す。重複可、長さ0〜100000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([1,2,4,7],9) → true\",\n  \"hint\": \"和が小さいと左を、大きいと右を1つ進める。昇順による大小関係が根拠。入力が未ソートならこのままでは使えず、ソート時間や元位置保持も必要。\",\n  \"explain\": \"残りの最小と最大を組み、成立しない端だけ除外する。両端は高々n回動く。\",\n  \"solution\": \"function solve(nums,target){let l=0,r=nums.length-1;while(l<r){const s=nums[l]+nums[r];if(s===target)return true;if(s<target)l++;else r--}return false}\",\n  \"starter\": \"function solve(nums, target) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          4,\n          7\n        ],\n        9\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          4\n        ],\n        8\n      ],\n      \"e\": false\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          4,\n          7\n        ],\n        9\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          4\n        ],\n        8\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        [\n          3\n        ],\n        6\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        6\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        [\n          -5,\n          -1,\n          3,\n          9\n        ],\n        4\n      ],\n      \"e\": true\n    }\n  ],\n  \"complexity\": \"時間 O(n)、追加領域 O(1)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        [\n          3\n        ],\n        6\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        6\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        [\n          -5,\n          -1,\n          3,\n          9\n        ],\n        4\n      ],\n      \"e\": true\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "昇順整数配列numsで、異なる2要素の和がtargetになるかbooleanを返す。重複可、長さ0〜100000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, target)\n\n例：solve([1,2,4,7],9) → true",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n残りの最小と最大を組み、成立しない端だけ除外する。両端は高々n回動く。",
+          "code": "function solve(nums, target) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "和が小さいと左を、大きいと右を1つ進める。昇順による大小関係が根拠。入力が未ソートならこのままでは使えず、ソート時間や元位置保持も必要。"
+          ],
+          "reference": "function solve(nums,target){let l=0,r=nums.length-1;while(l<r){const s=nums[l]+nums[r];if(s===target)return true;if(s<target)l++;else r--}return false}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        2,\n        4,\n        7\n      ],\n      9\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      [\n        1,\n        2,\n        4\n      ],\n      8\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      [],\n      0\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      [\n        3\n      ],\n      6\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      [\n        3,\n        3\n      ],\n      6\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      [\n        -5,\n        -1,\n        3,\n        9\n      ],\n      4\n    ],\n    \"e\": true\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-window",
+      "title": "03 / 連続区間を保つ",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Sliding window · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-window\",\n  \"title\": \"03 / 連続区間を保つ\",\n  \"topic\": \"Sliding window\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-window\",\n  \"signature\": \"function solve(nums, limit)\",\n  \"statement\": \"非負整数配列numsの、和がlimit以下の最長連続区間の長さ。limitも非負整数。長さ0〜100000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([2,1,3,2],4) → 2\",\n  \"hint\": \"縮めた後はsum≤limit。捨てた開始位置は後の右端でも復活しない。負数ありの [5,-4], limit=1 では5を捨てると長さ2の正解を失う。負数を含む和には別の手段を検討する。\",\n  \"explain\": \"非負条件により一度捨てた左端は戻す必要がない。各要素は1回追加、最大1回削除。\",\n  \"solution\": \"function solve(nums,limit){let l=0,sum=0,best=0;for(let r=0;r<nums.length;r++){sum+=nums[r];while(sum>limit)sum-=nums[l++];best=Math.max(best,r-l+1)}return best}\",\n  \"starter\": \"function solve(nums, limit) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          2,\n          1,\n          3,\n          2\n        ],\n        4\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          0,\n          0,\n          0\n        ],\n        0\n      ],\n      \"e\": 3\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          2,\n          1,\n          3,\n          2\n        ],\n        4\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          0,\n          0,\n          0\n        ],\n        0\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [],\n        2\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          5\n        ],\n        1\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          1,\n          1\n        ],\n        3\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [\n          4,\n          0,\n          1,\n          0\n        ],\n        1\n      ],\n      \"e\": 3\n    }\n  ],\n  \"complexity\": \"時間 O(n)、追加領域 O(1)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [],\n        2\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          5\n        ],\n        1\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          1,\n          1\n        ],\n        3\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [\n          4,\n          0,\n          1,\n          0\n        ],\n        1\n      ],\n      \"e\": 3\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "非負整数配列numsの、和がlimit以下の最長連続区間の長さ。limitも非負整数。長さ0〜100000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, limit)\n\n例：solve([2,1,3,2],4) → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n非負条件により一度捨てた左端は戻す必要がない。各要素は1回追加、最大1回削除。",
+          "code": "function solve(nums, limit) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "縮めた後はsum≤limit。捨てた開始位置は後の右端でも復活しない。負数ありの [5,-4], limit=1 では5を捨てると長さ2の正解を失う。負数を含む和には別の手段を検討する。"
+          ],
+          "reference": "function solve(nums,limit){let l=0,sum=0,best=0;for(let r=0;r<nums.length;r++){sum+=nums[r];while(sum>limit)sum-=nums[l++];best=Math.max(best,r-l+1)}return best}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        2,\n        1,\n        3,\n        2\n      ],\n      4\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        0,\n        0,\n        0\n      ],\n      0\n    ],\n    \"e\": 3\n  },\n  {\n    \"a\": [\n      [],\n      2\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        5\n      ],\n      1\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        1,\n        1,\n        1\n      ],\n      3\n    ],\n    \"e\": 3\n  },\n  {\n    \"a\": [\n      [\n        4,\n        0,\n        1,\n        0\n      ],\n      1\n    ],\n    \"e\": 3\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-prefix",
+      "title": "04 / 区間の和を差にする",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Prefix sum / frequency · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-prefix\",\n  \"title\": \"04 / 区間の和を差にする\",\n  \"topic\": \"Prefix sum / frequency\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-prefix\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"負数を含む整数配列numsで、和がtargetとなる空でない連続区間の個数。長さ0〜100000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([1,-1,1],1) → 3\",\n  \"hint\": \"P[r]−P[l]=target を変形。過去の累積和→頻度をMapに持つ。初期0を1回登録。現在の累積和を数えた後に登録し空区間を除く。\",\n  \"explain\": \"累積和の差を不足分の頻度検索へ変える。負数でも成立し、大小の単調性に依存しない。\",\n  \"solution\": \"function solve(nums,target){let p=0,ans=0;const f=new Map([[0,1]]);for(const x of nums){p+=x;ans+=f.get(p-target)||0;f.set(p,(f.get(p)||0)+1)}return ans}\",\n  \"starter\": \"function solve(nums, target) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          1,\n          -1,\n          1\n        ],\n        1\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [\n          0,\n          0\n        ],\n        0\n      ],\n      \"e\": 3\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          -1,\n          1\n        ],\n        1\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [\n          0,\n          0\n        ],\n        0\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          5,\n          -4\n        ],\n        1\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          3\n        ],\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          -1,\n          -1,\n          1\n        ],\n        -1\n      ],\n      \"e\": 3\n    }\n  ],\n  \"complexity\": \"期待時間 O(n)、追加領域 O(n)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          5,\n          -4\n        ],\n        1\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          3\n        ],\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          -1,\n          -1,\n          1\n        ],\n        -1\n      ],\n      \"e\": 3\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "負数を含む整数配列numsで、和がtargetとなる空でない連続区間の個数。長さ0〜100000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, target)\n\n例：solve([1,-1,1],1) → 3",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n累積和の差を不足分の頻度検索へ変える。負数でも成立し、大小の単調性に依存しない。",
+          "code": "function solve(nums, target) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "P[r]−P[l]=target を変形。過去の累積和→頻度をMapに持つ。初期0を1回登録。現在の累積和を数えた後に登録し空区間を除く。"
+          ],
+          "reference": "function solve(nums,target){let p=0,ans=0;const f=new Map([[0,1]]);for(const x of nums){p+=x;ans+=f.get(p-target)||0;f.set(p,(f.get(p)||0)+1)}return ans}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        -1,\n        1\n      ],\n      1\n    ],\n    \"e\": 3\n  },\n  {\n    \"a\": [\n      [\n        0,\n        0\n      ],\n      0\n    ],\n    \"e\": 3\n  },\n  {\n    \"a\": [\n      [],\n      0\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        5,\n        -4\n      ],\n      1\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      [\n        1,\n        2,\n        3\n      ],\n      3\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        -1,\n        -1,\n        1\n      ],\n      -1\n    ],\n    \"e\": 3\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-binary",
+      "title": "05 / 成立する境界を探す",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Binary search · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-binary\",\n  \"title\": \"05 / 成立する境界を探す\",\n  \"topic\": \"Binary search\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-binary\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"昇順配列numsでtarget以上の最初の位置。なければ長さを返す。重複可、長さ0〜1000000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([1,3,3,8],3) → 1\",\n  \"hint\": \"判定はfalse…trueと単調。mid成立ならhi=mid、不成立ならlo=mid+1。hi=nは要素でなく「該当なし」の番兵。未確定要素[lo,hi)が毎回縮む。\",\n  \"explain\": \"成立が単調であることと答えを捨てない更新が核心。区間の縮小も証明する。\",\n  \"solution\": \"function solve(nums,target){let lo=0,hi=nums.length;while(lo<hi){const mid=lo+Math.floor((hi-lo)/2);if(nums[mid]>=target)hi=mid;else lo=mid+1}return lo}\",\n  \"starter\": \"function solve(nums, target) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          1,\n          3,\n          3,\n          8\n        ],\n        3\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [],\n        3\n      ],\n      \"e\": 0\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          3,\n          3,\n          8\n        ],\n        3\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [],\n        3\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        3\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2\n        ],\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          2\n        ],\n        1\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          4,\n          7\n        ],\n        5\n      ],\n      \"e\": 2\n    }\n  ],\n  \"complexity\": \"時間 O(log(n+1))、追加領域 O(1)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [\n          3,\n          3\n        ],\n        3\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2\n        ],\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          2\n        ],\n        1\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          1,\n          4,\n          7\n        ],\n        5\n      ],\n      \"e\": 2\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "昇順配列numsでtarget以上の最初の位置。なければ長さを返す。重複可、長さ0〜1000000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, target)\n\n例：solve([1,3,3,8],3) → 1",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n成立が単調であることと答えを捨てない更新が核心。区間の縮小も証明する。",
+          "code": "function solve(nums, target) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "判定はfalse…trueと単調。mid成立ならhi=mid、不成立ならlo=mid+1。hi=nは要素でなく「該当なし」の番兵。未確定要素[lo,hi)が毎回縮む。"
+          ],
+          "reference": "function solve(nums,target){let lo=0,hi=nums.length;while(lo<hi){const mid=lo+Math.floor((hi-lo)/2);if(nums[mid]>=target)hi=mid;else lo=mid+1}return lo}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        3,\n        3,\n        8\n      ],\n      3\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      [],\n      3\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        3,\n        3\n      ],\n      3\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        1,\n        2\n      ],\n      3\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        2\n      ],\n      1\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        1,\n        4,\n        7\n      ],\n      5\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-stack",
+      "title": "06 / 未解決の候補を積む",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Monotonic stack · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-stack\",\n  \"title\": \"06 / 未解決の候補を積む\",\n  \"topic\": \"Monotonic stack\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-stack\",\n  \"signature\": \"function solve(nums)\",\n  \"statement\": \"各位置について、右側で最初に自分より大きい値が現れるまでの位置の差を返す。なければ0。同値は大きいと見なさない。長さ0〜100000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([3,1,4,4,2,5]) → [2,1,3,2,1,0]\",\n  \"hint\": \"新しい値より小さい末尾をpopし答えを確定、その後現在位置をpush。同値は残す。popされた位置はそれまで大きい値に出会っていないため、現在が最初。\",\n  \"explain\": \"未解決位置を非増加スタックに保つ。二重ループでも各要素は1回だけpopされるため償却O(n)。\",\n  \"solution\": \"function solve(nums){const a=Array(nums.length).fill(0),st=[];for(let i=0;i<nums.length;i++){while(st.length&&nums[st[st.length-1]]<nums[i]){const j=st.pop();a[j]=i-j}st.push(i)}return a}\",\n  \"starter\": \"function solve(nums) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          3,\n          1,\n          4,\n          4,\n          2,\n          5\n        ]\n      ],\n      \"e\": [\n        2,\n        1,\n        3,\n        2,\n        1,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2\n        ]\n      ],\n      \"e\": [\n        0,\n        0\n      ]\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          3,\n          1,\n          4,\n          4,\n          2,\n          5\n        ]\n      ],\n      \"e\": [\n        2,\n        1,\n        3,\n        2,\n        1,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2\n        ]\n      ],\n      \"e\": [\n        0,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        []\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          4,\n          3,\n          2,\n          1\n        ]\n      ],\n      \"e\": [\n        0,\n        0,\n        0,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          3\n        ]\n      ],\n      \"e\": [\n        1,\n        1,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        [\n          -2,\n          -3,\n          -1\n        ]\n      ],\n      \"e\": [\n        2,\n        1,\n        0\n      ]\n    }\n  ],\n  \"complexity\": \"時間 O(n)、追加領域 O(n)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        []\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          4,\n          3,\n          2,\n          1\n        ]\n      ],\n      \"e\": [\n        0,\n        0,\n        0,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          3\n        ]\n      ],\n      \"e\": [\n        1,\n        1,\n        0\n      ]\n    },\n    {\n      \"a\": [\n        [\n          -2,\n          -3,\n          -1\n        ]\n      ],\n      \"e\": [\n        2,\n        1,\n        0\n      ]\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "各位置について、右側で最初に自分より大きい値が現れるまでの位置の差を返す。なければ0。同値は大きいと見なさない。長さ0〜100000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums)\n\n例：solve([3,1,4,4,2,5]) → [2,1,3,2,1,0]",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n未解決位置を非増加スタックに保つ。二重ループでも各要素は1回だけpopされるため償却O(n)。",
+          "code": "function solve(nums) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "新しい値より小さい末尾をpopし答えを確定、その後現在位置をpush。同値は残す。popされた位置はそれまで大きい値に出会っていないため、現在が最初。"
+          ],
+          "reference": "function solve(nums){const a=Array(nums.length).fill(0),st=[];for(let i=0;i<nums.length;i++){while(st.length&&nums[st[st.length-1]]<nums[i]){const j=st.pop();a[j]=i-j}st.push(i)}return a}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        3,\n        1,\n        4,\n        4,\n        2,\n        5\n      ]\n    ],\n    \"e\": [\n      2,\n      1,\n      3,\n      2,\n      1,\n      0\n    ]\n  },\n  {\n    \"a\": [\n      [\n        2,\n        2\n      ]\n    ],\n    \"e\": [\n      0,\n      0\n    ]\n  },\n  {\n    \"a\": [\n      []\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        4,\n        3,\n        2,\n        1\n      ]\n    ],\n    \"e\": [\n      0,\n      0,\n      0,\n      0\n    ]\n  },\n  {\n    \"a\": [\n      [\n        1,\n        2,\n        3\n      ]\n    ],\n    \"e\": [\n      1,\n      1,\n      0\n    ]\n  },\n  {\n    \"a\": [\n      [\n        -2,\n        -3,\n        -1\n      ]\n    ],\n    \"e\": [\n      2,\n      1,\n      0\n    ]\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-linked",
+      "title": "07 / 参照を切る前に保存する",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Linked list · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-linked\",\n  \"title\": \"07 / 参照を切る前に保存する\",\n  \"topic\": \"Linked list\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-linked\",\n  \"signature\": \"function solve(head)\",\n  \"statement\": \"循環のない単方向連結リスト{val,next}を反転し、新しい先頭を返す。末尾nextはnull、空はnull。長さ0〜10000。この問題では既存ノードのnextを書き換えてよい。新しいノードや配列を作らず反転する。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"1 → 2 → 3 → null を 3 → 2 → 1 → null にする\",\n  \"hint\": \"next=cur.nextを先に保存、cur.next=prev、prev=cur、cur=next。分割された2つの鎖で全ノードを保持。curがnullならprevが全体。\",\n  \"explain\": \"次への参照を保存してから反転する。出力値だけの採点ではノード再利用を証明できないため、ノード生成の有無は自己レビューも行う。\",\n  \"solution\": \"function solve(head){let prev=null,cur=head;while(cur){const next=cur.next;cur.next=prev;prev=cur;cur=next}return prev}\",\n  \"starter\": \"function solve(head) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 2,\n            \"next\": null\n          }\n        }\n      ],\n      \"e\": {\n        \"val\": 2,\n        \"next\": {\n          \"val\": 1,\n          \"next\": null\n        }\n      }\n    },\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": null\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 2,\n            \"next\": null\n          }\n        }\n      ],\n      \"e\": {\n        \"val\": 2,\n        \"next\": {\n          \"val\": 1,\n          \"next\": null\n        }\n      }\n    },\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": null\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 7,\n          \"next\": null\n        }\n      ],\n      \"e\": {\n        \"val\": 7,\n        \"next\": null\n      }\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 1,\n            \"next\": {\n              \"val\": 2,\n              \"next\": null\n            }\n          }\n        }\n      ],\n      \"e\": {\n        \"val\": 2,\n        \"next\": {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 1,\n            \"next\": null\n          }\n        }\n      }\n    }\n  ],\n  \"complexity\": \"時間 O(n)、追加領域 O(1)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 7,\n          \"next\": null\n        }\n      ],\n      \"e\": {\n        \"val\": 7,\n        \"next\": null\n      }\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 1,\n            \"next\": {\n              \"val\": 2,\n              \"next\": null\n            }\n          }\n        }\n      ],\n      \"e\": {\n        \"val\": 2,\n        \"next\": {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 1,\n            \"next\": null\n          }\n        }\n      }\n    }\n  ],\n  \"immutable\": false,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "循環のない単方向連結リスト{val,next}を反転し、新しい先頭を返す。末尾nextはnull、空はnull。長さ0〜10000。この問題では既存ノードのnextを書き換えてよい。新しいノードや配列を作らず反転する。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(head)\n\n例：1 → 2 → 3 → null を 3 → 2 → 1 → null にする",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n次への参照を保存してから反転する。出力値だけの採点ではノード再利用を証明できないため、ノード生成の有無は自己レビューも行う。",
+          "code": "function solve(head) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "next=cur.nextを先に保存、cur.next=prev、prev=cur、cur=next。分割された2つの鎖で全ノードを保持。curがnullならprevが全体。"
+          ],
+          "reference": "function solve(head){let prev=null,cur=head;while(cur){const next=cur.next;cur.next=prev;prev=cur;cur=next}return prev}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"next\": {\n          \"val\": 2,\n          \"next\": null\n        }\n      }\n    ],\n    \"e\": {\n      \"val\": 2,\n      \"next\": {\n        \"val\": 1,\n        \"next\": null\n      }\n    }\n  },\n  {\n    \"a\": [\n      null\n    ],\n    \"e\": null\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 7,\n        \"next\": null\n      }\n    ],\n    \"e\": {\n      \"val\": 7,\n      \"next\": null\n    }\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"next\": {\n          \"val\": 1,\n          \"next\": {\n            \"val\": 2,\n            \"next\": null\n          }\n        }\n      }\n    ],\n    \"e\": {\n      \"val\": 2,\n      \"next\": {\n        \"val\": 1,\n        \"next\": {\n          \"val\": 1,\n          \"next\": null\n        }\n      }\n    }\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-tree-dfs",
+      "title": "08 / 部分木の答えを組み立てる",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Tree / postorder DFS · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-tree-dfs\",\n  \"title\": \"08 / 部分木の答えを組み立てる\",\n  \"topic\": \"Tree / postorder DFS\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-tree-dfs\",\n  \"signature\": \"function solve(root)\",\n  \"statement\": \"二分木{val,left,right}で、任意の2ノード間の最長経路の辺数を返す。空木・1ノードは0。子なしはnull。ノード数0〜10000。深い木でも再帰上限で失敗しない実装を目指す。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"根に左右1つずつ子がある木 → 2\",\n  \"hint\": \"空の高さ0、ノード高さ1+max(L,R)。L+Rはこのノードを通る経路の辺数。帰る高さと全体の最長経路は別の量。後順DFSで子を先に処理。\",\n  \"explain\": \"後順で高さを保存し、各ノードを折返し点とする経路を評価。参照解は高さMapにO(n)領域を使う。\",\n  \"solution\": \"function solve(root){if(!root)return 0;const h=new Map(),st=[[root,false]];let best=0;while(st.length){const [n,done]=st.pop();if(done){const l=h.get(n.left)||0,r=h.get(n.right)||0;best=Math.max(best,l+r);h.set(n,1+Math.max(l,r))}else{st.push([n,true]);if(n.right)st.push([n.right,false]);if(n.left)st.push([n.left,false])}}return best}\",\n  \"starter\": \"function solve(root) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": 0\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": null,\n          \"right\": null\n        }\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": {\n              \"val\": 3,\n              \"left\": null,\n              \"right\": null\n            },\n            \"right\": null\n          },\n          \"right\": null\n        }\n      ],\n      \"e\": 2\n    }\n  ],\n  \"complexity\": \"時間 O(n)、追加領域 O(n)（この反復実装）\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": null,\n          \"right\": null\n        }\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": {\n              \"val\": 3,\n              \"left\": null,\n              \"right\": null\n            },\n            \"right\": null\n          },\n          \"right\": null\n        }\n      ],\n      \"e\": 2\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "二分木{val,left,right}で、任意の2ノード間の最長経路の辺数を返す。空木・1ノードは0。子なしはnull。ノード数0〜10000。深い木でも再帰上限で失敗しない実装を目指す。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(root)\n\n例：根に左右1つずつ子がある木 → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n後順で高さを保存し、各ノードを折返し点とする経路を評価。参照解は高さMapにO(n)領域を使う。",
+          "code": "function solve(root) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "空の高さ0、ノード高さ1+max(L,R)。L+Rはこのノードを通る経路の辺数。帰る高さと全体の最長経路は別の量。後順DFSで子を先に処理。"
+          ],
+          "reference": "function solve(root){if(!root)return 0;const h=new Map(),st=[[root,false]];let best=0;while(st.length){const [n,done]=st.pop();if(done){const l=h.get(n.left)||0,r=h.get(n.right)||0;best=Math.max(best,l+r);h.set(n,1+Math.max(l,r))}else{st.push([n,true]);if(n.right)st.push([n.right,false]);if(n.left)st.push([n.left,false])}}return best}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": {\n          \"val\": 2,\n          \"left\": null,\n          \"right\": null\n        },\n        \"right\": {\n          \"val\": 3,\n          \"left\": null,\n          \"right\": null\n        }\n      }\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      null\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": null,\n        \"right\": null\n      }\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": {\n          \"val\": 2,\n          \"left\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": null\n        },\n        \"right\": null\n      }\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-tree-bfs",
+      "title": "09 / 同じ距離をまとめる",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Tree / BFS · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-tree-bfs\",\n  \"title\": \"09 / 同じ距離をまとめる\",\n  \"topic\": \"Tree / BFS\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-tree-bfs\",\n  \"signature\": \"function solve(root)\",\n  \"statement\": \"二分木{val,left,right}の値を深さ別に左から右へ並べた配列で返す。空木は[]。子なしnull、ノード数0〜10000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"根1、左右の子2と3 → [[1],[2,3]]\",\n  \"hint\": \"層開始時の末尾endを固定し、head<endだけ処理する。追加した子は次の層。shiftの反復を避けheadを進める。\",\n  \"explain\": \"固定した層境界まで取り出し、子を次層へ。参照実装は取り出したノードも配列に残すのでキュー領域O(n)。\",\n  \"solution\": \"function solve(root){if(!root)return [];const q=[root],out=[];let head=0;while(head<q.length){const end=q.length,level=[];while(head<end){const n=q[head++];level.push(n.val);if(n.left)q.push(n.left);if(n.right)q.push(n.right)}out.push(level)}return out}\",\n  \"starter\": \"function solve(root) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": [\n        [\n          1\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": []\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": {\n            \"val\": 2,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": [\n        [\n          1\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        null\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 8,\n          \"left\": null,\n          \"right\": null\n        }\n      ],\n      \"e\": [\n        [\n          8\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": null,\n          \"right\": {\n            \"val\": 2,\n            \"left\": {\n              \"val\": 3,\n              \"left\": null,\n              \"right\": null\n            },\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": [\n        [\n          1\n        ],\n        [\n          2\n        ],\n        [\n          3\n        ]\n      ]\n    }\n  ],\n  \"complexity\": \"時間 O(n)、追加領域 O(n)（出力を含む）\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        {\n          \"val\": 8,\n          \"left\": null,\n          \"right\": null\n        }\n      ],\n      \"e\": [\n        [\n          8\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        {\n          \"val\": 1,\n          \"left\": null,\n          \"right\": {\n            \"val\": 2,\n            \"left\": {\n              \"val\": 3,\n              \"left\": null,\n              \"right\": null\n            },\n            \"right\": null\n          }\n        }\n      ],\n      \"e\": [\n        [\n          1\n        ],\n        [\n          2\n        ],\n        [\n          3\n        ]\n      ]\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "二分木{val,left,right}の値を深さ別に左から右へ並べた配列で返す。空木は[]。子なしnull、ノード数0〜10000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(root)\n\n例：根1、左右の子2と3 → [[1],[2,3]]",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n固定した層境界まで取り出し、子を次層へ。参照実装は取り出したノードも配列に残すのでキュー領域O(n)。",
+          "code": "function solve(root) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "層開始時の末尾endを固定し、head<endだけ処理する。追加した子は次の層。shiftの反復を避けheadを進める。"
+          ],
+          "reference": "function solve(root){if(!root)return [];const q=[root],out=[];let head=0;while(head<q.length){const end=q.length,level=[];while(head<end){const n=q[head++];level.push(n.val);if(n.left)q.push(n.left);if(n.right)q.push(n.right)}out.push(level)}return out}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": {\n          \"val\": 2,\n          \"left\": null,\n          \"right\": null\n        },\n        \"right\": {\n          \"val\": 3,\n          \"left\": null,\n          \"right\": null\n        }\n      }\n    ],\n    \"e\": [\n      [\n        1\n      ],\n      [\n        2,\n        3\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      null\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 8,\n        \"left\": null,\n        \"right\": null\n      }\n    ],\n    \"e\": [\n      [\n        8\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      {\n        \"val\": 1,\n        \"left\": null,\n        \"right\": {\n          \"val\": 2,\n          \"left\": {\n            \"val\": 3,\n            \"left\": null,\n            \"right\": null\n          },\n          \"right\": null\n        }\n      }\n    ],\n    \"e\": [\n      [\n        1\n      ],\n      [\n        2\n      ],\n      [\n        3\n      ]\n    ]\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-graph-bfs",
+      "title": "10 / 最短の到達を確定する",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Graph / BFS · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-graph-bfs\",\n  \"title\": \"10 / 最短の到達を確定する\",\n  \"topic\": \"Graph / BFS\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-graph-bfs\",\n  \"signature\": \"function solve(graph, start, goal)\",\n  \"statement\": \"有向・非重み付きグラフの隣接リストgraphから、start→goalの最短辺数。未到達は-1。頂点0〜n-1、1≤n≤100000、辺≤200000。開始・目的は有効。自己ループ、重複辺、循環可。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([[1,2],[3],[3],[]],0,3) → 2\",\n  \"hint\": \"最初の発見が最短。追加時に距離を記録し、再追加しない。キューは距離非減少。Array.shiftではなくheadインデックスを使う。\",\n  \"explain\": \"距離順に探索し、発見時に距離を確定。循環を含んでも各頂点1回、各辺最大1回。\",\n  \"solution\": \"function solve(graph,start,goal){const d=Array(graph.length).fill(-1),q=[start];d[start]=0;for(let h=0;h<q.length;h++){const u=q[h];if(u===goal)return d[u];for(const v of graph[u])if(d[v]===-1){d[v]=d[u]+1;q.push(v)}}return -1}\",\n  \"starter\": \"function solve(graph, start, goal) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            3\n          ],\n          [\n            3\n          ],\n          []\n        ],\n        0,\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            1\n          ],\n          [\n            0\n          ],\n          []\n        ],\n        0,\n        2\n      ],\n      \"e\": -1\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            3\n          ],\n          [\n            3\n          ],\n          []\n        ],\n        0,\n        3\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            1\n          ],\n          [\n            0\n          ],\n          []\n        ],\n        0,\n        2\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [\n          []\n        ],\n        0,\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          [\n            0,\n            1,\n            1\n          ],\n          [\n            2\n          ],\n          []\n        ],\n        0,\n        2\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            3\n          ],\n          [],\n          []\n        ],\n        0,\n        3\n      ],\n      \"e\": 2\n    }\n  ],\n  \"complexity\": \"時間 O(V+E)、追加領域 O(V)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [\n          []\n        ],\n        0,\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          [\n            0,\n            1,\n            1\n          ],\n          [\n            2\n          ],\n          []\n        ],\n        0,\n        2\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            3\n          ],\n          [],\n          []\n        ],\n        0,\n        3\n      ],\n      \"e\": 2\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "有向・非重み付きグラフの隣接リストgraphから、start→goalの最短辺数。未到達は-1。頂点0〜n-1、1≤n≤100000、辺≤200000。開始・目的は有効。自己ループ、重複辺、循環可。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(graph, start, goal)\n\n例：solve([[1,2],[3],[3],[]],0,3) → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n距離順に探索し、発見時に距離を確定。循環を含んでも各頂点1回、各辺最大1回。",
+          "code": "function solve(graph, start, goal) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "最初の発見が最短。追加時に距離を記録し、再追加しない。キューは距離非減少。Array.shiftではなくheadインデックスを使う。"
+          ],
+          "reference": "function solve(graph,start,goal){const d=Array(graph.length).fill(-1),q=[start];d[start]=0;for(let h=0;h<q.length;h++){const u=q[h];if(u===goal)return d[u];for(const v of graph[u])if(d[v]===-1){d[v]=d[u]+1;q.push(v)}}return -1}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        [\n          1,\n          2\n        ],\n        [\n          3\n        ],\n        [\n          3\n        ],\n        []\n      ],\n      0,\n      3\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        [\n          1\n        ],\n        [\n          0\n        ],\n        []\n      ],\n      0,\n      2\n    ],\n    \"e\": -1\n  },\n  {\n    \"a\": [\n      [\n        []\n      ],\n      0,\n      0\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        [\n          0,\n          1,\n          1\n        ],\n        [\n          2\n        ],\n        []\n      ],\n      0,\n      2\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        [\n          1,\n          2\n        ],\n        [\n          3\n        ],\n        [],\n        []\n      ],\n      0,\n      3\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-topo",
+      "title": "11 / 前提を満たした仕事から進める",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Graph / topological order · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-topo\",\n  \"title\": \"11 / 前提を満たした仕事から進める\",\n  \"topic\": \"Graph / topological order\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-topo\",\n  \"signature\": \"function solve(n, edges)\",\n  \"statement\": \"仕事0〜n-1、辺[u,v]はuを終えてからvを行う制約。全仕事を完了できるかbooleanで返す。nは0〜100000、辺≤200000。辺の頂点は有効。重複辺と自己ループ可。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve(3,[[0,1],[1,2]]) → true\",\n  \"hint\": \"入次数0を取り出し後続の入次数を減らす。0になったら追加。処理数nなら完了可能。残る仕事は依存循環で入口を失っている。\",\n  \"explain\": \"入次数で実行可能集合を更新する。重複辺も加算・減算を対応させる。\",\n  \"solution\": \"function solve(n,edges){const g=Array.from({length:n},()=>[]),d=Array(n).fill(0);for(const [u,v] of edges){g[u].push(v);d[v]++}const q=[];for(let i=0;i<n;i++)if(d[i]===0)q.push(i);for(let h=0;h<q.length;h++)for(const v of g[q[h]])if(--d[v]===0)q.push(v);return q.length===n}\",\n  \"starter\": \"function solve(n, edges) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        3,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            1,\n            2\n          ]\n        ]\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        3,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            1\n          ]\n        ]\n      ],\n      \"e\": false\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        3,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            1,\n            2\n          ]\n        ]\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        3,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            1\n          ]\n        ]\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        0,\n        []\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        1,\n        [\n          [\n            0,\n            0\n          ]\n        ]\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        3,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            0,\n            1\n          ]\n        ]\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        4,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            2,\n            3\n          ]\n        ]\n      ],\n      \"e\": true\n    }\n  ],\n  \"complexity\": \"時間 O(V+E)、追加領域 O(V+E)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        0,\n        []\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        1,\n        [\n          [\n            0,\n            0\n          ]\n        ]\n      ],\n      \"e\": false\n    },\n    {\n      \"a\": [\n        3,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            0,\n            1\n          ]\n        ]\n      ],\n      \"e\": true\n    },\n    {\n      \"a\": [\n        4,\n        [\n          [\n            0,\n            1\n          ],\n          [\n            2,\n            3\n          ]\n        ]\n      ],\n      \"e\": true\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "仕事0〜n-1、辺[u,v]はuを終えてからvを行う制約。全仕事を完了できるかbooleanで返す。nは0〜100000、辺≤200000。辺の頂点は有効。重複辺と自己ループ可。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(n, edges)\n\n例：solve(3,[[0,1],[1,2]]) → true",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n入次数で実行可能集合を更新する。重複辺も加算・減算を対応させる。",
+          "code": "function solve(n, edges) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "入次数0を取り出し後続の入次数を減らす。0になったら追加。処理数nなら完了可能。残る仕事は依存循環で入口を失っている。"
+          ],
+          "reference": "function solve(n,edges){const g=Array.from({length:n},()=>[]),d=Array(n).fill(0);for(const [u,v] of edges){g[u].push(v);d[v]++}const q=[];for(let i=0;i<n;i++)if(d[i]===0)q.push(i);for(let h=0;h<q.length;h++)for(const v of g[q[h]])if(--d[v]===0)q.push(v);return q.length===n}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      3,\n      [\n        [\n          0,\n          1\n        ],\n        [\n          1,\n          2\n        ]\n      ]\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      3,\n      [\n        [\n          0,\n          1\n        ],\n        [\n          1,\n          2\n        ],\n        [\n          2,\n          1\n        ]\n      ]\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      0,\n      []\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      1,\n      [\n        [\n          0,\n          0\n        ]\n      ]\n    ],\n    \"e\": false\n  },\n  {\n    \"a\": [\n      3,\n      [\n        [\n          0,\n          1\n        ],\n        [\n          0,\n          1\n        ]\n      ]\n    ],\n    \"e\": true\n  },\n  {\n    \"a\": [\n      4,\n      [\n        [\n          0,\n          1\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    ],\n    \"e\": true\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-heap",
+      "title": "12 / 上位だけを残す",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Heap / top k · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-heap\",\n  \"title\": \"12 / 上位だけを残す\",\n  \"topic\": \"Heap / top k\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-heap\",\n  \"signature\": \"function solve(nums, k)\",\n  \"statement\": \"整数配列numsのk番目に大きい値。重複は別要素として数える。長さ1〜100000、1≤k≤長さ。入力を変更せず追加領域O(k)を目指す。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([4,1,7,7,2],2) → 7\",\n  \"hint\": \"根が上位集合の最小値、つまりk個そろえば現在のk番目。根を置換後、下へ修復する。全配列のソートは不要。\",\n  \"explain\": \"上位k個の最小ヒープ。挿入・置換O(log k)、各要素を1回読む。k=1でもO(n)なので表記はO(n log(k+1))。\",\n  \"solution\": \"function solve(nums,k){const h=[];for(const x of nums){if(h.length<k){h.push(x);let i=h.length-1;while(i>0){const p=Math.floor((i-1)/2);if(h[p]<=h[i])break;[h[p],h[i]]=[h[i],h[p]];i=p}}else if(x>h[0]){h[0]=x;let i=0;while(true){let j=2*i+1;if(j>=h.length)break;if(j+1<h.length&&h[j+1]<h[j])j++;if(h[i]<=h[j])break;[h[i],h[j]]=[h[j],h[i]];i=j}}}return h[0]}\",\n  \"starter\": \"function solve(nums, k) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          4,\n          1,\n          7,\n          7,\n          2\n        ],\n        2\n      ],\n      \"e\": 7\n    },\n    {\n      \"a\": [\n        [\n          3,\n          1,\n          2\n        ],\n        3\n      ],\n      \"e\": 1\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          4,\n          1,\n          7,\n          7,\n          2\n        ],\n        2\n      ],\n      \"e\": 7\n    },\n    {\n      \"a\": [\n        [\n          3,\n          1,\n          2\n        ],\n        3\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [\n          -2,\n          -8,\n          -1\n        ],\n        2\n      ],\n      \"e\": -2\n    },\n    {\n      \"a\": [\n        [\n          5\n        ],\n        1\n      ],\n      \"e\": 5\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          3,\n          4,\n          5\n        ],\n        2\n      ],\n      \"e\": 4\n    },\n    {\n      \"a\": [\n        [\n          5,\n          4,\n          3,\n          2,\n          1\n        ],\n        1\n      ],\n      \"e\": 5\n    }\n  ],\n  \"complexity\": \"時間 O(n log(k+1))、追加領域 O(k)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [\n          -2,\n          -8,\n          -1\n        ],\n        2\n      ],\n      \"e\": -2\n    },\n    {\n      \"a\": [\n        [\n          5\n        ],\n        1\n      ],\n      \"e\": 5\n    },\n    {\n      \"a\": [\n        [\n          1,\n          2,\n          3,\n          4,\n          5\n        ],\n        2\n      ],\n      \"e\": 4\n    },\n    {\n      \"a\": [\n        [\n          5,\n          4,\n          3,\n          2,\n          1\n        ],\n        1\n      ],\n      \"e\": 5\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "整数配列numsのk番目に大きい値。重複は別要素として数える。長さ1〜100000、1≤k≤長さ。入力を変更せず追加領域O(k)を目指す。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, k)\n\n例：solve([4,1,7,7,2],2) → 7",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n上位k個の最小ヒープ。挿入・置換O(log k)、各要素を1回読む。k=1でもO(n)なので表記はO(n log(k+1))。",
+          "code": "function solve(nums, k) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "根が上位集合の最小値、つまりk個そろえば現在のk番目。根を置換後、下へ修復する。全配列のソートは不要。"
+          ],
+          "reference": "function solve(nums,k){const h=[];for(const x of nums){if(h.length<k){h.push(x);let i=h.length-1;while(i>0){const p=Math.floor((i-1)/2);if(h[p]<=h[i])break;[h[p],h[i]]=[h[i],h[p]];i=p}}else if(x>h[0]){h[0]=x;let i=0;while(true){let j=2*i+1;if(j>=h.length)break;if(j+1<h.length&&h[j+1]<h[j])j++;if(h[i]<=h[j])break;[h[i],h[j]]=[h[j],h[i]];i=j}}}return h[0]}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        4,\n        1,\n        7,\n        7,\n        2\n      ],\n      2\n    ],\n    \"e\": 7\n  },\n  {\n    \"a\": [\n      [\n        3,\n        1,\n        2\n      ],\n      3\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      [\n        -2,\n        -8,\n        -1\n      ],\n      2\n    ],\n    \"e\": -2\n  },\n  {\n    \"a\": [\n      [\n        5\n      ],\n      1\n    ],\n    \"e\": 5\n  },\n  {\n    \"a\": [\n      [\n        1,\n        2,\n        3,\n        4,\n        5\n      ],\n      2\n    ],\n    \"e\": 4\n  },\n  {\n    \"a\": [\n      [\n        5,\n        4,\n        3,\n        2,\n        1\n      ],\n      1\n    ],\n    \"e\": 5\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-backtrack",
+      "title": "13 / 選択を戻して探索する",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Backtracking · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-backtrack\",\n  \"title\": \"13 / 選択を戻して探索する\",\n  \"topic\": \"Backtracking\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-backtrack\",\n  \"signature\": \"function solve(nums, target)\",\n  \"statement\": \"正整数配列numsの各位置を高々1回使い、和targetになる値の組合せをすべて返す。同じ値の組合せは1回だけ。各組合せは昇順、結果全体は数値の辞書順。targetは0以上、長さ0〜18。target=0なら[[]]。入力は変更しない。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([1,1,2,3],3) → [[1,2],[3]]\",\n  \"hint\": \"iを選んだらi+1へ進むため同位置を再使用しない。push→再帰→popで戻す。正整数なので値>remainなら以後も打切れる。0や負数を許すなら根拠を見直す。\",\n  \"explain\": \"ソートして同じ深さの重複のみ省き、選択と復元を対にする。出力を複製しないと全結果が同じpath参照になる。\",\n  \"solution\": \"function solve(nums,target){const a=[...nums].sort((x,y)=>x-y),out=[],path=[];function dfs(start,rem){if(rem===0){out.push([...path]);return}for(let i=start;i<a.length;i++){if(i>start&&a[i]===a[i-1])continue;if(a[i]>rem)break;path.push(a[i]);dfs(i+1,rem-a[i]);path.pop()}}dfs(0,target);return out}\",\n  \"starter\": \"function solve(nums, target) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          1,\n          1,\n          2,\n          3\n        ],\n        3\n      ],\n      \"e\": [\n        [\n          1,\n          2\n        ],\n        [\n          3\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [\n          1,\n          1,\n          2\n        ],\n        2\n      ],\n      \"e\": [\n        [\n          1,\n          1\n        ],\n        [\n          2\n        ]\n      ]\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          1,\n          2,\n          3\n        ],\n        3\n      ],\n      \"e\": [\n        [\n          1,\n          2\n        ],\n        [\n          3\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [\n          1,\n          1,\n          2\n        ],\n        2\n      ],\n      \"e\": [\n        [\n          1,\n          1\n        ],\n        [\n          2\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": [\n        []\n      ]\n    },\n    {\n      \"a\": [\n        [],\n        1\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2,\n          2\n        ],\n        4\n      ],\n      \"e\": [\n        [\n          2,\n          2\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [\n          3,\n          1,\n          2,\n          4\n        ],\n        5\n      ],\n      \"e\": [\n        [\n          1,\n          4\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    }\n  ],\n  \"complexity\": \"時間 O(n·2^n) 上界＋ソート、追加領域 O(n)（出力除外）、出力最大 O(n·2^n)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": [\n        []\n      ]\n    },\n    {\n      \"a\": [\n        [],\n        1\n      ],\n      \"e\": []\n    },\n    {\n      \"a\": [\n        [\n          2,\n          2,\n          2\n        ],\n        4\n      ],\n      \"e\": [\n        [\n          2,\n          2\n        ]\n      ]\n    },\n    {\n      \"a\": [\n        [\n          3,\n          1,\n          2,\n          4\n        ],\n        5\n      ],\n      \"e\": [\n        [\n          1,\n          4\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "正整数配列numsの各位置を高々1回使い、和targetになる値の組合せをすべて返す。同じ値の組合せは1回だけ。各組合せは昇順、結果全体は数値の辞書順。targetは0以上、長さ0〜18。target=0なら[[]]。入力は変更しない。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(nums, target)\n\n例：solve([1,1,2,3],3) → [[1,2],[3]]",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\nソートして同じ深さの重複のみ省き、選択と復元を対にする。出力を複製しないと全結果が同じpath参照になる。",
+          "code": "function solve(nums, target) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "iを選んだらi+1へ進むため同位置を再使用しない。push→再帰→popで戻す。正整数なので値>remainなら以後も打切れる。0や負数を許すなら根拠を見直す。"
+          ],
+          "reference": "function solve(nums,target){const a=[...nums].sort((x,y)=>x-y),out=[],path=[];function dfs(start,rem){if(rem===0){out.push([...path]);return}for(let i=start;i<a.length;i++){if(i>start&&a[i]===a[i-1])continue;if(a[i]>rem)break;path.push(a[i]);dfs(i+1,rem-a[i]);path.pop()}}dfs(0,target);return out}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        1,\n        2,\n        3\n      ],\n      3\n    ],\n    \"e\": [\n      [\n        1,\n        2\n      ],\n      [\n        3\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      [\n        1,\n        1,\n        2\n      ],\n      2\n    ],\n    \"e\": [\n      [\n        1,\n        1\n      ],\n      [\n        2\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      [],\n      0\n    ],\n    \"e\": [\n      []\n    ]\n  },\n  {\n    \"a\": [\n      [],\n      1\n    ],\n    \"e\": []\n  },\n  {\n    \"a\": [\n      [\n        2,\n        2,\n        2\n      ],\n      4\n    ],\n    \"e\": [\n      [\n        2,\n        2\n      ]\n    ]\n  },\n  {\n    \"a\": [\n      [\n        3,\n        1,\n        2,\n        4\n      ],\n      5\n    ],\n    \"e\": [\n      [\n        1,\n        4\n      ],\n      [\n        2,\n        3\n      ]\n    ]\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-greedy",
+      "title": "14 / 安全な選択を証明する",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Greedy / intervals · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-greedy\",\n  \"title\": \"14 / 安全な選択を証明する\",\n  \"topic\": \"Greedy / intervals\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-greedy\",\n  \"signature\": \"function solve(intervals)\",\n  \"statement\": \"時間区間[start,end)の予定から、重ならず選べる最大件数。start<end、端点が接する予定は両方選べる。報酬は全件同じ。長さ0〜100000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([[0,3],[1,2],[2,4],[4,5]]) → 3\",\n  \"hint\": \"交換論法。置換後も同じ件数で重ならない。残りにも繰り返せる。報酬が異なる最大報酬問題にはこの証明は使えず、DPなどが必要。\",\n  \"explain\": \"終了順にソートし、実行可能なものを採用。交換論法と「件数が目的」「端点接触可」という条件を説明する。\",\n  \"solution\": \"function solve(intervals){const a=intervals.map(x=>[...x]).sort((x,y)=>x[1]-y[1]||x[0]-y[0]);let end=-Infinity,count=0;for(const [s,e]of a)if(s>=end){count++;end=e}return count}\",\n  \"starter\": \"function solve(intervals) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          [\n            0,\n            3\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            4\n          ],\n          [\n            4,\n            5\n          ]\n        ]\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        []\n      ],\n      \"e\": 0\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          [\n            0,\n            3\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            4\n          ],\n          [\n            4,\n            5\n          ]\n        ]\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        []\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            3\n          ]\n        ]\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            0,\n            10\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            3\n          ],\n          [\n            3,\n            4\n          ]\n        ]\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            3\n          ],\n          [\n            1,\n            3\n          ]\n        ]\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [\n          [\n            -4,\n            -2\n          ],\n          [\n            -2,\n            0\n          ],\n          [\n            -3,\n            1\n          ]\n        ]\n      ],\n      \"e\": 2\n    }\n  ],\n  \"complexity\": \"時間 O(n log n)、追加領域 O(n)（コピー）\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            3\n          ]\n        ]\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          [\n            0,\n            10\n          ],\n          [\n            1,\n            2\n          ],\n          [\n            2,\n            3\n          ],\n          [\n            3,\n            4\n          ]\n        ]\n      ],\n      \"e\": 3\n    },\n    {\n      \"a\": [\n        [\n          [\n            1,\n            3\n          ],\n          [\n            1,\n            3\n          ]\n        ]\n      ],\n      \"e\": 1\n    },\n    {\n      \"a\": [\n        [\n          [\n            -4,\n            -2\n          ],\n          [\n            -2,\n            0\n          ],\n          [\n            -3,\n            1\n          ]\n        ]\n      ],\n      \"e\": 2\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "時間区間[start,end)の予定から、重ならず選べる最大件数。start<end、端点が接する予定は両方選べる。報酬は全件同じ。長さ0〜100000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(intervals)\n\n例：solve([[0,3],[1,2],[2,4],[4,5]]) → 3",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n終了順にソートし、実行可能なものを採用。交換論法と「件数が目的」「端点接触可」という条件を説明する。",
+          "code": "function solve(intervals) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "交換論法。置換後も同じ件数で重ならない。残りにも繰り返せる。報酬が異なる最大報酬問題にはこの証明は使えず、DPなどが必要。"
+          ],
+          "reference": "function solve(intervals){const a=intervals.map(x=>[...x]).sort((x,y)=>x[1]-y[1]||x[0]-y[0]);let end=-Infinity,count=0;for(const [s,e]of a)if(s>=end){count++;end=e}return count}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        [\n          0,\n          3\n        ],\n        [\n          1,\n          2\n        ],\n        [\n          2,\n          4\n        ],\n        [\n          4,\n          5\n        ]\n      ]\n    ],\n    \"e\": 3\n  },\n  {\n    \"a\": [\n      []\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [\n        [\n          1,\n          2\n        ],\n        [\n          2,\n          3\n        ]\n      ]\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        [\n          0,\n          10\n        ],\n        [\n          1,\n          2\n        ],\n        [\n          2,\n          3\n        ],\n        [\n          3,\n          4\n        ]\n      ]\n    ],\n    \"e\": 3\n  },\n  {\n    \"a\": [\n      [\n        [\n          1,\n          3\n        ],\n        [\n          1,\n          3\n        ]\n      ]\n    ],\n    \"e\": 1\n  },\n  {\n    \"a\": [\n      [\n        [\n          -4,\n          -2\n        ],\n        [\n          -2,\n          0\n        ],\n        [\n          -3,\n          1\n        ]\n      ]\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    },
+    {
+      "id": "learn-dp",
+      "title": "15 / 同じ小問題を一度だけ解く",
+      "category": "実装・説明（自動実行なし）",
+      "summary": "Dynamic programming · Core",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "30分",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"learn-dp\",\n  \"title\": \"15 / 同じ小問題を一度だけ解く\",\n  \"topic\": \"Dynamic programming\",\n  \"minutes\": 30,\n  \"level\": \"Core\",\n  \"lessonId\": \"learn-dp\",\n  \"signature\": \"function solve(coins, amount)\",\n  \"statement\": \"異なる正整数の額面coinsを何度でも使い、amountを作る最少枚数。作れなければ-1、amount=0は0。額面数0〜100、amountは0〜10000。\\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\",\n  \"example\": \"solve([1,3,4],6) → 2\",\n  \"hint\": \"正の額面なのでx-c<x。金額の小さい順なら参照先は確定。到達不能∞を区別し、最後に∞なら-1に変える。\",\n  \"explain\": \"状態、基底、遷移、計算順、到達不能の表現を1つずつ決める。テスト通過だけでなく最後の選択で全解を分解できる理由を説明する。\",\n  \"solution\": \"function solve(coins,amount){const dp=Array(amount+1).fill(Infinity);dp[0]=0;for(let x=1;x<=amount;x++)for(const c of coins)if(c<=x)dp[x]=Math.min(dp[x],dp[x-c]+1);return Number.isFinite(dp[amount])?dp[amount]:-1}\",\n  \"starter\": \"function solve(coins, amount) {\\n  // 1. 保持する状態を決める\\n  // 2. 更新と終了条件を書く\\n  // 3. 境界を確かめる\\n  throw new Error(\\\"TODO: implement\\\");\\n}\",\n  \"publicTests\": [\n    {\n      \"a\": [\n        [\n          1,\n          3,\n          4\n        ],\n        6\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          2\n        ],\n        3\n      ],\n      \"e\": -1\n    }\n  ],\n  \"tests\": [\n    {\n      \"a\": [\n        [\n          1,\n          3,\n          4\n        ],\n        6\n      ],\n      \"e\": 2\n    },\n    {\n      \"a\": [\n        [\n          2\n        ],\n        3\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [],\n        7\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [\n          2,\n          5\n        ],\n        11\n      ],\n      \"e\": 4\n    },\n    {\n      \"a\": [\n        [\n          7\n        ],\n        14\n      ],\n      \"e\": 2\n    }\n  ],\n  \"complexity\": \"時間 O(amount×額面数)、追加領域 O(amount)\",\n  \"additionalTests\": [\n    {\n      \"a\": [\n        [],\n        0\n      ],\n      \"e\": 0\n    },\n    {\n      \"a\": [\n        [],\n        7\n      ],\n      \"e\": -1\n    },\n    {\n      \"a\": [\n        [\n          2,\n          5\n        ],\n        11\n      ],\n      \"e\": 4\n    },\n    {\n      \"a\": [\n        [\n          7\n        ],\n        14\n      ],\n      \"e\": 2\n    }\n  ],\n  \"immutable\": true,\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "notes": "コードの実行・自動採点機能はありません。PC で実装・テストし、ここでは自己評価を記録します。",
+      "steps": [
+        {
+          "id": "implementation",
+          "phase": "実装と説明・自己評価",
+          "prompt": "異なる正整数の額面coinsを何度でも使い、amountを作る最少枚数。作れなければ-1、amount=0は0。額面数0〜100、amountは0〜10000。\n共通条件: 数値の演算結果は安全な整数範囲内。指定がなければ入力を変更しない。\n\nfunction solve(coins, amount)\n\n例：solve([1,3,4],6) → 2",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自己申告の記録です。テスト合格や実装の正しさを意味しません。\n状態、基底、遷移、計算順、到達不能の表現を1つずつ決める。テスト通過だけでなく最後の選択で全解を分解できる理由を説明する。",
+          "code": "function solve(coins, amount) {\n  // 1. 保持する状態を決める\n  // 2. 更新と終了条件を書く\n  // 3. 境界を確かめる\n  throw new Error(\"TODO: implement\");\n}",
+          "hints": [
+            "正の額面なのでx-c<x。金額の小さい順なら参照先は確定。到達不能∞を区別し、最後に∞なら-1に変える。"
+          ],
+          "reference": "function solve(coins,amount){const dp=Array(amount+1).fill(Infinity);dp[0]=0;for(let x=1;x<=amount;x++)for(const c of coins)if(c<=x)dp[x]=Math.min(dp[x],dp[x-c]+1);return Number.isFinite(dp[amount])?dp[amount]:-1}\n\nテスト例（表示のみ・未実行）：\n[\n  {\n    \"a\": [\n      [\n        1,\n        3,\n        4\n      ],\n      6\n    ],\n    \"e\": 2\n  },\n  {\n    \"a\": [\n      [\n        2\n      ],\n      3\n    ],\n    \"e\": -1\n  },\n  {\n    \"a\": [\n      [],\n      0\n    ],\n    \"e\": 0\n  },\n  {\n    \"a\": [\n      [],\n      7\n    ],\n    \"e\": -1\n  },\n  {\n    \"a\": [\n      [\n        2,\n        5\n      ],\n      11\n    ],\n    \"e\": 4\n  },\n  {\n    \"a\": [\n      [\n        7\n      ],\n      14\n    ],\n    \"e\": 2\n  }\n]",
+          "check": "□ 実行したテストと未実行を区別した\n□ 計算量・不変条件・反例を説明した"
+        }
+      ]
+    }
+  ],
+  "sourceRelease": {
+    "contentVersion": "2026-10-12.2",
+    "archiveSHA256": "25e1417c988dd53bb8b00d63a05c12b0e5e34bbd2a7093e3c64e725126e54818",
+    "manifestSHA256": "cd9bfb7e8dd33f5818838de626e63df963651a7451439e0eb35ae90bc59215cc",
+    "contentFileSHA256": "b9df7f7be43aae42393a67b96d78f1a4410061abfcb8dd0a45172206cb8bcf6f"
+  }
+}
