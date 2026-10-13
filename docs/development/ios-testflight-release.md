@@ -25,15 +25,19 @@ TestFlight まで自動で届ける経路を説明する。設計判断の背景
    （TestFlight）へ自動提出される。
 5. owner が TestFlight でテスター（自分 + 友人）へ配布する。
 
-GitHub Actions のランナー自体は iOS ビルドを行わない。ランナーの役割は EAS へビルドを
-起動する非対話コマンドを 1 つ実行するだけであり、`bun install` などプロジェクト依存関係の
-解決はランナー側では行わない（`eas-cli` は `app.json` を静的に読むだけで、ビルド本体は
-EAS 側の隔離環境で完結するため）。
+GitHub Actions のランナーは、残る Expo config plugin を解決するために lockfile 固定の依存を
+インストールし、固定版 EAS CLI でクラウドビルドと提出を起動する。署名付き iOS ビルド本体は
+EAS 側の環境で実行する。ランナーに Apple の署名情報をコピーしない。
+
+2026-10-13 の運用確認では、既存の EAS project、App Store Connect App ID、GitHub の
+`EXPO_TOKEN` と EAS 管理の署名・提出経路を再利用して 1.2.2 (14) のビルドが成功し、
+再提出も `FINISHED` となった。初回セットアップを再実施する根拠はない。この提出成功は
+Apple の処理完了や App Store 審査・公開を示さない。新版は同じ経路で個別に結果を確認する。
 
 ## 初回セットアップ（一度きり、owner の手作業）
 
-Sonnet が用意するのはリポジトリ側の設定ファイルまでであり、次の手順は owner が Apple /
-Expo アカウントを使って一度だけ行う。
+次の手順は未設定の新規環境向けであり、owner が Apple / Expo アカウントを使って一度だけ行う。
+既存設定と過去の成功を確認してから、実際に不足する項目だけを扱う。
 
 1. [expo.dev](https://expo.dev) で Expo アカウントを作成し、ローカルで
    `bunx eas-cli@21.0.2 login` を実行してログインする。`bunx eas-cli@21.0.2 whoami` で
@@ -46,11 +50,9 @@ Expo アカウントを使って一度だけ行う。
    （Bundle ID `cloud.tenka.passport`、初回のみ）。作成後、General > App Information（または
    アプリのダッシュボード URL `https://appstoreconnect.apple.com/apps/<この数字>/`）に表示される
    数値の App ID を控える。[`eas.json`](../../eas.json) の
-   `submit.production.ios.ascAppId` はプレースホルダ
-   `"REPLACE_WITH_APP_STORE_CONNECT_APP_ID"` のままにしてあるので、実際の数値へ書き換えて
-   commit・push する（`ascAppId` は App Store Connect 上の公開 ID であり、`appleId` や
-   API キーのような秘密情報ではないため repository に含めてよい）。この置き換えをしないと
-   `eas submit --non-interactive` が対象アプリを特定できず失敗する。
+   `submit.production.ios.ascAppId` は既存アプリの実 ID を設定済みである。新規アプリだけは
+   実際の App ID を設定する（公開 ID であり、認証情報ではない）。既存アプリの ID を
+   初回セットアップの説明に合わせて変更しない。
 4. ローカルで初回だけ、**`--non-interactive` を付けずに** 次を対話実行し、Apple の署名用
    認証情報（Distribution Certificate / Provisioning Profile）を EAS のサーバ側に預ける。
    `bun run build:ios:testflight`（`package.json` 参照）は CI 専用に `--non-interactive` を
@@ -77,8 +79,8 @@ Expo アカウントを使って一度だけ行う。
    `.p8` ファイルを入力する。アップロード後は `.p8` ファイル自体をローカルにも CI にも残さない
    （EAS のサーバ側にだけ保存される）。
    [`eas.json`](../../eas.json) の `submit.production.ios` は `appleId` / `appleTeamId` /
-   API キーのパスを書かず、非対話実行に必須の `ascAppId`（非秘密の数値 ID、上記手順 3 で
-   置き換え済みのはず）だけを持つ。理由は
+   API キーのパスを書かず、非対話実行に必須の `ascAppId`（非秘密の数値 ID、既存設定または上記手順 3 で
+   確認した値）だけを持つ。理由は
    [ADR-0031](../adr/0031-eas-testflight-automated-release.md) を参照する。owner がローカルの
    `bun run submit:ios` で既存 Build を手動再提出したい場合も同じ資格情報を再利用できる。
 6. 以降はバージョンタグを push するだけで TestFlight に自動で上がる。TestFlight タブで
