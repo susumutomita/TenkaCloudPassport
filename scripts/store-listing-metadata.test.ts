@@ -362,3 +362,69 @@ it('review readiness emits presence/classification only, never private contact o
       .notesMatchPreparedCurrentDraft
   ).toBe(true);
 });
+
+it('reports absent privacy locales instead of silently omitting them', async () => {
+  const { summarizePrivacyURLs } = await import('./apply-store-listing');
+  expect(
+    summarizePrivacyURLs(
+      [
+        {
+          attributes: {
+            locale: 'ja',
+            privacyPolicyUrl: 'https://example.invalid/ja',
+          },
+        },
+      ],
+      { ja: { privacyPolicyUrl: 'https://example.invalid/ja' } }
+    )
+  ).toEqual([
+    {
+      locale: 'ja',
+      localizationPresent: true,
+      policyURLPresent: true,
+      matchesConfiguredURL: true,
+    },
+    {
+      locale: 'en-US',
+      localizationPresent: false,
+      policyURLPresent: false,
+      matchesConfiguredURL: false,
+    },
+  ]);
+});
+it('distinguishes removed framework references from affirmative inference claims', async () => {
+  const { summarizeReviewDetails } = await import('./apply-store-listing');
+  const retired =
+    'The FoundationModels integration was removed. The app no longer uses Apple Intelligence.';
+  const result = summarizeReviewDetails({ notes: retired }, retired);
+  expect(result.notesMatchPreparedCurrentDraft).toBe(true);
+  expect(result.legacyAIReferencesPresent).toBe(true);
+  expect(result.legacyAIClaimsPresent).toBe(false);
+  expect(
+    summarizeReviewDetails(
+      { notes: 'The app uses FoundationModels to find common ground.' },
+      retired
+    ).legacyAIClaimsPresent
+  ).toBe(true);
+});
+it('exposes unconfigured supported age answers without emitting unknown values', async () => {
+  const { summarizeAgeDeclaration } = await import('./apply-store-listing');
+  const result = summarizeAgeDeclaration(
+    {
+      gambling: false,
+      socialMedia: true,
+      socialMediaAgeRestricted: false,
+      unknownField: 'private@example.invalid',
+    },
+    { gambling: false }
+  );
+  expect(result.configuredFieldsMatch).toBe(true);
+  expect(result.unconfiguredSupportedFieldNames).toContain('socialMedia');
+  expect(result.unconfiguredSupportedFieldNames).toContain(
+    'socialMediaAgeRestricted'
+  );
+  expect(result.currentAnswers['socialMedia']).toBe(true);
+  expect(result.currentAnswers['socialMediaAgeRestricted']).toBe(false);
+  expect(result.missingSupportedRemoteFieldNames).toContain('messagingAndChat');
+  expect(JSON.stringify(result)).not.toContain('private@example.invalid');
+});

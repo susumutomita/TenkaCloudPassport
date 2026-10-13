@@ -556,9 +556,20 @@ export function summarizeReviewDetails(
         : null,
     notesPresent: notes.trim().length > 0,
     notesMatchPreparedCurrentDraft: notes.trim() === preparedNotes.trim(),
-    legacyAIClaimsPresent:
-      /includes an on-device conversation agent|automatically uses.{0,80}Apple Intelligence|FoundationModels|finds common ground|共通点.{0,20}見つけ/i.test(
+    legacyAIReferencesPresent:
+      /FoundationModels|Apple\s+Intelligence|conversation agent|会話エージェント/i.test(
         notes
+      ),
+    legacyAIClaimsPresent: notes
+      .split(/[.!?]+/)
+      .some(
+        (sentence) =>
+          /includes an on-device conversation agent|automatically uses[\s\S]{0,100}Apple\s+Intelligence|(?:uses|supports|includes|runs|integrates)[\s\S]{0,80}FoundationModels|finds common ground|共通点.{0,20}見つけ/i.test(
+            sentence
+          ) &&
+          !/\b(?:removed|retired|disabled|no longer|does not|doesn't|not included|not supported)\b|撤去|廃止|利用しない/i.test(
+            sentence
+          )
       ),
     currentFeatureMarkers: {
       learning: /learning catalogs|学習|教材/i.test(notes),
@@ -568,5 +579,96 @@ export function summarizeReviewDetails(
         ),
       legacyCleanup: /legacy model cleanup|旧モデル.{0,12}削除/i.test(notes),
     },
+  };
+}
+
+export function summarizePrivacyURLs(
+  locales: { attributes: { locale: string; privacyPolicyUrl?: string } }[],
+  configured: Record<string, { privacyPolicyUrl?: string }>
+) {
+  return ['ja', 'en-US'].map((locale) => {
+    const remote = locales.find((item) => item.attributes.locale === locale);
+    return {
+      locale,
+      localizationPresent: Boolean(remote),
+      policyURLPresent: Boolean(remote?.attributes.privacyPolicyUrl),
+      matchesConfiguredURL:
+        Boolean(remote?.attributes.privacyPolicyUrl) &&
+        remote?.attributes.privacyPolicyUrl ===
+          configured[locale]?.privacyPolicyUrl,
+    };
+  });
+}
+const AGE_DECLARATION_FIELDS = [
+  'advertising',
+  'ageAssurance',
+  'ageRatingOverride',
+  'ageRatingOverrideV2',
+  'alcoholTobaccoOrDrugUseOrReferences',
+  'contests',
+  'gambling',
+  'gamblingSimulated',
+  'gunsOrOtherWeapons',
+  'healthOrWellnessTopics',
+  'horrorOrFearThemes',
+  'kidsAgeBand',
+  'koreaAgeRatingOverride',
+  'lootBox',
+  'matureOrSuggestiveThemes',
+  'medicalOrTreatmentInformation',
+  'messagingAndChat',
+  'parentalControls',
+  'profanityOrCrudeHumor',
+  'sexualContentGraphicAndNudity',
+  'sexualContentOrNudity',
+  'socialMedia',
+  'socialMediaAgeRestricted',
+  'unrestrictedWebAccess',
+  'userGeneratedContent',
+  'violenceCartoonOrFantasy',
+  'violenceRealistic',
+  'violenceRealisticProlongedGraphicOrSadistic',
+];
+export function summarizeAgeDeclaration(
+  attributes: Record<string, unknown>,
+  configured: Record<string, unknown>
+) {
+  const configuredKeys = Object.keys(configured).filter(
+    (key) => key !== 'developerAgeRatingInfoUrl'
+  );
+  return {
+    status: 'available',
+    configuredFieldsMatch: configuredKeys.every(
+      (key) => attributes[key] === configured[key]
+    ),
+    differentConfiguredFieldNames: configuredKeys.filter(
+      (key) => attributes[key] !== configured[key]
+    ),
+    unconfiguredSupportedFieldNames: AGE_DECLARATION_FIELDS.filter(
+      (key) => !Object.hasOwn(configured, key)
+    ),
+    missingSupportedRemoteFieldNames: AGE_DECLARATION_FIELDS.filter(
+      (key) => !Object.hasOwn(attributes, key)
+    ),
+    unrecognizedRemoteFieldNames: Object.keys(attributes).filter(
+      (key) =>
+        !AGE_DECLARATION_FIELDS.includes(key) &&
+        key !== 'developerAgeRatingInfoUrl'
+    ),
+    developerAgeRatingURLPresent:
+      typeof attributes['developerAgeRatingInfoUrl'] === 'string' &&
+      attributes['developerAgeRatingInfoUrl'].length > 0,
+    currentAnswers: Object.fromEntries(
+      AGE_DECLARATION_FIELDS.map((key) => [
+        key,
+        typeof attributes[key] === 'boolean' ||
+        attributes[key] === null ||
+        /^(NONE|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|FOUR_PLUS|SIX_PLUS|NINE_PLUS|TWELVE_PLUS|FIFTEEN_PLUS|SEVENTEEN_PLUS|EIGHTEEN_PLUS|TWENTY_ONE_PLUS|UNRATED|AGES_5_AND_UNDER|AGES_6_TO_8|AGES_9_TO_11)$/.test(
+          String(attributes[key])
+        )
+          ? attributes[key]
+          : 'unrecognized or unavailable',
+      ])
+    ),
   };
 }

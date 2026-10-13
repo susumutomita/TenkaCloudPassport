@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
   applyReviewedListing,
+  summarizeAgeDeclaration,
+  summarizePrivacyURLs,
   summarizeReviewDetails,
   verifySavedListing,
 } from './apply-store-listing.ts';
@@ -103,50 +105,13 @@ async function inspectReviewReadiness(
         const declaration = await optionalRead('age rating', async () => {
           const age = await info.getAgeRatingDeclarationAsync();
           if (!age) return { status: 'absent' };
-          const keys = Object.keys(config.advisory).filter(
-            (key) => key !== 'developerAgeRatingInfoUrl'
-          );
-          return {
-            status: 'available',
-            matchesConfiguredDeclaration: keys.every(
-              (key) => age.attributes[key] === config.advisory[key]
-            ),
-            differentFieldNames: keys.filter(
-              (key) => age.attributes[key] !== config.advisory[key]
-            ),
-            currentAnswers: Object.fromEntries(
-              keys.map((key) => [
-                key,
-                typeof age.attributes[key] === 'boolean' ||
-                age.attributes[key] === null ||
-                /^(NONE|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|FOUR_PLUS|NINE_PLUS|TWELVE_PLUS|SEVENTEEN_PLUS|UNRATED)$/.test(
-                  String(age.attributes[key])
-                )
-                  ? age.attributes[key]
-                  : 'unrecognized or unavailable',
-              ])
-            ),
-          };
+          return summarizeAgeDeclaration(age.attributes, config.advisory);
         });
         const privacyURLs = await optionalRead(
           'privacy policy URLs',
           async () => {
             const locales = await info.getLocalizationsAsync();
-            return locales
-              .filter((item: { attributes: { locale: string } }) =>
-                ['ja', 'en-US'].includes(item.attributes.locale)
-              )
-              .map(
-                (item: {
-                  attributes: { locale: string; privacyPolicyUrl?: string };
-                }) => ({
-                  locale: item.attributes.locale,
-                  policyURLPresent: Boolean(item.attributes.privacyPolicyUrl),
-                  matchesConfiguredURL:
-                    item.attributes.privacyPolicyUrl ===
-                    config.info[item.attributes.locale]?.privacyPolicyUrl,
-                })
-              );
+            return summarizePrivacyURLs(locales, config.info);
           }
         );
         output.push({

@@ -7,6 +7,7 @@ on:
       - scripts/inspect-store-listing.ts
       - scripts/apply-store-listing.ts
       - store.config.json
+      - docs/release/app-store-submission-1.3.0.md
       - docs/assets/app-store-screenshots/v1.3.0/**
   workflow_dispatch:
     inputs:
