@@ -88,5 +88,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh run download 38417493910 --name passport-store-screenshots-38417493910 --dir /tmp/passport-capture-evidence
+          gh run download 38431044902 --name passport-store-screenshots-38431044902 --dir /tmp/passport-capture-evidence
           python3 scripts/native-capture-evidence.py /tmp/passport-capture-evidence
