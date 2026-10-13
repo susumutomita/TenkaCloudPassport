@@ -1,4 +1,4 @@
-name: ios-resubmit-1.2.2
+name: ios-processing-1.2.2
 
 on:
   push:
@@ -13,122 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  submit-existing-build:
+  inspect-apple-processing:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect existing build and its submissions
-        id: inspect
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        shell: python
-        run: |
-          import json, os, urllib.request, urllib.error
-          build_id = 'd726ae3e-fe94-4042-bdfe-5975c5f2a930'
-          query = '''query ExistingReleaseBuild($id: ID!) {
-            builds { byId(buildId: $id) {
-              id status platform appVersion appBuildVersion gitCommitHash
-              project { id }
-              submissions { id status platform error { errorCode message } }
-            } }
-          }'''
-          token = os.environ.get('EXPO_TOKEN')
-          if not token:
-              raise SystemExit('Existing EXPO_TOKEN is unavailable; no submission attempted')
-          request = urllib.request.Request('https://api.expo.dev/graphql',
-              data=json.dumps({'query': query, 'variables': {'id': build_id}}).encode(),
-              headers={'Content-Type': 'application/json', 'User-Agent': 'eas-cli/21.0.2', 'Authorization': 'Bearer ' + token})
-          try:
-              with urllib.request.urlopen(request, timeout=60) as response:
-                  result = json.load(response)
-          except urllib.error.HTTPError as error:
-              print(json.dumps({'easHttpStatus': error.code}))
-              raise SystemExit('EAS read-only query HTTP failure; no submission attempted')
-          except Exception:
-              raise SystemExit('EAS read-only query failed; no submission attempted')
-          if result.get('errors'):
-              raise SystemExit('EAS query returned errors; no submission attempted')
-          build = result['data']['builds']['byId']
-          expected = {'id': build_id, 'status': 'FINISHED', 'platform': 'IOS',
-              'appVersion': '1.2.2', 'appBuildVersion': '14',
-              'gitCommitHash': '5bbdb1bd0312093410420e542b66dcd1265636c8'}
-          if any(build.get(key) != value for key, value in expected.items()):
-              raise SystemExit('Existing build identity/status mismatch; no submission attempted')
-          if build['project']['id'] != '82efa217-a2ac-4209-a975-ea7198a51cda':
-              raise SystemExit('Unexpected EAS project; no submission attempted')
-          print(json.dumps({key: build[key] for key in expected}))
-          for submission in build['submissions']:
-              error = submission.get('error') or {}
-              # Only statuses and known agreement error classification are emitted.
-              print(json.dumps({'submissionId': submission['id'], 'status': submission['status'],
-                  'missingAgreement': 'agreement' in error.get('message', '').lower(),
-                  'errorCode': error.get('errorCode')}))
-          submissions = build['submissions']
-          if any(item['status'] == 'FINISHED' for item in submissions):
-              print('Existing submission already finished; skipping duplicate submission')
-              allowed = False
-          elif any(item['status'] not in ('ERRORED', 'CANCELED') for item in submissions):
-              print('Existing submission is active or unknown; skipping duplicate submission')
-              allowed = False
-          elif not any(item['id'] == '08c5ad62-2901-4701-8ec2-8b7f2c0274b8'
-                       and item['status'] == 'ERRORED' for item in submissions):
-              raise SystemExit('Expected prior failed submission not found; no submission attempted')
-          else:
-              allowed = True
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('submit_allowed=' + str(allowed).lower() + '\n')
-
-      - name: Check out the successful release commit
-        if: steps.inspect.outputs.submit_allowed == 'true'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          ref: 5bbdb1bd0312093410420e542b66dcd1265636c8
-          persist-credentials: false
-
-      - name: Setup Bun
-        if: steps.inspect.outputs.submit_allowed == 'true'
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
-        with:
-          bun-version-file: package.json
-
-      - name: Setup Node.js
-        if: steps.inspect.outputs.submit_allowed == 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: '22.13.1'
-
-      - name: Install frozen dependencies and the existing pinned EAS CLI
-        if: steps.inspect.outputs.submit_allowed == 'true'
-        run: |
-          bun install --frozen-lockfile --ignore-scripts
-          bun add -g --ignore-scripts eas-cli@21.0.2
-          bun add -g --ignore-scripts @aikidosec/safe-chain@1.5.3
-          safe-chain setup-ci
-
-      - name: Submit build 14 without rebuilding
-        if: steps.inspect.outputs.submit_allowed == 'true'
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          CI: 'true'
-        run: |
-          umask 077
-          set +e
-          eas submit --platform ios --profile production --id d726ae3e-fe94-4042-bdfe-5975c5f2a930 --non-interactive --wait > "$RUNNER_TEMP/eas-submit.log" 2>&1
-          submit_result=$?
-          set -e
-          python3 - <<'PYTHON'
-          import json, os, re
-          with open(os.path.join(os.environ['RUNNER_TEMP'], 'eas-submit.log')) as log:
-              text = log.read()
-          urls = re.findall(r'https://expo\.dev/accounts/amedama/projects/tenkacloud-passport/submissions/[0-9a-f-]{36}', text)
-          print(json.dumps({'submissionUrls': list(dict.fromkeys(urls)),
-              'agreementErrorReported': 'agreement' in text.lower(),
-              'appleSubmissionSuccessReported': 'successfully submitted' in text.lower()
-                  or 'successfully uploaded' in text.lower()}))
-          PYTHON
-          exit "$submit_result"
-
-      - name: Report final submission statuses
-        if: always()
+      - name: Read Apple processing status for build 14
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         shell: python
@@ -136,7 +24,8 @@ jobs:
           import json, os, urllib.request
           query = '''query ExistingReleaseSubmissionStatus($id: ID!) {
             builds { byId(buildId: $id) {
-              id submissions { id status
+              id status platform appVersion appBuildVersion gitCommitHash project { id }
+              submissions { id status
                 appStoreConnectBuildUpload { version buildNumber uploadState
                   appStoreConnectBuild { buildNumber processingState uploadedDate }
                 }
@@ -155,6 +44,15 @@ jobs:
               raise SystemExit('Final EAS status query failed')
           if result.get('errors'):
               raise SystemExit('Final EAS status query returned errors')
-          for submission in result['data']['builds']['byId']['submissions']:
+          build = result['data']['builds']['byId']
+          expected = {'id': 'd726ae3e-fe94-4042-bdfe-5975c5f2a930', 'status': 'FINISHED',
+              'platform': 'IOS', 'appVersion': '1.2.2', 'appBuildVersion': '14',
+              'gitCommitHash': '5bbdb1bd0312093410420e542b66dcd1265636c8'}
+          if any(build.get(key) != value for key, value in expected.items()):
+              raise SystemExit('Build identity mismatch')
+          if build['project']['id'] != '82efa217-a2ac-4209-a975-ea7198a51cda':
+              raise SystemExit('EAS project mismatch')
+          print(json.dumps(expected))
+          for submission in build['submissions']:
               print(json.dumps({'submissionId': submission['id'], 'status': submission['status'],
                   'appleBuildUpload': submission.get('appStoreConnectBuildUpload')}))
