@@ -19,6 +19,9 @@ type Shot = {
   };
 };
 type ShotSet = {
+  id: string;
+  context: { token?: string | { getToken(): Promise<string> } };
+  updateAsync(input: { appScreenshots: string[] }): Promise<unknown>;
   attributes: { screenshotDisplayType: string; appScreenshots: Shot[] };
 };
 type LocaleModel = {
@@ -117,6 +120,7 @@ export function validateReviewedAssets(
   listing: Listing
 ): void {
   if (listing.version !== '1.3.0') throw new Error('Listing version mismatch');
+  for (const local of Object.values(listing.info)) listingFields(local);
   const provenance = JSON.parse(
     readFileSync(
       join(
@@ -230,6 +234,8 @@ async function editableVersion(
   });
 }
 function listingFields(local: Listing['info'][string]): Fields {
+  if (Buffer.byteLength(local.keywords.join(','), 'utf8') > 100)
+    throw new Error('Keywords exceed Apple UTF-8 byte limit');
   return {
     description: local.description,
     keywords: local.keywords.join(','),
@@ -292,10 +298,38 @@ function verifyScreenshotSet(
       throw new Error('Screenshot content/processing readback mismatch');
   }
 }
+export async function canonicalScreenshotOrder(
+  set: ShotSet,
+  paths: string[],
+  request: (url: string, token: string) => Promise<{ data: { id: string }[] }>
+): Promise<Shot[]> {
+  const shots = paths.map((path) => {
+    const shot = set.attributes.appScreenshots.find(
+      (item) => item.attributes.fileName === basename(path)
+    );
+    if (!shot) throw new Error('Expected screenshot is missing');
+    return shot;
+  });
+  await set.updateAsync({ appScreenshots: shots.map((shot) => shot.id) });
+  const token = set.context.token;
+  const signed = typeof token === 'string' ? token : await token?.getToken();
+  if (!signed) throw new Error('Existing Apple API authentication is required');
+  const response = await request(
+    `https://api.appstoreconnect.apple.com/v1/appScreenshotSets/${set.id}/relationships/appScreenshots`,
+    signed
+  );
+  if (
+    response.data.map((item) => item.id).join(',') !==
+    shots.map((shot) => shot.id).join(',')
+  )
+    throw new Error('Canonical screenshot order readback mismatch');
+  return shots;
+}
 async function verifyLocale(
   remote: LocaleModel,
   local: Listing['info'][string],
-  projectDir: string
+  projectDir: string,
+  cliRoot: string
 ): Promise<void> {
   for (const [key, expected] of Object.entries(listingFields(local))) {
     if (Reflect.get(remote.attributes, key) !== expected)
@@ -310,9 +344,23 @@ async function verifyLocale(
     return;
   }
   for (const [type, paths] of Object.entries(local.screenshots)) {
-    const shots =
-      sets.find((set) => set.attributes.screenshotDisplayType === type)
-        ?.attributes.appScreenshots ?? [];
+    const set = sets.find(
+      (item) => item.attributes.screenshotDisplayType === type
+    );
+    if (!set) throw new Error('Expected screenshot set is missing');
+    const load = createRequire(join(cliRoot, 'package.json'));
+    const { getRequestClient } = load('@expo/apple-utils');
+    const shots = await canonicalScreenshotOrder(
+      set,
+      paths,
+      async (url, token) => {
+        const response = await getRequestClient().get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 30000,
+        });
+        return response.data;
+      }
+    );
     verifyScreenshotSet(shots, paths, projectDir);
   }
 }
@@ -371,7 +419,7 @@ export async function applyReviewedListing(input: {
     throw new Error('Selected build readback mismatch');
   for (const remote of await version.getLocalizationsAsync()) {
     const local = listing.info[remote.attributes.locale];
-    if (local) await verifyLocale(remote, local, projectDir);
+    if (local) await verifyLocale(remote, local, projectDir, cliRoot);
   }
   console.log(
     JSON.stringify({

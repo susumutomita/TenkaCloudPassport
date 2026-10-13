@@ -19,7 +19,9 @@ for (const locale of ['ja', 'en-US']) {
     expect(info.subtitle.length).toBeLessThanOrEqual(30);
     expect(info.description.length).toBeLessThanOrEqual(4000);
     expect(info.promoText.length).toBeLessThanOrEqual(170);
-    expect(info.keywords.join(',').length).toBeLessThanOrEqual(100);
+    expect(
+      Buffer.byteLength(info.keywords.join(','), 'utf8')
+    ).toBeLessThanOrEqual(100);
     expect(info.description).not.toContain('Apple Intelligence');
     expect(info.description).toContain(
       locale === 'ja' ? '会話 AI は廃止' : 'conversation AI has been retired'
@@ -172,4 +174,39 @@ it('creates only approved locale records when a new version has no copied locali
       whatsNew: local.releaseNotes,
     });
   }
+});
+
+it('rejects canonical Apple screenshot order that differs from embedded SDK order', async () => {
+  const { canonicalScreenshotOrder } = await import('./apply-store-listing');
+  const shots = ['first', 'second'].map((id) => ({
+    id,
+    attributes: { fileName: `${id}.png`, fileSize: 1 },
+  }));
+  let reordered: string[] = [];
+  const set = {
+    id: 'synthetic-set',
+    context: { token: 'synthetic-token' },
+    attributes: {
+      screenshotDisplayType: 'APP_IPHONE_61',
+      appScreenshots: shots,
+    },
+    updateAsync: async (input: { appScreenshots: string[] }) => {
+      reordered = input.appScreenshots;
+    },
+  };
+  await expect(
+    canonicalScreenshotOrder(set, ['first.png', 'second.png'], async () => ({
+      data: [{ id: 'second' }, { id: 'first' }],
+    }))
+  ).rejects.toThrow('Canonical screenshot order readback mismatch');
+  expect(reordered).toEqual(['first', 'second']);
+  expect(
+    await canonicalScreenshotOrder(
+      set,
+      ['first.png', 'second.png'],
+      async () => ({
+        data: [{ id: 'first' }, { id: 'second' }],
+      })
+    )
+  ).toEqual(shots);
 });
