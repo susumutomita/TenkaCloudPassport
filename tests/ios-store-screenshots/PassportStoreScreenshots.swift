@@ -45,10 +45,12 @@ final class PassportStoreScreenshots: XCTestCase {
     XCTAssertTrue(start.waitForExistence(timeout: 180), app.debugDescription)
     tap("保存した教材で学習を始める")
     top(); capture("03-learning-library")
-    let lesson = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "学習を始める：2つの値")).firstMatch
+    let lesson = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "学習を始める：")).firstMatch
     for _ in 0..<20 { if lesson.exists && lesson.isHittable { break }; app.scrollViews.firstMatch.swipeUp() }
-    XCTAssertTrue(lesson.exists && lesson.isHittable); lesson.tap()
-    XCTAssertTrue(app.staticTexts["2つの値を組み合わせる"].waitForExistence(timeout: 20))
+    XCTAssertTrue(lesson.exists && lesson.isHittable)
+    let lessonTitle = String(lesson.label.dropFirst("学習を始める：".count))
+    lesson.tap()
+    XCTAssertTrue(app.staticTexts[lessonTitle].waitForExistence(timeout: 20))
     top(); capture("04-learning-study")
     tap("Passport に戻る")
     let settings = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "設定")).firstMatch

@@ -142,7 +142,8 @@ class InspectStore extends MetadataPull {
       );
       const locales = await version.getLocalizationsAsync();
       for (const locale of locales) {
-        const { description, keywords, promotionalText } = locale.attributes;
+        const { description, keywords, promotionalText, whatsNew } =
+          locale.attributes;
         const sets = await locale.getAppScreenshotSetsAsync();
         console.log(
           JSON.stringify({
@@ -152,11 +153,12 @@ class InspectStore extends MetadataPull {
               description,
               keywords,
               promotionalText,
+              whatsNew,
               screenshots: sets.map(
                 (set: {
                   attributes: {
                     screenshotDisplayType: string;
-                    appScreenshots?: {
+                    appScreenshots: {
                       id: string;
                       attributes: {
                         fileName: unknown;
@@ -167,7 +169,7 @@ class InspectStore extends MetadataPull {
                   };
                 }) => ({
                   displayType: set.attributes.screenshotDisplayType,
-                  files: (set.attributes.appScreenshots ?? []).map((shot) => ({
+                  files: set.attributes.appScreenshots.map((shot) => ({
                     id: shot.id,
                     name: shot.attributes.fileName,
                     bytes: shot.attributes.fileSize,

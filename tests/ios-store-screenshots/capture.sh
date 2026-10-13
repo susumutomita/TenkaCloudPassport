@@ -16,7 +16,25 @@ for pair in 'iphone-medium|iPhone 17 Pro' 'iphone-6.9|iPhone 17 Pro Max' 'ipad-1
   xcrun simctl status_bar "$identifier" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
   xcrun simctl ui "$identifier" appearance light
   xcrun simctl install "$identifier" "$app_binary"
-  xcodebuild test -project /tmp/PassportStoreScreenshots/PassportStoreScreenshots.xcodeproj -scheme PassportStoreScreenshots -destination "platform=iOS Simulator,id=$identifier" -resultBundlePath "$destination/result.xcresult" CODE_SIGNING_ALLOWED=NO > "$destination/test.log" 2>&1
+  diagnose_launch() {
+    xcrun simctl spawn "$identifier" log show --style compact --last 3m --predicate 'process == "TenkaCloudPassport" OR eventMessage CONTAINS "cloud.tenka.passport"' > "$destination/launch-diagnostics.log" 2>&1 || true
+    tail -n 150 "$destination/launch-diagnostics.log"
+    for report in "$HOME"/Library/Logs/DiagnosticReports/TenkaCloudPassport*.ips; do
+      if test -f "$report"; then cp "$report" "$destination/"; head -n 100 "$report"; fi
+    done
+  }
+  if ! xcrun simctl launch "$identifier" cloud.tenka.passport > "$destination/launch.log" 2>&1; then
+    cat "$destination/launch.log"
+    diagnose_launch
+    exit 1
+  fi
+  cat "$destination/launch.log"
+  xcrun simctl terminate "$identifier" cloud.tenka.passport || true
+  if ! xcodebuild test -project /tmp/PassportStoreScreenshots/PassportStoreScreenshots.xcodeproj -scheme PassportStoreScreenshots -destination "platform=iOS Simulator,id=$identifier" -resultBundlePath "$destination/result.xcresult" CODE_SIGNING_ALLOWED=NO > "$destination/test.log" 2>&1; then
+    tail -n 110 "$destination/test.log"
+    diagnose_launch
+    exit 1
+  fi
   xcrun xcresulttool export attachments --path "$destination/result.xcresult" --output-path "$destination/attachments"
   xcrun simctl shutdown "$identifier"
 done
