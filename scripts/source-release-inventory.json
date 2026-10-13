@@ -357,6 +357,8 @@
     "src/app/intro-card-app-wiring.test.ts",
     "src/app/intro-card-notice.test.ts",
     "src/app/intro-card-notice.ts",
+    "src/app/intro-card-sharing.test.ts",
+    "src/app/intro-card-sharing.ts",
     "src/app/intro-card-storage.test.ts",
     "src/app/intro-card-storage.ts",
     "src/app/invite-lounge-flow.test.ts",

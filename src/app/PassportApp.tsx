@@ -14,11 +14,7 @@ import {
 } from '../domain/agent-model-provider';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
 import { RULES_INTERACTION_PROVIDER } from '../domain/interaction-discovery-provider';
-import {
-  createIntroCard,
-  INTRO_CARD_MAX_THEMES,
-  type IntroCard,
-} from '../domain/intro-card';
+import { createIntroCard, type IntroCard } from '../domain/intro-card';
 import type { ClockSnapshot, LoungeState } from '../domain/lounge';
 import type { LoungeInvite } from '../domain/lounge-invite';
 import {
@@ -111,6 +107,7 @@ import {
   type IntroCardNotice,
   introCardNoticeFromError,
 } from './intro-card-notice';
+import { introCardForSharing } from './intro-card-sharing';
 import {
   EMPTY_INTRO_CARD_DRAFT_FIELDS,
   type IntroCardDraftFields,
@@ -689,13 +686,11 @@ function IntroCardStageGate({
       onOpenSettings={edit.onOpenSettings}
       onRemoveOtherLink={edit.onRemoveOtherLink}
       onSave={edit.onSave}
-      onToggleThemeId={edit.onToggleThemeId}
       organization={edit.organization}
       otherLinks={edit.otherLinks}
       phone={edit.phone}
       saving={edit.saving}
       selfIntro={edit.selfIntro}
-      themeIds={edit.themeIds}
       title={edit.title}
       cardUrlByteUsage={edit.cardUrlByteUsage}
     />
@@ -806,13 +801,7 @@ export default function PassportApp({
   const [introCardDraftOtherLinks, setIntroCardDraftOtherLinks] = useState<
     readonly string[]
   >([]);
-  // Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマ（最大
-  // `INTRO_CARD_MAX_THEMES` 件）。`ClueSelector`（カタログからの選択式）で選ぶため、
-  // 他の draft state と異なりテキスト欄ではなく、`IntroCardDraftFields`
-  // （下書き永続化、Issue 93）の対象にもしない。保存済みカードから
-  // `loadIntroCardDraftFrom` が都度水和し、保存・削除で確定 state を更新する
-  // （Profile Creation の `ownerSelection`/`toggleClueId` と同じ「draft 永続化
-  // しない選択式 state」の流儀）。
+  // Preserve existing card topics privately for backwards-compatible storage only.
   const [introCardDraftThemeIds, setIntroCardDraftThemeIds] = useState<
     readonly ClueId[]
   >([]);
@@ -1605,7 +1594,7 @@ export default function PassportApp({
       // 表示画面では再検証せずそのまま QR 化できる前提を保つ。Issue 84 で
       // QR の中身が vCard 直埋めから URL へ変わったため、検証対象も
       // encodeVCard から encodeIntroCardUrl へ揃える）。
-      encodeIntroCardUrl(card);
+      encodeIntroCardUrl(introCardForSharing(card));
       await introCardStorage.save(card);
       introCardRef.current = card;
       setIntroCard(card);
@@ -2368,7 +2357,9 @@ export default function PassportApp({
       }}
       introCard={introCard}
       introCardEdit={{
-        cardUrlByteUsage: introCardUrlByteLength(introCardDraftAsShape()),
+        cardUrlByteUsage: introCardUrlByteLength(
+          introCardForSharing(introCardDraftAsShape())
+        ),
         email: introCardDraftEmail,
         errorFieldKey: introCardErrorFieldKey,
         linkGithub: introCardDraftLinkGithub,
@@ -2399,16 +2390,11 @@ export default function PassportApp({
             removeOtherLink(current, index)
           ),
         onSave: () => void saveIntroCard(),
-        onToggleThemeId: (id) =>
-          setIntroCardDraftThemeIds((current) =>
-            toggleClueId(current, id, INTRO_CARD_MAX_THEMES)
-          ),
         organization: introCardDraftOrganization,
         otherLinks: introCardDraftOtherLinks,
         phone: introCardDraftPhone,
         saving: introCardSaving,
         selfIntro: introCardDraftSelfIntro,
-        themeIds: introCardDraftThemeIds,
         title: introCardDraftTitle,
       }}
       locale={locale}

@@ -68,7 +68,9 @@ describe('自己紹介カード（Issue 79）の Accessibility 契約', () => {
   it('表示画面の QR は encodeIntroCardUrl（自己紹介ページ URL）から生成し vCard 直埋めには依存しない（Issue 84）', async () => {
     const text = await source('IntroCardScreen.tsx');
 
-    expect(text).toContain('encodeQr(encodeIntroCardUrl(card))');
+    expect(text).toContain(
+      'encodeQr(encodeIntroCardUrl(introCardForSharing(card)))'
+    );
     expect(text).not.toContain('encodeVCard');
   });
 

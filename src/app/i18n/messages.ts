@@ -523,14 +523,6 @@ export interface AppMessages {
     readonly addLinkButton: string;
     readonly addLinkButtonHint: string;
     readonly removeLinkButtonLabel: (index: number) => string;
-    /**
-     * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマの選択欄
-     * （`ClueSelector` を再利用、`clueSelector` 名前空間のラベルとは別に
-     * この欄固有の見出し・件数表示だけをここで持つ）。
-     */
-    readonly themeIdsLabel: string;
-    readonly themeIdsHint: string;
-    readonly themeIdsCounter: (current: number, max: number) => string;
     readonly byteUsageLabel: (current: number, max: number) => string;
     readonly byteUsageOverBudget: (current: number, max: number) => string;
     readonly saveButton: (saving: boolean) => string;
@@ -1116,10 +1108,6 @@ const ja: AppMessages = {
     addLinkButtonHint:
       '自由な URL の入力欄を追加します。名前付き欄と合わせて最大 5 件までです。',
     removeLinkButtonLabel: (index) => `その他のリンク ${index} を削除`,
-    themeIdsLabel: '会話テーマ（任意）',
-    themeIdsHint:
-      '端末内会話エージェントが相手との共通点を探すのに使います。最大 3 件まで選べます。',
-    themeIdsCounter: (current, max) => `${current} / ${max} 件選択`,
     byteUsageLabel: (current, max) => `QR の目安: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `QR の上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
@@ -1706,10 +1694,6 @@ const en: AppMessages = {
     addLinkButtonHint:
       'Adds a free-form URL field. Up to 5 links in total, including the named fields.',
     removeLinkButtonLabel: (index) => `Remove other link ${index}`,
-    themeIdsLabel: 'Conversation topics (optional)',
-    themeIdsHint:
-      'Used by the on-device conversation agent to find common ground with someone you meet. Choose up to 3.',
-    themeIdsCounter: (current, max) => `${current} / ${max} selected`,
     byteUsageLabel: (current, max) => `QR estimate: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `This exceeds the QR limit (${current} / ${max} byte). Please shorten your input.`,

@@ -129,7 +129,7 @@ function DiagnosticActions({
     sharing,
     deleteAllConfirmationRequested,
   } = flow;
-  const destructiveActionBlocked = busy || recoveryRequired;
+  const destructiveActionBlocked = loading || busy || recoveryRequired;
   return (
     <>
       <ActionButton
