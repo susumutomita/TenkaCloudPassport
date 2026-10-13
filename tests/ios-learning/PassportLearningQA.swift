@@ -29,7 +29,11 @@ final class PassportLearningQA: XCTestCase {
     }
     return button
   }
-  func tap(_ label: String) { let button = findButton(label); XCTAssertTrue(button.exists, "Missing \(label)"); XCTAssertTrue(button.isHittable, "Not tappable \(label)"); button.tap() }
+  func assertEnabled(_ button: XCUIElement) {
+    let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: button)
+    XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed, "Button remains disabled: \(button.label)")
+  }
+  func tap(_ label: String) { let button = findButton(label); XCTAssertTrue(button.exists, "Missing \(label)"); assertEnabled(button); let actionable = findButton(label); XCTAssertTrue(actionable.isHittable, "Not tappable \(label)"); actionable.tap() }
   func screenshot(_ name: String) { let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment) }
   func openLearning() {
     let entry = app.buttons["学習・面接の練習"].firstMatch
@@ -73,7 +77,7 @@ final class PassportLearningQA: XCTestCase {
     screenshot("03-incorrect-small")
     app.swipeDown(); app.swipeDown()
     tap("各要素と、それより後ろの全要素の組を調べる")
-    XCTAssertTrue(findButton("次へ / Next").isEnabled)
+    assertEnabled(findButton("次へ / Next"))
     screenshot("04-correct-small"); tap("次へ / Next")
     tap("教材一覧へ / Back to lessons"); tap("Passport に戻る")
     app.terminate(); app.launch(); openLearning(); tap("2つの値を組み合わせる · 2/5")
@@ -136,7 +140,7 @@ final class PassportLearningQA: XCTestCase {
     for _ in 0..<35 { if foundation.isHittable { break }; app.scrollViews.firstMatch.swipeUp() }
     XCTAssertTrue(foundation.isHittable); foundation.tap(); screenshot("18-foundation-accessibility-xxxl")
     tap("ある i で a[i]≥a[i+1]")
-    XCTAssertTrue(findButton("次へ / Next").isEnabled)
+    assertEnabled(findButton("次へ / Next"))
     screenshot("19-correct-accessibility-xxxl")
     tap("教材一覧へ / Back to lessons"); tap("Passport に戻る")
   }
