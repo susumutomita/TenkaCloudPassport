@@ -14,7 +14,7 @@ export type LegacyCleanupFlow = Pick<
   | 'modelPreview'
   | 'error'
   | 'refreshModel'
-  | 'removeModel'
+  | 'removeLegacyModel'
 >;
 const COPY = {
   ja: {
@@ -61,7 +61,7 @@ export function LegacyModelCleanupSection({
       return;
     }
     setConfirm(false);
-    void flow.removeModel();
+    void flow.removeLegacyModel();
   }
   return (
     <Card>

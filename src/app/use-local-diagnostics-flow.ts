@@ -47,6 +47,7 @@ export interface LocalDiagnosticsFlow {
   readonly endAndForgetLounge: () => void;
   readonly resetPassport: () => Promise<void>;
   readonly removeModel: () => Promise<void>;
+  readonly removeLegacyModel: () => Promise<void>;
   readonly requestDeleteAll: () => void;
   readonly cancelDeleteAll: () => void;
   readonly confirmDeleteAll: () => Promise<void>;
@@ -282,27 +283,40 @@ export function useLocalDiagnosticsFlow({
     }
   }, [applyError, localDataControl]);
 
-  const removeModel = useCallback(async (): Promise<void> => {
-    if (busy || recoveryRequired) return;
-    setBusy(true);
-    try {
-      await localDataControl.removeModel();
-      onModelRemoved?.();
-      setNotice('model-removed');
-      await refreshModel();
-    } catch (cause: unknown) {
-      applyError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }, [
-    applyError,
-    busy,
-    localDataControl,
-    onModelRemoved,
-    recoveryRequired,
-    refreshModel,
-  ]);
+  const removeStoredModel = useCallback(
+    async (refreshAfter: () => Promise<void>): Promise<void> => {
+      if (busy || loading || recoveryRequired) return;
+      setBusy(true);
+      try {
+        await localDataControl.removeModel();
+        setModelPreview(undefined);
+        onModelRemoved?.();
+        setNotice('model-removed');
+        await refreshAfter();
+      } catch (cause: unknown) {
+        applyError(cause);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      applyError,
+      busy,
+      loading,
+      localDataControl,
+      onModelRemoved,
+      recoveryRequired,
+    ]
+  );
+
+  const removeModel = useCallback(
+    () => removeStoredModel(refresh),
+    [removeStoredModel, refresh]
+  );
+  const removeLegacyModel = useCallback(
+    () => removeStoredModel(refreshModel),
+    [removeStoredModel, refreshModel]
+  );
 
   const requestDeleteAll = useCallback((): void => {
     if (recoveryRequired) return;
@@ -366,6 +380,7 @@ export function useLocalDiagnosticsFlow({
     endAndForgetLounge,
     resetPassport,
     removeModel,
+    removeLegacyModel,
     requestDeleteAll,
     cancelDeleteAll,
     confirmDeleteAll,
