@@ -1,10 +1,12 @@
 # Release Status and Device Matrix
 
+2026-10-13: Native 版番号は 1.3.0 の準備値へ更新。以下の Source Alpha の物理検証・公開 Gate は履歴の snapshot であり、新版の実機確認やストア公開を示さない。
+
 - Snapshot date: 2026-07-18
 - Evidence source snapshot: `eaa6382cd380c31400cd1e879625ccbcc628c0ba`
 - Candidate commit: `Not fixed`（tag 作成時に 40 桁 SHA へ固定する）
 - Candidate version: `0.1.0-alpha.1`
-- Native user-facing version: `1.2.2`（Source-only Candidate に Native Binary は含めない。`app.json` の `expo.version` と同期する）
+- Native user-facing version: `1.3.0`（Source-only Candidate に Native Binary は含めない。`app.json` の `expo.version` と同期する）
 - Public OSS Alpha: `Blocked`
 - `oss-alpha-draft` Environment protection: `Not run`（Repository 設定の Required Reviewer 証拠なし）
 - `v*` Tag immutability ruleset: `Not run`（active な更新 / 削除禁止と bypass なしの証拠なし）
