@@ -23,6 +23,8 @@ import {
   currentProgress,
   startLesson,
 } from '../../domain/learning/transitions';
+import { createRoundId } from '../../domain/session-identifiers';
+import { webCryptoRandomBytes } from '../../protocol/web-crypto-random';
 import { colors, spacing } from '../../ui/theme';
 import { LearningLesson } from './LearningLesson';
 
@@ -148,7 +150,7 @@ function Study({
           startLesson(
             current,
             lessonKey(catalog, lesson),
-            `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            createRoundId(webCryptoRandomBytes),
             true
           )
         )

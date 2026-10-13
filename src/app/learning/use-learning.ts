@@ -22,6 +22,8 @@ import {
   importCatalog,
   restoreBackup,
 } from '../../domain/learning/validation';
+import { createRoundId } from '../../domain/session-identifiers';
+import { webCryptoRandomBytes } from '../../protocol/web-crypto-random';
 import { emptyLearningState } from './bundled';
 import { fetchCatalog, fetchManifest } from './catalog-download';
 import { catalogTransport } from './default-transport';
@@ -103,7 +105,6 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     });
   }
   async function open(catalog: Catalog, lesson: Lesson) {
-    const sessionID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const current = state && currentProgress(state, catalog, lesson);
     if (current) {
       setSelection({ catalog, lesson });
@@ -111,7 +112,11 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     }
     if (
       await commit((data) =>
-        startLesson(data, lessonKey(catalog, lesson), sessionID)
+        startLesson(
+          data,
+          lessonKey(catalog, lesson),
+          createRoundId(webCryptoRandomBytes)
+        )
       )
     )
       setSelection({ catalog, lesson });
