@@ -1,8 +1,10 @@
 /** Read-only release/listing inspection using the pinned EAS Metadata authentication route. */
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
   applyReviewedListing,
+  summarizeReviewDetails,
   verifySavedListing,
 } from './apply-store-listing.ts';
 
@@ -22,6 +24,174 @@ const { getAppStoreAuthAsync } = load('./build/metadata/auth');
 const { getProfilesAsync } = load('./build/utils/profiles');
 const { EasJsonAccessor } = load('@expo/eas-json');
 
+async function optionalRead(label: string, read: () => Promise<unknown>) {
+  try {
+    return { status: 'available', result: await read() };
+  } catch (error) {
+    const status =
+      error && typeof error === 'object'
+        ? Reflect.get(Reflect.get(error, 'response') ?? {}, 'status')
+        : undefined;
+    return {
+      status: 'unavailable',
+      area: label,
+      reason:
+        status === 401
+          ? 'unauthorized'
+          : status === 403
+            ? 'forbidden'
+            : status === 404
+              ? 'resource not found'
+              : 'read failed',
+    };
+  }
+}
+type ReadinessAppInfo = {
+  id: string;
+  attributes: { appStoreState?: string; state?: string };
+  getAgeRatingDeclarationAsync(): Promise<{
+    attributes: Record<string, unknown>;
+  } | null>;
+  getLocalizationsAsync(): Promise<
+    { attributes: { locale: string; privacyPolicyUrl?: string } }[]
+  >;
+};
+async function inspectReviewReadiness(
+  app: { id: string; getAppInfoAsync(): Promise<ReadinessAppInfo[]> },
+  versions: {
+    attributes: { versionString: string };
+    getAppStoreReviewDetailAsync(): Promise<{
+      attributes: Record<string, unknown>;
+    } | null>;
+  }[],
+  builds: { attributes: Record<string, unknown> }[],
+  projectDir: string
+) {
+  const config = JSON.parse(
+    readFileSync(join(projectDir, 'store.config.json'), 'utf8')
+  ).apple;
+  const notesDoc = readFileSync(
+    join(projectDir, 'docs/release/app-store-submission-1.3.0.md'),
+    'utf8'
+  );
+  const preparedNotes = notesDoc
+    .match(/## 審査用 Notes 案\s+([\s\S]*?)\n##/)?.[1]
+    ?.trim();
+  if (!preparedNotes) throw new Error('Prepared review notes are missing');
+  const review = [];
+  for (const version of versions.filter(
+    (item: { attributes: { versionString: string } }) =>
+      ['1.2.0', '1.3.0'].includes(item.attributes.versionString)
+  )) {
+    review.push({
+      version: version.attributes.versionString,
+      details: await optionalRead('review information', async () => {
+        const detail = await version.getAppStoreReviewDetailAsync();
+        return summarizeReviewDetails(
+          detail?.attributes ?? null,
+          preparedNotes
+        );
+      }),
+    });
+  }
+  const appInfo = await optionalRead(
+    'app information/age/privacy URLs',
+    async () => {
+      const infos = await app.getAppInfoAsync();
+      const output = [];
+      for (const info of infos) {
+        const declaration = await optionalRead('age rating', async () => {
+          const age = await info.getAgeRatingDeclarationAsync();
+          if (!age) return { status: 'absent' };
+          const keys = Object.keys(config.advisory).filter(
+            (key) => key !== 'developerAgeRatingInfoUrl'
+          );
+          return {
+            status: 'available',
+            matchesConfiguredDeclaration: keys.every(
+              (key) => age.attributes[key] === config.advisory[key]
+            ),
+            differentFieldNames: keys.filter(
+              (key) => age.attributes[key] !== config.advisory[key]
+            ),
+            currentAnswers: Object.fromEntries(
+              keys.map((key) => [
+                key,
+                typeof age.attributes[key] === 'boolean' ||
+                age.attributes[key] === null ||
+                /^(NONE|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|FOUR_PLUS|NINE_PLUS|TWELVE_PLUS|SEVENTEEN_PLUS|UNRATED)$/.test(
+                  String(age.attributes[key])
+                )
+                  ? age.attributes[key]
+                  : 'unrecognized or unavailable',
+              ])
+            ),
+          };
+        });
+        const privacyURLs = await optionalRead(
+          'privacy policy URLs',
+          async () => {
+            const locales = await info.getLocalizationsAsync();
+            return locales
+              .filter((item: { attributes: { locale: string } }) =>
+                ['ja', 'en-US'].includes(item.attributes.locale)
+              )
+              .map(
+                (item: {
+                  attributes: { locale: string; privacyPolicyUrl?: string };
+                }) => ({
+                  locale: item.attributes.locale,
+                  policyURLPresent: Boolean(item.attributes.privacyPolicyUrl),
+                  matchesConfiguredURL:
+                    item.attributes.privacyPolicyUrl ===
+                    config.info[item.attributes.locale]?.privacyPolicyUrl,
+                })
+              );
+          }
+        );
+        output.push({
+          id: info.id,
+          state: info.attributes.appStoreState ?? info.attributes.state,
+          ageRating: declaration,
+          privacyURLs,
+        });
+      }
+      return output;
+    }
+  );
+  const appleBuild = builds.find((item) => item.attributes['version'] === '15');
+  console.log(
+    JSON.stringify({
+      reviewReadinessReadOnly: {
+        appId: app.id,
+        review,
+        appInfo,
+        exportCompliance: {
+          build: '15',
+          usesNonExemptEncryption:
+            typeof appleBuild?.attributes['usesNonExemptEncryption'] ===
+            'boolean'
+              ? appleBuild.attributes['usesNonExemptEncryption']
+              : null,
+        },
+        privacyDataUsageLabels: {
+          status: 'unavailable',
+          reason:
+            'Not exposed by the existing pinned API-key read path; no web-session login attempted',
+        },
+        agreements: {
+          status: 'unavailable',
+          reason:
+            'Pinned agreement API requires an Apple web session/provider; existing API-key authentication is retained without a new login',
+        },
+        submissionAttempted: false,
+        publicationAttempted: false,
+        declarationChangesAttempted: false,
+        uploadAttempted: false,
+      },
+    })
+  );
+}
 let stage = 'EAS context';
 class InspectStore extends MetadataPull {
   async runAsync() {
@@ -195,6 +365,10 @@ class InspectStore extends MetadataPull {
         projectDir,
         cliRoot,
       });
+    }
+    if (action === 'inspect') {
+      stage = 'read-only review readiness audit';
+      await inspectReviewReadiness(app, versions, builds, projectDir);
     }
     if (action === 'apply') {
       stage = 'reviewed listing application';

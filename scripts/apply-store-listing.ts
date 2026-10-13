@@ -530,3 +530,43 @@ export async function applyReviewedListing(
     })
   );
 }
+
+/** Only presence/classification leaves memory; never emit review contact or Notes text. */
+export function summarizeReviewDetails(
+  attributes: Record<string, unknown> | null,
+  preparedNotes: string
+) {
+  if (!attributes) return { status: 'absent' };
+  const present = (key: string) =>
+    typeof attributes[key] === 'string' &&
+    String(attributes[key]).trim().length > 0;
+  const notes =
+    typeof attributes['notes'] === 'string' ? attributes['notes'] : '';
+  return {
+    status: 'available',
+    contact: {
+      firstNamePresent: present('contactFirstName'),
+      lastNamePresent: present('contactLastName'),
+      emailPresent: present('contactEmail'),
+      phonePresent: present('contactPhone'),
+    },
+    demoAccountRequired:
+      typeof attributes['demoAccountRequired'] === 'boolean'
+        ? attributes['demoAccountRequired']
+        : null,
+    notesPresent: notes.trim().length > 0,
+    notesMatchPreparedCurrentDraft: notes.trim() === preparedNotes.trim(),
+    legacyAIClaimsPresent:
+      /includes an on-device conversation agent|automatically uses.{0,80}Apple Intelligence|FoundationModels|finds common ground|共通点.{0,20}見つけ/i.test(
+        notes
+      ),
+    currentFeatureMarkers: {
+      learning: /learning catalogs|学習|教材/i.test(notes),
+      inferenceRetired:
+        /inference is removed|AI has been retired|会話\s*AI.{0,12}廃止/i.test(
+          notes
+        ),
+      legacyCleanup: /legacy model cleanup|旧モデル.{0,12}削除/i.test(notes),
+    },
+  };
+}

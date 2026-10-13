@@ -316,3 +316,49 @@ it('rejects old nonempty and duplicate remote screenshot display sets', async ()
     )
   ).not.toThrow();
 });
+
+it('review readiness emits presence/classification only, never private contact or Notes values', async () => {
+  const { summarizeReviewDetails } = await import('./apply-store-listing');
+  const privateValues = [
+    'Synthetic private first',
+    'Synthetic private last',
+    'private@example.invalid',
+    '+15550000000',
+  ];
+  const note =
+    'Private note: includes an on-device conversation agent and FoundationModels.';
+  const result = summarizeReviewDetails(
+    {
+      contactFirstName: privateValues[0],
+      contactLastName: privateValues[1],
+      contactEmail: privateValues[2],
+      contactPhone: privateValues[3],
+      notes: note,
+      demoAccountRequired: false,
+    },
+    'Current notes'
+  );
+  const output = JSON.stringify(result);
+  for (const value of [...privateValues, note])
+    expect(output).not.toContain(value);
+  expect(result.legacyAIClaimsPresent).toBe(true);
+  expect(result.notesMatchPreparedCurrentDraft).toBe(false);
+  expect(result.contact).toEqual({
+    firstNamePresent: true,
+    lastNamePresent: true,
+    emailPresent: true,
+    phonePresent: true,
+  });
+  expect(summarizeReviewDetails(null, 'Current notes')).toEqual({
+    status: 'absent',
+  });
+  const current =
+    'Learning catalogs. On-device conversation inference is removed. Legacy model cleanup.';
+  expect(
+    summarizeReviewDetails({ notes: current }, current).legacyAIClaimsPresent
+  ).toBe(false);
+  expect(
+    summarizeReviewDetails({ notes: current }, current)
+      .notesMatchPreparedCurrentDraft
+  ).toBe(true);
+});
