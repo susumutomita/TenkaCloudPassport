@@ -59,7 +59,7 @@ interface UseLocalDiagnosticsFlowParams {
   readonly onClose: () => void;
   readonly onEndAndForgetLounge: () => void;
   readonly onPassportReset: () => void;
-  readonly onModelRemoved: () => void;
+  readonly onModelRemoved?: () => void;
   readonly onAllDataDeleted: (recoveryRequired: boolean) => void;
   readonly onRetryStartupRecovery: () => Promise<'not-pending' | 'recovered'>;
   readonly onError: (error: DiagnosticErrorSignal) => void;
@@ -262,7 +262,7 @@ export function useLocalDiagnosticsFlow({
     setBusy(true);
     try {
       await localDataControl.removeModel();
-      onModelRemoved();
+      onModelRemoved?.();
       setNotice('model-removed');
       await refresh();
     } catch (cause: unknown) {

@@ -82,35 +82,6 @@ describe('AgentModelProvider の Platform Composition', () => {
     expect(completeCalls).toBe(0);
   });
 
-  it('App Composition Root は Platform Provider を PassportApp へ明示的に渡す（Issue 118: distributionCapability は SettingsScreen が使わなくなり App Composition からも外した）', async () => {
-    const app = await source('../../App.tsx');
-
-    expect(app).toContain('createDefaultAgentModelProvider(localDataLeases)');
-    expect(app).toContain(
-      'agentModelProvider={agentModelProviderStartup.provider}'
-    );
-    expect(app).not.toContain('DEFAULT_DISTRIBUTION_CAPABILITY');
-    expect(app).not.toContain('distributionCapability');
-    expect(app).toContain('createDefaultLocalModelManagement(localDataLeases)');
-    expect(app).toContain(
-      'localModelManagement={localModelComposition?.management ?? null}'
-    );
-  });
-
-  it('Follow-up F-983000: App Composition Root は Provider を Promise で受け取り、解決するまで PassportApp をマウントしない', async () => {
-    const app = await source('../../App.tsx');
-
-    expect(app).toContain('AgentModelProviderStartupResult');
-    expect(app).toContain(
-      'const [agentModelProviderStartup, setAgentModelProviderStartup] ='
-    );
-    expect(app).toMatch(/agentModelProviderStartup \? \(/);
-    expect(app).toContain('appleIntelligenceUnavailable={');
-    expect(app).toContain(
-      'agentModelProviderStartup.appleIntelligenceUnavailable'
-    );
-  });
-
   describe('Follow-up F-983000: 起動時 Availability Gate（resolveNativeAgentModelProviderAtStartup）', () => {
     it('Expo Go では Availability を問い合わせず、常に Rules Provider を返す', async () => {
       let checkCalls = 0;

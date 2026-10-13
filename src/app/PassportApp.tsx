@@ -8,11 +8,8 @@ import {
   useState,
 } from 'react';
 import { AccessibilityInfo, AppState } from 'react-native';
-import CameraQrCaptureOverlay from '../components/CameraQrCaptureOverlay';
-import { ErrorBoundary } from '../components/ErrorBoundary';
 import {
   type AgentModelInput,
-  type AgentModelProvider,
   RULES_MODEL_PROVIDER,
 } from '../domain/agent-model-provider';
 import type { ClueId, LanguageCode } from '../domain/clue-catalog';
@@ -65,9 +62,6 @@ import {
 import { encodeQrPayload } from '../protocol/qr-payload';
 import { webCryptoRandomBytes } from '../protocol/web-crypto-random';
 import ActiveLoungeScreen from '../screens/ActiveLoungeScreen';
-import ConversationAgentScreen, {
-  type ConversationAgentScreenProps,
-} from '../screens/ConversationAgentScreen';
 import ConversationSelfReportScreen from '../screens/ConversationSelfReportScreen';
 import DestroyedLoungeScreen from '../screens/DestroyedLoungeScreen';
 import EncounterSetupScreen from '../screens/EncounterSetupScreen';
@@ -103,8 +97,6 @@ import {
   pilotProviderRunFromOutcome,
 } from './agent-provider-session';
 import type { BackupSharePort } from './backup-share-port';
-import type { CameraQrCapturePort } from './camera-qr-capture';
-import { createDefaultCameraQrCapturePort } from './default-camera-qr-capture';
 import type { DiagnosticErrorSignal } from './diagnostic-recovery';
 import type { DiagnosticTransportState } from './diagnostic-report';
 import type { Locale } from './i18n/locale';
@@ -130,8 +122,6 @@ import {
   type LocalDataControl,
   LocalDataControlError,
 } from './local-data-control';
-import type { LocalModelManagementPort } from './local-model-management-port';
-import type { LocalModelMutationLeasePort } from './local-model-mutation-lease';
 import {
   LocalProfileStorageError,
   type LocalProfileStoragePort,
@@ -171,12 +161,10 @@ import {
   recoverLocalStateAtStartup,
   type StartupLocalRecoveryResult,
 } from './startup-local-recovery';
-import { useConversationAgentFlow } from './use-conversation-agent-flow';
 import {
   type LocalDiagnosticsFlow,
   useLocalDiagnosticsFlow,
 } from './use-local-diagnostics-flow';
-import { useLocalModelManagement } from './use-local-model-management';
 import {
   type PilotMeasurementFlow,
   usePilotMeasurementFlow,
@@ -191,22 +179,6 @@ interface PassportAppProps {
   readonly initialLocalePort: InitialLocalePort;
   /** Issue 111: 明示切替（Settings / ヘッダートグル）の永続化先。 */
   readonly localePreferenceStorage: LocalePreferenceStoragePort;
-  /**
-   * ADR-0057 / Follow-up F-983000: Native では起動時に 1 回確定した
-   * Apple Intelligence Primary Provider（非対応端末では最初から Rules）。
-   * Web / Expo Go は常に `RULES_MODEL_PROVIDER`。
-   */
-  readonly agentModelProvider?: AgentModelProvider;
-  /**
-   * Follow-up F-983000 / F-056000: 起動時の Availability Gate が確定した
-   * 「この端末は Apple Intelligence を使えないか」。会話エージェント画面が
-   * 非対応端末向けの簡潔な案内を出すかどうかの唯一の判定源にする
-   * （Encounter ごとに揺れる `onDeviceAiActive` は使わない）。
-   */
-  readonly appleIntelligenceUnavailable?: boolean;
-  /** Development Build だけが app-private GGUF lifecycle を注入する。 */
-  readonly localModelManagement?: LocalModelManagementPort | null;
-  readonly localModelMutationLeases?: LocalModelMutationLeasePort | null;
   readonly localDataControl: LocalDataControl;
 }
 
@@ -220,9 +192,6 @@ type SetupStage =
   | 'settings'
   | 'diagnostics'
   | 'pilot-measurement'
-  // Issue 104 / ADR-0036: 端末内会話エージェント（Step A）。diagnostics /
-  // pilot-measurement と同じく Settings 経由の 1 経路だけを持つ、控えめな入口にする。
-  | 'conversation-agent'
   // Issue 79: 自己紹介カードピボット Step 1 のメインフロー。Pet / Lounge / Encounter 系
   // stage は導線から外れ、既定の着地点はこの 2 つになる。
   | 'intro-card'
@@ -400,8 +369,7 @@ interface ProfileHomeGateProps {
   readonly locale: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onOpenSettings: () => void;
-  /** Issue 170: 会話エージェントをホームの主導線から開く。 */
-  readonly onOpenConversationAgent: () => void;
+
   readonly encounter: EncounterBranchProps;
   readonly creation: PassportCreationBranchProps;
   /** Issue 79: 自己紹介カードピボット Step 1。詳細は `IntroCardStageGate` を参照。 */
@@ -426,7 +394,6 @@ function ProfileHomeGate({
   locale,
   onChangeLocale,
   onOpenSettings,
-  onOpenConversationAgent,
   encounter,
   creation,
   introCard,
@@ -447,7 +414,6 @@ function ProfileHomeGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDeleteIntroCard}
         onEdit={onEditIntroCard}
-        onOpenConversationAgent={onOpenConversationAgent}
         onOpenSettings={onOpenSettings}
         stage={stage}
       />
@@ -566,19 +532,7 @@ const UTILITY_STAGES: ReadonlySet<SetupStage> = new Set([
   'settings',
   'diagnostics',
   'pilot-measurement',
-  'conversation-agent',
 ]);
-
-/**
- * Issue 104 / ADR-0036: `IntroCardEditBranchProps` と同じく、
- * `ConversationAgentScreenProps` から `locale`/`onChangeLocale` の 2 つだけを
- * `UtilityStageGate` 側の引数として別に渡す（`Omit` で screen 側の型から直接導出し、
- * 型の drift を防ぐ）。
- */
-type ConversationAgentBranchProps = Omit<
-  ConversationAgentScreenProps,
-  'locale' | 'onChangeLocale'
->;
 
 interface UtilityStageGateProps {
   readonly stage: SetupStage;
@@ -589,20 +543,6 @@ interface UtilityStageGateProps {
   readonly locale: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
   readonly onCloseSettings: () => void;
-  /**
-   * Issue 104 / ADR-0036: 端末内会話エージェント。diagnostics / pilot-measurement
-   * と同じく Settings 経由の 1 経路だけを持つ控えめな入口にする。
-   */
-  readonly onOpenConversationAgent: () => void;
-  readonly conversationAgent: ConversationAgentBranchProps;
-  /** Issue 146: 会話エージェントの「QR 再スキャン」が開く実カメラ Preview の Port。 */
-  readonly cameraQrCapturePort: CameraQrCapturePort;
-  /**
-   * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 会話エージェントの Settings
-   * 入口を disabled にするための判定。Pet Profile の `hasProfile` とは別の値
-   * （自己紹介カード、`introCard !== null`）。
-   */
-  readonly hasIntroCard: boolean;
 }
 
 function UtilityStageGate({
@@ -614,10 +554,6 @@ function UtilityStageGate({
   locale,
   onChangeLocale,
   onCloseSettings,
-  onOpenConversationAgent,
-  conversationAgent,
-  cameraQrCapturePort,
-  hasIntroCard,
 }: UtilityStageGateProps) {
   if (stage === 'diagnostics') {
     return (
@@ -632,35 +568,6 @@ function UtilityStageGate({
   if (stage === 'pilot-measurement') {
     return (
       <PilotMeasurementScreen flow={pilotMeasurementFlow} locale={locale} />
-    );
-  }
-  if (stage === 'conversation-agent') {
-    // Issue 138（実機 blocker C、会話 Agent 起動クラッシュ）: JS 例外で
-    // アプリ全体（他 Stage・Navigation）まで巻き込まないよう、この Stage
-    // だけを Error Boundary で包む。native 側の crash はここでは防げない
-    // （`ErrorBoundary.tsx` 冒頭コメント参照）。
-    return (
-      <ErrorBoundary
-        messages={{
-          title: MESSAGES[locale].conversationAgent.crashNoticeTitle,
-          description:
-            MESSAGES[locale].conversationAgent.crashNoticeDescription,
-          backButtonLabel: MESSAGES[locale].conversationAgent.backButton,
-        }}
-        onRecover={conversationAgent.onBack}
-      >
-        <ConversationAgentScreen
-          {...conversationAgent}
-          locale={locale}
-          onChangeLocale={onChangeLocale}
-        />
-        {/*
-          Issue 146: 実カメラの Preview は Modal で画面全体を覆うため、Screen の
-          レイアウトへは影響しない。Stage をこの Overlay ごと Error Boundary の
-          中に置き、カメラ側の JS 例外でも他 Stage を巻き込まないようにする。
-        */}
-        <CameraQrCaptureOverlay locale={locale} port={cameraQrCapturePort} />
-      </ErrorBoundary>
     );
   }
   if (stage === 'settings') {
@@ -678,11 +585,9 @@ function UtilityStageGate({
           requestDeleteAll: diagnosticsFlow.requestDeleteAll,
           retryRecovery: diagnosticsFlow.refresh,
         }}
-        hasIntroCard={hasIntroCard}
         locale={locale}
         onBack={onCloseSettings}
         onChangeLocale={onChangeLocale}
-        onOpenConversationAgent={onOpenConversationAgent}
       />
     );
   }
@@ -727,8 +632,7 @@ interface IntroCardStageGateProps {
    * （`IntroCardScreen` / `IntroCardEditScreen` 参照）。
    */
   readonly onOpenSettings: () => void;
-  /** Issue 170: 会話エージェントをホームの主導線から開く。 */
-  readonly onOpenConversationAgent: () => void;
+
   readonly edit: IntroCardEditBranchProps;
 }
 
@@ -740,7 +644,6 @@ function IntroCardStageGate({
   onEdit,
   onDelete,
   onOpenSettings,
-  onOpenConversationAgent,
   edit,
 }: IntroCardStageGateProps) {
   if (stage === 'intro-card' && introCard) {
@@ -754,7 +657,6 @@ function IntroCardStageGate({
         onChangeLocale={onChangeLocale}
         onDelete={onDelete}
         onEdit={onEdit}
-        onOpenConversationAgent={onOpenConversationAgent}
         onOpenSettings={onOpenSettings}
       />
     );
@@ -806,13 +708,6 @@ export default function PassportApp({
   backupSharePort,
   initialLocalePort,
   localePreferenceStorage,
-  agentModelProvider = RULES_MODEL_PROVIDER,
-  // code-reviewer 指摘（minor）: 既定値は rulesOnlyAgentModelProviderStartupResult()
-  // と同じ組（rules provider には常に true）にし、片方だけ省略されても矛盾する
-  // 組み合わせにならないようにする。
-  appleIntelligenceUnavailable = true,
-  localModelManagement = null,
-  localModelMutationLeases = null,
   localDataControl,
 }: PassportAppProps) {
   // M1 にはカメラ実機がないため、既定値は 'granted' にして単一端末デモをその場で
@@ -821,13 +716,6 @@ export default function PassportApp({
   // Port を個別の初期状態で構成して検証する。
   const [qrScannerPort] = useState(() =>
     createInProcessQrScannerPort('granted')
-  );
-  // Issue 146: 会話エージェントは対面の相手端末に表示された QR を読む必要があり、
-  // 単一端末デモ用の in-process Port（publish した文字列を返すだけ）では成立しない。
-  // 実カメラの読取だけをこの Port が担い、Lounge Invite の単一端末フローは
-  // 従来どおり上の `qrScannerPort` を使い続ける（2 つの Port は責務が異なる）。
-  const [cameraQrCapturePort] = useState(() =>
-    createDefaultCameraQrCapturePort()
   );
   const [restoring, setRestoring] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1117,36 +1005,12 @@ export default function PassportApp({
       true
     ).catch(() => undefined);
   }, [providerResultApplicationGate, providerRunner, trackProviderTeardown]);
-  const waitForActiveProviderTeardown = useCallback((): Promise<void> => {
-    providerResultApplicationGate.clear();
-    const cancelAfterDrain = (): Promise<void> =>
-      trackProviderTeardown(
-        () => providerRunner.cancelAllAndWait().then(() => undefined),
-        true
-      );
-    const existing = providerTeardownPendingRef.current;
-    return existing ? existing.then(cancelAfterDrain) : cancelAfterDrain();
-  }, [providerResultApplicationGate, providerRunner, trackProviderTeardown]);
   const waitForSettledProviderTeardown = useCallback((): void => {
     void trackProviderTeardown(
       () => providerRunner.waitForNativeTeardowns(),
       false
     ).catch(() => undefined);
   }, [providerRunner, trackProviderTeardown]);
-  // ADR-0057 / Follow-up F-056000: Settings・会話エージェント画面のどちらも
-  // `localModels.view`（Local Model 管理 UI 用の state・操作）を消費者向けには
-  // 表示しなくなった（Qwen の有効化・DL 進捗・削除 UI を消費者導線から撤去した）。
-  // `invalidateAfterExternalPurge` / `isMutationPending()` は全データ削除の
-  // lease 調整に引き続き使うため hook 自体は維持するが、表示先が無くなった
-  // Settings 再訪時の manifest 再読込 effect（旧 ADR-0043）はここで削除する。
-  const localModels = useLocalModelManagement({
-    management: localModelManagement,
-    mutationLeases: localModelMutationLeases,
-    fallbackProvider: agentModelProvider,
-    waitForNativeTeardown: waitForActiveProviderTeardown,
-    hasActiveProviderRun: providerRunPending,
-    ready: !restoring,
-  });
 
   useEffect(() => {
     return () => {
@@ -1169,28 +1033,6 @@ export default function PassportApp({
     sharePort: backupSharePort,
     onOpen: () => setStage('pilot-measurement'),
     onClose: () => setStage('settings'),
-  });
-  // Issue 104 / ADR-0036: 端末内会話エージェント。`providerRunner` は Pet
-  // Interaction と同じ共有 instance をそのまま渡す。
-  //
-  // ADR-0057 / Follow-up F-056000（advisor 指摘）: `provider` には
-  // `localModels.provider` ではなく、起動時に確定した `agentModelProvider`
-  // （Apple Intelligence Primary、非対応端末では Rules）をそのまま渡す。
-  // `localModels.provider` は Settings 経由の手動 GGUF import/activate
-  // （旧 ADR-0043 の再導入口、消費者導線からは撤去済み）で書き換わる state の
-  // ため、v1.1.1〜v1.1.6 で既に Qwen を有効化・activate 済みの端末では
-  // manifest がそのまま残り、Settings の削除導線が無くなった後もそちらへ
-  // 固定されてしまう（ADR-0057 が「消費者向け会話エージェントの実行経路からは
-  // 到達不能になる」と書いた前提が、この経路の存在によって実際には崩れていた）。
-  // `agentModelProvider` を直接渡すことで、Qwen の manifest 状態に関わらず
-  // 会話エージェントは常に Apple Intelligence / Rules だけを使う。
-  const conversationAgentFlow = useConversationAgentFlow({
-    locale,
-    cameraQrCapturePort,
-    providerRunner,
-    provider: agentModelProvider,
-    onNavigateToConversationAgent: () => setStage('conversation-agent'),
-    onNavigateToSettings: () => setStage('settings'),
   });
   const recordPilotOutcome = useCallback(
     (
@@ -1285,7 +1127,6 @@ export default function PassportApp({
   }, []);
 
   const purgeIntroCardMemory = useCallback((): void => {
-    conversationAgentFlow.purge();
     introCardRef.current = null;
     setIntroCard(null);
     applyIntroCardDraftFields(EMPTY_INTRO_CARD_DRAFT_FIELDS);
@@ -1295,13 +1136,12 @@ export default function PassportApp({
       kind: 'empty',
       message: MESSAGES[localeRef.current].introCard.initialNotice,
     });
-  }, [applyIntroCardDraftFields, conversationAgentFlow.purge]);
+  }, [applyIntroCardDraftFields]);
 
   const resetAllLocalMemory = useCallback(
     (recoveryRequired: boolean): void => {
       forgetLoungeForDiagnostics();
       purgeIntroCardMemory();
-      localModels.invalidateAfterExternalPurge();
       resetPassportInMemory();
       pilotMeasurementFlow.reset();
       if (!recoveryRequired) {
@@ -1313,7 +1153,6 @@ export default function PassportApp({
       forgetLoungeForDiagnostics,
       purgeIntroCardMemory,
       introCardHomeStage,
-      localModels.invalidateAfterExternalPurge,
       pilotMeasurementFlow.reset,
       resetPassportInMemory,
     ]
@@ -1416,7 +1255,6 @@ export default function PassportApp({
     onClose: () => setStage('settings'),
     onEndAndForgetLounge: forgetLoungeForDiagnostics,
     onPassportReset: resetPassportInMemory,
-    onModelRemoved: localModels.invalidateAfterExternalPurge,
     onAllDataDeleted: resetAllLocalMemory,
     onRetryStartupRecovery: retryStartupRecovery,
     onError: setLastDiagnosticError,
@@ -2125,20 +1963,11 @@ export default function PassportApp({
     endInvite('host-ended');
   }
 
-  /**
-   * 「会話の糸を探す」操作 1 回で共通 Model Provider を実行する。検証済み Bridge は
-   * そのまま Retired Lounge へ、保守的な no-signal は既存の bounded Rules Discovery と
-   * Owner Question へ渡す。Runner が二重 Tap、Deadline、Fallback-once を所有する。
-   * v1.0（ADR-0038）: Provider は `useLocalModelManagement` が返す state では
-   * なく `RULES_MODEL_PROVIDER` に固定する（会話 Agent と同じ理由、上記
-   * `conversationAgentFlow` 配線のコメント参照）。
-   */
   function startPetInteraction(): void {
     if (lounge?.status !== 'active') return;
     const encounterKey = activeEncounterKeyRef.current;
     if (!encounterKey) return;
     if (providerTeardownPendingRef.current) return;
-    if (localModels.isMutationPending()) return;
     const applicationToken = providerResultApplicationGate.begin(encounterKey);
     if (!applicationToken) return;
     const active = lounge;
@@ -2345,45 +2174,12 @@ export default function PassportApp({
   if (UTILITY_STAGES.has(stage)) {
     return (
       <UtilityStageGate
-        cameraQrCapturePort={cameraQrCapturePort}
-        conversationAgent={{
-          // Follow-up F-056000: 起動時に確定した「この端末は Apple Intelligence
-          // を使えないか」だけを渡す。旧 `modelManagement` / `onDeviceAiActive`
-          // （Qwen 未取得ノート、Issue 180）は消費者導線から撤去した。
-          appleIntelligenceUnavailable,
-          canAddPeer: conversationAgentFlow.canAddPeer,
-          errorMessage: conversationAgentFlow.errorMessage,
-          hasSelfIntroCard: conversationAgentFlow.hasSelfIntroCard,
-          onBack: conversationAgentFlow.close,
-          onChangePasteInput: conversationAgentFlow.onChangePasteInput,
-          // Codex 指摘（blocker、Issue 104 PR #132）: Settings footer が
-          // `openSettings`（stage 変更のみ）を呼んでいたため、受信済み相手カード・
-          // 貼り付け中の URL・実行結果が hook state に残ったまま Settings 経由で
-          // 離脱でき、`providerRunner` の Native Lane 占有も解放されなかった。
-          // `onBack` と同じ `conversationAgentFlow.close`（session clear +
-          // forget() を含む単一 cleanup）に統一し、どちらのボタンから離脱しても
-          // 同じ後始末を経由する（`docs/design/2026-07-23-on-device-conversation-agent.md`
-          // 「セッション終了（画面遷移・アプリ終了・明示的な「終了する」操作）で
-          // 即時 clear する」契約どおり）。
-          onOpenSettings: conversationAgentFlow.close,
-          onRemovePeer: conversationAgentFlow.onRemovePeer,
-          onReset: conversationAgentFlow.onReset,
-          onScanPeer: conversationAgentFlow.onScanPeer,
-          onStart: conversationAgentFlow.onStart,
-          onSubmitPasteInput: conversationAgentFlow.onSubmitPasteInput,
-          onUseSampleCard: conversationAgentFlow.onUseSampleCard,
-          pasteInput: conversationAgentFlow.pasteInput,
-          peers: conversationAgentFlow.peers,
-          result: conversationAgentFlow.result,
-        }}
         diagnosticsFlow={diagnosticsFlow}
-        hasIntroCard={introCard !== null}
         hasLounge={hasDisposableLounge(lounge, loungeRoom)}
         hasProfile={privateProfile !== null}
         locale={locale}
         onChangeLocale={handleChangeLocale}
         onCloseSettings={closeSettings}
-        onOpenConversationAgent={() => conversationAgentFlow.open(introCard)}
         pilotMeasurementFlow={pilotMeasurementFlow}
         stage={stage}
       />
@@ -2617,7 +2413,6 @@ export default function PassportApp({
       locale={locale}
       onDeleteIntroCard={() => void deleteIntroCard()}
       onEditIntroCard={openIntroCardEdit}
-      onOpenConversationAgent={() => conversationAgentFlow.open(introCard)}
       onOpenSettings={openSettings}
       privateProfile={privateProfile}
       stage={stage}

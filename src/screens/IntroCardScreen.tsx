@@ -32,12 +32,6 @@ export interface IntroCardScreenProps {
    * 無いと通常フローから到達できなくなっていた。
    */
   readonly onOpenSettings: () => void;
-  /**
-   * Issue 170（owner フィードバック「なんで会話の機能が設定から起動させるのか
-   * 全くわからない」）: 会話エージェントは製品の中核機能であり、Settings の
-   * 奥ではなくホーム画面の主導線から 1 タップで開く。
-   */
-  readonly onOpenConversationAgent: () => void;
 }
 
 /**
@@ -58,12 +52,8 @@ export default function IntroCardScreen({
   onEdit,
   onDelete,
   onOpenSettings,
-  onOpenConversationAgent,
 }: IntroCardScreenProps) {
   const t = MESSAGES[locale].introCard;
-  // Issue 170: 導線ラベルは Settings 側の既存文言と同一に保つ（二重定義による
-  // 文言 drift を避けるため、settings セクションの key を正本として参照する）。
-  const settingsT = MESSAGES[locale].settings;
   const encodedQr = useMemo(() => encodeQr(encodeIntroCardUrl(card)), [card]);
 
   return (
@@ -94,14 +84,6 @@ export default function IntroCardScreen({
         phone={card.phone}
         selfIntro={card.selfIntro}
         title={card.title}
-      />
-      {/* Issue 170: 会話エージェント（製品の中核機能）をホームの最上位アクションに
-          置く。カード表示画面は「相手に会う」文脈で開かれるため、会う時の主用途で
-          ある「会話のきっかけを見つける」を編集より先に出す。 */}
-      <ActionButton
-        accessibilityHint={settingsT.conversationAgentButtonHint}
-        label={settingsT.conversationAgentButton}
-        onPress={onOpenConversationAgent}
       />
       <ActionButton
         accessibilityHint={t.editButtonHint}

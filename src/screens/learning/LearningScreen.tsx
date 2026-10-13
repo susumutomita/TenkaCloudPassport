@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Locale } from '../../app/i18n/locale';
 import type { LearningFilePort } from '../../app/learning/file-port';
+import { catalogTitle, orderedCatalogs } from '../../app/learning/presentation';
 import { PUBLISHED_CATALOGS } from '../../app/learning/published-catalogs';
 import type { LearningStorage } from '../../app/learning/storage';
 import {
@@ -26,6 +27,7 @@ import {
 import { createRoundId } from '../../domain/session-identifiers';
 import { webCryptoRandomBytes } from '../../protocol/web-crypto-random';
 import { colors, spacing } from '../../ui/theme';
+import { CatalogPicker } from './CatalogPicker';
 import { LearningLesson } from './LearningLesson';
 
 interface Props {
@@ -34,7 +36,7 @@ interface Props {
   readonly locale: Locale;
   readonly onClose: () => void;
 }
-type Tab = 'library' | 'review' | 'history' | 'files';
+type Tab = 'library' | 'add' | 'review' | 'history' | 'files';
 type Flow = ReturnType<typeof useLearning>;
 export default function LearningScreen({
   storage,
@@ -52,7 +54,7 @@ export default function LearningScreen({
     <AppScreen
       key={screenKey}
       eyebrow="Learning"
-      title={ja ? '考え方を組み立てる' : 'Build your reasoning'}
+      title={ja ? '理解して使う' : 'Understand and apply'}
       footer={
         <ActionButton
           label={ja ? 'Passport に戻る' : 'Back to Passport'}
@@ -63,12 +65,16 @@ export default function LearningScreen({
       }
       description={
         ja
-          ? 'オフラインで練習。自由説明は自己評価です。コードは実行・自動採点しません。習得や面接合格を保証しません。'
+          ? '典型アルゴリズムとシステム設計を、理解から実装・類題へ。保存後はオフラインで学べます。'
           : 'Offline practice. Explanations are self-assessed; code is not executed or automatically graded. No mastery or interview outcome is guaranteed.'
       }
     >
       {flow.message ? (
-        <Text accessibilityRole="alert" style={styles.error}>
+        <Text
+          accessibilityRole={flow.messageKind === 'error' ? 'alert' : 'summary'}
+          accessibilityLiveRegion="polite"
+          style={flow.messageKind === 'error' ? styles.error : styles.notice}
+        >
           {flow.message}
         </Text>
       ) : null}
@@ -168,26 +174,34 @@ function LearningHome({
   readonly state: LearningState;
   readonly locale: Locale;
 }) {
-  const [tab, setTab] = useState<Tab>('library');
+  const [tab, setTab] = useState<Tab>(
+    state.catalogs.length ? 'library' : 'add'
+  );
+  const [focusedCatalog, setFocusedCatalog] = useState<string | null>(null);
   const labels =
     locale === 'ja'
-      ? ['教材', '復習', '履歴', 'JSON 管理']
-      : ['Lessons', 'Review', 'History', 'JSON'];
+      ? ['学習する', '教材を追加', '復習', '履歴', '保存管理']
+      : ['Practice', 'Add lessons', 'Review', 'History', 'Saved data'];
   return (
     <>
       <View style={styles.tabs}>
-        {(['library', 'review', 'history', 'files'] as const).map(
+        {(['library', 'add', 'review', 'history', 'files'] as const).map(
           (value, index) => (
-            <ActionButton
+            <View
               key={value}
-              label={labels[index] ?? value}
-              onPress={() => {
-                setTab(value);
-                flow.setPending(null);
-              }}
-              disabled={flow.busy}
-              variant={tab === value ? 'primary' : 'secondary'}
-            />
+              style={index < 2 ? styles.tab : styles.secondaryTab}
+            >
+              <ActionButton
+                label={labels[index] ?? value}
+                onPress={() => {
+                  setTab(value);
+                  setFocusedCatalog(null);
+                  flow.setPending(null);
+                }}
+                disabled={flow.busy}
+                variant={tab === value ? 'primary' : 'secondary'}
+              />
+            </View>
           )
         )}
       </View>
@@ -197,6 +211,25 @@ function LearningHome({
           review={tab === 'review'}
           busy={flow.busy}
           onOpen={flow.open}
+          focus={focusedCatalog}
+        />
+      ) : null}
+      {tab === 'add' ? (
+        <CatalogPicker
+          flow={flow}
+          locale={locale}
+          onStudy={(catalogID) => {
+            setFocusedCatalog(catalogID);
+            setTab('library');
+          }}
+        />
+      ) : null}
+      {tab === 'library' ? (
+        <ActionButton
+          label={locale === 'ja' ? '教材を追加する' : 'Add lessons'}
+          onPress={() => setTab('add')}
+          disabled={flow.busy}
+          variant="secondary"
         />
       ) : null}
       {tab === 'history' ? <History state={state} /> : null}
@@ -208,7 +241,7 @@ function RemoteCatalogs({ flow }: { readonly flow: Flow }) {
   const [url, setURL] = useState<string>(PUBLISHED_CATALOGS[0].manifestURL);
   return (
     <>
-      <Text>公開教材を選択（v2026.10.1301）</Text>
+      <Text>詳細：取得元と版を選ぶ</Text>
       {PUBLISHED_CATALOGS.map((catalog) => (
         <ActionButton
           key={catalog.manifestURL}
@@ -240,7 +273,7 @@ function RemoteCatalogs({ flow }: { readonly flow: Flow }) {
       {flow.state?.sources?.map((source) => (
         <View key={source.manifestURL} style={styles.card}>
           <Text>
-            {source.title} · {source.catalogID}
+            {catalogTitle(source)} · {source.catalogID}
           </Text>
           <ActionButton
             label="版一覧を更新 / Refresh versions"
@@ -291,7 +324,7 @@ function FileManagement({ flow }: { readonly flow: Flow }) {
       {flow.state?.catalogs.map((catalog) => (
         <View key={catalogKey(catalog)} style={styles.card}>
           <Text>
-            {catalog.title} · {catalog.version}
+            {catalogTitle(catalog)} · {catalog.version}
           </Text>
           <ActionButton
             label="この版の教材と履歴を削除 / Remove this catalog & history"
@@ -368,13 +401,15 @@ function LearningLibrary({
   review,
   busy,
   onOpen,
+  focus,
 }: {
   readonly state: LearningState;
   readonly review: boolean;
   readonly busy: boolean;
   readonly onOpen: (catalog: Catalog, lesson: Lesson) => Promise<void>;
+  readonly focus: string | null;
 }) {
-  const catalogs = state.catalogs.map((catalog) => ({
+  const catalogs = orderedCatalogs(state.catalogs, focus).map((catalog) => ({
     catalog,
     lessons: catalog.lessons.filter(
       (lesson) => !review || currentProgress(state, catalog, lesson)?.review
@@ -384,8 +419,7 @@ function LearningLibrary({
     <>
       {state.catalogs.length === 0 ? (
         <Text>
-          教材はまだありません。「JSON
-          管理」で取得元を登録・取得してください。保存後はオフラインで利用できます。
+          教材はまだありません。「教材を追加」からダウンロードしてください。保存後はオフラインで利用できます。
         </Text>
       ) : null}
       {review && catalogs.every((item) => item.lessons.length === 0) ? (
@@ -395,9 +429,9 @@ function LearningLibrary({
         .filter((item) => item.lessons.length)
         .map(({ catalog, lessons }) => (
           <View key={catalogKey(catalog)} style={styles.card}>
-            <Text style={styles.heading}>{catalog.title}</Text>
+            <Text style={styles.heading}>{catalogTitle(catalog)}</Text>
             <Text>
-              {catalog.catalogID} · v{catalog.version}
+              保存済み · {catalog.lessons.length} 問 · v{catalog.version}
             </Text>
             {lessons.map((lesson) => (
               <LessonLink
@@ -435,7 +469,7 @@ function LessonLink({
       : ` · ${progress.index + 1}/${lesson.steps.length}`;
   return (
     <ActionButton
-      label={`${lesson.title}${suffix}`}
+      label={`${progress ? (progress.completed ? '完了：' : '続きから：') : '学習を始める：'}${lesson.title}${suffix}`}
       disabled={busy}
       onPress={() => void onOpen(catalog, lesson)}
       variant="secondary"
@@ -443,9 +477,12 @@ function LessonLink({
   );
 }
 const styles = StyleSheet.create({
+  notice: { color: colors.successText, fontSize: 16 },
   error: { color: colors.danger, fontSize: 16 },
   heading: { color: colors.ink, fontSize: 21, fontWeight: '700' },
-  tabs: { gap: spacing.sm },
+  tabs: { gap: spacing.sm, flexDirection: 'row', flexWrap: 'wrap' },
+  tab: { width: '47%', flexGrow: 1 },
+  secondaryTab: { width: '28%', flexGrow: 1 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,

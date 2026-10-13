@@ -78,7 +78,7 @@ function signal() {
   return new AbortController().signal;
 }
 describe('external catalogs and atomic application', () => {
-  it('offers discovery sources with published fixture versions while leaving payloads external', () => {
+  it('offers content-based discovery identities while leaving versioned payloads external', () => {
     expect(BUNDLED_CATALOGS.length).toBe(PUBLISHED_CATALOGS.length);
     for (const entry of PUBLISHED_CATALOGS) {
       expect(catalogURL(entry.manifestURL).pathname).toMatch(
@@ -86,8 +86,7 @@ describe('external catalogs and atomic application', () => {
       );
       expect(
         BUNDLED_CATALOGS.some(
-          (catalog) =>
-            catalog.title === entry.title && catalog.version === entry.version
+          (catalog) => catalog.catalogID === entry.catalogID
         )
       ).toBe(true);
     }

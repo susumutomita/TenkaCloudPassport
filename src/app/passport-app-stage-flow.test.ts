@@ -209,7 +209,7 @@ describe('PassportApp の Stage 遷移契約', () => {
   it('Model 未導入の既定 Provider Status を Active Lounge へ明示的に渡す', async () => {
     const text = await source();
 
-    expect(text).toContain('agentModelProvider = RULES_MODEL_PROVIDER');
+    expect(text).not.toContain('agentModelProviderStartup');
     expect(text).toContain('useState<ProviderRuntimeState>');
     expect(text).toContain('providerStatus={providerRuntimeState.status}');
   });
@@ -222,28 +222,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     // 読む材料が無い。実行経路を増やす利益が無いため Rules のままにする。
     expect(petInteractionBody).not.toContain('localModels.provider');
     expect(petInteractionBody).toContain('provider: RULES_MODEL_PROVIDER');
-    expect(text).toContain('provider: agentModelProvider');
-  });
-
-  it('Issue 18: 進行中の判定を伴う Model 操作は Native Context の解放完了を待つ', async () => {
-    const text = await source();
-    const teardownBody = functionBody(text, 'waitForActiveProviderTeardown');
-    const trackingBody = functionBody(text, 'trackProviderTeardown');
-
-    expect(teardownBody).toContain('providerRunner');
-    expect(teardownBody).toContain('.cancelAllAndWait()');
-    expect(teardownBody).not.toContain('activeEncounterKeyRef.current = null');
-    expect(teardownBody).toContain('providerResultApplicationGate.clear()');
-    expect(teardownBody).toContain('trackProviderTeardown');
-    expect(teardownBody).toContain('existing.then(cancelAfterDrain)');
-    expect(trackingBody).toContain('providerTeardownPendingRef.current');
-    expect(trackingBody).toContain('setProviderRunPending(true)');
-    expect(trackingBody).toContain('setProviderRunPending(false)');
-    expect(text).toContain(
-      'waitForNativeTeardown: waitForActiveProviderTeardown'
-    );
-    expect(text).toContain('hasActiveProviderRun: providerRunPending');
-    expect(text).toContain('ready: !restoring');
+    expect(text).not.toContain('useConversationAgentFlow');
   });
 
   it('開始操作は共通 Provider Runner を通し、検証済み Decision だけを Lounge へ適用する', async () => {
@@ -259,7 +238,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(body).toContain('applyAgentModelDecision');
     expect(body).toContain('activeEncounterKeyRef.current !== encounterKey');
     expect(body).toContain('providerTeardownPendingRef.current');
-    expect(body).toContain('localModels.isMutationPending()');
+    expect(body).not.toContain('localModels.isMutationPending()');
     expectInOrder(body, [
       '.run({',
       'waitForSettledProviderTeardown()',
@@ -278,27 +257,6 @@ describe('PassportApp の Stage 遷移契約', () => {
     expect(text).toContain('providerBusy={providerRunPending}');
   });
 
-  it('ADR-0057 / Follow-up F-056000: 会話 Agent へは起動時に確定した agentModelProvider を渡し、localModels.provider（Qwen manifest 経由）は読まない', async () => {
-    const text = await source();
-    const callStart = text.indexOf('useConversationAgentFlow({');
-    const callEnd = text.indexOf('});', callStart);
-    const call = text.slice(callStart, callEnd);
-
-    expect(call).toContain('provider: agentModelProvider');
-    expect(call).not.toContain('provider: localModels.provider');
-  });
-
-  it('Follow-up F-056000: 会話エージェント画面へは起動時確定の appleIntelligenceUnavailable だけを配線し、旧 modelManagement / onDeviceAiActive は渡さない', async () => {
-    const text = await source();
-    const callStart = text.indexOf('conversationAgent={{');
-    const callEnd = text.indexOf('}}', callStart);
-    const call = text.slice(callStart, callEnd);
-
-    expect(call).toContain('appleIntelligenceUnavailable,');
-    expect(call).not.toContain('modelManagement:');
-    expect(call).not.toContain('onDeviceAiActive:');
-  });
-
   it('起動削除 Recovery 後だけ Model を読み、外部 purge と同時に旧 Provider を無効化する', async () => {
     const text = await source();
     // Issue 79: 起動時 effect が Intro Card Storage も `Promise.all` で束ねるように
@@ -312,7 +270,7 @@ describe('PassportApp の Stage 遷移契約', () => {
     );
     const startupEffectFailure = recovery.slice(startupEffectFailureStart);
 
-    expect(text).toContain('ready: !restoring');
+    expect(text).not.toContain('useLocalModelManagement');
     expectInOrder(startupEffectFailure, [
       "result.kind === 'recovery-failed'",
       'diagnosticsFlow.enterRecovery(result.error)',
@@ -332,10 +290,7 @@ describe('PassportApp の Stage 遷移契約', () => {
       "result.kind === 'recovery-failed'",
       'applyStartupRecoveryResultRef.current(result)',
     ]);
-    expect(text).toContain('localModels.invalidateAfterExternalPurge()');
-    expect(text).toContain(
-      'onModelRemoved: localModels.invalidateAfterExternalPurge'
-    );
+    expect(text).not.toContain('localModels.invalidateAfterExternalPurge()');
   });
 
   it('Invite フローからの離脱経路（再開・Profile 編集）は discardInviteFlow を直接呼ぶ', async () => {
