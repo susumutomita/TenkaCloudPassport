@@ -68,6 +68,7 @@ export interface UseConversationAgentFlowInput {
 }
 
 export interface ConversationAgentFlow {
+  readonly purge: () => void;
   readonly hasSelfIntroCard: boolean;
   readonly peers: readonly ConversationAgentPeerView[];
   /**
@@ -176,12 +177,15 @@ export function useConversationAgentFlow({
     [onNavigateToConversationAgent, resetTransientState]
   );
 
-  const close = useCallback((): void => {
+  const purge = useCallback((): void => {
     scanGenerationRef.current += 1;
     setSession(null);
     resetTransientState();
+  }, [resetTransientState]);
+  const close = useCallback((): void => {
+    purge();
     onNavigateToSettings();
-  }, [onNavigateToSettings, resetTransientState]);
+  }, [onNavigateToSettings, purge]);
 
   const addPeer = useCallback(
     (card: IntroCard): void => {
@@ -412,5 +416,6 @@ export function useConversationAgentFlow({
     onReset,
     open,
     close,
+    purge,
   };
 }

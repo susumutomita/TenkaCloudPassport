@@ -1,0 +1,650 @@
+{
+  "schemaVersion": 1,
+  "catalogID": "interviewlab.warmups",
+  "version": "2026.10.1301",
+  "title": "短い練習カード",
+  "lessons": [
+    {
+      "id": "map-order",
+      "title": "同じ数を2回使える？",
+      "category": "短い練習",
+      "summary": "読む · Map / 重複",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"map-order\",\n  \"track\": \"読む\",\n  \"topic\": \"Map / 重複\",\n  \"title\": \"同じ数を2回使える？\",\n  \"code\": \"const seen = new Map();\\nconst nums = [3, 3];\\nlet answer = [];\\nfor (let i = 0; i < nums.length; i++) {\\n  const j = seen.get(6 - nums[i]);\\n  if (j !== undefined) {\\n    answer = [j, i]; break;\\n  }\\n  seen.set(nums[i], i);\\n}\\nconsole.log(answer);\",\n  \"question\": \"出力はどれ？\",\n  \"choices\": [\n    \"[0, 0]\",\n    \"[0, 1]\",\n    \"[]\"\n  ],\n  \"answer\": 1,\n  \"why\": \"i=0 では Map は空。3→0 を登録します。i=1 で不足分3が見つかり、インデックス [0,1] を返します。検索を登録より先に行うことで、同じ要素を二度使いません。\",\n  \"recall\": \"なぜ先に seen.set をすると危険？\",\n  \"output\": \"[0,1]\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "読む",
+          "prompt": "出力はどれ？",
+          "code": "const seen = new Map();\nconst nums = [3, 3];\nlet answer = [];\nfor (let i = 0; i < nums.length; i++) {\n  const j = seen.get(6 - nums[i]);\n  if (j !== undefined) {\n    answer = [j, i]; break;\n  }\n  seen.set(nums[i], i);\n}\nconsole.log(answer);",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "[0, 0]",
+              "explanation": "i=0 では Map は空。3→0 を登録します。i=1 で不足分3が見つかり、インデックス [0,1] を返します。検索を登録より先に行うことで、同じ要素を二度使いません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "[0, 1]",
+              "explanation": "i=0 では Map は空。3→0 を登録します。i=1 で不足分3が見つかり、インデックス [0,1] を返します。検索を登録より先に行うことで、同じ要素を二度使いません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "[]",
+              "explanation": "i=0 では Map は空。3→0 を登録します。i=1 で不足分3が見つかり、インデックス [0,1] を返します。検索を登録より先に行うことで、同じ要素を二度使いません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "i=0 では Map は空。3→0 を登録します。i=1 で不足分3が見つかり、インデックス [0,1] を返します。検索を登録より先に行うことで、同じ要素を二度使いません。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "なぜ先に seen.set をすると危険？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "i=0 では Map は空。3→0 を登録します。i=1 で不足分3が見つかり、インデックス [0,1] を返します。検索を登録より先に行うことで、同じ要素を二度使いません。"
+        }
+      ]
+    },
+    {
+      "id": "window-back",
+      "title": "左端が後ろに戻ってしまう",
+      "category": "短い練習",
+      "summary": "直す · Sliding window",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"window-back\",\n  \"track\": \"直す\",\n  \"topic\": \"Sliding window\",\n  \"title\": \"左端が後ろに戻ってしまう\",\n  \"code\": \"// s = \\\"abba\\\"\\nif (last.has(s[i])) {\\n  left = last.get(s[i]) + 1;\\n}\\nlast.set(s[i], i);\",\n  \"question\": \"重複しない窓を保つ修正は？\",\n  \"choices\": [\n    \"left = 0 に戻す\",\n    \"left = Math.max(left, last.get(s[i]) + 1)\",\n    \"last を毎回空にする\"\n  ],\n  \"answer\": 1,\n  \"why\": \"最後の a で以前の a は現在の窓の外にあります。left を1へ戻すと \\\"bba\\\" を数えてしまいます。left は単調に右へ進める必要があり、max で現在の2を維持します。\",\n  \"recall\": \"\\\"abba\\\" の各文字で left を指で追ってみよう。\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "直す",
+          "prompt": "重複しない窓を保つ修正は？",
+          "code": "// s = \"abba\"\nif (last.has(s[i])) {\n  left = last.get(s[i]) + 1;\n}\nlast.set(s[i], i);",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "left = 0 に戻す",
+              "explanation": "最後の a で以前の a は現在の窓の外にあります。left を1へ戻すと \"bba\" を数えてしまいます。left は単調に右へ進める必要があり、max で現在の2を維持します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "left = Math.max(left, last.get(s[i]) + 1)",
+              "explanation": "最後の a で以前の a は現在の窓の外にあります。left を1へ戻すと \"bba\" を数えてしまいます。left は単調に右へ進める必要があり、max で現在の2を維持します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "last を毎回空にする",
+              "explanation": "最後の a で以前の a は現在の窓の外にあります。left を1へ戻すと \"bba\" を数えてしまいます。left は単調に右へ進める必要があり、max で現在の2を維持します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "最後の a で以前の a は現在の窓の外にあります。left を1へ戻すと \"bba\" を数えてしまいます。left は単調に右へ進める必要があり、max で現在の2を維持します。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "\"abba\" の各文字で left を指で追ってみよう。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "最後の a で以前の a は現在の窓の外にあります。left を1へ戻すと \"bba\" を数えてしまいます。left は単調に右へ進める必要があり、max で現在の2を維持します。"
+        }
+      ]
+    },
+    {
+      "id": "binary-bound",
+      "title": "挿入位置を予測する",
+      "category": "短い練習",
+      "summary": "読む · Binary search",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"binary-bound\",\n  \"track\": \"読む\",\n  \"topic\": \"Binary search\",\n  \"title\": \"挿入位置を予測する\",\n  \"code\": \"function lowerBound(a, target) {\\n  let lo = 0, hi = a.length;\\n  while (lo < hi) {\\n    const mid = Math.floor((lo+hi)/2);\\n    if (a[mid] >= target) hi = mid;\\n    else lo = mid + 1;\\n  }\\n  return lo;\\n}\\nconsole.log(lowerBound([1,3,3,8],3));\",\n  \"question\": \"出力はどれ？\",\n  \"choices\": [\n    \"1\",\n    \"2\",\n    \"3\"\n  ],\n  \"answer\": 0,\n  \"why\": \"target 以上の最初の位置を探す lower_bound です。重複した3のうち左側、インデックス1を返します。hi=mid で候補を捨てません。\",\n  \"recall\": \"target=9 なら何を返す？ なぜ？\",\n  \"output\": \"1\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "読む",
+          "prompt": "出力はどれ？",
+          "code": "function lowerBound(a, target) {\n  let lo = 0, hi = a.length;\n  while (lo < hi) {\n    const mid = Math.floor((lo+hi)/2);\n    if (a[mid] >= target) hi = mid;\n    else lo = mid + 1;\n  }\n  return lo;\n}\nconsole.log(lowerBound([1,3,3,8],3));",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "1",
+              "explanation": "target 以上の最初の位置を探す lower_bound です。重複した3のうち左側、インデックス1を返します。hi=mid で候補を捨てません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "2",
+              "explanation": "target 以上の最初の位置を探す lower_bound です。重複した3のうち左側、インデックス1を返します。hi=mid で候補を捨てません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "3",
+              "explanation": "target 以上の最初の位置を探す lower_bound です。重複した3のうち左側、インデックス1を返します。hi=mid で候補を捨てません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "target 以上の最初の位置を探す lower_bound です。重複した3のうち左側、インデックス1を返します。hi=mid で候補を捨てません。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "target=9 なら何を返す？ なぜ？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "target 以上の最初の位置を探す lower_bound です。重複した3のうち左側、インデックス1を返します。hi=mid で候補を捨てません。"
+        }
+      ]
+    },
+    {
+      "id": "copy-mutation",
+      "title": "コピーしたはずなのに",
+      "category": "短い練習",
+      "summary": "読む · Reference / コピー",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"copy-mutation\",\n  \"track\": \"読む\",\n  \"topic\": \"Reference / コピー\",\n  \"title\": \"コピーしたはずなのに\",\n  \"code\": \"const original = [[1, 2], [4, 5]];\\nconst copy = [...original];\\ncopy[0][1] = 9;\\nconsole.log(original[0][1]);\",\n  \"question\": \"出力はどれ？\",\n  \"choices\": [\n    \"2\",\n    \"9\",\n    \"undefined\"\n  ],\n  \"answer\": 1,\n  \"why\": \"スプレッドは外側の配列だけをコピーします。内側の配列は同じ参照なので original も変わります。この形なら original.map(pair => [...pair]) で内側もコピーできます。\",\n  \"recall\": \"オブジェクトがさらにネストしていたら？\",\n  \"output\": \"9\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "読む",
+          "prompt": "出力はどれ？",
+          "code": "const original = [[1, 2], [4, 5]];\nconst copy = [...original];\ncopy[0][1] = 9;\nconsole.log(original[0][1]);",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "2",
+              "explanation": "スプレッドは外側の配列だけをコピーします。内側の配列は同じ参照なので original も変わります。この形なら original.map(pair => [...pair]) で内側もコピーできます。"
+            },
+            {
+              "id": "choice-1",
+              "text": "9",
+              "explanation": "スプレッドは外側の配列だけをコピーします。内側の配列は同じ参照なので original も変わります。この形なら original.map(pair => [...pair]) で内側もコピーできます。"
+            },
+            {
+              "id": "choice-2",
+              "text": "undefined",
+              "explanation": "スプレッドは外側の配列だけをコピーします。内側の配列は同じ参照なので original も変わります。この形なら original.map(pair => [...pair]) で内側もコピーできます。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "スプレッドは外側の配列だけをコピーします。内側の配列は同じ参照なので original も変わります。この形なら original.map(pair => [...pair]) で内側もコピーできます。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "オブジェクトがさらにネストしていたら？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "スプレッドは外側の配列だけをコピーします。内側の配列は同じ参照なので original も変わります。この形なら original.map(pair => [...pair]) で内側もコピーできます。"
+        }
+      ]
+    },
+    {
+      "id": "bfs-visited",
+      "title": "キューが膨らむ理由",
+      "category": "短い練習",
+      "summary": "直す · Graph / BFS",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"bfs-visited\",\n  \"track\": \"直す\",\n  \"topic\": \"Graph / BFS\",\n  \"title\": \"キューが膨らむ理由\",\n  \"code\": \"for (const v of graph[u]) {\\n  if (!visited.has(v)) {\\n    queue.push(v);\\n  }\\n}\\n// visited は取り出した時に付ける\",\n  \"question\": \"同じノードの重複追加を防ぐには？\",\n  \"choices\": [\n    \"追加するときに visited.add(v) する\",\n    \"キューを毎回ソートする\",\n    \"visited を削除する\"\n  ],\n  \"answer\": 0,\n  \"why\": \"複数の親から同じノードへ到達すると、取り出す前に何度も追加されます。発見時（enqueue時）に訪問済みにすると1ノード1回の追加にできます。初期ノードも追加時に記録します。\",\n  \"recall\": \"重み付きグラフでも普通のBFSで最短距離を求められる？\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "直す",
+          "prompt": "同じノードの重複追加を防ぐには？",
+          "code": "for (const v of graph[u]) {\n  if (!visited.has(v)) {\n    queue.push(v);\n  }\n}\n// visited は取り出した時に付ける",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "追加するときに visited.add(v) する",
+              "explanation": "複数の親から同じノードへ到達すると、取り出す前に何度も追加されます。発見時（enqueue時）に訪問済みにすると1ノード1回の追加にできます。初期ノードも追加時に記録します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "キューを毎回ソートする",
+              "explanation": "複数の親から同じノードへ到達すると、取り出す前に何度も追加されます。発見時（enqueue時）に訪問済みにすると1ノード1回の追加にできます。初期ノードも追加時に記録します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "visited を削除する",
+              "explanation": "複数の親から同じノードへ到達すると、取り出す前に何度も追加されます。発見時（enqueue時）に訪問済みにすると1ノード1回の追加にできます。初期ノードも追加時に記録します。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "複数の親から同じノードへ到達すると、取り出す前に何度も追加されます。発見時（enqueue時）に訪問済みにすると1ノード1回の追加にできます。初期ノードも追加時に記録します。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "重み付きグラフでも普通のBFSで最短距離を求められる？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "複数の親から同じノードへ到達すると、取り出す前に何度も追加されます。発見時（enqueue時）に訪問済みにすると1ノード1回の追加にできます。初期ノードも追加時に記録します。"
+        }
+      ]
+    },
+    {
+      "id": "coin-greedy",
+      "title": "大きい硬貨から選ぶと？",
+      "category": "短い練習",
+      "summary": "読む · DP / 貪欲法",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"coin-greedy\",\n  \"track\": \"読む\",\n  \"topic\": \"DP / 貪欲法\",\n  \"title\": \"大きい硬貨から選ぶと？\",\n  \"code\": \"const coins = [4, 3, 1];\\nlet amount = 6, used = 0;\\nfor (const coin of coins) {\\n  while (amount >= coin) {\\n    amount -= coin; used++;\\n  }\\n}\\nconsole.log(used);\",\n  \"question\": \"出力と、真の最少枚数の組は？\",\n  \"choices\": [\n    \"出力2 / 最少2\",\n    \"出力3 / 最少2\",\n    \"出力3 / 最少3\"\n  ],\n  \"answer\": 1,\n  \"why\": \"この貪欲法は4+1+1で3枚。最適解は3+3で2枚です。任意の額面では貪欲法が成立せず、dp[x] = min(dp[x-c]+1) を使えます。\",\n  \"recall\": \"貪欲法を選ぶ前に何を確かめるべき？\",\n  \"output\": \"3\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "読む",
+          "prompt": "出力と、真の最少枚数の組は？",
+          "code": "const coins = [4, 3, 1];\nlet amount = 6, used = 0;\nfor (const coin of coins) {\n  while (amount >= coin) {\n    amount -= coin; used++;\n  }\n}\nconsole.log(used);",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "出力2 / 最少2",
+              "explanation": "この貪欲法は4+1+1で3枚。最適解は3+3で2枚です。任意の額面では貪欲法が成立せず、dp[x] = min(dp[x-c]+1) を使えます。"
+            },
+            {
+              "id": "choice-1",
+              "text": "出力3 / 最少2",
+              "explanation": "この貪欲法は4+1+1で3枚。最適解は3+3で2枚です。任意の額面では貪欲法が成立せず、dp[x] = min(dp[x-c]+1) を使えます。"
+            },
+            {
+              "id": "choice-2",
+              "text": "出力3 / 最少3",
+              "explanation": "この貪欲法は4+1+1で3枚。最適解は3+3で2枚です。任意の額面では貪欲法が成立せず、dp[x] = min(dp[x-c]+1) を使えます。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "この貪欲法は4+1+1で3枚。最適解は3+3で2枚です。任意の額面では貪欲法が成立せず、dp[x] = min(dp[x-c]+1) を使えます。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "貪欲法を選ぶ前に何を確かめるべき？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "この貪欲法は4+1+1で3枚。最適解は3+3で2枚です。任意の額面では貪欲法が成立せず、dp[x] = min(dp[x-c]+1) を使えます。"
+        }
+      ]
+    },
+    {
+      "id": "binary-loop",
+      "title": "止まらない二分探索",
+      "category": "短い練習",
+      "summary": "直す · Binary search",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"binary-loop\",\n  \"track\": \"直す\",\n  \"topic\": \"Binary search\",\n  \"title\": \"止まらない二分探索\",\n  \"code\": \"while (lo < hi) {\\n  const mid = Math.floor((lo+hi)/2);\\n  if (a[mid] < target) lo = mid;\\n  else hi = mid;\\n}\",\n  \"question\": \"[lo, hi) の探索で必要な修正は？\",\n  \"choices\": [\n    \"lo = mid + 1\",\n    \"hi = mid + 1\",\n    \"mid を切り上げるだけ\"\n  ],\n  \"answer\": 0,\n  \"why\": \"hi=lo+1 のとき mid=lo。lo=mid では探索範囲が縮みません。a[mid]<target なら mid は答えではないので lo=mid+1 として除外できます。\",\n  \"recall\": \"各反復で範囲が必ず小さくなることを説明しよう。\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "直す",
+          "prompt": "[lo, hi) の探索で必要な修正は？",
+          "code": "while (lo < hi) {\n  const mid = Math.floor((lo+hi)/2);\n  if (a[mid] < target) lo = mid;\n  else hi = mid;\n}",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "lo = mid + 1",
+              "explanation": "hi=lo+1 のとき mid=lo。lo=mid では探索範囲が縮みません。a[mid]<target なら mid は答えではないので lo=mid+1 として除外できます。"
+            },
+            {
+              "id": "choice-1",
+              "text": "hi = mid + 1",
+              "explanation": "hi=lo+1 のとき mid=lo。lo=mid では探索範囲が縮みません。a[mid]<target なら mid は答えではないので lo=mid+1 として除外できます。"
+            },
+            {
+              "id": "choice-2",
+              "text": "mid を切り上げるだけ",
+              "explanation": "hi=lo+1 のとき mid=lo。lo=mid では探索範囲が縮みません。a[mid]<target なら mid は答えではないので lo=mid+1 として除外できます。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "hi=lo+1 のとき mid=lo。lo=mid では探索範囲が縮みません。a[mid]<target なら mid は答えではないので lo=mid+1 として除外できます。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "各反復で範囲が必ず小さくなることを説明しよう。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "hi=lo+1 のとき mid=lo。lo=mid では探索範囲が縮みません。a[mid]<target なら mid は答えではないので lo=mid+1 として除外できます。"
+        }
+      ]
+    },
+    {
+      "id": "stack-nesting",
+      "title": "個数が合えば正しい？",
+      "category": "短い練習",
+      "summary": "直す · Stack / 不変条件",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"stack-nesting\",\n  \"track\": \"直す\",\n  \"topic\": \"Stack / 不変条件\",\n  \"title\": \"個数が合えば正しい？\",\n  \"code\": \"// 開き括弧 +1、閉じ括弧 -1\\n// 最後の合計が0なら true とする\\nconst input = \\\"([)]\\\";\",\n  \"question\": \"この判定が誤る理由は？\",\n  \"choices\": [\n    \"文字列の長さが偶数だから\",\n    \"個数だけでは括弧の種類と順序を検証できない\",\n    \"JavaScriptでは括弧を数えられない\"\n  ],\n  \"answer\": 1,\n  \"why\": \"\\\"([)]\\\" は個数が一致しても入れ子が壊れています。スタックの最後の開き括弧と、今の閉じ括弧の種類を比較し、最終的にスタックが空か確認します。\",\n  \"recall\": \"\\\")(\\\" を合計だけで判定すると何が起こる？\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "直す",
+          "prompt": "この判定が誤る理由は？",
+          "code": "// 開き括弧 +1、閉じ括弧 -1\n// 最後の合計が0なら true とする\nconst input = \"([)]\";",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "文字列の長さが偶数だから",
+              "explanation": "\"([)]\" は個数が一致しても入れ子が壊れています。スタックの最後の開き括弧と、今の閉じ括弧の種類を比較し、最終的にスタックが空か確認します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "個数だけでは括弧の種類と順序を検証できない",
+              "explanation": "\"([)]\" は個数が一致しても入れ子が壊れています。スタックの最後の開き括弧と、今の閉じ括弧の種類を比較し、最終的にスタックが空か確認します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "JavaScriptでは括弧を数えられない",
+              "explanation": "\"([)]\" は個数が一致しても入れ子が壊れています。スタックの最後の開き括弧と、今の閉じ括弧の種類を比較し、最終的にスタックが空か確認します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "\"([)]\" は個数が一致しても入れ子が壊れています。スタックの最後の開き括弧と、今の閉じ括弧の種類を比較し、最終的にスタックが空か確認します。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "\")(\" を合計だけで判定すると何が起こる？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "\"([)]\" は個数が一致しても入れ子が壊れています。スタックの最後の開き括弧と、今の閉じ括弧の種類を比較し、最終的にスタックが空か確認します。"
+        }
+      ]
+    },
+    {
+      "id": "complexity-map",
+      "title": "ループが2つなら二乗？",
+      "category": "短い練習",
+      "summary": "考える · 計算量",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"complexity-map\",\n  \"track\": \"考える\",\n  \"topic\": \"計算量\",\n  \"title\": \"ループが2つなら二乗？\",\n  \"code\": \"for (const x of nums) seen.add(x);\\nfor (const x of nums) {\\n  if (seen.has(target-x)) count++;\\n}\",\n  \"question\": \"Set操作を平均O(1)、numsの長さをnとすると時間計算量は？\",\n  \"choices\": [\n    \"O(n)\",\n    \"O(n²)\",\n    \"O(log n)\"\n  ],\n  \"answer\": 0,\n  \"why\": \"2つのループは直列なので O(n)+O(n)=O(n)。入れ子ではありません。Setの追加・参照を平均O(1)とする前提も、口頭で明示しましょう。なお、このコードだけでは同じ要素の二重使用を防げません。\",\n  \"recall\": \"追加メモリはどれくらい必要？\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "考える",
+          "prompt": "Set操作を平均O(1)、numsの長さをnとすると時間計算量は？",
+          "code": "for (const x of nums) seen.add(x);\nfor (const x of nums) {\n  if (seen.has(target-x)) count++;\n}",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "O(n)",
+              "explanation": "2つのループは直列なので O(n)+O(n)=O(n)。入れ子ではありません。Setの追加・参照を平均O(1)とする前提も、口頭で明示しましょう。なお、このコードだけでは同じ要素の二重使用を防げません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "O(n²)",
+              "explanation": "2つのループは直列なので O(n)+O(n)=O(n)。入れ子ではありません。Setの追加・参照を平均O(1)とする前提も、口頭で明示しましょう。なお、このコードだけでは同じ要素の二重使用を防げません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "O(log n)",
+              "explanation": "2つのループは直列なので O(n)+O(n)=O(n)。入れ子ではありません。Setの追加・参照を平均O(1)とする前提も、口頭で明示しましょう。なお、このコードだけでは同じ要素の二重使用を防げません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "2つのループは直列なので O(n)+O(n)=O(n)。入れ子ではありません。Setの追加・参照を平均O(1)とする前提も、口頭で明示しましょう。なお、このコードだけでは同じ要素の二重使用を防げません。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "追加メモリはどれくらい必要？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "2つのループは直列なので O(n)+O(n)=O(n)。入れ子ではありません。Setの追加・参照を平均O(1)とする前提も、口頭で明示しましょう。なお、このコードだけでは同じ要素の二重使用を防げません。"
+        }
+      ]
+    },
+    {
+      "id": "webhook-once",
+      "title": "同じ通知が2回来た",
+      "category": "短い練習",
+      "summary": "考える · 設計 / 冪等性",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"webhook-once\",\n  \"track\": \"考える\",\n  \"topic\": \"設計 / 冪等性\",\n  \"title\": \"同じ通知が2回来た\",\n  \"code\": \"POST /webhook\\n{ eventId: \\\"evt-42\\\",\\n  type: \\\"payment.succeeded\\\" }\\n\\n// 同じ eventId が再配信された\",\n  \"question\": \"二重処理を防ぐ中心的な設計は？\",\n  \"choices\": [\n    \"再送をすべて禁止する\",\n    \"eventIdの一意制約と業務更新を同じトランザクションで扱う\",\n    \"毎回新しいIDを作る\"\n  ],\n  \"answer\": 1,\n  \"why\": \"再送は障害回復に必要です。受信eventIdを一意に記録し、業務更新と原子的に処理します。外部API呼び出しまで同じDBトランザクションに含められるとは限らず、別途outboxや外部側の冪等キーを検討します。\",\n  \"recall\": \"DB更新直後、応答前に落ちたら何が起こる？\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "考える",
+          "prompt": "二重処理を防ぐ中心的な設計は？",
+          "code": "POST /webhook\n{ eventId: \"evt-42\",\n  type: \"payment.succeeded\" }\n\n// 同じ eventId が再配信された",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "再送をすべて禁止する",
+              "explanation": "再送は障害回復に必要です。受信eventIdを一意に記録し、業務更新と原子的に処理します。外部API呼び出しまで同じDBトランザクションに含められるとは限らず、別途outboxや外部側の冪等キーを検討します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "eventIdの一意制約と業務更新を同じトランザクションで扱う",
+              "explanation": "再送は障害回復に必要です。受信eventIdを一意に記録し、業務更新と原子的に処理します。外部API呼び出しまで同じDBトランザクションに含められるとは限らず、別途outboxや外部側の冪等キーを検討します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "毎回新しいIDを作る",
+              "explanation": "再送は障害回復に必要です。受信eventIdを一意に記録し、業務更新と原子的に処理します。外部API呼び出しまで同じDBトランザクションに含められるとは限らず、別途outboxや外部側の冪等キーを検討します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "再送は障害回復に必要です。受信eventIdを一意に記録し、業務更新と原子的に処理します。外部API呼び出しまで同じDBトランザクションに含められるとは限らず、別途outboxや外部側の冪等キーを検討します。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "DB更新直後、応答前に落ちたら何が起こる？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "再送は障害回復に必要です。受信eventIdを一意に記録し、業務更新と原子的に処理します。外部API呼び出しまで同じDBトランザクションに含められるとは限らず、別途outboxや外部側の冪等キーを検討します。"
+        }
+      ]
+    },
+    {
+      "id": "queue-shift",
+      "title": "BFSの隠れたコスト",
+      "category": "短い練習",
+      "summary": "考える · 実装 / Queue",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"queue-shift\",\n  \"track\": \"考える\",\n  \"topic\": \"実装 / Queue\",\n  \"title\": \"BFSの隠れたコスト\",\n  \"code\": \"while (queue.length) {\\n  const u = queue.shift();\\n  // 隣接ノードを追加\\n}\",\n  \"question\": \"配列キューの前詰めコストを避けるには？\",\n  \"choices\": [\n    \"queue.sort()を追加する\",\n    \"headインデックスを増やして読む\",\n    \"pop()に替えれば必ずBFSになる\"\n  ],\n  \"answer\": 1,\n  \"why\": \"let head=0 とし、head<queue.length の間 queue[head++] を読めば、前詰めを避けられます。pop()はLIFOになり、探索順序がDFSへ変わります。配列実装の性能保証に依存しない書き方です。\",\n  \"recall\": \"キューのメモリを長期間再利用するときは何に注意する？\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "考える",
+          "prompt": "配列キューの前詰めコストを避けるには？",
+          "code": "while (queue.length) {\n  const u = queue.shift();\n  // 隣接ノードを追加\n}",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "queue.sort()を追加する",
+              "explanation": "let head=0 とし、head<queue.length の間 queue[head++] を読めば、前詰めを避けられます。pop()はLIFOになり、探索順序がDFSへ変わります。配列実装の性能保証に依存しない書き方です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "headインデックスを増やして読む",
+              "explanation": "let head=0 とし、head<queue.length の間 queue[head++] を読めば、前詰めを避けられます。pop()はLIFOになり、探索順序がDFSへ変わります。配列実装の性能保証に依存しない書き方です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "pop()に替えれば必ずBFSになる",
+              "explanation": "let head=0 とし、head<queue.length の間 queue[head++] を読めば、前詰めを避けられます。pop()はLIFOになり、探索順序がDFSへ変わります。配列実装の性能保証に依存しない書き方です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "let head=0 とし、head<queue.length の間 queue[head++] を読めば、前詰めを避けられます。pop()はLIFOになり、探索順序がDFSへ変わります。配列実装の性能保証に依存しない書き方です。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "キューのメモリを長期間再利用するときは何に注意する？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "let head=0 とし、head<queue.length の間 queue[head++] を読めば、前詰めを避けられます。pop()はLIFOになり、探索順序がDFSへ変わります。配列実装の性能保証に依存しない書き方です。"
+        }
+      ]
+    },
+    {
+      "id": "star-action",
+      "title": "自分の貢献を伝える",
+      "category": "短い練習",
+      "summary": "考える · 英語 / Ownership",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "",
+      "prerequisites": null,
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"star-action\",\n  \"track\": \"考える\",\n  \"topic\": \"英語 / Ownership\",\n  \"title\": \"自分の貢献を伝える\",\n  \"code\": \"“We improved the service.\\nIt worked well.”\",\n  \"question\": \"事実を足して具体化するなら、最もよい型は？\",\n  \"choices\": [\n    \"“I did everything perfectly.”\",\n    \"“I chose X because Y; the measured result was Z.”\",\n    \"“The team was very good.”\"\n  ],\n  \"answer\": 1,\n  \"why\": \"自分の行動、判断理由、根拠のある結果を分けて伝えます。X/Y/Zには実際の経験だけを入れ、測っていない数字やチームの成果を自分一人の成果として語らないこと。\",\n  \"recall\": \"実際の経験を1つ使って、声に出して言い換えよう。\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ],\n  \"sources\": []\n}",
+      "steps": [
+        {
+          "id": "question",
+          "phase": "考える",
+          "prompt": "事実を足して具体化するなら、最もよい型は？",
+          "code": "“We improved the service.\nIt worked well.”",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "“I did everything perfectly.”",
+              "explanation": "自分の行動、判断理由、根拠のある結果を分けて伝えます。X/Y/Zには実際の経験だけを入れ、測っていない数字やチームの成果を自分一人の成果として語らないこと。"
+            },
+            {
+              "id": "choice-1",
+              "text": "“I chose X because Y; the measured result was Z.”",
+              "explanation": "自分の行動、判断理由、根拠のある結果を分けて伝えます。X/Y/Zには実際の経験だけを入れ、測っていない数字やチームの成果を自分一人の成果として語らないこと。"
+            },
+            {
+              "id": "choice-2",
+              "text": "“The team was very good.”",
+              "explanation": "自分の行動、判断理由、根拠のある結果を分けて伝えます。X/Y/Zには実際の経験だけを入れ、測っていない数字やチームの成果を自分一人の成果として語らないこと。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "自分の行動、判断理由、根拠のある結果を分けて伝えます。X/Y/Zには実際の経験だけを入れ、測っていない数字やチームの成果を自分一人の成果として語らないこと。"
+        },
+        {
+          "id": "recall",
+          "phase": "説明・自己評価",
+          "prompt": "実際の経験を1つ使って、声に出して言い換えよう。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の行動、判断理由、根拠のある結果を分けて伝えます。X/Y/Zには実際の経験だけを入れ、測っていない数字やチームの成果を自分一人の成果として語らないこと。"
+        }
+      ]
+    }
+  ],
+  "sourceRelease": {
+    "contentVersion": "2026-10-12.2",
+    "archiveSHA256": "25e1417c988dd53bb8b00d63a05c12b0e5e34bbd2a7093e3c64e725126e54818",
+    "manifestSHA256": "cd9bfb7e8dd33f5818838de626e63df963651a7451439e0eb35ae90bc59215cc",
+    "contentFileSHA256": "c2c7044eb4129652203e1cf922886b3ae8cbba589c93f83d3c27f4f60832ef11"
+  }
+}

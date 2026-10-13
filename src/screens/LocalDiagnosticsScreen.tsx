@@ -33,6 +33,7 @@ function localDataTotal(
   const storedCount = preview
     ? preview.profileCount +
       preview.settingsCount +
+      (preview.additionalCount ?? 0) +
       Math.max(preview.modelCount, preview.model ? 1 : 0)
     : 0;
   return storedCount + (hasLounge ? 1 : 0);

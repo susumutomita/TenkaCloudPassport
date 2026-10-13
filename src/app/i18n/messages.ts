@@ -1108,9 +1108,9 @@ const ja: AppMessages = {
     backButton: '戻る',
     eraseAllDataButton: 'この端末のすべてのデータを削除',
     eraseAllDataButtonHint:
-      '自己紹介カード、Local Model など、この端末に保存した内容をすべて削除します。取り消せません。',
+      '自己紹介カード、Local Model、学習履歴と追加教材など、この端末に保存した内容をすべて削除します。取り消せません。',
     eraseAllDataConfirmDescription:
-      'この端末に保存された自己紹介カード、Local Model などをすべて削除します。この操作は取り消せません。',
+      'この端末に保存された自己紹介カード、下書き、Local Model、学習履歴と追加教材を削除します。この操作は取り消せません。表示言語設定と、共有先のバックアップファイルは残ります。',
     eraseAllDataConfirmButton: '削除する',
     eraseAllDataCancelButton: 'キャンセル',
     eraseAllDataRecoveryTitle: '前回の削除が完了していません。',
@@ -1869,9 +1869,9 @@ const en: AppMessages = {
     backButton: 'Back',
     eraseAllDataButton: 'Delete all data on this device',
     eraseAllDataButtonHint:
-      'Deletes everything saved on this device, including your intro card and local model. This cannot be undone.',
+      'Deletes everything saved on this device, including your intro card, local model, learning history, and imported catalogs. This cannot be undone.',
     eraseAllDataConfirmDescription:
-      'This deletes your intro card, local model, and everything else saved on this device. This cannot be undone.',
+      'This deletes your intro card, draft, local model, learning history, and imported catalogs. This cannot be undone. Your language preference and backups saved outside the app remain.',
     eraseAllDataConfirmButton: 'Delete',
     eraseAllDataCancelButton: 'Cancel',
     eraseAllDataRecoveryTitle: 'The previous deletion did not finish.',

@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Keyboard, View } from 'react-native';
 import packageManifest from './package.json';
 import { createDefaultAgentModelProvider } from './src/app/default-agent-model-provider';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
@@ -9,6 +10,11 @@ import { createDefaultLocalDeletionJournal } from './src/app/default-local-delet
 import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
 import { createDefaultLocalePreferenceStorage } from './src/app/default-locale-preference-storage';
+import { DeletionCoordinatedIntroCardStorage } from './src/app/deletion-coordinated-intro-card-storage';
+import type { Locale } from './src/app/i18n/locale';
+import { learningFiles } from './src/app/learning/default-files';
+import { createLearningStorage } from './src/app/learning/default-storage';
+import { LearningNavigation } from './src/app/learning/navigation';
 import {
   createLocalDataControl,
   DeletionCoordinatedLocalProfileStorageAdapter,
@@ -20,6 +26,7 @@ import {
   rulesOnlyAgentModelProviderStartupResult,
 } from './src/app/native-agent-model-provider-composition';
 import PassportApp from './src/app/PassportApp';
+import LearningScreen from './src/screens/learning/LearningScreen';
 
 const localDataLeases = new LocalModelContextLeaseRegistry();
 const localDeletionJournal = createDefaultLocalDeletionJournal();
@@ -28,7 +35,15 @@ const localProfileStorage = new DeletionCoordinatedLocalProfileStorageAdapter(
   localDataLeases,
   localDeletionJournal
 );
-const introCardStorage = createDefaultIntroCardStorage();
+const learningStorage = createLearningStorage(
+  localDataLeases,
+  localDeletionJournal
+);
+const introCardStorage = new DeletionCoordinatedIntroCardStorage(
+  createDefaultIntroCardStorage(),
+  localDataLeases,
+  localDeletionJournal
+);
 const backupSharePort = createDefaultBackupSharePort();
 const initialLocalePort = createDefaultInitialLocalePort();
 const localePreferenceStorage = createDefaultLocalePreferenceStorage();
@@ -47,6 +62,8 @@ const agentModelProviderStartupPromise =
 const localModelComposition =
   createDefaultLocalModelManagement(localDataLeases);
 const localDataControl = createLocalDataControl({
+  introCardStorage,
+  learningStorage,
   profileStorage: localProfileStorage,
   modelStorage:
     localModelComposition?.modelStorage ?? new NoLocalModelStorageAdapter(),
@@ -55,6 +72,11 @@ const localDataControl = createLocalDataControl({
 });
 
 export default function App() {
+  const [learningLocale, setLearningLocale] = useState<Locale | null>(null);
+  const openLearning = useCallback((locale: Locale) => {
+    Keyboard.dismiss();
+    setLearningLocale(locale);
+  }, []);
   const [agentModelProviderStartup, setAgentModelProviderStartup] =
     useState<AgentModelProviderStartupResult | null>(null);
 
@@ -80,27 +102,37 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <LearningNavigation.Provider value={openLearning}>
       <StatusBar style="dark" />
       {agentModelProviderStartup ? (
-        <PassportApp
-          appVersion={packageManifest.version}
-          agentModelProvider={agentModelProviderStartup.provider}
-          appleIntelligenceUnavailable={
-            agentModelProviderStartup.appleIntelligenceUnavailable
-          }
-          backupSharePort={backupSharePort}
-          localModelManagement={localModelComposition?.management ?? null}
-          localModelMutationLeases={
-            localModelComposition?.mutationLeases ?? null
-          }
-          localDataControl={localDataControl}
-          localProfileStorage={localProfileStorage}
-          introCardStorage={introCardStorage}
-          initialLocalePort={initialLocalePort}
-          localePreferenceStorage={localePreferenceStorage}
+        <View style={{ flex: 1, display: learningLocale ? 'none' : 'flex' }}>
+          <PassportApp
+            appVersion={packageManifest.version}
+            agentModelProvider={agentModelProviderStartup.provider}
+            appleIntelligenceUnavailable={
+              agentModelProviderStartup.appleIntelligenceUnavailable
+            }
+            backupSharePort={backupSharePort}
+            localModelManagement={localModelComposition?.management ?? null}
+            localModelMutationLeases={
+              localModelComposition?.mutationLeases ?? null
+            }
+            localDataControl={localDataControl}
+            localProfileStorage={localProfileStorage}
+            introCardStorage={introCardStorage}
+            initialLocalePort={initialLocalePort}
+            localePreferenceStorage={localePreferenceStorage}
+          />
+        </View>
+      ) : null}
+      {learningLocale ? (
+        <LearningScreen
+          storage={learningStorage}
+          files={learningFiles}
+          locale={learningLocale}
+          onClose={() => setLearningLocale(null)}
         />
       ) : null}
-    </>
+    </LearningNavigation.Provider>
   );
 }

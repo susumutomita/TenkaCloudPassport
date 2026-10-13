@@ -8,6 +8,7 @@ import {
   type Locale,
 } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
+import { LearningEntry } from '../app/learning/navigation';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import Card from '../components/Card';
@@ -202,6 +203,14 @@ export default function SettingsScreen({
         label={t.conversationAgentButton}
         onPress={onOpenConversationAgent}
         variant="secondary"
+      />
+      <LearningEntry
+        locale={locale}
+        disabled={
+          dataErasure.busy ||
+          dataErasure.loading ||
+          dataErasure.recoveryRequired
+        }
       />
       <DataErasureSection dataErasure={dataErasure} locale={locale} t={t} />
       <ActionButton

@@ -1159,8 +1159,7 @@ export default function PassportApp({
   // Issue 79: `restoring` を false にした直後や Settings を閉じた後の着地先は、
   // 既定でこの Callback が決める。起動時（`applyStartupRecoveryResult` の 'recovered'
   // 分岐）と Diagnostics の「全データ削除」の両方から呼ばれるため、その場の React state
-  // ではなく `introCardRef.current`（同期参照）で判定する。全データ削除は Intro Card
-  // Storage を対象にしないため、削除前後で Intro Card の有無は変化しない。
+  // ではなく `introCardRef.current`（同期参照）で判定する。全データ削除はカードと下書きも対象にし、同期参照を空へ戻す。
   const introCardHomeStage = useCallback(
     (): SetupStage => (introCardRef.current ? 'intro-card' : 'intro-card-edit'),
     []
@@ -1285,9 +1284,23 @@ export default function PassportApp({
     });
   }, []);
 
+  const purgeIntroCardMemory = useCallback((): void => {
+    conversationAgentFlow.purge();
+    introCardRef.current = null;
+    setIntroCard(null);
+    applyIntroCardDraftFields(EMPTY_INTRO_CARD_DRAFT_FIELDS);
+    setIntroCardDraftThemeIds([]);
+    setIntroCardErrorFieldKey(undefined);
+    setIntroCardNotice({
+      kind: 'empty',
+      message: MESSAGES[localeRef.current].introCard.initialNotice,
+    });
+  }, [applyIntroCardDraftFields, conversationAgentFlow.purge]);
+
   const resetAllLocalMemory = useCallback(
     (recoveryRequired: boolean): void => {
       forgetLoungeForDiagnostics();
+      purgeIntroCardMemory();
       localModels.invalidateAfterExternalPurge();
       resetPassportInMemory();
       pilotMeasurementFlow.reset();
@@ -1298,6 +1311,7 @@ export default function PassportApp({
     },
     [
       forgetLoungeForDiagnostics,
+      purgeIntroCardMemory,
       introCardHomeStage,
       localModels.invalidateAfterExternalPurge,
       pilotMeasurementFlow.reset,

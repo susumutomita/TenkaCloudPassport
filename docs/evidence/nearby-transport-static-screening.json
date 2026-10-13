@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "reviewedMonth": "2026-08",
+  "reviewedMonth": "2026-10",
   "baseline": {
-    "expoSdk": "57.0.9",
-    "reactNative": "0.86.2",
+    "expoSdk": "57.0.28",
+    "reactNative": "0.86.3",
     "androidCompileSdk": 36,
     "androidTargetSdk": 36,
     "iosMinimum": "16.4",
     "xcodeMinimum": "26.4",
-    "packageJsonSha256": "af5ed0d2ebfe2f4ef1b4cca97fa63b987627b6635f3088cbb79fd10e44726dff",
-    "bunLockSha256": "ebcc2ec8211e7ff225ef94194e76997612925c7831722c4a6e640c594e0fcf0f"
+    "packageJsonSha256": "2d1916e682b89e485a790bf6660c22738ebacdf2575ce12399c3aa04d3695f1a",
+    "bunLockSha256": "e6a53df110adab2d46debf314a30c4f539ada7e8368d54c2c4aeacd2fb6088b6"
   },
   "sources": [
     {

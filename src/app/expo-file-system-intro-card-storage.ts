@@ -65,15 +65,23 @@ export class ExpoFileSystemIntroCardStorageAdapter
     }
   }
 
-  async inspect(): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
-    if (!this.document) throw unavailableIntroCardStorageError();
+  inspect(): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
+    return this.inspectDocument(this.document);
+  }
+  inspectDraft(): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
+    return this.inspectDocument(this.draftDocument);
+  }
+  private async inspectDocument(
+    document: ProfileDocument | null
+  ): Promise<{ readonly count: 0 | 1; readonly bytes: number }> {
+    if (!document) throw unavailableIntroCardStorageError();
     try {
-      if (!this.document.exists) return { count: 0, bytes: 0 };
-      const size = this.document.size;
+      if (!document.exists) return { count: 0, bytes: 0 };
+      const size = document.size;
       if (size !== null && Number.isSafeInteger(size) && size >= 0) {
         return { count: 1, bytes: size };
       }
-      const raw = await this.document.text();
+      const raw = await document.text();
       return { count: 1, bytes: new TextEncoder().encode(raw).byteLength };
     } catch (error: unknown) {
       throw new IntroCardStorageError(

@@ -1,0 +1,2191 @@
+{
+  "schemaVersion": 1,
+  "catalogID": "interviewlab.cs-math",
+  "version": "2026.10.1301",
+  "title": "CS・数学の基礎",
+  "lessons": [
+    {
+      "id": "foundation-logic",
+      "title": "仕様を論理式からテストへ",
+      "category": "CS・数学",
+      "summary": "論理・仕様",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["命題と量化記号"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-logic\",\n  \"name\": \"仕様を論理式からテストへ\",\n  \"topic\": \"論理・仕様\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"命題と量化記号\"\n  ],\n  \"interviewUse\": \"境界条件・反例・テスト設計\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"「すべて」の否定\",\n      \"prompt\": \"長さnの配列が狭義単調増加である条件は、全ての i（0≤i<n−1）について a[i]<a[i+1]。この条件を否定すると？\",\n      \"choices\": [\n        \"ある i で a[i]≥a[i+1]\",\n        \"全ての i で a[i]≥a[i+1]\",\n        \"ある i で a[i]>a[i+1]\"\n      ],\n      \"answer\": 0,\n      \"why\": \"全称命題の否定は反例の存在。等しい隣接要素も狭義単調増加の反例です。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"例をいくつ通せばよい？\",\n      \"prompt\": \"[1,2,3] と [2,4,8] で成功した実装は、全ての配列で正しい？\",\n      \"choices\": [\n        \"有限個の成功例で証明できる\",\n        \"まだ証明にならない\",\n        \"長さ3なら必ず正しい\"\n      ],\n      \"answer\": 1,\n      \"why\": \"テストは欠陥の発見に役立ちますが、未検査入力を含む一般命題には論証が必要です。まず重複・減少・空を反例候補にします。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"空の集合上の条件\",\n      \"prompt\": \"同じ仕様のまま、空配列と1要素配列を判定すると？\",\n      \"choices\": [\n        \"両方 false\",\n        \"空だけ false\",\n        \"両方 true\"\n      ],\n      \"answer\": 2,\n      \"why\": \"調べる隣接ペアが存在せず、反例もありません。全称条件は真。長さ2以上を要求する別仕様なら、その前提を明記します。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"最小の反例\",\n      \"prompt\": \"実装が「a[i]>a[i+1] のときだけ false」としている。仕様との差を最小で見つける入力は？\",\n      \"choices\": [\n        \"[1,2]\",\n        \"[2,2]\",\n        \"[3,2,1]\"\n      ],\n      \"answer\": 1,\n      \"why\": \"[2,2] では実装は true、狭義単調増加の仕様は false。長さ0、1には隣接比較がなく、この種類の反例は作れません。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"非減少配列（同じ値を許す）を判定する手順を作る。空・1要素・重複を含む仕様と、false を返す最小反例を説明してください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"条件を「全ての隣接ペア」で表すと？\",\n        \"false の条件はその全称命題の否定です。\"\n      ],\n      \"why\": \"失敗条件だけを探すと、境界を含む実装が簡潔になります。\",\n      \"reference\": \"for i = 0 .. n-2:\\n  if a[i] > a[i+1]: return false\\nreturn true\\n最小反例: [2,1]。空・[2]・[2,2] は true。\",\n      \"check\": \"□ < と ≤ の違いを仕様に反映した\\n□ 空入力を説明した\\n□ 成功例だけを正しさの証明にしなかった\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "「すべて」の否定",
+          "prompt": "長さnの配列が狭義単調増加である条件は、全ての i（0≤i<n−1）について a[i]<a[i+1]。この条件を否定すると？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "ある i で a[i]≥a[i+1]",
+              "explanation": "全称命題の否定は反例の存在。等しい隣接要素も狭義単調増加の反例です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "全ての i で a[i]≥a[i+1]",
+              "explanation": "全称命題の否定は反例の存在。等しい隣接要素も狭義単調増加の反例です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "ある i で a[i]>a[i+1]",
+              "explanation": "全称命題の否定は反例の存在。等しい隣接要素も狭義単調増加の反例です。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "全称命題の否定は反例の存在。等しい隣接要素も狭義単調増加の反例です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "例をいくつ通せばよい？",
+          "prompt": "[1,2,3] と [2,4,8] で成功した実装は、全ての配列で正しい？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "有限個の成功例で証明できる",
+              "explanation": "テストは欠陥の発見に役立ちますが、未検査入力を含む一般命題には論証が必要です。まず重複・減少・空を反例候補にします。"
+            },
+            {
+              "id": "choice-1",
+              "text": "まだ証明にならない",
+              "explanation": "テストは欠陥の発見に役立ちますが、未検査入力を含む一般命題には論証が必要です。まず重複・減少・空を反例候補にします。"
+            },
+            {
+              "id": "choice-2",
+              "text": "長さ3なら必ず正しい",
+              "explanation": "テストは欠陥の発見に役立ちますが、未検査入力を含む一般命題には論証が必要です。まず重複・減少・空を反例候補にします。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "テストは欠陥の発見に役立ちますが、未検査入力を含む一般命題には論証が必要です。まず重複・減少・空を反例候補にします。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "空の集合上の条件",
+          "prompt": "同じ仕様のまま、空配列と1要素配列を判定すると？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "両方 false",
+              "explanation": "調べる隣接ペアが存在せず、反例もありません。全称条件は真。長さ2以上を要求する別仕様なら、その前提を明記します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "空だけ false",
+              "explanation": "調べる隣接ペアが存在せず、反例もありません。全称条件は真。長さ2以上を要求する別仕様なら、その前提を明記します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "両方 true",
+              "explanation": "調べる隣接ペアが存在せず、反例もありません。全称条件は真。長さ2以上を要求する別仕様なら、その前提を明記します。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "調べる隣接ペアが存在せず、反例もありません。全称条件は真。長さ2以上を要求する別仕様なら、その前提を明記します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "最小の反例",
+          "prompt": "実装が「a[i]>a[i+1] のときだけ false」としている。仕様との差を最小で見つける入力は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "[1,2]",
+              "explanation": "[2,2] では実装は true、狭義単調増加の仕様は false。長さ0、1には隣接比較がなく、この種類の反例は作れません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "[2,2]",
+              "explanation": "[2,2] では実装は true、狭義単調増加の仕様は false。長さ0、1には隣接比較がなく、この種類の反例は作れません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "[3,2,1]",
+              "explanation": "[2,2] では実装は true、狭義単調増加の仕様は false。長さ0、1には隣接比較がなく、この種類の反例は作れません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "[2,2] では実装は true、狭義単調増加の仕様は false。長さ0、1には隣接比較がなく、この種類の反例は作れません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "非減少配列（同じ値を許す）を判定する手順を作る。空・1要素・重複を含む仕様と、false を返す最小反例を説明してください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "失敗条件だけを探すと、境界を含む実装が簡潔になります。",
+          "code": null,
+          "hints": [
+            "条件を「全ての隣接ペア」で表すと？",
+            "false の条件はその全称命題の否定です。"
+          ],
+          "reference": "for i = 0 .. n-2:\n  if a[i] > a[i+1]: return false\nreturn true\n最小反例: [2,1]。空・[2]・[2,2] は true。",
+          "check": "□ < と ≤ の違いを仕様に反映した\n□ 空入力を説明した\n□ 成功例だけを正しさの証明にしなかった"
+        }
+      ],
+      "notes": "面接での使い方：境界条件・反例・テスト設計"
+    },
+    {
+      "id": "foundation-invariant",
+      "title": "ループの正しさを支える",
+      "category": "CS・数学",
+      "summary": "不変条件・停止性",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["帰納法"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-invariant\",\n  \"name\": \"ループの正しさを支える\",\n  \"topic\": \"不変条件・停止性\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"帰納法\"\n  ],\n  \"interviewUse\": \"コードの正当性を短く説明する\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"どの時点の主張？\",\n      \"prompt\": \"配列の先頭から合計を求める。i個処理済みの時点で保持するべき関係は？\",\n      \"choices\": [\n        \"sum は配列全体の合計\",\n        \"sum = a[0]+…+a[i−1]\",\n        \"sum = a[i]\"\n      ],\n      \"answer\": 1,\n      \"why\": \"状態の時点と範囲を固定します。半開区間 [0,i) と書けば i=0 でも自然です。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"初期化を確認する\",\n      \"prompt\": \"i=0、sum=0 で不変条件は成立する？\",\n      \"choices\": [\n        \"成立する。空和は0\",\n        \"成立しない。最初の要素が必要\",\n        \"正数だけなら成立する\"\n      ],\n      \"answer\": 0,\n      \"why\": \"まだ処理していない区間の和は0。負数・ゼロが混じっても成立します。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"更新と終了をつなぐ\",\n      \"prompt\": \"sum += a[i]; i += 1 の更新で、何が言える？\",\n      \"choices\": [\n        \"不変条件だけで停止も自動保証\",\n        \"和は必ず増える\",\n        \"不変条件を保ち、n−i が1減る\"\n      ],\n      \"answer\": 2,\n      \"why\": \"和の増減は不要。0≤i<n の間だけ更新すれば、不変条件を保ち、非負整数 n−i が減るので停止します。停止時 i=n で全体の和です。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"機械の数も仕様に含める\",\n      \"prompt\": \"数学上の整数で正しい和の実装を固定幅整数へ移す。追加で確認する条件は？\",\n      \"choices\": [\n        \"負数を禁止するだけ\",\n        \"表現範囲・オーバーフローの扱い\",\n        \"配列をソートする\"\n      ],\n      \"answer\": 1,\n      \"why\": \"論証の数体系と実装の数体系が一致する必要があります。言語によって桁あふれの挙動は異なるため、範囲制約・広い型・多倍長などを明示します。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"非空配列の最大値を1回の走査で求める。初期状態、不変条件、更新、停止時の結論を説明してください。全要素が負の場合も扱ってください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"0で初期化してよいでしょうか？\",\n        \"処理済み範囲にある要素で初期化すると？\"\n      ],\n      \"why\": \"先頭要素を初期値にすれば、全要素が負でも成立します。空配列は今回の前提外ですが、APIなら例外等を決めます。\",\n      \"reference\": \"best = a[0]; i = 1\\n不変条件: best = max(a[0:i])\\nwhile i < n:\\n  best = max(best, a[i]); i += 1\\nreturn best\",\n      \"check\": \"□ 非空という前提を明記した\\n□ 初期化・保存・終了を説明した\\n□ [-5,-2] で -2 を返す\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "どの時点の主張？",
+          "prompt": "配列の先頭から合計を求める。i個処理済みの時点で保持するべき関係は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "sum は配列全体の合計",
+              "explanation": "状態の時点と範囲を固定します。半開区間 [0,i) と書けば i=0 でも自然です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "sum = a[0]+…+a[i−1]",
+              "explanation": "状態の時点と範囲を固定します。半開区間 [0,i) と書けば i=0 でも自然です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "sum = a[i]",
+              "explanation": "状態の時点と範囲を固定します。半開区間 [0,i) と書けば i=0 でも自然です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "状態の時点と範囲を固定します。半開区間 [0,i) と書けば i=0 でも自然です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "初期化を確認する",
+          "prompt": "i=0、sum=0 で不変条件は成立する？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "成立する。空和は0",
+              "explanation": "まだ処理していない区間の和は0。負数・ゼロが混じっても成立します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "成立しない。最初の要素が必要",
+              "explanation": "まだ処理していない区間の和は0。負数・ゼロが混じっても成立します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "正数だけなら成立する",
+              "explanation": "まだ処理していない区間の和は0。負数・ゼロが混じっても成立します。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "まだ処理していない区間の和は0。負数・ゼロが混じっても成立します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "更新と終了をつなぐ",
+          "prompt": "sum += a[i]; i += 1 の更新で、何が言える？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "不変条件だけで停止も自動保証",
+              "explanation": "和の増減は不要。0≤i<n の間だけ更新すれば、不変条件を保ち、非負整数 n−i が減るので停止します。停止時 i=n で全体の和です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "和は必ず増える",
+              "explanation": "和の増減は不要。0≤i<n の間だけ更新すれば、不変条件を保ち、非負整数 n−i が減るので停止します。停止時 i=n で全体の和です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "不変条件を保ち、n−i が1減る",
+              "explanation": "和の増減は不要。0≤i<n の間だけ更新すれば、不変条件を保ち、非負整数 n−i が減るので停止します。停止時 i=n で全体の和です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "和の増減は不要。0≤i<n の間だけ更新すれば、不変条件を保ち、非負整数 n−i が減るので停止します。停止時 i=n で全体の和です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "機械の数も仕様に含める",
+          "prompt": "数学上の整数で正しい和の実装を固定幅整数へ移す。追加で確認する条件は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "負数を禁止するだけ",
+              "explanation": "論証の数体系と実装の数体系が一致する必要があります。言語によって桁あふれの挙動は異なるため、範囲制約・広い型・多倍長などを明示します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "表現範囲・オーバーフローの扱い",
+              "explanation": "論証の数体系と実装の数体系が一致する必要があります。言語によって桁あふれの挙動は異なるため、範囲制約・広い型・多倍長などを明示します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "配列をソートする",
+              "explanation": "論証の数体系と実装の数体系が一致する必要があります。言語によって桁あふれの挙動は異なるため、範囲制約・広い型・多倍長などを明示します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "論証の数体系と実装の数体系が一致する必要があります。言語によって桁あふれの挙動は異なるため、範囲制約・広い型・多倍長などを明示します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "非空配列の最大値を1回の走査で求める。初期状態、不変条件、更新、停止時の結論を説明してください。全要素が負の場合も扱ってください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "先頭要素を初期値にすれば、全要素が負でも成立します。空配列は今回の前提外ですが、APIなら例外等を決めます。",
+          "code": null,
+          "hints": [
+            "0で初期化してよいでしょうか？",
+            "処理済み範囲にある要素で初期化すると？"
+          ],
+          "reference": "best = a[0]; i = 1\n不変条件: best = max(a[0:i])\nwhile i < n:\n  best = max(best, a[i]); i += 1\nreturn best",
+          "check": "□ 非空という前提を明記した\n□ 初期化・保存・終了を説明した\n□ [-5,-2] で -2 を返す"
+        }
+      ],
+      "notes": "面接での使い方：コードの正当性を短く説明する"
+    },
+    {
+      "id": "foundation-counting",
+      "title": "総当たりの数を数える",
+      "category": "CS・数学",
+      "summary": "離散数学・計数",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["和の公式"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-counting\",\n  \"name\": \"総当たりの数を数える\",\n  \"topic\": \"離散数学・計数\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"和の公式\"\n  ],\n  \"interviewUse\": \"全探索の計算量と重複排除\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"数える対象を決める\",\n      \"prompt\": \"n個の異なる位置から2つ選ぶ。順序は区別せず、同じ位置は2回選ばない。候補数は？\",\n      \"choices\": [\n        \"n²\",\n        \"n(n−1)\",\n        \"n(n−1)/2\"\n      ],\n      \"answer\": 2,\n      \"why\": \"まず順序付きでは n(n−1)。各組を逆順でも数えるので2で割ります。値が同じでも位置が違えば別候補です。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"ループと式を対応させる\",\n      \"prompt\": \"for i=0..n−1, for j=i+1..n−1 の内側が実行される回数は？\",\n      \"choices\": [\n        \"(n−1)+(n−2)+…+0\",\n        \"n+n+…+n\",\n        \"log₂ n\"\n      ],\n      \"answer\": 0,\n      \"why\": \"iを固定した候補は n−i−1 個。合計が n(n−1)/2 です。三角形のループでも Θ(n²)。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"区間は端で数える\",\n      \"prompt\": \"長さnの配列の空でない連続区間 [l,r) は何個？ 0≤l<r≤n。\",\n      \"choices\": [\n        \"n(n−1)/2\",\n        \"n(n+1)/2\",\n        \"2ⁿ\"\n      ],\n      \"answer\": 1,\n      \"why\": \"n+1個の境界から異なる2つを選ぶので C(n+1,2)。部分集合とは異なり、間を飛ばせません。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"小さい入力で照合\",\n      \"prompt\": \"長さ3の配列の空でない連続区間数と、要素の部分集合数（空集合を含む）は？\",\n      \"choices\": [\n        \"6 と 8\",\n        \"3 と 6\",\n        \"8 と 6\"\n      ],\n      \"answer\": 0,\n      \"why\": \"区間は長さ1が3、長さ2が2、長さ3が1で計6。部分集合は各位置を採用するかの2択が3つなので8。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"n個のタスク間で、自己ループのない一方向リンク候補を全て列挙したい。A→B と B→A は別です。式・ループ・n=0,1,3 の件数を示してください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"今回、逆向きは重複でしょうか？\",\n        \"各始点から何個の終点を選べますか？\"\n      ],\n      \"why\": \"向きを区別するので2で割りません。出力件数自体が Θ(n²) です。\",\n      \"reference\": \"for u = 0 .. n-1:\\n  for v = 0 .. n-1:\\n    if u != v: emit(u,v)\\n件数 n(n−1); n=0,1,3 で 0,0,6。\",\n      \"check\": \"□ 順序と同一位置の扱いを確認した\\n□ 小さいnで式を検算した\\n□ 全件出力に必要な時間を説明した\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "数える対象を決める",
+          "prompt": "n個の異なる位置から2つ選ぶ。順序は区別せず、同じ位置は2回選ばない。候補数は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "n²",
+              "explanation": "まず順序付きでは n(n−1)。各組を逆順でも数えるので2で割ります。値が同じでも位置が違えば別候補です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "n(n−1)",
+              "explanation": "まず順序付きでは n(n−1)。各組を逆順でも数えるので2で割ります。値が同じでも位置が違えば別候補です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "n(n−1)/2",
+              "explanation": "まず順序付きでは n(n−1)。各組を逆順でも数えるので2で割ります。値が同じでも位置が違えば別候補です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "まず順序付きでは n(n−1)。各組を逆順でも数えるので2で割ります。値が同じでも位置が違えば別候補です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "ループと式を対応させる",
+          "prompt": "for i=0..n−1, for j=i+1..n−1 の内側が実行される回数は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "(n−1)+(n−2)+…+0",
+              "explanation": "iを固定した候補は n−i−1 個。合計が n(n−1)/2 です。三角形のループでも Θ(n²)。"
+            },
+            {
+              "id": "choice-1",
+              "text": "n+n+…+n",
+              "explanation": "iを固定した候補は n−i−1 個。合計が n(n−1)/2 です。三角形のループでも Θ(n²)。"
+            },
+            {
+              "id": "choice-2",
+              "text": "log₂ n",
+              "explanation": "iを固定した候補は n−i−1 個。合計が n(n−1)/2 です。三角形のループでも Θ(n²)。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "iを固定した候補は n−i−1 個。合計が n(n−1)/2 です。三角形のループでも Θ(n²)。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "区間は端で数える",
+          "prompt": "長さnの配列の空でない連続区間 [l,r) は何個？ 0≤l<r≤n。",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "n(n−1)/2",
+              "explanation": "n+1個の境界から異なる2つを選ぶので C(n+1,2)。部分集合とは異なり、間を飛ばせません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "n(n+1)/2",
+              "explanation": "n+1個の境界から異なる2つを選ぶので C(n+1,2)。部分集合とは異なり、間を飛ばせません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "2ⁿ",
+              "explanation": "n+1個の境界から異なる2つを選ぶので C(n+1,2)。部分集合とは異なり、間を飛ばせません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "n+1個の境界から異なる2つを選ぶので C(n+1,2)。部分集合とは異なり、間を飛ばせません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "小さい入力で照合",
+          "prompt": "長さ3の配列の空でない連続区間数と、要素の部分集合数（空集合を含む）は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "6 と 8",
+              "explanation": "区間は長さ1が3、長さ2が2、長さ3が1で計6。部分集合は各位置を採用するかの2択が3つなので8。"
+            },
+            {
+              "id": "choice-1",
+              "text": "3 と 6",
+              "explanation": "区間は長さ1が3、長さ2が2、長さ3が1で計6。部分集合は各位置を採用するかの2択が3つなので8。"
+            },
+            {
+              "id": "choice-2",
+              "text": "8 と 6",
+              "explanation": "区間は長さ1が3、長さ2が2、長さ3が1で計6。部分集合は各位置を採用するかの2択が3つなので8。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "区間は長さ1が3、長さ2が2、長さ3が1で計6。部分集合は各位置を採用するかの2択が3つなので8。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "n個のタスク間で、自己ループのない一方向リンク候補を全て列挙したい。A→B と B→A は別です。式・ループ・n=0,1,3 の件数を示してください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "向きを区別するので2で割りません。出力件数自体が Θ(n²) です。",
+          "code": null,
+          "hints": [
+            "今回、逆向きは重複でしょうか？",
+            "各始点から何個の終点を選べますか？"
+          ],
+          "reference": "for u = 0 .. n-1:\n  for v = 0 .. n-1:\n    if u != v: emit(u,v)\n件数 n(n−1); n=0,1,3 で 0,0,6。",
+          "check": "□ 順序と同一位置の扱いを確認した\n□ 小さいnで式を検算した\n□ 全件出力に必要な時間を説明した"
+        }
+      ],
+      "notes": "面接での使い方：全探索の計算量と重複排除"
+    },
+    {
+      "id": "foundation-bayes",
+      "title": "アラートの意味を条件づける",
+      "category": "CS・数学",
+      "summary": "条件付き確率",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["確率の積・和"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-bayes\",\n  \"name\": \"アラートの意味を条件づける\",\n  \"topic\": \"条件付き確率\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"確率の積・和\"\n  ],\n  \"interviewUse\": \"監視の誤検知・評価指標を解釈する\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"分母を変える\",\n      \"prompt\": \"障害率1%。障害時に警報が出る確率90%、正常時に警報が出る確率5%。警報を見たときに知りたい確率は？\",\n      \"choices\": [\n        \"P(警報 | 障害)\",\n        \"P(障害 | 警報)\",\n        \"P(正常)\"\n      ],\n      \"answer\": 1,\n      \"why\": \"観測した警報で母集団を絞ります。感度90%をそのまま障害確率と読むと、条件を逆にしています。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"人数へ置き換える\",\n      \"prompt\": \"この比率が期待どおりの10,000件を考える。障害由来の警報と正常由来の警報の期待件数は？\",\n      \"choices\": [\n        \"90 と 495\",\n        \"900 と 500\",\n        \"100 と 50\"\n      ],\n      \"answer\": 0,\n      \"why\": \"障害100件の90%で90、正常9,900件の5%で495。これは期待件数であり、有限標本の実測値が必ず一致するという意味ではありません。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"警報の集合で割る\",\n      \"prompt\": \"警報が出た場合の障害確率は？\",\n      \"choices\": [\n        \"90%\",\n        \"約1%\",\n        \"90/(90+495) ≈ 15.4%\"\n      ],\n      \"answer\": 2,\n      \"why\": \"ベイズ則で 0.9×0.01 / (0.9×0.01+0.05×0.99)。警報の多数が正常由来になるのは、正常の基数が大きいためです。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"環境が変わると？\",\n      \"prompt\": \"感度・誤検知率が同じで、障害率が10%へ上昇した。警報時の障害確率は？\",\n      \"choices\": [\n        \"変わらず15.4%\",\n        \"2/3 ≈ 66.7%\",\n        \"90%\"\n      ],\n      \"answer\": 1,\n      \"why\": \"0.09/(0.09+0.045)=2/3。同じ検出器でも事前確率によって観測の意味が変わります。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"障害率2%、感度80%、正常時警報率2%の検出器がある。警報時の障害確率を求め、どの情報なしでは計算できないか説明してください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"10,000件なら障害200件、正常9,800件です。\",\n        \"警報を出した両群の件数を足して分母にします。\"\n      ],\n      \"why\": \"160/(160+196)=40/89≈44.9%。感度だけでは不足し、基礎発生率と正常時の警報率も必要です。\",\n      \"reference\": \"P(D|A) = P(A|D)P(D) / [P(A|D)P(D)+P(A|¬D)P(¬D)]\\n=0.016/(0.016+0.0196)≈0.4494\",\n      \"check\": \"□ P(A|D) と P(D|A) を区別した\\n□ 正常由来の警報も分母に入れた\\n□ 現場の発生率への依存を説明した\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "分母を変える",
+          "prompt": "障害率1%。障害時に警報が出る確率90%、正常時に警報が出る確率5%。警報を見たときに知りたい確率は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "P(警報 | 障害)",
+              "explanation": "観測した警報で母集団を絞ります。感度90%をそのまま障害確率と読むと、条件を逆にしています。"
+            },
+            {
+              "id": "choice-1",
+              "text": "P(障害 | 警報)",
+              "explanation": "観測した警報で母集団を絞ります。感度90%をそのまま障害確率と読むと、条件を逆にしています。"
+            },
+            {
+              "id": "choice-2",
+              "text": "P(正常)",
+              "explanation": "観測した警報で母集団を絞ります。感度90%をそのまま障害確率と読むと、条件を逆にしています。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "観測した警報で母集団を絞ります。感度90%をそのまま障害確率と読むと、条件を逆にしています。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "人数へ置き換える",
+          "prompt": "この比率が期待どおりの10,000件を考える。障害由来の警報と正常由来の警報の期待件数は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "90 と 495",
+              "explanation": "障害100件の90%で90、正常9,900件の5%で495。これは期待件数であり、有限標本の実測値が必ず一致するという意味ではありません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "900 と 500",
+              "explanation": "障害100件の90%で90、正常9,900件の5%で495。これは期待件数であり、有限標本の実測値が必ず一致するという意味ではありません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "100 と 50",
+              "explanation": "障害100件の90%で90、正常9,900件の5%で495。これは期待件数であり、有限標本の実測値が必ず一致するという意味ではありません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "障害100件の90%で90、正常9,900件の5%で495。これは期待件数であり、有限標本の実測値が必ず一致するという意味ではありません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "警報の集合で割る",
+          "prompt": "警報が出た場合の障害確率は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "90%",
+              "explanation": "ベイズ則で 0.9×0.01 / (0.9×0.01+0.05×0.99)。警報の多数が正常由来になるのは、正常の基数が大きいためです。"
+            },
+            {
+              "id": "choice-1",
+              "text": "約1%",
+              "explanation": "ベイズ則で 0.9×0.01 / (0.9×0.01+0.05×0.99)。警報の多数が正常由来になるのは、正常の基数が大きいためです。"
+            },
+            {
+              "id": "choice-2",
+              "text": "90/(90+495) ≈ 15.4%",
+              "explanation": "ベイズ則で 0.9×0.01 / (0.9×0.01+0.05×0.99)。警報の多数が正常由来になるのは、正常の基数が大きいためです。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "ベイズ則で 0.9×0.01 / (0.9×0.01+0.05×0.99)。警報の多数が正常由来になるのは、正常の基数が大きいためです。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "環境が変わると？",
+          "prompt": "感度・誤検知率が同じで、障害率が10%へ上昇した。警報時の障害確率は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "変わらず15.4%",
+              "explanation": "0.09/(0.09+0.045)=2/3。同じ検出器でも事前確率によって観測の意味が変わります。"
+            },
+            {
+              "id": "choice-1",
+              "text": "2/3 ≈ 66.7%",
+              "explanation": "0.09/(0.09+0.045)=2/3。同じ検出器でも事前確率によって観測の意味が変わります。"
+            },
+            {
+              "id": "choice-2",
+              "text": "90%",
+              "explanation": "0.09/(0.09+0.045)=2/3。同じ検出器でも事前確率によって観測の意味が変わります。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "0.09/(0.09+0.045)=2/3。同じ検出器でも事前確率によって観測の意味が変わります。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "障害率2%、感度80%、正常時警報率2%の検出器がある。警報時の障害確率を求め、どの情報なしでは計算できないか説明してください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "160/(160+196)=40/89≈44.9%。感度だけでは不足し、基礎発生率と正常時の警報率も必要です。",
+          "code": null,
+          "hints": [
+            "10,000件なら障害200件、正常9,800件です。",
+            "警報を出した両群の件数を足して分母にします。"
+          ],
+          "reference": "P(D|A) = P(A|D)P(D) / [P(A|D)P(D)+P(A|¬D)P(¬D)]\n=0.016/(0.016+0.0196)≈0.4494",
+          "check": "□ P(A|D) と P(D|A) を区別した\n□ 正常由来の警報も分母に入れた\n□ 現場の発生率への依存を説明した"
+        }
+      ],
+      "notes": "面接での使い方：監視の誤検知・評価指標を解釈する"
+    },
+    {
+      "id": "foundation-expectation",
+      "title": "平均コストを分解する",
+      "category": "CS・数学",
+      "summary": "期待値・独立性",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["確率変数"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-expectation\",\n  \"name\": \"平均コストを分解する\",\n  \"topic\": \"期待値・独立性\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"確率変数\"\n  ],\n  \"interviewUse\": \"期待計算量・キャッシュ・再試行\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"ヒットとミスを分ける\",\n      \"prompt\": \"キャッシュ命中率80%。ヒットの総時間1ms、ミスの総時間11ms。期待時間は？\",\n      \"choices\": [\n        \"3ms\",\n        \"6ms\",\n        \"11ms\"\n      ],\n      \"answer\": 0,\n      \"why\": \"0.8×1+0.2×11=3ms。11msはミス時の総時間なので、さらに1msを足しません。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"独立でなくても足せる？\",\n      \"prompt\": \"同じリクエスト内の処理時間 X,Y が相関している。E[X+Y] は？\",\n      \"choices\": [\n        \"相関があると計算不能\",\n        \"常に E[X]E[Y]\",\n        \"期待値が有限なら E[X]+E[Y]\"\n      ],\n      \"answer\": 2,\n      \"why\": \"期待値の線形性に独立性は不要。ただし分散や同時失敗確率の計算では相関が重要です。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"積には何が必要？\",\n      \"prompt\": \"2回の試行の各失敗確率が0.1。両方失敗の確率を0.01とするための十分な仮定は？\",\n      \"choices\": [\n        \"両試行が同じサーバーを使う\",\n        \"失敗イベントの独立性\",\n        \"平均時間が等しい\"\n      ],\n      \"answer\": 1,\n      \"why\": \"独立なら積になります。障害が持続する共通原因があると、2回目も失敗しやすく、単純な積は使えません。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"上限を決めた再試行\",\n      \"prompt\": \"独立な各試行の失敗率0.2。成功したら止め、最大3回試す。期待試行回数は？\",\n      \"choices\": [\n        \"1.24\",\n        \"3\",\n        \"1.25\"\n      ],\n      \"answer\": 0,\n      \"why\": \"N≥1 は必ず、N≥2 は0.2、N≥3 は0.04。E[N]=1+0.2+0.04=1.24。無限再試行の1/(1−0.2)=1.25とは違います。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"独立な失敗率qの処理を最大2回試す。各試行は固定50ms、初回失敗時だけ10ms待って再試行する。期待総時間と最終失敗確率を求め、q=0.1で検算してください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"初回の50msは必ず必要です。\",\n        \"待ち時間と2回目の50msが発生する確率は？\"\n      ],\n      \"why\": \"期待時間は50+60q ms。最終失敗は独立性の下でq²。q=0.1なら56ms、1%。\",\n      \"reference\": \"T = 50 + I(初回失敗)×60\\nE[T]=50+60q\\nP(最終失敗)=q²\\n0≤q≤1。q=1なら110ms・失敗率1。\",\n      \"check\": \"□ 失敗後だけ待つ費用を入れた\\n□ 期待値と最悪値を区別した\\n□ q² に必要な独立性を述べた\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "ヒットとミスを分ける",
+          "prompt": "キャッシュ命中率80%。ヒットの総時間1ms、ミスの総時間11ms。期待時間は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "3ms",
+              "explanation": "0.8×1+0.2×11=3ms。11msはミス時の総時間なので、さらに1msを足しません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "6ms",
+              "explanation": "0.8×1+0.2×11=3ms。11msはミス時の総時間なので、さらに1msを足しません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "11ms",
+              "explanation": "0.8×1+0.2×11=3ms。11msはミス時の総時間なので、さらに1msを足しません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "0.8×1+0.2×11=3ms。11msはミス時の総時間なので、さらに1msを足しません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "独立でなくても足せる？",
+          "prompt": "同じリクエスト内の処理時間 X,Y が相関している。E[X+Y] は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "相関があると計算不能",
+              "explanation": "期待値の線形性に独立性は不要。ただし分散や同時失敗確率の計算では相関が重要です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "常に E[X]E[Y]",
+              "explanation": "期待値の線形性に独立性は不要。ただし分散や同時失敗確率の計算では相関が重要です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "期待値が有限なら E[X]+E[Y]",
+              "explanation": "期待値の線形性に独立性は不要。ただし分散や同時失敗確率の計算では相関が重要です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "期待値の線形性に独立性は不要。ただし分散や同時失敗確率の計算では相関が重要です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "積には何が必要？",
+          "prompt": "2回の試行の各失敗確率が0.1。両方失敗の確率を0.01とするための十分な仮定は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "両試行が同じサーバーを使う",
+              "explanation": "独立なら積になります。障害が持続する共通原因があると、2回目も失敗しやすく、単純な積は使えません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "失敗イベントの独立性",
+              "explanation": "独立なら積になります。障害が持続する共通原因があると、2回目も失敗しやすく、単純な積は使えません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "平均時間が等しい",
+              "explanation": "独立なら積になります。障害が持続する共通原因があると、2回目も失敗しやすく、単純な積は使えません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "独立なら積になります。障害が持続する共通原因があると、2回目も失敗しやすく、単純な積は使えません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "上限を決めた再試行",
+          "prompt": "独立な各試行の失敗率0.2。成功したら止め、最大3回試す。期待試行回数は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "1.24",
+              "explanation": "N≥1 は必ず、N≥2 は0.2、N≥3 は0.04。E[N]=1+0.2+0.04=1.24。無限再試行の1/(1−0.2)=1.25とは違います。"
+            },
+            {
+              "id": "choice-1",
+              "text": "3",
+              "explanation": "N≥1 は必ず、N≥2 は0.2、N≥3 は0.04。E[N]=1+0.2+0.04=1.24。無限再試行の1/(1−0.2)=1.25とは違います。"
+            },
+            {
+              "id": "choice-2",
+              "text": "1.25",
+              "explanation": "N≥1 は必ず、N≥2 は0.2、N≥3 は0.04。E[N]=1+0.2+0.04=1.24。無限再試行の1/(1−0.2)=1.25とは違います。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "N≥1 は必ず、N≥2 は0.2、N≥3 は0.04。E[N]=1+0.2+0.04=1.24。無限再試行の1/(1−0.2)=1.25とは違います。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "独立な失敗率qの処理を最大2回試す。各試行は固定50ms、初回失敗時だけ10ms待って再試行する。期待総時間と最終失敗確率を求め、q=0.1で検算してください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "期待時間は50+60q ms。最終失敗は独立性の下でq²。q=0.1なら56ms、1%。",
+          "code": null,
+          "hints": [
+            "初回の50msは必ず必要です。",
+            "待ち時間と2回目の50msが発生する確率は？"
+          ],
+          "reference": "T = 50 + I(初回失敗)×60\nE[T]=50+60q\nP(最終失敗)=q²\n0≤q≤1。q=1なら110ms・失敗率1。",
+          "check": "□ 失敗後だけ待つ費用を入れた\n□ 期待値と最悪値を区別した\n□ q² に必要な独立性を述べた"
+        }
+      ],
+      "notes": "面接での使い方：期待計算量・キャッシュ・再試行"
+    },
+    {
+      "id": "foundation-uncertainty",
+      "title": "観測ゼロを保証にしない",
+      "category": "CS・数学",
+      "summary": "統計・不確実性",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["二項分布・対数"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-uncertainty\",\n  \"name\": \"観測ゼロを保証にしない\",\n  \"topic\": \"統計・不確実性\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"二項分布・対数\"\n  ],\n  \"interviewUse\": \"ベンチマークと信頼性の説明\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"0件の失敗から言えること\",\n      \"prompt\": \"独立・同一失敗確率pの100回の試験で失敗0回。正しい解釈は？\",\n      \"choices\": [\n        \"p=0が証明された\",\n        \"pは小さそうだが0とは断定できない\",\n        \"次の1回は必ず成功\"\n      ],\n      \"answer\": 1,\n      \"why\": \"観測のない事象も起こりえます。推定値0と、未知の母数が厳密に0である主張は別です。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"観測の確率を作る\",\n      \"prompt\": \"このモデルで、n回とも成功する確率は？\",\n      \"choices\": [\n        \"1−np\",\n        \"pⁿ\",\n        \"(1−p)ⁿ\"\n      ],\n      \"answer\": 2,\n      \"why\": \"1回の成功率1−pを独立なn回で掛けます。共通障害などで相関する試験には、この式をそのまま適用できません。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"一側の上限を導く\",\n      \"prompt\": \"失敗0回のときの、二項モデルに基づく95%片側信頼上限Uは (1−U)ⁿ=0.05 を解く。n=100なら？\",\n      \"choices\": [\n        \"約2.95%\",\n        \"0%\",\n        \"95%\"\n      ],\n      \"answer\": 0,\n      \"why\": \"U=1−0.05^(1/100)≈0.02951。これは頻度論の信頼上限であり、「pが95%の確率でこの範囲にある」という事後確率ではありません。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"実験の単位を確かめる\",\n      \"prompt\": \"同じ障害が続く1秒間に100試験を集中させた。独立試験とみなして上限を出す前に何を確認する？\",\n      \"choices\": [\n        \"小数点の桁数だけ\",\n        \"試験間の相関と本番条件の代表性\",\n        \"平均だけで十分\"\n      ],\n      \"answer\": 1,\n      \"why\": \"独立・同分布というモデルへの適合が重要です。件数を増やしても、同じ偏りや相関が残れば単純な信頼区間は妥当とは限りません。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"失敗確率p=1%の系で、独立試験をn回しても失敗0回となる確率を5%以下にしたい。必要な最小整数nと、結果の解釈を説明してください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"0.99ⁿ≤0.05 を解きます。\",\n        \"負の log(0.99) で割ると不等号に注意します。\"\n      ],\n      \"why\": \"n≥log(0.05)/log(0.99)≈298.07 より299回。299回の無失敗が「真の失敗率ゼロ」を意味するわけではありません。\",\n      \"reference\": \"n = ceil(log(0.05)/log(0.99)) = 299\\n0.99^298≈0.05004 >0.05\\n0.99^299≈0.04954 ≤0.05\",\n      \"check\": \"□ 切り上げた\\n□ 独立・同一確率という前提を述べた\\n□ 無失敗をゼロリスクと呼ばなかった\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "0件の失敗から言えること",
+          "prompt": "独立・同一失敗確率pの100回の試験で失敗0回。正しい解釈は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "p=0が証明された",
+              "explanation": "観測のない事象も起こりえます。推定値0と、未知の母数が厳密に0である主張は別です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "pは小さそうだが0とは断定できない",
+              "explanation": "観測のない事象も起こりえます。推定値0と、未知の母数が厳密に0である主張は別です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "次の1回は必ず成功",
+              "explanation": "観測のない事象も起こりえます。推定値0と、未知の母数が厳密に0である主張は別です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "観測のない事象も起こりえます。推定値0と、未知の母数が厳密に0である主張は別です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "観測の確率を作る",
+          "prompt": "このモデルで、n回とも成功する確率は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "1−np",
+              "explanation": "1回の成功率1−pを独立なn回で掛けます。共通障害などで相関する試験には、この式をそのまま適用できません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "pⁿ",
+              "explanation": "1回の成功率1−pを独立なn回で掛けます。共通障害などで相関する試験には、この式をそのまま適用できません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "(1−p)ⁿ",
+              "explanation": "1回の成功率1−pを独立なn回で掛けます。共通障害などで相関する試験には、この式をそのまま適用できません。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "1回の成功率1−pを独立なn回で掛けます。共通障害などで相関する試験には、この式をそのまま適用できません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "一側の上限を導く",
+          "prompt": "失敗0回のときの、二項モデルに基づく95%片側信頼上限Uは (1−U)ⁿ=0.05 を解く。n=100なら？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "約2.95%",
+              "explanation": "U=1−0.05^(1/100)≈0.02951。これは頻度論の信頼上限であり、「pが95%の確率でこの範囲にある」という事後確率ではありません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "0%",
+              "explanation": "U=1−0.05^(1/100)≈0.02951。これは頻度論の信頼上限であり、「pが95%の確率でこの範囲にある」という事後確率ではありません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "95%",
+              "explanation": "U=1−0.05^(1/100)≈0.02951。これは頻度論の信頼上限であり、「pが95%の確率でこの範囲にある」という事後確率ではありません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "U=1−0.05^(1/100)≈0.02951。これは頻度論の信頼上限であり、「pが95%の確率でこの範囲にある」という事後確率ではありません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "実験の単位を確かめる",
+          "prompt": "同じ障害が続く1秒間に100試験を集中させた。独立試験とみなして上限を出す前に何を確認する？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "小数点の桁数だけ",
+              "explanation": "独立・同分布というモデルへの適合が重要です。件数を増やしても、同じ偏りや相関が残れば単純な信頼区間は妥当とは限りません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "試験間の相関と本番条件の代表性",
+              "explanation": "独立・同分布というモデルへの適合が重要です。件数を増やしても、同じ偏りや相関が残れば単純な信頼区間は妥当とは限りません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "平均だけで十分",
+              "explanation": "独立・同分布というモデルへの適合が重要です。件数を増やしても、同じ偏りや相関が残れば単純な信頼区間は妥当とは限りません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "独立・同分布というモデルへの適合が重要です。件数を増やしても、同じ偏りや相関が残れば単純な信頼区間は妥当とは限りません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "失敗確率p=1%の系で、独立試験をn回しても失敗0回となる確率を5%以下にしたい。必要な最小整数nと、結果の解釈を説明してください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "n≥log(0.05)/log(0.99)≈298.07 より299回。299回の無失敗が「真の失敗率ゼロ」を意味するわけではありません。",
+          "code": null,
+          "hints": [
+            "0.99ⁿ≤0.05 を解きます。",
+            "負の log(0.99) で割ると不等号に注意します。"
+          ],
+          "reference": "n = ceil(log(0.05)/log(0.99)) = 299\n0.99^298≈0.05004 >0.05\n0.99^299≈0.04954 ≤0.05",
+          "check": "□ 切り上げた\n□ 独立・同一確率という前提を述べた\n□ 無失敗をゼロリスクと呼ばなかった"
+        }
+      ],
+      "notes": "面接での使い方：ベンチマークと信頼性の説明"
+    },
+    {
+      "id": "foundation-recurrence",
+      "title": "再帰木からコストを導く",
+      "category": "CS・数学",
+      "summary": "漸近評価・漸化式",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["等比級数"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-recurrence\",\n  \"name\": \"再帰木からコストを導く\",\n  \"topic\": \"漸近評価・漸化式\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"等比級数\"\n  ],\n  \"interviewUse\": \"分割統治の時間と領域\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"部分問題と結合を分ける\",\n      \"prompt\": \"n=2ᵏ。問題を半分2個へ分け、結合にnの仕事をする。T(1)=1。式は？\",\n      \"choices\": [\n        \"T(n)=T(n/2)+1\",\n        \"T(n)=2T(n/2)+n\",\n        \"T(n)=2T(n−1)\"\n      ],\n      \"answer\": 1,\n      \"why\": \"呼出し数2、各サイズn/2、再帰の外の仕事nを別々に記述します。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"同じ深さを足す\",\n      \"prompt\": \"深さdでノード数2ᵈ、各ノードの結合コストn/2ᵈ。深さ全体の仕事は？\",\n      \"choices\": [\n        \"n\",\n        \"n/2ᵈ\",\n        \"2ᵈn\"\n      ],\n      \"answer\": 0,\n      \"why\": \"2ᵈ×n/2ᵈ=n。深さごとの仕事を数えると、ノードごとの式を全部展開する必要がありません。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"葉まで合計する\",\n      \"prompt\": \"葉までk=log₂n段。非葉の各段n、葉の合計n。T(n)は？\",\n      \"choices\": [\n        \"Θ(n)\",\n        \"Θ(log n)\",\n        \"n log₂n+n = Θ(n log n)\"\n      ],\n      \"answer\": 2,\n      \"why\": \"内部のk段と葉を分けて数えます。O(n²)も上界ですが、ここでは上下から一致するΘ表記が精確です。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"時間とスタックは別\",\n      \"prompt\": \"同じ再帰を深さ優先で実行し、各フレームはO(1)の局所情報だけ持つ。再帰スタックの最大量は？\",\n      \"choices\": [\n        \"Θ(n log n)\",\n        \"Θ(log n)\",\n        \"Θ(n²)\"\n      ],\n      \"answer\": 1,\n      \"why\": \"同時に生きている呼出しは根から葉への経路。配列コピー等を別途作る実装なら追加領域は別評価です。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"T(1)=1、T(n)=T(n/2)+n（n=2ᵏ）の処理を考える。再帰木の各段、総仕事、スタックを導いてください。各フレームの局所領域はO(1)。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"1段ごとの仕事は n,n/2,n/4,… です。\",\n        \"葉の1まで含める等比和です。\"\n      ],\n      \"why\": \"仕事はn+n/2+…+1=2n−1でΘ(n)。時間が線形でも深さはlog₂nなのでスタックはΘ(log n)。\",\n      \"reference\": \"T(n)=Σ(d=0..log₂n) n/2ᵈ=2n−1\\n時間 Θ(n); スタック Θ(log n)（n≥2）\\nn=1ならどちらも定数。\",\n      \"check\": \"□ 呼出し数が1になった違いを反映した\\n□ 全仕事と最大同時フレーム数を分けた\\n□ n=1の基底条件を確認した\"\n    }\n  ],\n  \"sources\": [],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "部分問題と結合を分ける",
+          "prompt": "n=2ᵏ。問題を半分2個へ分け、結合にnの仕事をする。T(1)=1。式は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "T(n)=T(n/2)+1",
+              "explanation": "呼出し数2、各サイズn/2、再帰の外の仕事nを別々に記述します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "T(n)=2T(n/2)+n",
+              "explanation": "呼出し数2、各サイズn/2、再帰の外の仕事nを別々に記述します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "T(n)=2T(n−1)",
+              "explanation": "呼出し数2、各サイズn/2、再帰の外の仕事nを別々に記述します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "呼出し数2、各サイズn/2、再帰の外の仕事nを別々に記述します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "同じ深さを足す",
+          "prompt": "深さdでノード数2ᵈ、各ノードの結合コストn/2ᵈ。深さ全体の仕事は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "n",
+              "explanation": "2ᵈ×n/2ᵈ=n。深さごとの仕事を数えると、ノードごとの式を全部展開する必要がありません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "n/2ᵈ",
+              "explanation": "2ᵈ×n/2ᵈ=n。深さごとの仕事を数えると、ノードごとの式を全部展開する必要がありません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "2ᵈn",
+              "explanation": "2ᵈ×n/2ᵈ=n。深さごとの仕事を数えると、ノードごとの式を全部展開する必要がありません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "2ᵈ×n/2ᵈ=n。深さごとの仕事を数えると、ノードごとの式を全部展開する必要がありません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "葉まで合計する",
+          "prompt": "葉までk=log₂n段。非葉の各段n、葉の合計n。T(n)は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "Θ(n)",
+              "explanation": "内部のk段と葉を分けて数えます。O(n²)も上界ですが、ここでは上下から一致するΘ表記が精確です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "Θ(log n)",
+              "explanation": "内部のk段と葉を分けて数えます。O(n²)も上界ですが、ここでは上下から一致するΘ表記が精確です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "n log₂n+n = Θ(n log n)",
+              "explanation": "内部のk段と葉を分けて数えます。O(n²)も上界ですが、ここでは上下から一致するΘ表記が精確です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "内部のk段と葉を分けて数えます。O(n²)も上界ですが、ここでは上下から一致するΘ表記が精確です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "時間とスタックは別",
+          "prompt": "同じ再帰を深さ優先で実行し、各フレームはO(1)の局所情報だけ持つ。再帰スタックの最大量は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "Θ(n log n)",
+              "explanation": "同時に生きている呼出しは根から葉への経路。配列コピー等を別途作る実装なら追加領域は別評価です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "Θ(log n)",
+              "explanation": "同時に生きている呼出しは根から葉への経路。配列コピー等を別途作る実装なら追加領域は別評価です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "Θ(n²)",
+              "explanation": "同時に生きている呼出しは根から葉への経路。配列コピー等を別途作る実装なら追加領域は別評価です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "同時に生きている呼出しは根から葉への経路。配列コピー等を別途作る実装なら追加領域は別評価です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "T(1)=1、T(n)=T(n/2)+n（n=2ᵏ）の処理を考える。再帰木の各段、総仕事、スタックを導いてください。各フレームの局所領域はO(1)。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "仕事はn+n/2+…+1=2n−1でΘ(n)。時間が線形でも深さはlog₂nなのでスタックはΘ(log n)。",
+          "code": null,
+          "hints": [
+            "1段ごとの仕事は n,n/2,n/4,… です。",
+            "葉の1まで含める等比和です。"
+          ],
+          "reference": "T(n)=Σ(d=0..log₂n) n/2ᵈ=2n−1\n時間 Θ(n); スタック Θ(log n)（n≥2）\nn=1ならどちらも定数。",
+          "check": "□ 呼出し数が1になった違いを反映した\n□ 全仕事と最大同時フレーム数を分けた\n□ n=1の基底条件を確認した"
+        }
+      ],
+      "notes": "面接での使い方：分割統治の時間と領域"
+    },
+    {
+      "id": "foundation-concurrency",
+      "title": "並行実行で壊れる条件を探す",
+      "category": "CS・数学",
+      "summary": "OS・排他制御",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "POSIX: pthread_cond_wait",
+          "url": "https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_cond_clockwait.html"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["状態遷移・不変条件"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-concurrency\",\n  \"name\": \"並行実行で壊れる条件を探す\",\n  \"topic\": \"OS・排他制御\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"状態遷移・不変条件\"\n  ],\n  \"interviewUse\": \"共有状態・ワーカープール\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"1行を1操作と思わない\",\n      \"prompt\": \"共有x=0。各ワーカーの増分を read→add→write に分解し、AとBが両方0を読んでから各々1を書く。このモデルの最終値は？\",\n      \"choices\": [\n        \"0\",\n        \"1\",\n        \"2\"\n      ],\n      \"answer\": 1,\n      \"why\": \"読み書きを個別の原子的操作としても、read-modify-write全体は原子的とは限りません。このトレースでは1回分の更新が消えます。実言語ではデータ競合が未定義動作になる場合もあります。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"何を一緒に守る？\",\n      \"prompt\": \"「残量>0なら1減らして取り出す」。残量を負にしないためmutexで囲む最小の論理的単位は？\",\n      \"choices\": [\n        \"残量確認から減算まで\",\n        \"減算の代入だけ\",\n        \"結果の表示だけ\"\n      ],\n      \"answer\": 0,\n      \"why\": \"確認と更新の間へ他者が割り込むと、同じ残量を根拠に2人が進めます。全てのアクセスが同じ同期規約を守る必要があります。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"条件待ちは再確認する\",\n      \"prompt\": \"POSIX条件変数で空のキューを待つ。mutexを保持して条件を確認する。適切な形は？\",\n      \"choices\": [\n        \"if empty: wait(); pop()\",\n        \"while empty: wait(); pop()\",\n        \"通知を受けたらmutexなしでpop()\"\n      ],\n      \"answer\": 1,\n      \"why\": \"waitはmutex解放と待機への移行を原子的に行い、復帰前に再取得します。復帰だけで条件の成立は保証されないので、mutexの下で条件を再評価します。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"起きても品物がない\",\n      \"prompt\": \"通知後、待機者Aがmutexを再取得する前にBが最後の品物を取った。Aは？\",\n      \"choices\": [\n        \"通知があったので必ず取り出す\",\n        \"エラーとしてプロセスを終了する\",\n        \"条件を再確認し、空ならまた待つ\"\n      ],\n      \"answer\": 2,\n      \"why\": \"通知は品物の所有権を予約しません。待つ対象は「通知回数」ではなく共有状態の述語です。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"容量K>0のキューに投入する側を考える。複数producer/consumerが同じmutexを使う。満杯のとき待つ手順と、consumerが取り出したときの通知を設計してください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"producerが進める条件は size<K です。\",\n        \"復帰後にも条件を検査し、更新も同じmutex内で行います。\"\n      ],\n      \"why\": \"not_fullを待ち、取り出し側が空きを作ったとき通知します。終了処理を加えるなら閉鎖状態も述語に含め、全待機者の解放を設計します。\",\n      \"reference\": \"producer:\\n  lock(m)\\n  while size == K: wait(not_full,m)\\n  push(item); signal(not_empty)\\n  unlock(m)\\nconsumer:\\n  lock(m)\\n  while size == 0: wait(not_empty,m)\\n  item=pop(); signal(not_full)\\n  unlock(m)\",\n      \"check\": \"□ ifではなくwhileで再確認した\\n□ 待機・更新のmutexを統一した\\n□ 通知を所有権と取り違えなかった\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"POSIX: pthread_cond_wait\",\n      \"url\": \"https://pubs.opengroup.org/onlinepubs/9799919799/functions/pthread_cond_clockwait.html\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "1行を1操作と思わない",
+          "prompt": "共有x=0。各ワーカーの増分を read→add→write に分解し、AとBが両方0を読んでから各々1を書く。このモデルの最終値は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "0",
+              "explanation": "読み書きを個別の原子的操作としても、read-modify-write全体は原子的とは限りません。このトレースでは1回分の更新が消えます。実言語ではデータ競合が未定義動作になる場合もあります。"
+            },
+            {
+              "id": "choice-1",
+              "text": "1",
+              "explanation": "読み書きを個別の原子的操作としても、read-modify-write全体は原子的とは限りません。このトレースでは1回分の更新が消えます。実言語ではデータ競合が未定義動作になる場合もあります。"
+            },
+            {
+              "id": "choice-2",
+              "text": "2",
+              "explanation": "読み書きを個別の原子的操作としても、read-modify-write全体は原子的とは限りません。このトレースでは1回分の更新が消えます。実言語ではデータ競合が未定義動作になる場合もあります。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "読み書きを個別の原子的操作としても、read-modify-write全体は原子的とは限りません。このトレースでは1回分の更新が消えます。実言語ではデータ競合が未定義動作になる場合もあります。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "何を一緒に守る？",
+          "prompt": "「残量>0なら1減らして取り出す」。残量を負にしないためmutexで囲む最小の論理的単位は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "残量確認から減算まで",
+              "explanation": "確認と更新の間へ他者が割り込むと、同じ残量を根拠に2人が進めます。全てのアクセスが同じ同期規約を守る必要があります。"
+            },
+            {
+              "id": "choice-1",
+              "text": "減算の代入だけ",
+              "explanation": "確認と更新の間へ他者が割り込むと、同じ残量を根拠に2人が進めます。全てのアクセスが同じ同期規約を守る必要があります。"
+            },
+            {
+              "id": "choice-2",
+              "text": "結果の表示だけ",
+              "explanation": "確認と更新の間へ他者が割り込むと、同じ残量を根拠に2人が進めます。全てのアクセスが同じ同期規約を守る必要があります。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "確認と更新の間へ他者が割り込むと、同じ残量を根拠に2人が進めます。全てのアクセスが同じ同期規約を守る必要があります。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "条件待ちは再確認する",
+          "prompt": "POSIX条件変数で空のキューを待つ。mutexを保持して条件を確認する。適切な形は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "if empty: wait(); pop()",
+              "explanation": "waitはmutex解放と待機への移行を原子的に行い、復帰前に再取得します。復帰だけで条件の成立は保証されないので、mutexの下で条件を再評価します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "while empty: wait(); pop()",
+              "explanation": "waitはmutex解放と待機への移行を原子的に行い、復帰前に再取得します。復帰だけで条件の成立は保証されないので、mutexの下で条件を再評価します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "通知を受けたらmutexなしでpop()",
+              "explanation": "waitはmutex解放と待機への移行を原子的に行い、復帰前に再取得します。復帰だけで条件の成立は保証されないので、mutexの下で条件を再評価します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "waitはmutex解放と待機への移行を原子的に行い、復帰前に再取得します。復帰だけで条件の成立は保証されないので、mutexの下で条件を再評価します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "起きても品物がない",
+          "prompt": "通知後、待機者Aがmutexを再取得する前にBが最後の品物を取った。Aは？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "通知があったので必ず取り出す",
+              "explanation": "通知は品物の所有権を予約しません。待つ対象は「通知回数」ではなく共有状態の述語です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "エラーとしてプロセスを終了する",
+              "explanation": "通知は品物の所有権を予約しません。待つ対象は「通知回数」ではなく共有状態の述語です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "条件を再確認し、空ならまた待つ",
+              "explanation": "通知は品物の所有権を予約しません。待つ対象は「通知回数」ではなく共有状態の述語です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "通知は品物の所有権を予約しません。待つ対象は「通知回数」ではなく共有状態の述語です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "容量K>0のキューに投入する側を考える。複数producer/consumerが同じmutexを使う。満杯のとき待つ手順と、consumerが取り出したときの通知を設計してください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "not_fullを待ち、取り出し側が空きを作ったとき通知します。終了処理を加えるなら閉鎖状態も述語に含め、全待機者の解放を設計します。",
+          "code": null,
+          "hints": [
+            "producerが進める条件は size<K です。",
+            "復帰後にも条件を検査し、更新も同じmutex内で行います。"
+          ],
+          "reference": "producer:\n  lock(m)\n  while size == K: wait(not_full,m)\n  push(item); signal(not_empty)\n  unlock(m)\nconsumer:\n  lock(m)\n  while size == 0: wait(not_empty,m)\n  item=pop(); signal(not_full)\n  unlock(m)",
+          "check": "□ ifではなくwhileで再確認した\n□ 待機・更新のmutexを統一した\n□ 通知を所有権と取り違えなかった"
+        }
+      ],
+      "notes": "面接での使い方：共有状態・ワーカープール"
+    },
+    {
+      "id": "foundation-deadlock",
+      "title": "待ちの循環を断つ",
+      "category": "CS・数学",
+      "summary": "OS・デッドロック",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "PostgreSQL: Explicit Locking",
+          "url": "https://www.postgresql.org/docs/current/explicit-locking.html"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["有向グラフ"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-deadlock\",\n  \"name\": \"待ちの循環を断つ\",\n  \"topic\": \"OS・デッドロック\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"有向グラフ\"\n  ],\n  \"interviewUse\": \"複数資源のロック設計\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"停止した理由を描く\",\n      \"prompt\": \"AはL1を保持してL2待ち。BはL2を保持してL1待ち。どちらも取得するまで既存ロックを解放しない。状態は？\",\n      \"choices\": [\n        \"デッドロック\",\n        \"必ず次の時刻に解消\",\n        \"単なる計算量増加\"\n      ],\n      \"answer\": 0,\n      \"why\": \"A→B、B→Aの待ちが閉じています。各ロックは単一所有者で、強制解放なしというモデルです。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"局所修正では足りない\",\n      \"prompt\": \"AだけL1→L2の順に統一し、BはL2→L1のまま。デッドロックを防げた？\",\n      \"choices\": [\n        \"Aが速ければ必ず防げる\",\n        \"防げない\",\n        \"2個のロックなら常に安全\"\n      ],\n      \"answer\": 1,\n      \"why\": \"取得順の規則は全ての競合経路が守る必要があります。実行速度は正しさの根拠になりません。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"順序から不可能性を示す\",\n      \"prompt\": \"全ロックに一意な順位を付け、全処理が昇順でのみ追加取得する。循環待ちが不可能な理由は？\",\n      \"choices\": [\n        \"ロック待ちが一切起きないから\",\n        \"mutexが自動的に公平になるから\",\n        \"循環なら順位が厳密増加して出発点へ戻る矛盾が起きるから\"\n      ],\n      \"answer\": 2,\n      \"why\": \"これはその規約下のロック循環に対する証明です。他の待ち要因やロック昇格を含めるなら別途検討が必要。待ち時間や飢餓をなくす証明でもありません。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"タイムアウトの位置づけ\",\n      \"prompt\": \"ロック取得に時間上限を付けた。失敗時の設計として必要なのは？\",\n      \"choices\": [\n        \"保持ロックを解放し、変更を整合的に取り消す\",\n        \"直ちに同じ順序で無限再試行\",\n        \"途中の変更を残して成功と返す\"\n      ],\n      \"answer\": 0,\n      \"why\": \"タイムアウトは回復の契機であり、未完了の操作を完了済みにしません。再試行を行うなら回数・待機・部分変更の扱いが要ります。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"資源IDが整数の2資源操作を設計する。操作(8,3)と(3,8)が同時実行されても循環待ちを作らず、同じIDの操作(3,3)で非再入mutexを二重取得しない手順は？\",\n      \"transfer\": true,\n      \"hints\": [\n        \"引数の順序と取得順序を分けられます。\",\n        \"重複IDを除き、共通の順序で取ると？\"\n      ],\n      \"why\": \"IDの一意集合を昇順取得します。取得済みロックは例外時にも解放。別の資源待ちをクリティカル区間へ入れないことも確認します。\",\n      \"reference\": \"ids = sort(unique([a,b]))\\ntry:\\n  for id in ids: lock(id); record_acquired(id)\\n  perform_operation()\\nfinally:\\n  unlock acquired locks in reverse order\",\n      \"check\": \"□ 全呼出し元が同じ順序を守る\\n□ 同一IDを1回だけ取得する\\n□ 例外・失敗時の解放を示した\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"PostgreSQL: Explicit Locking\",\n      \"url\": \"https://www.postgresql.org/docs/current/explicit-locking.html\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "停止した理由を描く",
+          "prompt": "AはL1を保持してL2待ち。BはL2を保持してL1待ち。どちらも取得するまで既存ロックを解放しない。状態は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "デッドロック",
+              "explanation": "A→B、B→Aの待ちが閉じています。各ロックは単一所有者で、強制解放なしというモデルです。"
+            },
+            {
+              "id": "choice-1",
+              "text": "必ず次の時刻に解消",
+              "explanation": "A→B、B→Aの待ちが閉じています。各ロックは単一所有者で、強制解放なしというモデルです。"
+            },
+            {
+              "id": "choice-2",
+              "text": "単なる計算量増加",
+              "explanation": "A→B、B→Aの待ちが閉じています。各ロックは単一所有者で、強制解放なしというモデルです。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "A→B、B→Aの待ちが閉じています。各ロックは単一所有者で、強制解放なしというモデルです。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "局所修正では足りない",
+          "prompt": "AだけL1→L2の順に統一し、BはL2→L1のまま。デッドロックを防げた？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "Aが速ければ必ず防げる",
+              "explanation": "取得順の規則は全ての競合経路が守る必要があります。実行速度は正しさの根拠になりません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "防げない",
+              "explanation": "取得順の規則は全ての競合経路が守る必要があります。実行速度は正しさの根拠になりません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "2個のロックなら常に安全",
+              "explanation": "取得順の規則は全ての競合経路が守る必要があります。実行速度は正しさの根拠になりません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "取得順の規則は全ての競合経路が守る必要があります。実行速度は正しさの根拠になりません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "順序から不可能性を示す",
+          "prompt": "全ロックに一意な順位を付け、全処理が昇順でのみ追加取得する。循環待ちが不可能な理由は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "ロック待ちが一切起きないから",
+              "explanation": "これはその規約下のロック循環に対する証明です。他の待ち要因やロック昇格を含めるなら別途検討が必要。待ち時間や飢餓をなくす証明でもありません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "mutexが自動的に公平になるから",
+              "explanation": "これはその規約下のロック循環に対する証明です。他の待ち要因やロック昇格を含めるなら別途検討が必要。待ち時間や飢餓をなくす証明でもありません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "循環なら順位が厳密増加して出発点へ戻る矛盾が起きるから",
+              "explanation": "これはその規約下のロック循環に対する証明です。他の待ち要因やロック昇格を含めるなら別途検討が必要。待ち時間や飢餓をなくす証明でもありません。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "これはその規約下のロック循環に対する証明です。他の待ち要因やロック昇格を含めるなら別途検討が必要。待ち時間や飢餓をなくす証明でもありません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "タイムアウトの位置づけ",
+          "prompt": "ロック取得に時間上限を付けた。失敗時の設計として必要なのは？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "保持ロックを解放し、変更を整合的に取り消す",
+              "explanation": "タイムアウトは回復の契機であり、未完了の操作を完了済みにしません。再試行を行うなら回数・待機・部分変更の扱いが要ります。"
+            },
+            {
+              "id": "choice-1",
+              "text": "直ちに同じ順序で無限再試行",
+              "explanation": "タイムアウトは回復の契機であり、未完了の操作を完了済みにしません。再試行を行うなら回数・待機・部分変更の扱いが要ります。"
+            },
+            {
+              "id": "choice-2",
+              "text": "途中の変更を残して成功と返す",
+              "explanation": "タイムアウトは回復の契機であり、未完了の操作を完了済みにしません。再試行を行うなら回数・待機・部分変更の扱いが要ります。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "タイムアウトは回復の契機であり、未完了の操作を完了済みにしません。再試行を行うなら回数・待機・部分変更の扱いが要ります。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "資源IDが整数の2資源操作を設計する。操作(8,3)と(3,8)が同時実行されても循環待ちを作らず、同じIDの操作(3,3)で非再入mutexを二重取得しない手順は？",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "IDの一意集合を昇順取得します。取得済みロックは例外時にも解放。別の資源待ちをクリティカル区間へ入れないことも確認します。",
+          "code": null,
+          "hints": [
+            "引数の順序と取得順序を分けられます。",
+            "重複IDを除き、共通の順序で取ると？"
+          ],
+          "reference": "ids = sort(unique([a,b]))\ntry:\n  for id in ids: lock(id); record_acquired(id)\n  perform_operation()\nfinally:\n  unlock acquired locks in reverse order",
+          "check": "□ 全呼出し元が同じ順序を守る\n□ 同一IDを1回だけ取得する\n□ 例外・失敗時の解放を示した"
+        }
+      ],
+      "notes": "面接での使い方：複数資源のロック設計"
+    },
+    {
+      "id": "foundation-network",
+      "title": "遅延と再試行に予算を置く",
+      "category": "CS・数学",
+      "summary": "ネットワーク・期限",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "AWS: Timeouts, retries, and backoff with jitter",
+          "url": "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["期待値・最大値"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-network\",\n  \"name\": \"遅延と再試行に予算を置く\",\n  \"topic\": \"ネットワーク・期限\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"期待値・最大値\"\n  ],\n  \"interviewUse\": \"API依存関係と障害時負荷\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"依存関係が時間を決める\",\n      \"prompt\": \"Aに40ms、Bに70msかかる。BはAの結果が必要。追加コストを無視した完了時間は？\",\n      \"choices\": [\n        \"40ms\",\n        \"70ms\",\n        \"110ms\"\n      ],\n      \"answer\": 2,\n      \"why\": \"依存があるので直列の和。独立な2処理を同時開始し両方待つなら最大値70msですが、この条件では並列化できません。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"タイムアウトで何が分かる？\",\n      \"prompt\": \"書き込みRPCがタイムアウトした。確定したことは？\",\n      \"choices\": [\n        \"期限までに応答を受け取れなかった\",\n        \"サーバーは書き込みをしていない\",\n        \"サーバーは必ず故障した\"\n      ],\n      \"answer\": 0,\n      \"why\": \"実行済みで応答だけ失われた可能性もあります。再試行の安全性は別途設計する必要があります。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"層ごとの再試行を掛ける\",\n      \"prompt\": \"上流が最大3回試し、各上流試行に対して下流も最大3回試す。最悪の下流試行数は？\",\n      \"choices\": [\n        \"3\",\n        \"6\",\n        \"9\"\n      ],\n      \"answer\": 2,\n      \"why\": \"最大試行数は3×3。複数層が別々に再試行すると障害時負荷が増幅します。ここでは「再試行3回」ではなく初回込み最大3回です。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"残り時間で判断する\",\n      \"prompt\": \"全体期限200ms。初回に80ms、待機に20ms使った。2回目に使える最大予算は、その他の処理コストを無視して？\",\n      \"choices\": [\n        \"200ms\",\n        \"100ms\",\n        \"120ms\"\n      ],\n      \"answer\": 1,\n      \"why\": \"残り200−80−20=100ms。実装では接続等を含む期限の対象を確認し、各試行のタイムアウトと全体期限を分けます。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"読み取りAPIを初回込み最大3回、全体期限300msで呼ぶ。1回目120ms、待機30ms、2回目100msを消費した。次の待機予定が60msならどう判断する？ 再試行するエラーの分類も述べてください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"残り期限と待機予定を比較します。\",\n        \"全ての失敗が一時的とは限りません。\"\n      ],\n      \"why\": \"残り50msなので60msの待機後に3回目を始められません。ここでは期限超過として停止する方針にします。認証・入力エラーを無差別に再試行せず、一時的な障害等に限定します。\",\n      \"reference\": \"remaining = 300-(120+30+100) = 50ms\\nif planned_wait >= remaining: stop_with_deadline\\nelse: wait; retry with timeout <= new_remaining\\n再試行回数上限・全体期限・ジッター付き待機を併用。\",\n      \"check\": \"□ 初回も試行数に含めた\\n□ 待機にも期限を消費した\\n□ タイムアウトを未実行の証拠にしなかった\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"AWS: Timeouts, retries, and backoff with jitter\",\n      \"url\": \"https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "依存関係が時間を決める",
+          "prompt": "Aに40ms、Bに70msかかる。BはAの結果が必要。追加コストを無視した完了時間は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "40ms",
+              "explanation": "依存があるので直列の和。独立な2処理を同時開始し両方待つなら最大値70msですが、この条件では並列化できません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "70ms",
+              "explanation": "依存があるので直列の和。独立な2処理を同時開始し両方待つなら最大値70msですが、この条件では並列化できません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "110ms",
+              "explanation": "依存があるので直列の和。独立な2処理を同時開始し両方待つなら最大値70msですが、この条件では並列化できません。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "依存があるので直列の和。独立な2処理を同時開始し両方待つなら最大値70msですが、この条件では並列化できません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "タイムアウトで何が分かる？",
+          "prompt": "書き込みRPCがタイムアウトした。確定したことは？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "期限までに応答を受け取れなかった",
+              "explanation": "実行済みで応答だけ失われた可能性もあります。再試行の安全性は別途設計する必要があります。"
+            },
+            {
+              "id": "choice-1",
+              "text": "サーバーは書き込みをしていない",
+              "explanation": "実行済みで応答だけ失われた可能性もあります。再試行の安全性は別途設計する必要があります。"
+            },
+            {
+              "id": "choice-2",
+              "text": "サーバーは必ず故障した",
+              "explanation": "実行済みで応答だけ失われた可能性もあります。再試行の安全性は別途設計する必要があります。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "実行済みで応答だけ失われた可能性もあります。再試行の安全性は別途設計する必要があります。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "層ごとの再試行を掛ける",
+          "prompt": "上流が最大3回試し、各上流試行に対して下流も最大3回試す。最悪の下流試行数は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "3",
+              "explanation": "最大試行数は3×3。複数層が別々に再試行すると障害時負荷が増幅します。ここでは「再試行3回」ではなく初回込み最大3回です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "6",
+              "explanation": "最大試行数は3×3。複数層が別々に再試行すると障害時負荷が増幅します。ここでは「再試行3回」ではなく初回込み最大3回です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "9",
+              "explanation": "最大試行数は3×3。複数層が別々に再試行すると障害時負荷が増幅します。ここでは「再試行3回」ではなく初回込み最大3回です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "最大試行数は3×3。複数層が別々に再試行すると障害時負荷が増幅します。ここでは「再試行3回」ではなく初回込み最大3回です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "残り時間で判断する",
+          "prompt": "全体期限200ms。初回に80ms、待機に20ms使った。2回目に使える最大予算は、その他の処理コストを無視して？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "200ms",
+              "explanation": "残り200−80−20=100ms。実装では接続等を含む期限の対象を確認し、各試行のタイムアウトと全体期限を分けます。"
+            },
+            {
+              "id": "choice-1",
+              "text": "100ms",
+              "explanation": "残り200−80−20=100ms。実装では接続等を含む期限の対象を確認し、各試行のタイムアウトと全体期限を分けます。"
+            },
+            {
+              "id": "choice-2",
+              "text": "120ms",
+              "explanation": "残り200−80−20=100ms。実装では接続等を含む期限の対象を確認し、各試行のタイムアウトと全体期限を分けます。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "残り200−80−20=100ms。実装では接続等を含む期限の対象を確認し、各試行のタイムアウトと全体期限を分けます。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "読み取りAPIを初回込み最大3回、全体期限300msで呼ぶ。1回目120ms、待機30ms、2回目100msを消費した。次の待機予定が60msならどう判断する？ 再試行するエラーの分類も述べてください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "残り50msなので60msの待機後に3回目を始められません。ここでは期限超過として停止する方針にします。認証・入力エラーを無差別に再試行せず、一時的な障害等に限定します。",
+          "code": null,
+          "hints": [
+            "残り期限と待機予定を比較します。",
+            "全ての失敗が一時的とは限りません。"
+          ],
+          "reference": "remaining = 300-(120+30+100) = 50ms\nif planned_wait >= remaining: stop_with_deadline\nelse: wait; retry with timeout <= new_remaining\n再試行回数上限・全体期限・ジッター付き待機を併用。",
+          "check": "□ 初回も試行数に含めた\n□ 待機にも期限を消費した\n□ タイムアウトを未実行の証拠にしなかった"
+        }
+      ],
+      "notes": "面接での使い方：API依存関係と障害時負荷"
+    },
+    {
+      "id": "foundation-transactions",
+      "title": "読んでから書く競合を扱う",
+      "category": "CS・数学",
+      "summary": "DB・トランザクション",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "PostgreSQL: Transaction Isolation",
+          "url": "https://www.postgresql.org/docs/current/transaction-iso.html"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["不変条件・並行実行"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-transactions\",\n  \"name\": \"読んでから書く競合を扱う\",\n  \"topic\": \"DB・トランザクション\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"不変条件・並行実行\"\n  ],\n  \"interviewUse\": \"在庫・予約・残高の整合性\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"トランザクションだけで十分？\",\n      \"prompt\": \"在庫1を2トランザクションが通常SELECTで読み、それぞれアプリで0を計算してUPDATEで0を書き、各々「予約成功」と返す。read committed下で何が問題？\",\n      \"choices\": [\n        \"在庫値が0なら必ず正しい\",\n        \"2件の成功に対して在庫が1しかなかった\",\n        \"通常SELECTが必ず互いをブロックする\"\n      ],\n      \"answer\": 1,\n      \"why\": \"最終値だけでなく「成功予約数≤元在庫」という業務不変条件が壊れます。BEGINとCOMMITで囲むだけではこの読み取り・判断の競合は解消しません。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"条件を更新側へ移す\",\n      \"prompt\": \"PostgreSQLで在庫1個を確保する1文の候補は？\",\n      \"choices\": [\n        \"UPDATE stock SET qty=qty-1 WHERE id=? AND qty>0 RETURNING qty\",\n        \"SELECT qty; 成功と返す\",\n        \"UPDATE stock SET qty=0; 常に成功と返す\"\n      ],\n      \"answer\": 0,\n      \"why\": \"同じ行への競合更新をDBへ任せ、条件付きUPDATEが返した行の有無で成否を判断します。PostgreSQL read committedでは競合後の行にWHERE条件を再評価します。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"0行更新は何を意味する？\",\n      \"prompt\": \"上のUPDATEが0行を返した。何を返すべき？\",\n      \"choices\": [\n        \"確保成功\",\n        \"無条件に減算を再試行\",\n        \"この操作では確保できなかった\"\n      ],\n      \"answer\": 2,\n      \"why\": \"在庫不足または対象行がない可能性があります。APIで区別が必要なら別途仕様を定めます。成功は更新確認後、コミットの成否も含めて確定します。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"別の行にまたがる条件\",\n      \"prompt\": \"2行の当番表で「最低1人は当番」を守る。双方が他方の当番を読んで自分だけ休みに更新した。各行更新が原子的でも？\",\n      \"choices\": [\n        \"業務条件が壊れうる\",\n        \"常に安全\",\n        \"インデックスを付ければ解消する\"\n      ],\n      \"answer\": 0,\n      \"why\": \"行単位の原子性だけでは複数行の不変条件を守れません。Serializableとトランザクション全体の再試行、または関連資源の適切な共通ロック等を検討します。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"利用枠remainingからk個を確保するAPIを設計する。kは正整数。1行の条件付きUPDATEで、負の残量を作らず成否を判定してください。k≤0、存在しないID、コミット失敗も扱ってください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"WHEREに業務条件を含められます。\",\n        \"更新成功とクライアントへの確定成功は同じ時点でしょうか？\"\n      ],\n      \"why\": \"入力制約とDB更新の成否を分離し、コミットできた場合だけ成功を確定します。応答消失時の重複防止はさらに冪等性の設計が必要です。\",\n      \"reference\": \"reject unless integer(k) and k>0\\nBEGIN\\nUPDATE quota SET remaining=remaining-:k\\nWHERE id=:id AND remaining>=:k\\nRETURNING remaining;\\n0 rows: no allocation (not found or insufficient)\\nCOMMIT succeeds: allocation succeeds\\ncommit failure: do not claim confirmed success\",\n      \"check\": \"□ 正数のkだけ受理した\\n□ 読み取りと減算を別競合にしなかった\\n□ 0行とコミット失敗を区別して扱った\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"PostgreSQL: Transaction Isolation\",\n      \"url\": \"https://www.postgresql.org/docs/current/transaction-iso.html\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "トランザクションだけで十分？",
+          "prompt": "在庫1を2トランザクションが通常SELECTで読み、それぞれアプリで0を計算してUPDATEで0を書き、各々「予約成功」と返す。read committed下で何が問題？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "在庫値が0なら必ず正しい",
+              "explanation": "最終値だけでなく「成功予約数≤元在庫」という業務不変条件が壊れます。BEGINとCOMMITで囲むだけではこの読み取り・判断の競合は解消しません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "2件の成功に対して在庫が1しかなかった",
+              "explanation": "最終値だけでなく「成功予約数≤元在庫」という業務不変条件が壊れます。BEGINとCOMMITで囲むだけではこの読み取り・判断の競合は解消しません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "通常SELECTが必ず互いをブロックする",
+              "explanation": "最終値だけでなく「成功予約数≤元在庫」という業務不変条件が壊れます。BEGINとCOMMITで囲むだけではこの読み取り・判断の競合は解消しません。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "最終値だけでなく「成功予約数≤元在庫」という業務不変条件が壊れます。BEGINとCOMMITで囲むだけではこの読み取り・判断の競合は解消しません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "条件を更新側へ移す",
+          "prompt": "PostgreSQLで在庫1個を確保する1文の候補は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "UPDATE stock SET qty=qty-1 WHERE id=? AND qty>0 RETURNING qty",
+              "explanation": "同じ行への競合更新をDBへ任せ、条件付きUPDATEが返した行の有無で成否を判断します。PostgreSQL read committedでは競合後の行にWHERE条件を再評価します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "SELECT qty; 成功と返す",
+              "explanation": "同じ行への競合更新をDBへ任せ、条件付きUPDATEが返した行の有無で成否を判断します。PostgreSQL read committedでは競合後の行にWHERE条件を再評価します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "UPDATE stock SET qty=0; 常に成功と返す",
+              "explanation": "同じ行への競合更新をDBへ任せ、条件付きUPDATEが返した行の有無で成否を判断します。PostgreSQL read committedでは競合後の行にWHERE条件を再評価します。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "同じ行への競合更新をDBへ任せ、条件付きUPDATEが返した行の有無で成否を判断します。PostgreSQL read committedでは競合後の行にWHERE条件を再評価します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "0行更新は何を意味する？",
+          "prompt": "上のUPDATEが0行を返した。何を返すべき？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "確保成功",
+              "explanation": "在庫不足または対象行がない可能性があります。APIで区別が必要なら別途仕様を定めます。成功は更新確認後、コミットの成否も含めて確定します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "無条件に減算を再試行",
+              "explanation": "在庫不足または対象行がない可能性があります。APIで区別が必要なら別途仕様を定めます。成功は更新確認後、コミットの成否も含めて確定します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "この操作では確保できなかった",
+              "explanation": "在庫不足または対象行がない可能性があります。APIで区別が必要なら別途仕様を定めます。成功は更新確認後、コミットの成否も含めて確定します。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "在庫不足または対象行がない可能性があります。APIで区別が必要なら別途仕様を定めます。成功は更新確認後、コミットの成否も含めて確定します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "別の行にまたがる条件",
+          "prompt": "2行の当番表で「最低1人は当番」を守る。双方が他方の当番を読んで自分だけ休みに更新した。各行更新が原子的でも？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "業務条件が壊れうる",
+              "explanation": "行単位の原子性だけでは複数行の不変条件を守れません。Serializableとトランザクション全体の再試行、または関連資源の適切な共通ロック等を検討します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "常に安全",
+              "explanation": "行単位の原子性だけでは複数行の不変条件を守れません。Serializableとトランザクション全体の再試行、または関連資源の適切な共通ロック等を検討します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "インデックスを付ければ解消する",
+              "explanation": "行単位の原子性だけでは複数行の不変条件を守れません。Serializableとトランザクション全体の再試行、または関連資源の適切な共通ロック等を検討します。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "行単位の原子性だけでは複数行の不変条件を守れません。Serializableとトランザクション全体の再試行、または関連資源の適切な共通ロック等を検討します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "利用枠remainingからk個を確保するAPIを設計する。kは正整数。1行の条件付きUPDATEで、負の残量を作らず成否を判定してください。k≤0、存在しないID、コミット失敗も扱ってください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "入力制約とDB更新の成否を分離し、コミットできた場合だけ成功を確定します。応答消失時の重複防止はさらに冪等性の設計が必要です。",
+          "code": null,
+          "hints": [
+            "WHEREに業務条件を含められます。",
+            "更新成功とクライアントへの確定成功は同じ時点でしょうか？"
+          ],
+          "reference": "reject unless integer(k) and k>0\nBEGIN\nUPDATE quota SET remaining=remaining-:k\nWHERE id=:id AND remaining>=:k\nRETURNING remaining;\n0 rows: no allocation (not found or insufficient)\nCOMMIT succeeds: allocation succeeds\ncommit failure: do not claim confirmed success",
+          "check": "□ 正数のkだけ受理した\n□ 読み取りと減算を別競合にしなかった\n□ 0行とコミット失敗を区別して扱った"
+        }
+      ],
+      "notes": "面接での使い方：在庫・予約・残高の整合性"
+    },
+    {
+      "id": "foundation-index",
+      "title": "検索条件から索引を読む",
+      "category": "CS・数学",
+      "summary": "DB・B-tree索引",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "PostgreSQL: Multicolumn Indexes",
+          "url": "https://www.postgresql.org/docs/current/indexes-multicolumn.html"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["辞書式順序"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-index\",\n  \"name\": \"検索条件から索引を読む\",\n  \"topic\": \"DB・B-tree索引\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"辞書式順序\"\n  ],\n  \"interviewUse\": \"クエリ性能・複合キー設計\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"順番が検索の形になる\",\n      \"prompt\": \"複合B-tree索引 (tenant_id, created_at) は概念的にどの順で並ぶ？\",\n      \"choices\": [\n        \"created_atだけ\",\n        \"tenant_id、同じtenant内はcreated_at\",\n        \"2列を無秩序に混ぜる\"\n      ],\n      \"answer\": 1,\n      \"why\": \"辞書式の順序をイメージします。先頭列を固定すると、その中の時刻範囲を連続領域として扱いやすくなります。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"等値と範囲を対応させる\",\n      \"prompt\": \"WHERE tenant_id=7 AND created_at>=T にこの索引が合う根拠は？\",\n      \"choices\": [\n        \"全レコードを必ず読むから\",\n        \"tenant=7の領域内で時刻の開始位置へ絞れるから\",\n        \"常に1行しか返さないから\"\n      ],\n      \"answer\": 1,\n      \"why\": \"先頭の等値条件と次列の範囲条件が探索範囲を狭めます。返す行数kが多ければ、その取得費用も必要です。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"全ユーザーの時間検索\",\n      \"prompt\": \"WHERE created_at>=T だけなら、(tenant_id,created_at) は絶対に使えない？\",\n      \"choices\": [\n        \"絶対使えない\",\n        \"必ず最適になる\",\n        \"使える場合もあるが、狭い連続範囲には一般にならない\"\n      ],\n      \"answer\": 2,\n      \"why\": \"先頭列が未指定でも利用可能性はあります。PostgreSQLではskip scan等もあり、「左端条件がないと使用不能」は強すぎる主張。分布と実行計画で判断します。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"O(log n)で終わる？\",\n      \"prompt\": \"範囲条件でk行を返す検索を、常にO(log n)で完了すると説明してよい？\",\n      \"choices\": [\n        \"よくない。少なくとも結果を扱うkの費用がある\",\n        \"よい。索引があれば結果数は無関係\",\n        \"索引は必ずO(n²)\"\n      ],\n      \"answer\": 0,\n      \"why\": \"理想化した索引走査でも探索に加えて結果列挙の費用が必要です。実際にはテーブルへのアクセス、キャッシュ、選択率、ソート等も計測します。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"各テナントの状態別に、作成時刻の範囲でイベントを検索する。条件は tenant_id=固定、status=固定、created_at>=T。候補索引と並び順の根拠、追加索引の費用、検証方法を述べてください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"等値で固定する列の後に範囲列を置く候補を考えます。\",\n        \"索引は読み取り以外にもコストがあります。\"\n      ],\n      \"why\": \"(tenant_id,status,created_at) が候補。等値2列で絞った内部で時刻範囲を探します。他の主要クエリ次第で列順の選択は変わります。\",\n      \"reference\": \"候補: CREATE INDEX ON events(tenant_id,status,created_at)\\n検証: 代表的なデータ分布でEXPLAIN (ANALYZE, BUFFERS)\\n比較: 読み取り時間、走査行数、書き込み負荷、索引容量\\n注意: ANALYZEは実際にクエリを実行する。安全な環境で測る。\",\n      \"check\": \"□ 固定列と範囲列を区別した\\n□ 全てのクエリに最適とは断定しなかった\\n□ 書き込み・容量コストも考えた\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"PostgreSQL: Multicolumn Indexes\",\n      \"url\": \"https://www.postgresql.org/docs/current/indexes-multicolumn.html\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "順番が検索の形になる",
+          "prompt": "複合B-tree索引 (tenant_id, created_at) は概念的にどの順で並ぶ？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "created_atだけ",
+              "explanation": "辞書式の順序をイメージします。先頭列を固定すると、その中の時刻範囲を連続領域として扱いやすくなります。"
+            },
+            {
+              "id": "choice-1",
+              "text": "tenant_id、同じtenant内はcreated_at",
+              "explanation": "辞書式の順序をイメージします。先頭列を固定すると、その中の時刻範囲を連続領域として扱いやすくなります。"
+            },
+            {
+              "id": "choice-2",
+              "text": "2列を無秩序に混ぜる",
+              "explanation": "辞書式の順序をイメージします。先頭列を固定すると、その中の時刻範囲を連続領域として扱いやすくなります。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "辞書式の順序をイメージします。先頭列を固定すると、その中の時刻範囲を連続領域として扱いやすくなります。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "等値と範囲を対応させる",
+          "prompt": "WHERE tenant_id=7 AND created_at>=T にこの索引が合う根拠は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "全レコードを必ず読むから",
+              "explanation": "先頭の等値条件と次列の範囲条件が探索範囲を狭めます。返す行数kが多ければ、その取得費用も必要です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "tenant=7の領域内で時刻の開始位置へ絞れるから",
+              "explanation": "先頭の等値条件と次列の範囲条件が探索範囲を狭めます。返す行数kが多ければ、その取得費用も必要です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "常に1行しか返さないから",
+              "explanation": "先頭の等値条件と次列の範囲条件が探索範囲を狭めます。返す行数kが多ければ、その取得費用も必要です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "先頭の等値条件と次列の範囲条件が探索範囲を狭めます。返す行数kが多ければ、その取得費用も必要です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "全ユーザーの時間検索",
+          "prompt": "WHERE created_at>=T だけなら、(tenant_id,created_at) は絶対に使えない？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "絶対使えない",
+              "explanation": "先頭列が未指定でも利用可能性はあります。PostgreSQLではskip scan等もあり、「左端条件がないと使用不能」は強すぎる主張。分布と実行計画で判断します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "必ず最適になる",
+              "explanation": "先頭列が未指定でも利用可能性はあります。PostgreSQLではskip scan等もあり、「左端条件がないと使用不能」は強すぎる主張。分布と実行計画で判断します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "使える場合もあるが、狭い連続範囲には一般にならない",
+              "explanation": "先頭列が未指定でも利用可能性はあります。PostgreSQLではskip scan等もあり、「左端条件がないと使用不能」は強すぎる主張。分布と実行計画で判断します。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "先頭列が未指定でも利用可能性はあります。PostgreSQLではskip scan等もあり、「左端条件がないと使用不能」は強すぎる主張。分布と実行計画で判断します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "O(log n)で終わる？",
+          "prompt": "範囲条件でk行を返す検索を、常にO(log n)で完了すると説明してよい？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "よくない。少なくとも結果を扱うkの費用がある",
+              "explanation": "理想化した索引走査でも探索に加えて結果列挙の費用が必要です。実際にはテーブルへのアクセス、キャッシュ、選択率、ソート等も計測します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "よい。索引があれば結果数は無関係",
+              "explanation": "理想化した索引走査でも探索に加えて結果列挙の費用が必要です。実際にはテーブルへのアクセス、キャッシュ、選択率、ソート等も計測します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "索引は必ずO(n²)",
+              "explanation": "理想化した索引走査でも探索に加えて結果列挙の費用が必要です。実際にはテーブルへのアクセス、キャッシュ、選択率、ソート等も計測します。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "理想化した索引走査でも探索に加えて結果列挙の費用が必要です。実際にはテーブルへのアクセス、キャッシュ、選択率、ソート等も計測します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "各テナントの状態別に、作成時刻の範囲でイベントを検索する。条件は tenant_id=固定、status=固定、created_at>=T。候補索引と並び順の根拠、追加索引の費用、検証方法を述べてください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "(tenant_id,status,created_at) が候補。等値2列で絞った内部で時刻範囲を探します。他の主要クエリ次第で列順の選択は変わります。",
+          "code": null,
+          "hints": [
+            "等値で固定する列の後に範囲列を置く候補を考えます。",
+            "索引は読み取り以外にもコストがあります。"
+          ],
+          "reference": "候補: CREATE INDEX ON events(tenant_id,status,created_at)\n検証: 代表的なデータ分布でEXPLAIN (ANALYZE, BUFFERS)\n比較: 読み取り時間、走査行数、書き込み負荷、索引容量\n注意: ANALYZEは実際にクエリを実行する。安全な環境で測る。",
+          "check": "□ 固定列と範囲列を区別した\n□ 全てのクエリに最適とは断定しなかった\n□ 書き込み・容量コストも考えた"
+        }
+      ],
+      "notes": "面接での使い方：クエリ性能・複合キー設計"
+    },
+    {
+      "id": "foundation-consistency",
+      "title": "完了時刻から整合性を考える",
+      "category": "CS・数学",
+      "summary": "分散系・線形化可能性",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "Jepsen: Linearizability",
+          "url": "https://jepsen.io/consistency/models/linearizable"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["順序関係・共有レジスタ"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-consistency\",\n  \"name\": \"完了時刻から整合性を考える\",\n  \"topic\": \"分散系・線形化可能性\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"順序関係・共有レジスタ\"\n  ],\n  \"interviewUse\": \"複製データの読み取り保証\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"古い値を読んでよい？\",\n      \"prompt\": \"値0のレジスタへwrite(1)が完了。その後readが開始。他のwriteはない。線形化可能ならreadは？\",\n      \"choices\": [\n        \"必ず1\",\n        \"0か1どちらでも\",\n        \"必ず0\"\n      ],\n      \"answer\": 0,\n      \"why\": \"重ならない操作の実時間順を守る必要があります。完了したwriteの後に始まったreadを、そのwriteより前へ並べ替えられません。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"操作が重なったら？\",\n      \"prompt\": \"write(1)が開始したがまだ完了せず、その途中でreadが開始・完了。他のwriteはなく初期値0。線形化可能なread結果は？\",\n      \"choices\": [\n        \"1だけ\",\n        \"0だけ\",\n        \"0または1\"\n      ],\n      \"answer\": 2,\n      \"why\": \"重なる操作は、仕様に合う限りどちらの順に線形化してもよい場合があります。「常に物理時刻の最新値」と曖昧に定義しないことが大切です。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"複製が遅れていると？\",\n      \"prompt\": \"write(1)成功後、別レプリカへreadしたら0。操作は重ならない。何が言える？\",\n      \"choices\": [\n        \"この履歴は線形化可能性を満たさない\",\n        \"一切の整合性モデルに違反する\",\n        \"必ずデータが永久消失した\"\n      ],\n      \"answer\": 0,\n      \"why\": \"この履歴は強い保証の反例ですが、より弱いモデルで許容される場合があります。どの保証をAPIが約束しているかを確認します。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"待つか古い値を返すか\",\n      \"prompt\": \"ネットワーク分断中、あるノードは他方で完了したwriteの値を確認できない。全ノードが古い値を即答し続け、同時に線形化可能性も保証できる？\",\n      \"choices\": [\n        \"できる。後で同期すればよい\",\n        \"一般にはできない\",\n        \"タイムスタンプだけで必ずできる\"\n      ],\n      \"answer\": 1,\n      \"why\": \"応答を待たせる・拒否する場合を許さないと強い保証を維持できない履歴があります。「可用性」の意味と分断時の挙動を明示します。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"初期値0。Aのwrite(2)完了後にBのreadが開始し2を返す。そのread完了後にCのreadが開始し0を返す。他のwriteはない。この履歴の問題を時系列で説明し、API設計で選べる対応を挙げてください。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"重ならない操作の順序は固定です。\",\n        \"最後のreadをwriteより前へ移せるでしょうか？\"\n      ],\n      \"why\": \"最後のreadはwrite(2)より後なので0を返せません。強い読取り経路で待つ・失敗させる設計、または古い読取りを明示的に許容する別契約を選びます。\",\n      \"reference\": \"実時間順: write(2) < read_B=2 < read_C=0\\n単一レジスタ仕様と矛盾するため線形化不可能。\\n対応例: 強い保証を提供する読取りへルーティングし、確認不能時は待機または失敗。\\n別契約: stale readを許す範囲・用途を明示。\",\n      \"check\": \"□ 重ならない操作の順序を保った\\n□ 後日の同期で過去の違反が消えると考えなかった\\n□ 遅延・失敗と保証のトレードオフを述べた\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"Jepsen: Linearizability\",\n      \"url\": \"https://jepsen.io/consistency/models/linearizable\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "古い値を読んでよい？",
+          "prompt": "値0のレジスタへwrite(1)が完了。その後readが開始。他のwriteはない。線形化可能ならreadは？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "必ず1",
+              "explanation": "重ならない操作の実時間順を守る必要があります。完了したwriteの後に始まったreadを、そのwriteより前へ並べ替えられません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "0か1どちらでも",
+              "explanation": "重ならない操作の実時間順を守る必要があります。完了したwriteの後に始まったreadを、そのwriteより前へ並べ替えられません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "必ず0",
+              "explanation": "重ならない操作の実時間順を守る必要があります。完了したwriteの後に始まったreadを、そのwriteより前へ並べ替えられません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "重ならない操作の実時間順を守る必要があります。完了したwriteの後に始まったreadを、そのwriteより前へ並べ替えられません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "操作が重なったら？",
+          "prompt": "write(1)が開始したがまだ完了せず、その途中でreadが開始・完了。他のwriteはなく初期値0。線形化可能なread結果は？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "1だけ",
+              "explanation": "重なる操作は、仕様に合う限りどちらの順に線形化してもよい場合があります。「常に物理時刻の最新値」と曖昧に定義しないことが大切です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "0だけ",
+              "explanation": "重なる操作は、仕様に合う限りどちらの順に線形化してもよい場合があります。「常に物理時刻の最新値」と曖昧に定義しないことが大切です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "0または1",
+              "explanation": "重なる操作は、仕様に合う限りどちらの順に線形化してもよい場合があります。「常に物理時刻の最新値」と曖昧に定義しないことが大切です。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "重なる操作は、仕様に合う限りどちらの順に線形化してもよい場合があります。「常に物理時刻の最新値」と曖昧に定義しないことが大切です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "複製が遅れていると？",
+          "prompt": "write(1)成功後、別レプリカへreadしたら0。操作は重ならない。何が言える？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "この履歴は線形化可能性を満たさない",
+              "explanation": "この履歴は強い保証の反例ですが、より弱いモデルで許容される場合があります。どの保証をAPIが約束しているかを確認します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "一切の整合性モデルに違反する",
+              "explanation": "この履歴は強い保証の反例ですが、より弱いモデルで許容される場合があります。どの保証をAPIが約束しているかを確認します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "必ずデータが永久消失した",
+              "explanation": "この履歴は強い保証の反例ですが、より弱いモデルで許容される場合があります。どの保証をAPIが約束しているかを確認します。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "この履歴は強い保証の反例ですが、より弱いモデルで許容される場合があります。どの保証をAPIが約束しているかを確認します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "待つか古い値を返すか",
+          "prompt": "ネットワーク分断中、あるノードは他方で完了したwriteの値を確認できない。全ノードが古い値を即答し続け、同時に線形化可能性も保証できる？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "できる。後で同期すればよい",
+              "explanation": "応答を待たせる・拒否する場合を許さないと強い保証を維持できない履歴があります。「可用性」の意味と分断時の挙動を明示します。"
+            },
+            {
+              "id": "choice-1",
+              "text": "一般にはできない",
+              "explanation": "応答を待たせる・拒否する場合を許さないと強い保証を維持できない履歴があります。「可用性」の意味と分断時の挙動を明示します。"
+            },
+            {
+              "id": "choice-2",
+              "text": "タイムスタンプだけで必ずできる",
+              "explanation": "応答を待たせる・拒否する場合を許さないと強い保証を維持できない履歴があります。「可用性」の意味と分断時の挙動を明示します。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "応答を待たせる・拒否する場合を許さないと強い保証を維持できない履歴があります。「可用性」の意味と分断時の挙動を明示します。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "初期値0。Aのwrite(2)完了後にBのreadが開始し2を返す。そのread完了後にCのreadが開始し0を返す。他のwriteはない。この履歴の問題を時系列で説明し、API設計で選べる対応を挙げてください。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "最後のreadはwrite(2)より後なので0を返せません。強い読取り経路で待つ・失敗させる設計、または古い読取りを明示的に許容する別契約を選びます。",
+          "code": null,
+          "hints": [
+            "重ならない操作の順序は固定です。",
+            "最後のreadをwriteより前へ移せるでしょうか？"
+          ],
+          "reference": "実時間順: write(2) < read_B=2 < read_C=0\n単一レジスタ仕様と矛盾するため線形化不可能。\n対応例: 強い保証を提供する読取りへルーティングし、確認不能時は待機または失敗。\n別契約: stale readを許す範囲・用途を明示。",
+          "check": "□ 重ならない操作の順序を保った\n□ 後日の同期で過去の違反が消えると考えなかった\n□ 遅延・失敗と保証のトレードオフを述べた"
+        }
+      ],
+      "notes": "面接での使い方：複製データの読み取り保証"
+    },
+    {
+      "id": "foundation-idempotency",
+      "title": "応答が消えても二重実行しない",
+      "category": "CS・数学",
+      "summary": "分散系・冪等性",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "sources": [
+        {
+          "title": "AWS: Making retries safe with idempotent APIs",
+          "url": "https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/"
+        }
+      ],
+      "estimatedDuration": "約10分",
+      "prerequisites": ["DBトランザクション・一意制約"],
+      "englishPrompt": null,
+      "originalRecordJSON": "{\n  \"id\": \"foundation-idempotency\",\n  \"name\": \"応答が消えても二重実行しない\",\n  \"topic\": \"分散系・冪等性\",\n  \"time\": \"約10分\",\n  \"prerequisites\": [\n    \"DBトランザクション・一意制約\"\n  ],\n  \"interviewUse\": \"再試行可能な書き込みAPI\",\n  \"steps\": [\n    {\n      \"label\": \"仕様を定める\",\n      \"title\": \"不明な結果を再試行する\",\n      \"prompt\": \"作成APIがレコードを保存した直後、応答が消失した。クライアントが新規リクエストとして再送すると？\",\n      \"choices\": [\n        \"必ず安全\",\n        \"同じ意図で2件作成されうる\",\n        \"初回作成が自動で消える\"\n      ],\n      \"answer\": 1,\n      \"why\": \"タイムアウトは未実行を意味しません。同じ意図の再送をサーバーが識別できる契約が必要です。\"\n    },\n    {\n      \"label\": \"構造を見抜く\",\n      \"title\": \"同じ意図を識別する\",\n      \"prompt\": \"再試行ごとに使うidempotency keyは？\",\n      \"choices\": [\n        \"同じ論理操作では同じキー\",\n        \"毎回必ず新しいキー\",\n        \"全ユーザー全操作で同じキー\"\n      ],\n      \"answer\": 0,\n      \"why\": \"キーは論理操作の識別子。利用者等のスコープと組にして扱います。別の意図には別キー。同じ内容の正当な新規操作まで勝手に統合しません。\"\n    },\n    {\n      \"label\": \"根拠をつなぐ\",\n      \"title\": \"同時到着を防ぐには？\",\n      \"prompt\": \"キー未登録を確認してから作成するだけで、並行した2要求を防げる？\",\n      \"choices\": [\n        \"確認を2回すれば十分\",\n        \"ネットワークが速ければ十分\",\n        \"不十分。一意性と原子的な記録が必要\"\n      ],\n      \"answer\": 2,\n      \"why\": \"両者が未登録を観測できます。キーの一意制約や同等の排他を使い、業務変更と結果記録を同じ原子的境界で扱います。\"\n    },\n    {\n      \"label\": \"境界を試す\",\n      \"title\": \"キーだけ同じで内容が違う\",\n      \"prompt\": \"同じキーで異なるpayloadが届いた。明確な契約として適切なのは？\",\n      \"choices\": [\n        \"別操作として黙って実行\",\n        \"内容不一致として拒否\",\n        \"常に後の内容で上書き\"\n      ],\n      \"answer\": 1,\n      \"why\": \"入力の正規化・一致判定を決め、保存済みの意図と違う再利用を拒否します。キー保持期間を過ぎた再送にも別途方針が必要です。\"\n    },\n    {\n      \"label\": \"ヒントなしで転用\",\n      \"title\": \"条件を変えて組み立てる\",\n      \"prompt\": \"単一DB内のメモ作成APIを再試行可能にする。利用者u、キーk、本文pを受け取る。並行再送、応答消失、同じキーで別本文を扱う手順を説明してください。外部サービス呼出しはありません。\",\n      \"transfer\": true,\n      \"hints\": [\n        \"(u,k)を一意にし、本文と結果を保存できます。\",\n        \"メモ作成とキー記録の片方だけがコミットしたらどうなる？\"\n      ],\n      \"why\": \"同じDBトランザクションで一意キーの確保、メモ作成、結果記録をコミットします。競合側は確定結果を読み、本文一致なら同じ結果を返します。\",\n      \"reference\": \"BEGIN\\nclaim unique (u,k) with canonical payload p\\nif committed existing key:\\n  if payload differs: reject\\n  else: return stored result\\nelse:\\n  create memo; store result under (u,k)\\nCOMMIT\\nreturn stored result\\n並行競合: DB仕様に沿って待機/再試行し確定行を再読。\\n保持期限と期限後の再送ポリシーをAPI契約に記載。\",\n      \"check\": \"□ 作成と結果記録を同一トランザクションにした\\n□ 同じキーの別本文を拒否した\\n□ 外部副作用までこの手順で原子的になると主張しなかった\"\n    }\n  ],\n  \"sources\": [\n    {\n      \"title\": \"AWS: Making retries safe with idempotent APIs\",\n      \"url\": \"https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/\"\n    }\n  ],\n  \"category\": \"foundation\",\n  \"contentVersion\": \"2026-10-12.2\",\n  \"authors\": [\n    {\n      \"type\": \"ai-assisted\",\n      \"name\": \"Original interview-practice material\"\n    }\n  ]\n}",
+      "steps": [
+        {
+          "id": "step-1",
+          "phase": "仕様を定める",
+          "title": "不明な結果を再試行する",
+          "prompt": "作成APIがレコードを保存した直後、応答が消失した。クライアントが新規リクエストとして再送すると？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "必ず安全",
+              "explanation": "タイムアウトは未実行を意味しません。同じ意図の再送をサーバーが識別できる契約が必要です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "同じ意図で2件作成されうる",
+              "explanation": "タイムアウトは未実行を意味しません。同じ意図の再送をサーバーが識別できる契約が必要です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "初回作成が自動で消える",
+              "explanation": "タイムアウトは未実行を意味しません。同じ意図の再送をサーバーが識別できる契約が必要です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "タイムアウトは未実行を意味しません。同じ意図の再送をサーバーが識別できる契約が必要です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-2",
+          "phase": "構造を見抜く",
+          "title": "同じ意図を識別する",
+          "prompt": "再試行ごとに使うidempotency keyは？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "同じ論理操作では同じキー",
+              "explanation": "キーは論理操作の識別子。利用者等のスコープと組にして扱います。別の意図には別キー。同じ内容の正当な新規操作まで勝手に統合しません。"
+            },
+            {
+              "id": "choice-1",
+              "text": "毎回必ず新しいキー",
+              "explanation": "キーは論理操作の識別子。利用者等のスコープと組にして扱います。別の意図には別キー。同じ内容の正当な新規操作まで勝手に統合しません。"
+            },
+            {
+              "id": "choice-2",
+              "text": "全ユーザー全操作で同じキー",
+              "explanation": "キーは論理操作の識別子。利用者等のスコープと組にして扱います。別の意図には別キー。同じ内容の正当な新規操作まで勝手に統合しません。"
+            }
+          ],
+          "correctChoiceID": "choice-0",
+          "explanation": "キーは論理操作の識別子。利用者等のスコープと組にして扱います。別の意図には別キー。同じ内容の正当な新規操作まで勝手に統合しません。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-3",
+          "phase": "根拠をつなぐ",
+          "title": "同時到着を防ぐには？",
+          "prompt": "キー未登録を確認してから作成するだけで、並行した2要求を防げる？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "確認を2回すれば十分",
+              "explanation": "両者が未登録を観測できます。キーの一意制約や同等の排他を使い、業務変更と結果記録を同じ原子的境界で扱います。"
+            },
+            {
+              "id": "choice-1",
+              "text": "ネットワークが速ければ十分",
+              "explanation": "両者が未登録を観測できます。キーの一意制約や同等の排他を使い、業務変更と結果記録を同じ原子的境界で扱います。"
+            },
+            {
+              "id": "choice-2",
+              "text": "不十分。一意性と原子的な記録が必要",
+              "explanation": "両者が未登録を観測できます。キーの一意制約や同等の排他を使い、業務変更と結果記録を同じ原子的境界で扱います。"
+            }
+          ],
+          "correctChoiceID": "choice-2",
+          "explanation": "両者が未登録を観測できます。キーの一意制約や同等の排他を使い、業務変更と結果記録を同じ原子的境界で扱います。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-4",
+          "phase": "境界を試す",
+          "title": "キーだけ同じで内容が違う",
+          "prompt": "同じキーで異なるpayloadが届いた。明確な契約として適切なのは？",
+          "choices": [
+            {
+              "id": "choice-0",
+              "text": "別操作として黙って実行",
+              "explanation": "入力の正規化・一致判定を決め、保存済みの意図と違う再利用を拒否します。キー保持期間を過ぎた再送にも別途方針が必要です。"
+            },
+            {
+              "id": "choice-1",
+              "text": "内容不一致として拒否",
+              "explanation": "入力の正規化・一致判定を決め、保存済みの意図と違う再利用を拒否します。キー保持期間を過ぎた再送にも別途方針が必要です。"
+            },
+            {
+              "id": "choice-2",
+              "text": "常に後の内容で上書き",
+              "explanation": "入力の正規化・一致判定を決め、保存済みの意図と違う再利用を拒否します。キー保持期間を過ぎた再送にも別途方針が必要です。"
+            }
+          ],
+          "correctChoiceID": "choice-1",
+          "explanation": "入力の正規化・一致判定を決め、保存済みの意図と違う再利用を拒否します。キー保持期間を過ぎた再送にも別途方針が必要です。",
+          "code": null,
+          "hints": null,
+          "reference": null,
+          "check": null
+        },
+        {
+          "id": "step-5",
+          "phase": "ヒントなしで転用",
+          "title": "条件を変えて組み立てる",
+          "prompt": "単一DB内のメモ作成APIを再試行可能にする。利用者u、キーk、本文pを受け取る。並行再送、応答消失、同じキーで別本文を扱う手順を説明してください。外部サービス呼出しはありません。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "同じDBトランザクションで一意キーの確保、メモ作成、結果記録をコミットします。競合側は確定結果を読み、本文一致なら同じ結果を返します。",
+          "code": null,
+          "hints": [
+            "(u,k)を一意にし、本文と結果を保存できます。",
+            "メモ作成とキー記録の片方だけがコミットしたらどうなる？"
+          ],
+          "reference": "BEGIN\nclaim unique (u,k) with canonical payload p\nif committed existing key:\n  if payload differs: reject\n  else: return stored result\nelse:\n  create memo; store result under (u,k)\nCOMMIT\nreturn stored result\n並行競合: DB仕様に沿って待機/再試行し確定行を再読。\n保持期限と期限後の再送ポリシーをAPI契約に記載。",
+          "check": "□ 作成と結果記録を同一トランザクションにした\n□ 同じキーの別本文を拒否した\n□ 外部副作用までこの手順で原子的になると主張しなかった"
+        }
+      ],
+      "notes": "面接での使い方：再試行可能な書き込みAPI"
+    }
+  ],
+  "sourceRelease": {
+    "contentVersion": "2026-10-12.2",
+    "archiveSHA256": "25e1417c988dd53bb8b00d63a05c12b0e5e34bbd2a7093e3c64e725126e54818",
+    "manifestSHA256": "cd9bfb7e8dd33f5818838de626e63df963651a7451439e0eb35ae90bc59215cc",
+    "contentFileSHA256": "763a855a7adbc30d8df11cc2ff2dc6dab1256c8a5b692bccfadcbe888450cbe4"
+  }
+}

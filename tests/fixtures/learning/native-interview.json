@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "catalogID": "interviewlab.interview-practice",
+  "version": "2026.10.1301",
+  "title": "面接・経験・英語の説明",
+  "lessons": [
+    {
+      "id": "interview-practice-guide",
+      "title": "面接練習：判断を証拠にする",
+      "category": "面接練習",
+      "summary": "これは独自の練習教材。Google・OpenAI・Anthropicの実際の出題、採点基準、合格予測ではありません。自己申告や選択肢の正解だけでは面接準備度を測れません。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"version\": 1,\n  \"title\": \"面接練習：判断を証拠にする\",\n  \"notice\": \"これは独自の練習教材。Google・OpenAI・Anthropicの実際の出題、採点基準、合格予測ではありません。自己申告や選択肢の正解だけでは面接準備度を測れません。\",\n  \"officialGuidance\": [\n    {\n      \"id\": \"openai-guide\",\n      \"title\": \"OpenAI Interview Guide\",\n      \"url\": \"https://openai.com/interview-guide/\",\n      \"checked\": \"2026-10-12\",\n      \"status\": \"公式・本文確認\",\n      \"summary\": \"選考形式はチーム・職種により異なる。設計、コード品質、性能、テスト、思考の説明と協働を重視。AI利用可否は各面接の案内に従い、不明なら採用担当へ確認。\",\n      \"limit\": \"本教材の出題内容や配点が実際の選考と一致する根拠ではない。\"\n    },\n    {\n      \"id\": \"anthropic-careers\",\n      \"title\": \"Anthropic Careers\",\n      \"url\": \"https://www.anthropic.com/careers\",\n      \"checked\": \"2026-10-12\",\n      \"status\": \"公式・本文確認\",\n      \"summary\": \"技術職ではColabやCodeSignalなどによるlive codingを案内。基本構文・標準ライブラリへの習熟、経験や動機についての対話に言及。職種別要件を確認する。\",\n      \"limit\": \"全SWE職に研究数学やML経験が必須とは書かれていない。職種ごとの差を一般化しない。\"\n    },\n    {\n      \"id\": \"anthropic-ai\",\n      \"title\": \"Anthropic Candidate AI Guidance\",\n      \"url\": \"https://www.anthropic.com/candidate-ai-guidance\",\n      \"checked\": \"2026-10-12\",\n      \"publishedOrUpdated\": \"2025-07-10\",\n      \"status\": \"公式・本文確認\",\n      \"summary\": \"面接準備でのAI利用は認められる。応募文の初稿は本人が作成。take-homeとlive interviewは明示的に許可された場合以外AIを使わない。経験を作り上げない。\",\n      \"limit\": \"準備用アプリを本番で使ってよいという許可にはならない。個別案内が優先。\"\n    },\n    {\n      \"id\": \"google-careers\",\n      \"title\": \"Google Careers — Hiring process\",\n      \"url\": \"https://www.google.com/about/careers/applications/how-we-hire/\",\n      \"checked\": \"2026-10-12\",\n      \"status\": \"公式ページ到達・本文の詳細は取得できず\",\n      \"summary\": \"公式の採用プロセス案内先。今回の取得ではナビゲーションのみ確認できたため、最新の面接構成・AI利用規則・評価配点は断定しない。\",\n      \"limit\": \"応募職種と採用担当から届く最新の準備資料で確認する。\"\n    },\n    {\n      \"id\": \"google-engineer-advice\",\n      \"title\": \"A Google engineer shares her technical interview tips\",\n      \"url\": \"https://blog.google/company-news/inside-google/life-at-google/google-engineer-shares-her-technical-interview-tips/\",\n      \"checked\": \"2026-10-12\",\n      \"publishedOrUpdated\": \"2022-03-17\",\n      \"status\": \"公式記事・過去の個人アドバイス\",\n      \"summary\": \"問題を解きながら声に出して説明する練習、アルゴリズムと形式への準備を勧める。\",\n      \"limit\": \"2022年の社員記事。現在の全職種共通の選考要件ではない。\"\n    }\n  ],\n  \"practiceFlow\": [\n    {\n      \"stage\": \"スマホ：導出\",\n      \"minutes\": \"10–15\",\n      \"task\": \"選択前に前提と不変条件を自分の言葉で一文にする。正解を見たら、他案が成立する条件も一つ言う。\",\n      \"evidence\": \"選択の履歴は学習履歴であり、能力評価ではない。\"\n    },\n    {\n      \"stage\": \"スマホ：白紙から話す\",\n      \"minutes\": \"6–8\",\n      \"task\": \"転用問題をヒントなしで説明。要件→データ／API→通常経路→競合と障害→代償の順。録音は任意で、録音・採点機能がなければ自分の端末や相手との練習を使う。\",\n      \"evidence\": \"参照したヒント、言えなかった点、反例を具体的に記録。\"\n    },\n    {\n      \"stage\": \"PC：実装と反証\",\n      \"minutes\": \"40–60\",\n      \"task\": \"最小状態機械とテストを書く。成功パスだけでなく競合順序とクラッシュ位置を変える。\",\n      \"evidence\": \"実行したテスト結果・失敗例・修正差分を残す。未実行を合格扱いにしない。\"\n    },\n    {\n      \"stage\": \"人との模擬面接\",\n      \"minutes\": \"35–45\",\n      \"task\": \"相手に途中で要件を一つ変えてもらう。説明・深掘り・時間配分を観察してもらう。\",\n      \"evidence\": \"具体的な発言・コード・設計の観察に基づくコメント。会社の合否予測にはしない。\"\n    }\n  ],\n  \"evidencePolicy\": {\n    \"states\": [\n      \"未着手\",\n      \"ヒントありで説明\",\n      \"ヒントなしで説明を試行\",\n      \"コード実装済み・未検証\",\n      \"テスト実行記録あり\",\n      \"他者から具体的レビューあり\"\n    ],\n    \"rules\": [\n      \"「分かった」を完了や習熟の代わりにしない。\",\n      \"テスト実行、口頭説明、他者レビューは別々の証拠として記録する。\",\n      \"合格確率、企業別ready表示、自己採点からの合格判定は作らない。\",\n      \"参照解答は一例。異なる設計でも明示した要件を満たし、代償を説明できれば議論の対象。\"\n    ]\n  },\n  \"systemDesignRubric\": [\n    {\n      \"dimension\": \"要件と契約\",\n      \"observe\": \"規模、SLO、許す古さ、順序の範囲、障害時の優先順位を確認する。\",\n      \"weak\": \"「高可用・高整合」と言うだけ。\",\n      \"strong\": \"要件が衝突する場面を挙げ、何を優先するか合意する。\",\n      \"probe\": \"ネットワーク分断中に何を諦めますか？\"\n    },\n    {\n      \"dimension\": \"容量とボトルネック\",\n      \"observe\": \"到着率、処理時間、データ量、ピークを単位付きで概算する。\",\n      \"weak\": \"平均値だけでp99や台数を断言。\",\n      \"strong\": \"式・仮定・余裕と、測定すべき未知量を分ける。\",\n      \"probe\": \"負荷が10倍なら最初に壊れる箇所は？\"\n    },\n    {\n      \"dimension\": \"データモデルと不変条件\",\n      \"observe\": \"キー、所有者、状態遷移、一意性と原子性の境界を説明する。\",\n      \"weak\": \"DBやキュー名を挙げるだけ。\",\n      \"strong\": \"二つの並行操作を時系列で追い、不変条件が保たれる根拠を示す。\",\n      \"probe\": \"確認直後に別リクエストが状態を変えたら？\"\n    },\n    {\n      \"dimension\": \"障害と回復\",\n      \"observe\": \"タイムアウト、重複、古いworker、部分成功を扱う。\",\n      \"weak\": \"リトライすれば解決、exactly-onceとだけ言う。\",\n      \"strong\": \"再試行可能条件、重複排除の期間と境界、照合・手動復旧を説明する。\",\n      \"probe\": \"外部成功後、結果保存の前に落ちたら？\"\n    },\n    {\n      \"dimension\": \"安全性と運用\",\n      \"observe\": \"テナント境界、認可、秘密、監査、負荷制御を扱う。\",\n      \"weak\": \"セキュアにする、監視を入れるだけ。\",\n      \"strong\": \"具体的な越境テスト、失効期限、アラートと対応行動を結び付ける。\",\n      \"probe\": \"依存先停止時に許可・拒否のどちらを選びますか？\"\n    },\n    {\n      \"dimension\": \"説明と変更への適応\",\n      \"observe\": \"聞き手が追える粒度で理由を述べ、途中の新情報を取り込む。\",\n      \"weak\": \"暗記した完成図を最後まで話す。\",\n      \"strong\": \"仮定が変われば選択を変更し、捨てた案が適する条件も説明する。\",\n      \"probe\": \"この一つの要件を変えたら設計はどう変わりますか？\"\n    }\n  ],\n  \"behavioralMethod\": {\n    \"instruction\": \"実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\",\n    \"structure\": [\n      \"状況：誰の何が困っていたか。背景は短く。\",\n      \"責任：自分の担当と、チーム全体の担当を分ける。\",\n      \"判断：選択肢、制約、反対意見、判断に使った証拠。\",\n      \"行動：自分が具体的に何を変えたか。\",\n      \"結果：測った結果、因果関係の限界、残った問題。\",\n      \"振り返り：次なら変えることと、その後に実際に変えたこと。\"\n    ],\n    \"timing\": \"初答は約2分。詳しい証拠は追質問に残す。短くしすぎて判断と行動を消さない。\",\n    \"noStoryRule\": \"該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。\"\n  },\n  \"behavioralPrompts\": [\n    {\n      \"id\": \"incident\",\n      \"title\": \"障害の最中の判断\",\n      \"prompt\": \"自分が関わった障害を一つ。情報が足りない中で何を優先し、なぜその対応を選んだ？\",\n      \"englishPrompt\": \"Tell me about an incident where you had to act with incomplete information. What did you personally decide?\",\n      \"followUps\": [\n        \"最初の仮説が外れた証拠は？\",\n        \"復旧と原因究明をどう分けた？\",\n        \"再発防止が機能したと何で分かる？\"\n      ],\n      \"evidence\": [\n        \"時系列\",\n        \"本人の役割\",\n        \"検証可能な影響／復旧指標\",\n        \"残った不確実性\"\n      ],\n      \"avoid\": [\n        \"英雄談だけにする\",\n        \"チームの成果を自分一人の成果にする\",\n        \"実測していない改善率を作る\"\n      ]\n    },\n    {\n      \"id\": \"disagreement\",\n      \"title\": \"設計上の対立\",\n      \"prompt\": \"信頼する同僚と技術判断が分かれた経験。相手案の最も強い点と、自分が考えを変えた条件は？\",\n      \"englishPrompt\": \"Describe a technical disagreement. What was the strongest argument against your position?\",\n      \"followUps\": [\n        \"判断前にどんな検証をした？\",\n        \"決定後にどう協力した？\",\n        \"今ならどちらを選ぶ？\"\n      ],\n      \"evidence\": [\n        \"双方の合理的な制約\",\n        \"比較した代替案\",\n        \"意思決定の手続き\",\n        \"決定後の行動\"\n      ],\n      \"avoid\": [\n        \"相手を無能として描く\",\n        \"自分が常に正しかったと締める\"\n      ]\n    },\n    {\n      \"id\": \"security\",\n      \"title\": \"安全性と納期の調整\",\n      \"prompt\": \"納期とセキュリティ／信頼性がぶつかった実例。リスクを誰にどう伝え、何を決めた？\",\n      \"englishPrompt\": \"Tell me about a time you had to balance delivery speed with security or reliability.\",\n      \"followUps\": [\n        \"リスクの重大性と発生可能性をどう分けた？\",\n        \"段階公開や縮小案は？\",\n        \"残余リスクの責任者は？\"\n      ],\n      \"evidence\": [\n        \"脅威または障害モデル\",\n        \"現実的な代替案\",\n        \"決定権者\",\n        \"後続の検証\"\n      ],\n      \"avoid\": [\n        \"秘密情報を漏らす\",\n        \"全てのリスクをゼロにできると主張する\"\n      ]\n    },\n    {\n      \"id\": \"ambiguity\",\n      \"title\": \"曖昧な依頼から進める\",\n      \"prompt\": \"要件が曖昧だった案件。何を最初に確かめ、何を仮定して前に進めた？\",\n      \"englishPrompt\": \"Describe a project with unclear requirements. How did you reduce uncertainty?\",\n      \"followUps\": [\n        \"不可逆な決定と可逆な決定は？\",\n        \"最小の検証は何だった？\",\n        \"要件が変わった時に捨てたものは？\"\n      ],\n      \"evidence\": [\n        \"確認した利用者の問題\",\n        \"記録した仮定\",\n        \"小さな実験\",\n        \"変更時の判断\"\n      ],\n      \"avoid\": [\n        \"曖昧さを依頼者のせいだけにする\"\n      ]\n    },\n    {\n      \"id\": \"learning\",\n      \"title\": \"未知の領域への立ち上がり\",\n      \"prompt\": \"不慣れな技術を短期間で必要とした経験。学習と出荷をどう接続した？\",\n      \"englishPrompt\": \"Tell me about learning an unfamiliar domain quickly. How did you test that you understood it?\",\n      \"followUps\": [\n        \"誰に何を聞いた？\",\n        \"誤解が分かった瞬間は？\",\n        \"独力で再現できた証拠は？\"\n      ],\n      \"evidence\": [\n        \"最初の知識差\",\n        \"資料／相談先の選び方\",\n        \"試作・検証\",\n        \"仕事への具体的な適用\"\n      ],\n      \"avoid\": [\n        \"読んだ資料の数だけを成果にする\",\n        \"研究経験や数学力を職務成果の代わりにする\"\n      ]\n    },\n    {\n      \"id\": \"feedback\",\n      \"title\": \"厳しいフィードバック\",\n      \"prompt\": \"受け入れにくかった指摘を一つ。事実をどう確かめ、行動をどう変えた？\",\n      \"englishPrompt\": \"Tell me about feedback that was difficult to hear. What changed in your behavior?\",\n      \"followUps\": [\n        \"どの部分には同意しなかった？\",\n        \"変化を相手にどう確認した？\",\n        \"まだ改善中の点は？\"\n      ],\n      \"evidence\": [\n        \"指摘の具体性\",\n        \"検証した事実\",\n        \"変更した行動\",\n        \"後日の確認\"\n      ],\n      \"avoid\": [\n        \"弱みを強みに見せる定型文\",\n        \"反省したと言うだけで行動がない\"\n      ]\n    },\n    {\n      \"id\": \"motivation\",\n      \"title\": \"応募先と職種への動機\",\n      \"prompt\": \"応募予定の具体的な職種を一つ選ぶ。自分の経験が役立つ問題と、入社後に学ぶ必要がある点を説明する。\",\n      \"englishPrompt\": \"Why this role and team? Which of your experiences would transfer, and what would you need to learn?\",\n      \"followUps\": [\n        \"公式募集要項のどの仕事に対応する？\",\n        \"他の会社や職種でも成立する理由だけになっていない？\",\n        \"公開資料からまだ分からないことは？\"\n      ],\n      \"evidence\": [\n        \"現在の募集要項へのリンク\",\n        \"実経験との接点\",\n        \"不足領域の認識\",\n        \"面接官へ聞く具体的な問い\"\n      ],\n      \"avoid\": [\n        \"本人が持っていない信念を作る\",\n        \"企業の理念を復唱するだけ\",\n        \"一般SWEに研究者向け要件を自動適用する\"\n      ]\n    }\n  ],\n  \"behavioralRubric\": [\n    {\n      \"dimension\": \"事実性\",\n      \"check\": \"実例・仮定・推定を区別し、守秘義務を守ったか。\"\n    },\n    {\n      \"dimension\": \"本人の貢献\",\n      \"check\": \"チームの成果と自分の判断・行動を分けたか。\"\n    },\n    {\n      \"dimension\": \"判断の深さ\",\n      \"check\": \"代替案、制約、相手の合理性、判断材料を説明したか。\"\n    },\n    {\n      \"dimension\": \"結果の根拠\",\n      \"check\": \"観察された結果と自分の因果推定を分けたか。\"\n    },\n    {\n      \"dimension\": \"学びの実行\",\n      \"check\": \"振り返りが、その後の具体的な行動につながっているか。\"\n    },\n    {\n      \"dimension\": \"対話\",\n      \"check\": \"質問に答え、追質問の余地を残し、不明点を正直に扱ったか。\"\n    }\n  ],\n  \"englishPrompts\": [\n    {\n      \"id\": \"clarify\",\n      \"prompt\": \"Before I choose a design, I would like to clarify the consistency and availability requirements.\",\n      \"task\": \"この後に、今回の設計を変える確認質問を二つ、自分の言葉で続ける。\"\n    },\n    {\n      \"id\": \"invariant\",\n      \"prompt\": \"The invariant I want to preserve is ____. Here is a concurrent execution that could violate it.\",\n      \"task\": \"空欄を埋め、二つの操作を時間順に説明する。\"\n    },\n    {\n      \"id\": \"tradeoff\",\n      \"prompt\": \"I would choose ____ under these assumptions. If ____ changed, I would prefer ____.\",\n      \"task\": \"採用案と代替案の成立条件を説明する。\"\n    },\n    {\n      \"id\": \"uncertainty\",\n      \"prompt\": \"I do not know the exact number yet. My estimate assumes ____, and I would validate it by ____.\",\n      \"task\": \"単位付きの概算を一つ説明し、測定で確かめる。\"\n    },\n    {\n      \"id\": \"correction\",\n      \"prompt\": \"I missed a race condition. Let me revise the design and walk through the failing sequence again.\",\n      \"task\": \"誤りを隠さず、修正前後の挙動を説明する。\"\n    },\n    {\n      \"id\": \"summary\",\n      \"prompt\": \"The design provides ____, but it does not guarantee ____. The main operational risk is ____.\",\n      \"task\": \"60秒で保証・限界・監視と復旧をまとめる。\"\n    }\n  ],\n  \"roleCalibration\": {\n    \"core\": \"一般的なSWE準備の軸は、実装、アルゴリズムとデータ構造、設計、テスト、デバッグ、説明と協働。配分は応募職種・レベルと公式案内で調整する。\",\n    \"researchMath\": \"数学的素養は不変条件、計算量、確率的負荷、推論の明確さに活用できる。研究職・ML特化職の数学／研究要件を全SWEの共通要件としない。\",\n    \"askRecruiter\": [\n      \"予定される面接形式と時間は？\",\n      \"利用可能な言語・実行環境・参照資料は？\",\n      \"各ラウンドのAI利用可否は？\",\n      \"この職種で重視する専門領域と、準備資料は？\"\n    ]\n  }\n}",
+      "sources": [
+        {
+          "title": "OpenAI Interview Guide",
+          "url": "https://openai.com/interview-guide/"
+        },
+        {
+          "title": "Anthropic Careers",
+          "url": "https://www.anthropic.com/careers"
+        },
+        {
+          "title": "Anthropic Candidate AI Guidance",
+          "url": "https://www.anthropic.com/candidate-ai-guidance"
+        },
+        {
+          "title": "Google Careers — Hiring process",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/"
+        },
+        {
+          "title": "A Google engineer shares her technical interview tips",
+          "url": "https://blog.google/company-news/inside-google/life-at-google/google-engineer-shares-her-technical-interview-tips/"
+        }
+      ],
+      "steps": [
+        {
+          "id": "evidence",
+          "phase": "練習の証拠・自己評価",
+          "prompt": "これは独自の練習教材。Google・OpenAI・Anthropicの実際の出題、採点基準、合格予測ではありません。自己申告や選択肢の正解だけでは面接準備度を測れません。\n\nスマホ：導出（10–15分）\n選択前に前提と不変条件を自分の言葉で一文にする。正解を見たら、他案が成立する条件も一つ言う。\n選択の履歴は学習履歴であり、能力評価ではない。\n\nスマホ：白紙から話す（6–8分）\n転用問題をヒントなしで説明。要件→データ／API→通常経路→競合と障害→代償の順。録音は任意で、録音・採点機能がなければ自分の端末や相手との練習を使う。\n参照したヒント、言えなかった点、反例を具体的に記録。\n\nPC：実装と反証（40–60分）\n最小状態機械とテストを書く。成功パスだけでなく競合順序とクラッシュ位置を変える。\n実行したテスト結果・失敗例・修正差分を残す。未実行を合格扱いにしない。\n\n人との模擬面接（35–45分）\n相手に途中で要件を一つ変えてもらう。説明・深掘り・時間配分を観察してもらう。\n具体的な発言・コード・設計の観察に基づくコメント。会社の合否予測にはしない。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "「分かった」を完了や習熟の代わりにしない。\nテスト実行、口頭説明、他者レビューは別々の証拠として記録する。\n合格確率、企業別ready表示、自己採点からの合格判定は作らない。\n参照解答は一例。異なる設計でも明示した要件を満たし、代償を説明できれば議論の対象。",
+          "reference": "要件と契約\n規模、SLO、許す古さ、順序の範囲、障害時の優先順位を確認する。\n弱い例：「高可用・高整合」と言うだけ。\n具体的な例：要件が衝突する場面を挙げ、何を優先するか合意する。\n追質問：ネットワーク分断中に何を諦めますか？\n\n容量とボトルネック\n到着率、処理時間、データ量、ピークを単位付きで概算する。\n弱い例：平均値だけでp99や台数を断言。\n具体的な例：式・仮定・余裕と、測定すべき未知量を分ける。\n追質問：負荷が10倍なら最初に壊れる箇所は？\n\nデータモデルと不変条件\nキー、所有者、状態遷移、一意性と原子性の境界を説明する。\n弱い例：DBやキュー名を挙げるだけ。\n具体的な例：二つの並行操作を時系列で追い、不変条件が保たれる根拠を示す。\n追質問：確認直後に別リクエストが状態を変えたら？\n\n障害と回復\nタイムアウト、重複、古いworker、部分成功を扱う。\n弱い例：リトライすれば解決、exactly-onceとだけ言う。\n具体的な例：再試行可能条件、重複排除の期間と境界、照合・手動復旧を説明する。\n追質問：外部成功後、結果保存の前に落ちたら？\n\n安全性と運用\nテナント境界、認可、秘密、監査、負荷制御を扱う。\n弱い例：セキュアにする、監視を入れるだけ。\n具体的な例：具体的な越境テスト、失効期限、アラートと対応行動を結び付ける。\n追質問：依存先停止時に許可・拒否のどちらを選びますか？\n\n説明と変更への適応\n聞き手が追える粒度で理由を述べ、途中の新情報を取り込む。\n弱い例：暗記した完成図を最後まで話す。\n具体的な例：仮定が変われば選択を変更し、捨てた案が適する条件も説明する。\n追質問：この一つの要件を変えたら設計はどう変わりますか？\n\n一般的なSWE準備の軸は、実装、アルゴリズムとデータ構造、設計、テスト、デバッグ、説明と協働。配分は応募職種・レベルと公式案内で調整する。\n数学的素養は不変条件、計算量、確率的負荷、推論の明確さに活用できる。研究職・ML特化職の数学／研究要件を全SWEの共通要件としない。"
+        }
+      ]
+    },
+    {
+      "id": "incident",
+      "title": "障害の最中の判断",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Tell me about an incident where you had to act with incomplete information. What did you personally decide?",
+      "originalRecordJSON": "{\n  \"id\": \"incident\",\n  \"title\": \"障害の最中の判断\",\n  \"prompt\": \"自分が関わった障害を一つ。情報が足りない中で何を優先し、なぜその対応を選んだ？\",\n  \"englishPrompt\": \"Tell me about an incident where you had to act with incomplete information. What did you personally decide?\",\n  \"followUps\": [\n    \"最初の仮説が外れた証拠は？\",\n    \"復旧と原因究明をどう分けた？\",\n    \"再発防止が機能したと何で分かる？\"\n  ],\n  \"evidence\": [\n    \"時系列\",\n    \"本人の役割\",\n    \"検証可能な影響／復旧指標\",\n    \"残った不確実性\"\n  ],\n  \"avoid\": [\n    \"英雄談だけにする\",\n    \"チームの成果を自分一人の成果にする\",\n    \"実測していない改善率を作る\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "自分が関わった障害を一つ。情報が足りない中で何を優先し、なぜその対応を選んだ？",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "最初の仮説が外れた証拠は？",
+            "復旧と原因究明をどう分けた？",
+            "再発防止が機能したと何で分かる？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n時系列\n本人の役割\n検証可能な影響／復旧指標\n残った不確実性\n\n避けること：\n英雄談だけにする\nチームの成果を自分一人の成果にする\n実測していない改善率を作る"
+        }
+      ]
+    },
+    {
+      "id": "disagreement",
+      "title": "設計上の対立",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Describe a technical disagreement. What was the strongest argument against your position?",
+      "originalRecordJSON": "{\n  \"id\": \"disagreement\",\n  \"title\": \"設計上の対立\",\n  \"prompt\": \"信頼する同僚と技術判断が分かれた経験。相手案の最も強い点と、自分が考えを変えた条件は？\",\n  \"englishPrompt\": \"Describe a technical disagreement. What was the strongest argument against your position?\",\n  \"followUps\": [\n    \"判断前にどんな検証をした？\",\n    \"決定後にどう協力した？\",\n    \"今ならどちらを選ぶ？\"\n  ],\n  \"evidence\": [\n    \"双方の合理的な制約\",\n    \"比較した代替案\",\n    \"意思決定の手続き\",\n    \"決定後の行動\"\n  ],\n  \"avoid\": [\n    \"相手を無能として描く\",\n    \"自分が常に正しかったと締める\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "信頼する同僚と技術判断が分かれた経験。相手案の最も強い点と、自分が考えを変えた条件は？",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "判断前にどんな検証をした？",
+            "決定後にどう協力した？",
+            "今ならどちらを選ぶ？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n双方の合理的な制約\n比較した代替案\n意思決定の手続き\n決定後の行動\n\n避けること：\n相手を無能として描く\n自分が常に正しかったと締める"
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "title": "安全性と納期の調整",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Tell me about a time you had to balance delivery speed with security or reliability.",
+      "originalRecordJSON": "{\n  \"id\": \"security\",\n  \"title\": \"安全性と納期の調整\",\n  \"prompt\": \"納期とセキュリティ／信頼性がぶつかった実例。リスクを誰にどう伝え、何を決めた？\",\n  \"englishPrompt\": \"Tell me about a time you had to balance delivery speed with security or reliability.\",\n  \"followUps\": [\n    \"リスクの重大性と発生可能性をどう分けた？\",\n    \"段階公開や縮小案は？\",\n    \"残余リスクの責任者は？\"\n  ],\n  \"evidence\": [\n    \"脅威または障害モデル\",\n    \"現実的な代替案\",\n    \"決定権者\",\n    \"後続の検証\"\n  ],\n  \"avoid\": [\n    \"秘密情報を漏らす\",\n    \"全てのリスクをゼロにできると主張する\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "納期とセキュリティ／信頼性がぶつかった実例。リスクを誰にどう伝え、何を決めた？",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "リスクの重大性と発生可能性をどう分けた？",
+            "段階公開や縮小案は？",
+            "残余リスクの責任者は？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n脅威または障害モデル\n現実的な代替案\n決定権者\n後続の検証\n\n避けること：\n秘密情報を漏らす\n全てのリスクをゼロにできると主張する"
+        }
+      ]
+    },
+    {
+      "id": "ambiguity",
+      "title": "曖昧な依頼から進める",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Describe a project with unclear requirements. How did you reduce uncertainty?",
+      "originalRecordJSON": "{\n  \"id\": \"ambiguity\",\n  \"title\": \"曖昧な依頼から進める\",\n  \"prompt\": \"要件が曖昧だった案件。何を最初に確かめ、何を仮定して前に進めた？\",\n  \"englishPrompt\": \"Describe a project with unclear requirements. How did you reduce uncertainty?\",\n  \"followUps\": [\n    \"不可逆な決定と可逆な決定は？\",\n    \"最小の検証は何だった？\",\n    \"要件が変わった時に捨てたものは？\"\n  ],\n  \"evidence\": [\n    \"確認した利用者の問題\",\n    \"記録した仮定\",\n    \"小さな実験\",\n    \"変更時の判断\"\n  ],\n  \"avoid\": [\n    \"曖昧さを依頼者のせいだけにする\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "要件が曖昧だった案件。何を最初に確かめ、何を仮定して前に進めた？",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "不可逆な決定と可逆な決定は？",
+            "最小の検証は何だった？",
+            "要件が変わった時に捨てたものは？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n確認した利用者の問題\n記録した仮定\n小さな実験\n変更時の判断\n\n避けること：\n曖昧さを依頼者のせいだけにする"
+        }
+      ]
+    },
+    {
+      "id": "learning",
+      "title": "未知の領域への立ち上がり",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Tell me about learning an unfamiliar domain quickly. How did you test that you understood it?",
+      "originalRecordJSON": "{\n  \"id\": \"learning\",\n  \"title\": \"未知の領域への立ち上がり\",\n  \"prompt\": \"不慣れな技術を短期間で必要とした経験。学習と出荷をどう接続した？\",\n  \"englishPrompt\": \"Tell me about learning an unfamiliar domain quickly. How did you test that you understood it?\",\n  \"followUps\": [\n    \"誰に何を聞いた？\",\n    \"誤解が分かった瞬間は？\",\n    \"独力で再現できた証拠は？\"\n  ],\n  \"evidence\": [\n    \"最初の知識差\",\n    \"資料／相談先の選び方\",\n    \"試作・検証\",\n    \"仕事への具体的な適用\"\n  ],\n  \"avoid\": [\n    \"読んだ資料の数だけを成果にする\",\n    \"研究経験や数学力を職務成果の代わりにする\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "不慣れな技術を短期間で必要とした経験。学習と出荷をどう接続した？",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "誰に何を聞いた？",
+            "誤解が分かった瞬間は？",
+            "独力で再現できた証拠は？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n最初の知識差\n資料／相談先の選び方\n試作・検証\n仕事への具体的な適用\n\n避けること：\n読んだ資料の数だけを成果にする\n研究経験や数学力を職務成果の代わりにする"
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "title": "厳しいフィードバック",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Tell me about feedback that was difficult to hear. What changed in your behavior?",
+      "originalRecordJSON": "{\n  \"id\": \"feedback\",\n  \"title\": \"厳しいフィードバック\",\n  \"prompt\": \"受け入れにくかった指摘を一つ。事実をどう確かめ、行動をどう変えた？\",\n  \"englishPrompt\": \"Tell me about feedback that was difficult to hear. What changed in your behavior?\",\n  \"followUps\": [\n    \"どの部分には同意しなかった？\",\n    \"変化を相手にどう確認した？\",\n    \"まだ改善中の点は？\"\n  ],\n  \"evidence\": [\n    \"指摘の具体性\",\n    \"検証した事実\",\n    \"変更した行動\",\n    \"後日の確認\"\n  ],\n  \"avoid\": [\n    \"弱みを強みに見せる定型文\",\n    \"反省したと言うだけで行動がない\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "受け入れにくかった指摘を一つ。事実をどう確かめ、行動をどう変えた？",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "どの部分には同意しなかった？",
+            "変化を相手にどう確認した？",
+            "まだ改善中の点は？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n指摘の具体性\n検証した事実\n変更した行動\n後日の確認\n\n避けること：\n弱みを強みに見せる定型文\n反省したと言うだけで行動がない"
+        }
+      ]
+    },
+    {
+      "id": "motivation",
+      "title": "応募先と職種への動機",
+      "category": "経験面接",
+      "summary": "事実と本人の判断・行動を説明する",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "englishPrompt": "Why this role and team? Which of your experiences would transfer, and what would you need to learn?",
+      "originalRecordJSON": "{\n  \"id\": \"motivation\",\n  \"title\": \"応募先と職種への動機\",\n  \"prompt\": \"応募予定の具体的な職種を一つ選ぶ。自分の経験が役立つ問題と、入社後に学ぶ必要がある点を説明する。\",\n  \"englishPrompt\": \"Why this role and team? Which of your experiences would transfer, and what would you need to learn?\",\n  \"followUps\": [\n    \"公式募集要項のどの仕事に対応する？\",\n    \"他の会社や職種でも成立する理由だけになっていない？\",\n    \"公開資料からまだ分からないことは？\"\n  ],\n  \"evidence\": [\n    \"現在の募集要項へのリンク\",\n    \"実経験との接点\",\n    \"不足領域の認識\",\n    \"面接官へ聞く具体的な問い\"\n  ],\n  \"avoid\": [\n    \"本人が持っていない信念を作る\",\n    \"企業の理念を復唱するだけ\",\n    \"一般SWEに研究者向け要件を自動適用する\"\n  ]\n}",
+      "notes": "実際の経験を一つ選び、事実だけで構成する。答えの完成例を本人の経験として流用しない。守秘対象は匿名化し、数字は実測・推定・不明を明示する。\n該当経験がなければ「直接の経験はありません」と区別し、近い実例または仮定の回答へ移る。",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "経験の説明・自己評価",
+          "prompt": "応募予定の具体的な職種を一つ選ぶ。自分の経験が役立つ問題と、入社後に学ぶ必要がある点を説明する。",
+          "choices": [],
+          "correctChoiceID": null,
+          "hints": [
+            "公式募集要項のどの仕事に対応する？",
+            "他の会社や職種でも成立する理由だけになっていない？",
+            "公開資料からまだ分からないことは？"
+          ],
+          "explanation": "自己申告の記録です。自動採点はしません。",
+          "reference": "状況：誰の何が困っていたか。背景は短く。\n責任：自分の担当と、チーム全体の担当を分ける。\n判断：選択肢、制約、反対意見、判断に使った証拠。\n行動：自分が具体的に何を変えたか。\n結果：測った結果、因果関係の限界、残った問題。\n振り返り：次なら変えることと、その後に実際に変えたこと。",
+          "check": "確認する証拠：\n現在の募集要項へのリンク\n実経験との接点\n不足領域の認識\n面接官へ聞く具体的な問い\n\n避けること：\n本人が持っていない信念を作る\n企業の理念を復唱するだけ\n一般SWEに研究者向け要件を自動適用する"
+        }
+      ]
+    },
+    {
+      "id": "clarify",
+      "title": "英語で説明：clarify",
+      "category": "英語・説明",
+      "summary": "この後に、今回の設計を変える確認質問を二つ、自分の言葉で続ける。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"id\": \"clarify\",\n  \"prompt\": \"Before I choose a design, I would like to clarify the consistency and availability requirements.\",\n  \"task\": \"この後に、今回の設計を変える確認質問を二つ、自分の言葉で続ける。\"\n}",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "説明・自己評価",
+          "prompt": "Before I choose a design, I would like to clarify the consistency and availability requirements.\n\nこの後に、今回の設計を変える確認質問を二つ、自分の言葉で続ける。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の言葉で説明を試みた記録です。発音・内容を自動採点していません。"
+        }
+      ]
+    },
+    {
+      "id": "invariant",
+      "title": "英語で説明：invariant",
+      "category": "英語・説明",
+      "summary": "空欄を埋め、二つの操作を時間順に説明する。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"id\": \"invariant\",\n  \"prompt\": \"The invariant I want to preserve is ____. Here is a concurrent execution that could violate it.\",\n  \"task\": \"空欄を埋め、二つの操作を時間順に説明する。\"\n}",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "説明・自己評価",
+          "prompt": "The invariant I want to preserve is ____. Here is a concurrent execution that could violate it.\n\n空欄を埋め、二つの操作を時間順に説明する。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の言葉で説明を試みた記録です。発音・内容を自動採点していません。"
+        }
+      ]
+    },
+    {
+      "id": "tradeoff",
+      "title": "英語で説明：tradeoff",
+      "category": "英語・説明",
+      "summary": "採用案と代替案の成立条件を説明する。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"id\": \"tradeoff\",\n  \"prompt\": \"I would choose ____ under these assumptions. If ____ changed, I would prefer ____.\",\n  \"task\": \"採用案と代替案の成立条件を説明する。\"\n}",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "説明・自己評価",
+          "prompt": "I would choose ____ under these assumptions. If ____ changed, I would prefer ____.\n\n採用案と代替案の成立条件を説明する。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の言葉で説明を試みた記録です。発音・内容を自動採点していません。"
+        }
+      ]
+    },
+    {
+      "id": "uncertainty",
+      "title": "英語で説明：uncertainty",
+      "category": "英語・説明",
+      "summary": "単位付きの概算を一つ説明し、測定で確かめる。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"id\": \"uncertainty\",\n  \"prompt\": \"I do not know the exact number yet. My estimate assumes ____, and I would validate it by ____.\",\n  \"task\": \"単位付きの概算を一つ説明し、測定で確かめる。\"\n}",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "説明・自己評価",
+          "prompt": "I do not know the exact number yet. My estimate assumes ____, and I would validate it by ____.\n\n単位付きの概算を一つ説明し、測定で確かめる。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の言葉で説明を試みた記録です。発音・内容を自動採点していません。"
+        }
+      ]
+    },
+    {
+      "id": "correction",
+      "title": "英語で説明：correction",
+      "category": "英語・説明",
+      "summary": "誤りを隠さず、修正前後の挙動を説明する。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"id\": \"correction\",\n  \"prompt\": \"I missed a race condition. Let me revise the design and walk through the failing sequence again.\",\n  \"task\": \"誤りを隠さず、修正前後の挙動を説明する。\"\n}",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "説明・自己評価",
+          "prompt": "I missed a race condition. Let me revise the design and walk through the failing sequence again.\n\n誤りを隠さず、修正前後の挙動を説明する。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の言葉で説明を試みた記録です。発音・内容を自動採点していません。"
+        }
+      ]
+    },
+    {
+      "id": "summary",
+      "title": "英語で説明：summary",
+      "category": "英語・説明",
+      "summary": "60秒で保証・限界・監視と復旧をまとめる。",
+      "authors": [
+        {
+          "type": "ai-assisted",
+          "name": "Original interview-practice material"
+        }
+      ],
+      "contentVersion": "2026-10-12.2",
+      "originalRecordJSON": "{\n  \"id\": \"summary\",\n  \"prompt\": \"The design provides ____, but it does not guarantee ____. The main operational risk is ____.\",\n  \"task\": \"60秒で保証・限界・監視と復旧をまとめる。\"\n}",
+      "steps": [
+        {
+          "id": "explain",
+          "phase": "説明・自己評価",
+          "prompt": "The design provides ____, but it does not guarantee ____. The main operational risk is ____.\n\n60秒で保証・限界・監視と復旧をまとめる。",
+          "choices": [],
+          "correctChoiceID": null,
+          "explanation": "自分の言葉で説明を試みた記録です。発音・内容を自動採点していません。"
+        }
+      ]
+    }
+  ],
+  "sourceRelease": {
+    "contentVersion": "2026-10-12.2",
+    "archiveSHA256": "25e1417c988dd53bb8b00d63a05c12b0e5e34bbd2a7093e3c64e725126e54818",
+    "manifestSHA256": "cd9bfb7e8dd33f5818838de626e63df963651a7451439e0eb35ae90bc59215cc",
+    "contentFileSHA256": "fc7ab5741d99e2c7d6f3bc44322726a622463ac82d4c17ce7cfe359a1de98dca"
+  }
+}

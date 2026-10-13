@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
+import { LearningEntry } from '../app/learning/navigation';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import RealQrView from '../components/RealQrView';
@@ -113,6 +114,7 @@ export default function IntroCardScreen({
           編集ボタンより目立たせず、削除より上（削除は最も控えめな位置を保つ、
           直下コメント参照）に置く控えめなテキストリンクにする。タップ領域は
           削除リンクと同じく WCAG 2.5.5 相当の 44pt を維持する。 */}
+      <LearningEntry locale={locale} />
       <SettingsLinkFooter
         hint={t.settingsButtonHint}
         label={t.settingsButton}
