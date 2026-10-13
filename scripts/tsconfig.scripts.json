@@ -34,6 +34,8 @@
     "prepare-web-app-export.ts",
     "prepare-web-app-export.test.ts",
     "generate-app-icons.ts",
-    "generate-app-icons.test.ts"
+    "generate-app-icons.test.ts",
+    "inspect-store-listing.ts",
+    "store-listing-metadata.test.ts"
   ]
 }
