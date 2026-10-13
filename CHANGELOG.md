@@ -7,6 +7,13 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
+## [1.2.2] - 2026-10-13
+
+### Fixed
+
+- Intro Card viewer はカード表示前に URL fragment と現在の履歴 state を消去し、ページタイトルを固定する。reload や履歴からの再表示ではカードを復元せず、再度 QR の読み取りを求める。URL 消去に失敗した場合はカードを表示せず、その理由を案内する。明示的な vCard 保存は維持する（Issue 197）。
+- リリースタグとアプリのバージョン番号を同期する。過去の履歴同期、QR アプリの履歴、スクリーンショットの削除は保証しない。
+
 ## [1.2.0] - 2026-07-28
 
 オンデバイス AI を Apple Intelligence（OS 内蔵、FoundationModels framework）へ全面切替した Release です（ADR-0057 / ADR-0058）。
