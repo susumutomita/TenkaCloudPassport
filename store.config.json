@@ -1,7 +1,7 @@
 {
   "configVersion": 0,
   "apple": {
-    "version": "1.2.0",
+    "version": "1.3.0",
     "copyright": "2026 BULL LLC",
     "categories": ["PRODUCTIVITY", "SOCIAL_NETWORKING"],
     "release": {
@@ -11,45 +11,67 @@
       "ja": {
         "title": "TenkaCloud Passport",
         "subtitle": "名刺不要の自己紹介カード",
-        "description": "TenkaCloud Passport は、名刺がなくても自己紹介を渡せる、無料でアカウント不要のアプリです。\n\n■ 名刺不要、アカウント不要\n名前（必須）・肩書き・自己紹介・リンクなどを入力して保存するだけ。ログインもアカウント作成も要りません。\n\n■ QR を見せるだけ\n保存した自己紹介カードは QR コードとして表示します。相手はこのアプリを入れなくても、標準のカメラで QR を読み取るだけでブラウザに自己紹介ページが開きます。連絡先への追加はページ内のボタンを押した場合だけの任意操作です。\n\n■ サーバーへの送信ゼロ\n自己紹介データは QR コードの URL フラグメントに埋め込まれ、相手のブラウザ内だけで復号されます。このデータがサーバーへ送信されることはありません。\n\n■ 端末内で会話の共通点を見つける\n相手の自己紹介ページを取り込むと、確認済みの会話テーマから共通点と最初の質問を端末内だけで見つけます。この基本機能はモデルのダウンロードなしで動作します。\n\n対応端末（iPhone 15 Pro 以降・iOS 26 以降で Apple Intelligence を有効にしている場合）では、OS 内蔵の Apple Intelligence が自動的に働き、自己紹介文にある共通点を補助的に見つけたり、共通点の下に短い会話例を生成したりできます。ダウンロードや同意画面はなく、送信も一切ありません。会話例には「AI が作った例で、実際のやり取りではない」ことを常時表示します。入力と生成結果は端末内のメモリにだけ置かれ、保存もサーバー送信もされません。非対応端末では従来どおり確認済みテーマからの一致だけで動作します。\n\nデータを預からない、アカウントを作らない、名刺を用意しない。まずは自分の自己紹介カードを作ってみてください。",
+        "description": "TenkaCloud Passport は、アカウントを作らずに自己紹介カードを作り、QR で共有できるアプリです。\n\n名前、肩書き、自己紹介、リンクを入力してカードを保存します。相手は QR を読み取ってブラウザでカードを見られます。連絡先への保存は任意です。カードの内容は URL fragment からブラウザ内で読み取り、表示前に現在の URL から取り除きます。過去の同期履歴、QR アプリの履歴、スクリーンショットまでは消せません。\n\nアルゴリズムやシステム設計の練習教材を選び、ダウンロードして保存できます。保存後はオフラインで学び、回答履歴や途中の進捗から再開できます。教材の取得にはインターネット接続が必要です。\n\nヒントは段階的に開き、参考回答や出典は別の操作で確認します。自分の説明を考える一時メモも使えます。メモ本文は保存されません。学習記録は自己評価を含み、コードの実行・検証や習熟・面接結果を保証しません。\n\n端末内会話 AI は廃止しました。旧モデルファイルは自動削除しません。設定から容量を確認し、旧モデルだけを明示的に削除できます。自己紹介カードと学習進捗は残ります。",
         "keywords": [
           "名刺",
           "自己紹介",
           "QR",
-          "クラウド",
-          "会話",
-          "共通点",
-          "プライバシー",
+          "アルゴリズム",
+          "設計",
+          "学習",
           "オフライン",
-          "アカウント不要",
-          "交流",
-          "人脈",
           "無料"
         ],
-        "promoText": "名刺もアカウントも不要。QRだけで自己紹介を共有し、データはサーバーへ送りません。相手カードを取り込むと、端末内で会話の共通点を見つけます。",
+        "promoText": "アカウント不要の自己紹介カードをQRで共有。アルゴリズム・設計の教材を保存し、オフラインで練習と再開ができます。",
         "marketingUrl": "https://card.tenkacloud.com",
         "supportUrl": "https://github.com/susumutomita/TenkaCloudPassport",
-        "privacyPolicyUrl": "https://card.tenkacloud.com/privacy"
+        "privacyPolicyUrl": "https://card.tenkacloud.com/privacy",
+        "releaseNotes": "会話AIを廃止し、旧モデルの確認付き削除を設定に追加。教材選択・保存・再開、段階的ヒントと参考回答を改善しました。",
+        "screenshots": {
+          "APP_IPHONE_61": [
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-01-intro-card-edit-0e98a4a6ae39.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-02-intro-card-qr-8e887ca3853b.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-03-learning-library-2d35d7c82aa0.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-04-learning-study-4d37116439b2.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-05-settings-b162874ef7b4.png"
+          ],
+          "APP_IPHONE_67": [
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-01-intro-card-edit-2cd412b270be.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-02-intro-card-qr-fa40d5766a09.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-03-learning-library-dd9b397c2e2e.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-04-learning-study-756ac69b6b75.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-05-settings-78eeefe41aa6.png"
+          ],
+          "APP_IPAD_PRO_3GEN_129": [
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-01-intro-card-edit-d0796b3f924a.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-02-intro-card-qr-707d4e0f904c.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-03-learning-library-8ec85d9cf82a.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-04-learning-study-b88698dcc2df.png",
+            "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-05-settings-d8a7853520ce.png"
+          ]
+        }
       },
       "en-US": {
         "title": "TenkaCloud Passport",
         "subtitle": "No card, no account needed",
-        "description": "TenkaCloud Passport is a free, account-free app for introducing yourself without a business card.\n\n- No card, no account\nEnter your name (required), title, a short bio, and links, then save. No sign-up, no login.\n\n- Just show a QR code\nYour saved Intro Card displays as a QR code. The other person does not need to install anything — they scan it with their phone's stock Camera app, and their browser opens your intro page. Adding you to Contacts is a fully optional tap inside that page.\n\n- Zero server transmission\nYour intro data lives in the QR code's URL fragment and is decoded entirely inside the other person's browser. It is never sent to a server.\n\n- Find common ground on-device\nImport the other person's intro page and the app finds a shared conversation topic and a first question entirely on your device. This base flow works without downloading a model.\n\nOn supported devices (iPhone 15 Pro or later, iOS 26 or later, with Apple Intelligence enabled), the OS's built-in Apple Intelligence automatically helps identify common ground from the intro text and, on request, creates a short hypothetical conversation example. There is no download or consent screen, and nothing is ever transmitted. The app always labels that example as AI-generated and not a record of a real exchange. The inputs and generated example stay only in device memory; they are never saved or sent to a server. On unsupported devices, the app continues to work from confirmed conversation themes only.\n\nNo data collected. No account required. No business card needed. Create your Intro Card and try it.",
+        "description": "TenkaCloud Passport lets you create and share an Intro Card by QR without creating an account.\n\nSave your name, title, introduction and links. Other people can scan the QR and view the card in their browser. Saving a contact is optional. Card content is read from the URL fragment inside the browser, and the current URL is cleared before display. Previously synced history, QR app history and screenshots cannot be erased by this flow.\n\nChoose algorithm and system design practice catalogs, download and save them, then practice offline and resume from recorded progress. Downloading catalogs requires an internet connection.\n\nReveal hints one at a time and open reference answers and sources separately. Use a temporary reasoning draft; draft text is not saved. Learning records include self-assessment and do not verify executed code or guarantee mastery or interview outcomes.\n\nOn-device conversation AI has been retired. Existing model files are not automatically deleted. Settings lets you inspect their size and explicitly remove only legacy models while retaining cards and learning progress.",
         "keywords": [
           "business card",
-          "QR code",
+          "QR",
           "intro",
-          "networking",
+          "algorithms",
+          "system design",
+          "learning",
           "privacy",
           "offline",
-          "conversation",
           "no account",
           "free"
         ],
-        "promoText": "No business card or account. Share an intro by QR without sending profile data to a server, then find common ground on-device.",
+        "promoText": "Share an Intro Card by QR without an account. Save algorithm and design lessons, practice offline, and resume recorded progress.",
         "marketingUrl": "https://card.tenkacloud.com",
         "supportUrl": "https://github.com/susumutomita/TenkaCloudPassport",
-        "privacyPolicyUrl": "https://card.tenkacloud.com/en/privacy"
+        "privacyPolicyUrl": "https://card.tenkacloud.com/en/privacy",
+        "releaseNotes": "Retired conversation AI; added confirmed legacy model cleanup. Improved lesson downloads, resume, staged hints and reference answers."
       }
     },
     "advisory": {

@@ -1,0 +1,57 @@
+name: store-screenshots
+on:
+  push:
+    branches: [fix/store-listing-1.3.0]
+    paths:
+      - .github/workflows/store-screenshots.yml
+      - tests/ios-store-screenshots/**
+      - tests/ios-learning/generate-project.rb
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: store-screenshots-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  capture:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      EXPO_NO_TELEMETRY: '1'
+      CI: 'true'
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: '1.3.11'
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22.13.1'
+      - name: Locked dependencies and unsigned simulator build
+        run: |
+          set -euo pipefail
+          test "$(python3 -c "import json; print(json.load(open('app.json'))['expo']['version'])")" = 1.3.0
+          git fetch origin d42f0439639dfdb7b31d1560f83493a7cd4e73b8 --depth=1
+          git diff --exit-code d42f0439639dfdb7b31d1560f83493a7cd4e73b8 HEAD -- src App.tsx index.ts app.json assets package.json bun.lock .eas
+          bun install --frozen-lockfile --ignore-scripts
+          bun x expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+          cd ..
+          mkdir -p release-output/store-screenshots
+          printf '%s\n' d42f0439639dfdb7b31d1560f83493a7cd4e73b8 > release-output/store-screenshots/ui-source-commit.txt
+          git rev-parse HEAD > release-output/store-screenshots/source-commit.txt
+          xcodebuild -version > release-output/store-screenshots/xcode.txt
+          xcrun simctl list -j > release-output/store-screenshots/simulators.json
+          xcodebuild -workspace ios/TenkaCloudPassport.xcworkspace -scheme TenkaCloudPassport -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/passport-store-app CODE_SIGNING_ALLOWED=NO > release-output/store-screenshots/native-build.log 2>&1
+      - name: Capture real app UI on dedicated simulators
+        run: bash tests/ios-store-screenshots/capture.sh
+      - name: Preserve capture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: passport-store-screenshots-${{ github.run_id }}
+          path: release-output/store-screenshots
+          if-no-files-found: error
+          retention-days: 14

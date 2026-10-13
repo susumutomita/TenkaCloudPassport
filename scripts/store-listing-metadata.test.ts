@@ -1,0 +1,212 @@
+import { expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+
+const config = await Bun.file(
+  new URL('../store.config.json', import.meta.url)
+).json();
+const app = await Bun.file(new URL('../app.json', import.meta.url)).json();
+it('targets the current native version and retains existing declarations and release settings', () => {
+  expect(config.apple.version).toBe(app.expo.version);
+  const { version: _version, info: _info, ...protectedSettings } = config.apple;
+  expect(
+    createHash('sha256').update(JSON.stringify(protectedSettings)).digest('hex')
+  ).toBe('e4ea7afa57cafc78932c0978bef75d24f0fbda703c18d0ebe5654bf12e332c8f');
+});
+for (const locale of ['ja', 'en-US']) {
+  it(`accurately describes current features within listing limits (${locale})`, () => {
+    const info = config.apple.info[locale];
+    expect(info.title.length).toBeLessThanOrEqual(30);
+    expect(info.subtitle.length).toBeLessThanOrEqual(30);
+    expect(info.description.length).toBeLessThanOrEqual(4000);
+    expect(info.promoText.length).toBeLessThanOrEqual(170);
+    expect(
+      Buffer.byteLength(info.keywords.join(','), 'utf8')
+    ).toBeLessThanOrEqual(100);
+    expect(info.description).not.toContain('Apple Intelligence');
+    expect(info.description).toContain(
+      locale === 'ja' ? '会話 AI は廃止' : 'conversation AI has been retired'
+    );
+    expect(info.description).toContain(
+      locale === 'ja' ? 'メモ本文は保存されません' : 'draft text is not saved'
+    );
+    expect(info.description).toContain(
+      locale === 'ja'
+        ? 'インターネット接続が必要'
+        : 'requires an internet connection'
+    );
+    expect(info.description).toContain(
+      locale === 'ja' ? '自己評価' : 'self-assessment'
+    );
+    expect(info.keywords).not.toContain('conversation');
+    expect(info.keywords).not.toContain('共通点');
+  });
+}
+
+it('accepts all fifteen byte-verified native screenshots from the reviewed release UI', async () => {
+  const { validateReviewedAssets } = await import('./apply-store-listing');
+  validateReviewedAssets(new URL('..', import.meta.url).pathname, config.apple);
+  expect(Object.values(config.apple.info.ja.screenshots).flat()).toHaveLength(
+    15
+  );
+});
+
+it('rejects changed image bytes even when capture and visual review are marked complete', async () => {
+  const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } =
+    await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, dirname } = await import('node:path');
+  const { validateReviewedAssets } = await import('./apply-store-listing');
+  const root = new URL('..', import.meta.url).pathname;
+  const folder = mkdtempSync(
+    join(tmpdir(), 'passport-reviewed-image-corruption-')
+  );
+  try {
+    const evidencePath =
+      'docs/assets/app-store-screenshots/v1.3.0/capture-provenance.json';
+    const imagePath = config.apple.info.ja.screenshots.APP_IPHONE_61[0];
+    mkdirSync(dirname(join(folder, evidencePath)), { recursive: true });
+    writeFileSync(
+      join(folder, evidencePath),
+      readFileSync(join(root, evidencePath))
+    );
+    mkdirSync(dirname(join(folder, imagePath)), { recursive: true });
+    const image = readFileSync(join(root, imagePath));
+    image[image.length - 1] = (image[image.length - 1] ?? 0) ^ 1;
+    writeFileSync(join(folder, imagePath), image);
+    expect(() => validateReviewedAssets(folder, config.apple)).toThrow(
+      'Screenshot byte hash mismatch'
+    );
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+it('cannot mutate ASC when native capture has not been prepared', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import(
+    'node:fs'
+  );
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { applyReviewedListing } = await import('./apply-store-listing');
+  const folder = mkdtempSync(join(tmpdir(), 'passport-store-preflight-'));
+  let reads = 0;
+  try {
+    writeFileSync(join(folder, 'store.config.json'), JSON.stringify(config));
+    const capture = join(folder, 'docs/assets/app-store-screenshots/v1.3.0');
+    mkdirSync(capture, { recursive: true });
+    writeFileSync(
+      join(capture, 'capture-provenance.json'),
+      JSON.stringify({
+        uiSourceCommit: 'd42f0439639dfdb7b31d1560f83493a7cd4e73b8',
+        nativeCaptureSucceeded: false,
+        visuallyReviewed: false,
+        assets: [],
+      })
+    );
+    await expect(
+      applyReviewedListing({
+        app: {
+          id: '6793516094',
+          get context() {
+            reads++;
+            return null;
+          },
+        },
+        versions: [],
+        builds: [],
+        releaseBuild: { status: 'FINISHED', submissions: [] },
+        projectDir: folder,
+        cliRoot: folder,
+      })
+    ).rejects.toThrow('Native capture verification is required');
+    expect(reads).toBe(0);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+it('creates only approved locale records when a new version has no copied localization', async () => {
+  const { writeLocaleText } = await import('./apply-store-listing');
+  const writes: { locale: string; fields: Record<string, string> }[] = [];
+  const created: string[] = [];
+  await writeLocaleText(
+    {
+      id: 'new-version',
+      attributes: {
+        versionString: '1.3.0',
+        appStoreState: 'PREPARE_FOR_SUBMISSION',
+        releaseType: 'AFTER_APPROVAL',
+      },
+      async getLocalizationsAsync() {
+        return [];
+      },
+      async createLocalizationAsync({ locale }) {
+        created.push(locale);
+        return {
+          attributes: { locale },
+          async updateAsync(fields: Record<string, string>) {
+            writes.push({ locale, fields });
+          },
+          async getAppScreenshotSetsAsync() {
+            return [];
+          },
+        };
+      },
+      async updateBuildAsync() {
+        throw new Error(
+          'Locale text updates must not change the selected build'
+        );
+      },
+      async getBuildAsync() {
+        return null;
+      },
+    },
+    config.apple
+  );
+  expect(created).toEqual(['ja', 'en-US']);
+  expect(writes).toHaveLength(2);
+  for (const { locale, fields } of writes) {
+    const local = config.apple.info[locale];
+    expect(fields).toEqual({
+      description: local.description,
+      keywords: local.keywords.join(','),
+      promotionalText: local.promoText,
+      whatsNew: local.releaseNotes,
+    });
+  }
+});
+
+it('rejects canonical Apple screenshot order that differs from embedded SDK order', async () => {
+  const { canonicalScreenshotOrder } = await import('./apply-store-listing');
+  const shots = ['first', 'second'].map((id) => ({
+    id,
+    attributes: { fileName: `${id}.png`, fileSize: 1 },
+  }));
+  let reordered: string[] = [];
+  const set = {
+    id: 'synthetic-set',
+    context: { token: 'synthetic-token' },
+    attributes: {
+      screenshotDisplayType: 'APP_IPHONE_61',
+      appScreenshots: shots,
+    },
+    updateAsync: async (input: { appScreenshots: string[] }) => {
+      reordered = input.appScreenshots;
+    },
+  };
+  await expect(
+    canonicalScreenshotOrder(set, ['first.png', 'second.png'], async () => ({
+      data: [{ id: 'second' }, { id: 'first' }],
+    }))
+  ).rejects.toThrow('Canonical screenshot order readback mismatch');
+  expect(reordered).toEqual(['first', 'second']);
+  expect(
+    await canonicalScreenshotOrder(
+      set,
+      ['first.png', 'second.png'],
+      async () => ({
+        data: [{ id: 'first' }, { id: 'second' }],
+      })
+    )
+  ).toEqual(shots);
+});
