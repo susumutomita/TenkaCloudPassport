@@ -1,9 +1,15 @@
 /** Read-only release/listing inspection using the pinned EAS Metadata authentication route. */
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { applyReviewedListing } from './apply-store-listing.ts';
+
+const action = process.argv[2] ?? 'inspect';
+if (!['inspect', 'apply'].includes(action))
+  throw new Error('Unknown store action');
 
 const root = process.env['EAS_CLI_ROOT'];
 if (!root) throw new Error('EAS_CLI_ROOT is required');
+const cliRoot = root;
 const load = createRequire(join(root, 'package.json'));
 if (load('./package.json').version !== '21.0.2')
   throw new Error('Unexpected EAS CLI version');
@@ -91,7 +97,7 @@ class InspectStore extends MetadataPull {
     const builds = await Build.getAsync(app.context, {
       query: {
         limit: 10,
-        filter: { app: app.id, version: '15' },
+        filter: { app: app.id, version: '14,15' },
         includes: ['preReleaseVersion'],
       },
     });
@@ -105,9 +111,12 @@ class InspectStore extends MetadataPull {
               processingState: unknown;
               uploadedDate: unknown;
               expired: unknown;
+              preReleaseVersion?: { attributes: { version: string } };
             };
           }) => ({
             id: item.id,
+            appId: app.id,
+            appVersion: item.attributes.preReleaseVersion?.attributes.version,
             buildNumber: item.attributes.version,
             processingState: item.attributes.processingState,
             uploadedDate: item.attributes.uploadedDate,
@@ -171,6 +180,17 @@ class InspectStore extends MetadataPull {
         );
       }
     }
+    if (action === 'apply') {
+      stage = 'reviewed listing application';
+      await applyReviewedListing({
+        app,
+        versions,
+        builds,
+        releaseBuild: build,
+        projectDir,
+        cliRoot,
+      });
+    }
   }
 }
 try {
@@ -193,10 +213,15 @@ try {
               : /400|bad request|query|parameter/i.test(message)
                 ? 'request parameter rejected'
                 : 'unclassified failure';
-  console.error('Store inspection failed; no listing mutation was attempted.', {
-    stage,
-    reason,
-    error: error instanceof Error ? error.name : 'UnknownError',
-  });
+  console.error(
+    action === 'inspect'
+      ? 'Store inspection failed; no listing mutation was attempted.'
+      : 'Store listing application failed; inspect current remote state before retry.',
+    {
+      stage,
+      reason,
+      error: error instanceof Error ? error.name : 'UnknownError',
+    }
+  );
   process.exitCode = 1;
 }

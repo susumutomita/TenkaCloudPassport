@@ -39,3 +39,47 @@ for (const locale of ['ja', 'en-US']) {
     expect(info.keywords).not.toContain('共通点');
   });
 }
+
+it('cannot mutate ASC when native capture has not been prepared', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import(
+    'node:fs'
+  );
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { applyReviewedListing } = await import('./apply-store-listing');
+  const folder = mkdtempSync(join(tmpdir(), 'passport-store-preflight-'));
+  let reads = 0;
+  try {
+    writeFileSync(join(folder, 'store.config.json'), JSON.stringify(config));
+    const capture = join(folder, 'docs/assets/app-store-screenshots/v1.3.0');
+    mkdirSync(capture, { recursive: true });
+    writeFileSync(
+      join(capture, 'capture-provenance.json'),
+      JSON.stringify({
+        uiSourceCommit: 'd42f0439639dfdb7b31d1560f83493a7cd4e73b8',
+        nativeCaptureSucceeded: false,
+        visuallyReviewed: false,
+        assets: [],
+      })
+    );
+    await expect(
+      applyReviewedListing({
+        app: {
+          id: '6793516094',
+          get context() {
+            reads++;
+            return null;
+          },
+        },
+        versions: [],
+        builds: [],
+        releaseBuild: { status: 'FINISHED', submissions: [] },
+        projectDir: folder,
+        cliRoot: folder,
+      })
+    ).rejects.toThrow('Native capture verification is required');
+    expect(reads).toBe(0);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});

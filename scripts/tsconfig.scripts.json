@@ -36,6 +36,10 @@
     "generate-app-icons.ts",
     "generate-app-icons.test.ts",
     "inspect-store-listing.ts",
-    "store-listing-metadata.test.ts"
-  ]
+    "store-listing-metadata.test.ts",
+    "apply-store-listing.ts"
+  ],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true
+  }
 }
