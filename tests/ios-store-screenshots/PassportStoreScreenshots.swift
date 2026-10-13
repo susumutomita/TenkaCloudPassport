@@ -34,7 +34,9 @@ final class PassportStoreScreenshots: XCTestCase {
     attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
   }
   func testCurrentStoreScreens() throws {
-    let name = app.textFields["名前"].firstMatch; name.tap(); name.typeText("Sample Creator")
+    let name = app.textFields["名前"].firstMatch; name.tap(); name.typeText("Sample Creator\n")
+    let keyboardClosed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+    XCTAssertEqual(XCTWaiter.wait(for: [keyboardClosed], timeout: 10), .completed)
     tap("保存")
     XCTAssertTrue(app.buttons["編集する"].firstMatch.waitForExistence(timeout: 30))
     tap("編集する")
