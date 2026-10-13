@@ -185,13 +185,7 @@ class InspectStore extends MetadataPull {
         );
       }
     }
-    if (
-      action === 'inspect' &&
-      versions.some(
-        (item: { attributes: { versionString: string } }) =>
-          item.attributes.versionString === '1.3.0'
-      )
-    ) {
+    if (action === 'inspect') {
       stage = 'saved listing read-only verification';
       await verifySavedListing({
         app,

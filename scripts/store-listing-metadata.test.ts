@@ -246,3 +246,73 @@ it('accepts empty HTTP204 PATCH then requires canonical GET, while read-only nev
   ).toEqual({ data: [{ id: 'first' }] });
   expect(calls).toEqual(['patch', 'get']);
 });
+
+it('rejects missing target version in read-only verification before any remote context access', async () => {
+  const { verifySavedListing } = await import('./apply-store-listing');
+  let contexts = 0;
+  await expect(
+    verifySavedListing({
+      app: {
+        id: '6793516094',
+        get context() {
+          contexts++;
+          return null;
+        },
+      },
+      versions: [],
+      builds: [
+        {
+          id: 'synthetic-build',
+          attributes: {
+            version: '15',
+            processingState: 'VALID',
+            expired: false,
+            preReleaseVersion: { attributes: { version: '1.3.0' } },
+          },
+        },
+      ],
+      releaseBuild: {
+        status: 'FINISHED',
+        submissions: [
+          {
+            id: '304c3108-725a-4696-8063-4e41ce86f973',
+            status: 'FINISHED',
+          },
+        ],
+      },
+      projectDir: new URL('..', import.meta.url).pathname,
+      cliRoot: '/does-not-exist',
+    })
+  ).rejects.toThrow('Saved target version is missing');
+  expect(contexts).toBe(0);
+});
+it('rejects old nonempty and duplicate remote screenshot display sets', async () => {
+  const { verifyScreenshotDisplayTypes } = await import(
+    './apply-store-listing'
+  );
+  const shot = {
+    id: 'old',
+    attributes: { fileName: 'old-ai.png', fileSize: 1 },
+  };
+  const set = (type: string, shots = [] as (typeof shot)[]) => ({
+    attributes: { screenshotDisplayType: type, appScreenshots: shots },
+  });
+  expect(() =>
+    verifyScreenshotDisplayTypes(
+      [set('APP_IPHONE_61'), set('OLD_DISPLAY', [shot])],
+      ['APP_IPHONE_61']
+    )
+  ).toThrow('Unexpected nonempty screenshot display type');
+  expect(() =>
+    verifyScreenshotDisplayTypes(
+      [set('APP_IPHONE_61'), set('APP_IPHONE_61')],
+      ['APP_IPHONE_61']
+    )
+  ).toThrow('Duplicate screenshot display type');
+  expect(() =>
+    verifyScreenshotDisplayTypes(
+      [set('APP_IPHONE_61'), set('OLD_DISPLAY')],
+      ['APP_IPHONE_61']
+    )
+  ).not.toThrow();
+});

@@ -358,6 +358,22 @@ export async function canonicalScreenshotOrder(
     throw new Error('Canonical screenshot order readback mismatch');
   return shots;
 }
+export function verifyScreenshotDisplayTypes(
+  sets: Pick<ShotSet, 'attributes'>[],
+  expectedTypes: string[]
+): void {
+  const seen = new Set<string>();
+  for (const set of sets) {
+    const type = set.attributes.screenshotDisplayType;
+    if (seen.has(type)) throw new Error('Duplicate screenshot display type');
+    seen.add(type);
+    if (
+      !expectedTypes.includes(type) &&
+      set.attributes.appScreenshots.length > 0
+    )
+      throw new Error('Unexpected nonempty screenshot display type');
+  }
+}
 async function verifyLocale(
   remote: LocaleModel,
   local: Listing['info'][string],
@@ -370,6 +386,7 @@ async function verifyLocale(
       throw new Error('Listing text readback mismatch');
   }
   const sets = await remote.getAppScreenshotSetsAsync();
+  verifyScreenshotDisplayTypes(sets, Object.keys(local.screenshots ?? {}));
   if (!local.screenshots) {
     if (sets.some((set) => set.attributes.appScreenshots.length > 0))
       throw new Error(
