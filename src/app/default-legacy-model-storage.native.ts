@@ -1,17 +1,21 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import {
   createLegacyModelStorage,
+  LEGACY_DOWNLOAD_CACHE_NAME,
   type LegacyModelFile,
 } from './legacy-model-storage';
 /** Never creates a directory or touches files until explicit diagnostics/deletion. */
 export function createDefaultLegacyModelStorage() {
   const directory = new Directory(Paths.document, 'local-models');
+  const legacyDownload = new File(Paths.cache, LEGACY_DOWNLOAD_CACHE_NAME);
   return createLegacyModelStorage({
     list() {
-      if (!directory.exists) return [];
-      return directory.list().map(
+      const entries = directory.exists ? directory.list() : [];
+      if (legacyDownload.exists) entries.push(legacyDownload);
+      return entries.map(
         (entry): LegacyModelFile => ({
           name: entry.name,
+          isLegacyDownload: entry === legacyDownload,
           size() {
             if (!(entry instanceof File))
               throw new Error('旧モデルの保存領域に不正な項目があります。');

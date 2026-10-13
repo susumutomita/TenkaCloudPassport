@@ -2,11 +2,12 @@ import { expect, it } from 'bun:test';
 import {
   createLegacyModelStorage,
   isLegacyModelFile,
+  LEGACY_DOWNLOAD_CACHE_NAME,
   type LegacyModelFile,
 } from './legacy-model-storage';
 
 const digest = 'a'.repeat(64);
-function store(initial: Record<string, number>) {
+function store(initial: Record<string, number>, cacheArtifact = false) {
   const files = new Map(Object.entries(initial));
   const failures = new Set<string>();
   const port = createLegacyModelStorage({
@@ -14,6 +15,8 @@ function store(initial: Record<string, number>) {
       [...files].map(
         ([name, size]): LegacyModelFile => ({
           name,
+          isLegacyDownload:
+            cacheArtifact && name === LEGACY_DOWNLOAD_CACHE_NAME,
           size: () => size,
           remove: () => {
             if (failures.has(name))
@@ -107,4 +110,19 @@ it('matches exact historical filenames only, rejecting paths and arbitrary files
     'learning.json',
   ])
     expect(isLegacyModelFile(name)).toBe(false);
+});
+
+it('includes the exact historical interrupted-download cache artifact without touching other cache files', async () => {
+  const initial = {
+    [LEGACY_DOWNLOAD_CACHE_NAME]: 1100000000,
+    'other-download.gguf': 20,
+  };
+  expect(await store(initial).port.inspect()).toBeNull();
+  const s = store(initial, true);
+  expect(await s.port.inspect()).toMatchObject({
+    sizeBytes: 1100000000,
+    count: 1,
+  });
+  await s.port.remove();
+  expect([...s.files]).toEqual([['other-download.gguf', 20]]);
 });

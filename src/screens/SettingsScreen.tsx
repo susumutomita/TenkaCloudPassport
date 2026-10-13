@@ -114,13 +114,13 @@ function DataErasureSection({
           </Text>
         ) : null}
         <ActionButton
-          disabled={dataErasure.busy}
+          disabled={dataErasure.busy || dataErasure.loading}
           label={t.eraseAllDataConfirmButton}
           onPress={() => void dataErasure.confirmDeleteAll()}
           variant="danger"
         />
         <ActionButton
-          disabled={dataErasure.busy}
+          disabled={dataErasure.busy || dataErasure.loading}
           label={t.eraseAllDataCancelButton}
           onPress={dataErasure.cancelDeleteAll}
           variant="secondary"
@@ -131,7 +131,7 @@ function DataErasureSection({
   return (
     <ActionButton
       accessibilityHint={t.eraseAllDataButtonHint}
-      disabled={dataErasure.busy}
+      disabled={dataErasure.busy || dataErasure.loading}
       label={t.eraseAllDataButton}
       onPress={dataErasure.requestDeleteAll}
       variant="danger"

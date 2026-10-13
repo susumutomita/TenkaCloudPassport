@@ -3,7 +3,7 @@
 This XCTest runner launches the existing `cloud.tenka.passport` app. It does not create a new product app or change signing. Use a **new, test-only simulator**: the final test deliberately deletes all of that simulator app's test data. Never run it against a simulator containing personal data.
 
 1. Install existing locked dependencies with `bun install --frozen-lockfile --ignore-scripts`.
-2. Generate the existing app's native project with `bunx expo prebuild --platform ios --no-install`, explicitly verify/install its existing native artifacts with `make setup-llama-native`, then run `pod install` in `ios`.
+2. Generate the existing app's native project with `bunx expo prebuild --platform ios --no-install`, then run `pod install` in `ios`; retired inference artifacts are no longer installed.
 3. Build `TenkaCloudPassport.xcworkspace`, scheme `TenkaCloudPassport`, for the dedicated simulator with `CODE_SIGNING_ALLOWED=NO`.
 4. Start a separate localhost Metro port, e.g. `NODE_OPTIONS=--dns-result-order=ipv4first CI=1 bunx expo start --dev-client --port 8097 --localhost`. Node's IPv6-only localhost binding otherwise conflicts with Expo's `127.0.0.1` manifest URL on this machine.
 5. Open the development-client URL on the dedicated simulator. Set its app locale to Japanese using the normal locale toggle or a test-only `tenkacloud-passport-locale-preference` file containing `ja`.
