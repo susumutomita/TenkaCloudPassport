@@ -182,7 +182,7 @@ it('rejects canonical Apple screenshot order that differs from embedded SDK orde
     id,
     attributes: { fileName: `${id}.png`, fileSize: 1 },
   }));
-  let reordered: string[] = [];
+  let requestedOrder: string[] | undefined;
   const set = {
     id: 'synthetic-set',
     context: { token: 'synthetic-token' },
@@ -190,23 +190,129 @@ it('rejects canonical Apple screenshot order that differs from embedded SDK orde
       screenshotDisplayType: 'APP_IPHONE_61',
       appScreenshots: shots,
     },
-    updateAsync: async (input: { appScreenshots: string[] }) => {
-      reordered = input.appScreenshots;
-    },
   };
   await expect(
-    canonicalScreenshotOrder(set, ['first.png', 'second.png'], async () => ({
-      data: [{ id: 'second' }, { id: 'first' }],
-    }))
+    canonicalScreenshotOrder(
+      set,
+      ['first.png', 'second.png'],
+      async (_url, _token, ids) => {
+        requestedOrder = ids;
+        return { data: [{ id: 'second' }, { id: 'first' }] };
+      }
+    )
   ).rejects.toThrow('Canonical screenshot order readback mismatch');
-  expect(reordered).toEqual(['first', 'second']);
+  expect(requestedOrder).toBeUndefined();
   expect(
     await canonicalScreenshotOrder(
       set,
       ['first.png', 'second.png'],
-      async () => ({
-        data: [{ id: 'first' }, { id: 'second' }],
-      })
+      async (_url, _token, ids) => {
+        requestedOrder = ids;
+        return { data: [{ id: 'first' }, { id: 'second' }] };
+      },
+      true
     )
   ).toEqual(shots);
+  expect(requestedOrder).toEqual(['first', 'second']);
+});
+it('accepts empty HTTP204 PATCH then requires canonical GET, while read-only never patches', async () => {
+  const { requestCanonicalScreenshots } = await import('./apply-store-listing');
+  const calls: string[] = [];
+  const client = {
+    patch: async (_url: string, data: unknown) => {
+      calls.push('patch');
+      expect(data).toEqual({ data: [{ type: 'appScreenshots', id: 'first' }] });
+      return { status: 204, data: '' };
+    },
+    get: async () => {
+      calls.push('get');
+      return { data: { data: [{ id: 'first' }] } };
+    },
+  };
+  await requestCanonicalScreenshots(
+    client,
+    'https://example.invalid/relationship',
+    'synthetic-token'
+  );
+  expect(calls).toEqual(['get']);
+  calls.length = 0;
+  expect(
+    await requestCanonicalScreenshots(
+      client,
+      'https://example.invalid/relationship',
+      'synthetic-token',
+      ['first']
+    )
+  ).toEqual({ data: [{ id: 'first' }] });
+  expect(calls).toEqual(['patch', 'get']);
+});
+
+it('rejects missing target version in read-only verification before any remote context access', async () => {
+  const { verifySavedListing } = await import('./apply-store-listing');
+  let contexts = 0;
+  await expect(
+    verifySavedListing({
+      app: {
+        id: '6793516094',
+        get context() {
+          contexts++;
+          return null;
+        },
+      },
+      versions: [],
+      builds: [
+        {
+          id: 'synthetic-build',
+          attributes: {
+            version: '15',
+            processingState: 'VALID',
+            expired: false,
+            preReleaseVersion: { attributes: { version: '1.3.0' } },
+          },
+        },
+      ],
+      releaseBuild: {
+        status: 'FINISHED',
+        submissions: [
+          {
+            id: '304c3108-725a-4696-8063-4e41ce86f973',
+            status: 'FINISHED',
+          },
+        ],
+      },
+      projectDir: new URL('..', import.meta.url).pathname,
+      cliRoot: '/does-not-exist',
+    })
+  ).rejects.toThrow('Saved target version is missing');
+  expect(contexts).toBe(0);
+});
+it('rejects old nonempty and duplicate remote screenshot display sets', async () => {
+  const { verifyScreenshotDisplayTypes } = await import(
+    './apply-store-listing'
+  );
+  const shot = {
+    id: 'old',
+    attributes: { fileName: 'old-ai.png', fileSize: 1 },
+  };
+  const set = (type: string, shots = [] as (typeof shot)[]) => ({
+    attributes: { screenshotDisplayType: type, appScreenshots: shots },
+  });
+  expect(() =>
+    verifyScreenshotDisplayTypes(
+      [set('APP_IPHONE_61'), set('OLD_DISPLAY', [shot])],
+      ['APP_IPHONE_61']
+    )
+  ).toThrow('Unexpected nonempty screenshot display type');
+  expect(() =>
+    verifyScreenshotDisplayTypes(
+      [set('APP_IPHONE_61'), set('APP_IPHONE_61')],
+      ['APP_IPHONE_61']
+    )
+  ).toThrow('Duplicate screenshot display type');
+  expect(() =>
+    verifyScreenshotDisplayTypes(
+      [set('APP_IPHONE_61'), set('OLD_DISPLAY')],
+      ['APP_IPHONE_61']
+    )
+  ).not.toThrow();
 });
