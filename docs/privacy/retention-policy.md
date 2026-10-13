@@ -7,6 +7,8 @@ ADR-0033 により手動 JSON バックアップ機能を削除したため、�
 実際に復元・再エクスポートできることを意味しない。** Sanitized Diagnostic Report・
 Pilot Event Aggregate の明示 Share は独立した経路として引き続き有効である。
 
+会話推論と AI 会話例は廃止済み。以下の Rules / Lounge の短命データ契約と、旧ファイルの明示削除だけを維持する。
+
 ## 基本原則
 
 - `L3` の Lounge 由来データは永続ストレージ、ファイル、ログ、クラッシュレポートへ書き込まない。
@@ -94,8 +96,8 @@ QR 内の一時公開鍵に対応する秘密鍵を持つことを検証する�
 | Pet Message と推論データ | 処理中かつ Lounge 参加中だけである。 | 処理完了、失敗、キャンセル、`retired`、退出、Host 終了、20 分満了の契約に従う。 | 復元しない。 | 対象外である。 |
 | Bridge、`no-signal`、`retired` | 結果画面を閉じるまで、かつ Lounge セッションの期限内である。 | 画面終了、退出、Host 終了、20 分満了の契約に従う。 | 復元しない。 | 対象外である。 |
 | 端末設定とモデル検証記録 | 設定変更または初期化までである。 | 設定初期化、モデル解除、アプリ削除である。 | 復元できる。 | allowlist 内の項目だけが対象である。 |
-| GGUF モデル | Owner が置換または削除するまでである。 | 削除、検証失敗時の隔離、置換、アプリ削除である。 | 検証後に利用できる。 | 対象外である。 |
-| Local Model Benchmark | Model ごとに直近 20 件までである。 | Model 削除、計測記録削除、設定初期化、アプリ削除である。 | private Manifest の strict 検証後だけ復元できる。 | 対象外である。 |
+| 旧 GGUF・途中取得キャッシュ | 利用者が明示削除するまでである。新規取得・検証・利用はしない。 | 設定 → 旧モデルの片付けでの確認付き削除、またはアプリ削除である。 | 利用しない。容量確認だけが可能。 | 対象外である。 |
+| 旧 manifest・計測記録 | 過去版の残骸だけで、新規生成しない。 | 旧モデル管理ファイルの明示削除、またはアプリ削除である。 | 内容を解析・再利用しない。 | 対象外である。 |
 | Pilot Event Aggregate | Process 終了までである。未完了セッションと正確な duration は Aggregate へ残さない。 | Process 終了または全 Local Data 削除のうち早い時点である。 | 復元しない。 | Outcome 5 件以上を Preview 後に手動 Share した固定 JSON だけが対象である。 |
 | Formative Event Temporary Coded Record | Public Aggregate 更新直後またはセッション終了から 7 日以内の早い方である。 | セッションを閉じる確認前の撤回、Aggregate 更新、7 日満了、禁止 Field の発見のうち最も早い時点で Record 全体を削除する。 | 復元しない。 | 対象外である。Privacy データ台帳の `L6P` allowlist への明示投影だけを許可する。 |
 | Sanitized Formative Event Public Aggregate | Repository history と同じである。 | 誤りまたは禁止 Field は Public Aggregate と Review PR を Supersede して訂正する。 | 公開 Repository から再取得できる。元の `L6` は復元できない。 | 対象外である。固定 Code から作る 140 文字以内の sanitized pattern summary は許可するが、正確な人数、Role cohort、Locale cohort、Role × Locale、個別 Record、参加者由来の自由記述、逐語引用を含めない。 |

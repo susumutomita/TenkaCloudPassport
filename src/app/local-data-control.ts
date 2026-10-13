@@ -277,6 +277,7 @@ export class LocalDataControlError extends Error {
 
 export interface LocalDataControl {
   preview(): Promise<LocalDataPreview>;
+  inspectModel(): Promise<LocalModelInstallation | null>;
   resetPassport(): Promise<void>;
   removeModel(): Promise<void>;
   deleteAll(): Promise<LocalDataPreview>;
@@ -465,6 +466,13 @@ export function createLocalDataControl({
         throw storageFailure();
       } finally {
         lease.release();
+      }
+    },
+    async inspectModel(): Promise<LocalModelInstallation | null> {
+      try {
+        return await modelStorage.inspect();
+      } catch {
+        throw storageFailure();
       }
     },
     async removeModel(): Promise<void> {

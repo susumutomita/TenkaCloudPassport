@@ -13,6 +13,7 @@ import {
   type LocalDataControl,
   LocalDataControlError,
   type LocalDataPreview,
+  type LocalModelInstallation,
 } from './local-data-control';
 
 const DIAGNOSTIC_REPORT_FILE_NAME = 'tenkacloud-passport-diagnostic.json';
@@ -29,6 +30,8 @@ export type DiagnosticNoticeKind =
 export interface LocalDiagnosticsFlow {
   readonly diagnosticPreview: DiagnosticReportPreview | null;
   readonly localDataPreview: LocalDataPreview | null;
+  readonly modelPreview: LocalModelInstallation | null | undefined;
+  readonly refreshModel: () => Promise<void>;
   readonly loading: boolean;
   readonly busy: boolean;
   readonly recoveryRequired: boolean;
@@ -95,6 +98,9 @@ export function useLocalDiagnosticsFlow({
     useState<DiagnosticReportPreview | null>(null);
   const [localDataPreview, setLocalDataPreview] =
     useState<LocalDataPreview | null>(null);
+  const [modelPreview, setModelPreview] = useState<
+    LocalModelInstallation | null | undefined
+  >(undefined);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recoveryRequired, setRecoveryRequired] = useState(false);
@@ -109,6 +115,7 @@ export function useLocalDiagnosticsFlow({
     refreshGeneration.current += 1;
     setDiagnosticPreview(null);
     setLocalDataPreview(null);
+    setModelPreview(undefined);
     setLoading(false);
   }, []);
 
@@ -257,6 +264,24 @@ export function useLocalDiagnosticsFlow({
     refresh,
   ]);
 
+  const refreshModel = useCallback(async (): Promise<void> => {
+    const generation = ++refreshGeneration.current;
+    setLoading(true);
+    setError(null);
+    setDiagnosticPreview(null);
+    setLocalDataPreview(null);
+    try {
+      const model = await localDataControl.inspectModel();
+      if (refreshGeneration.current === generation) setModelPreview(model);
+    } catch (cause: unknown) {
+      if (refreshGeneration.current !== generation) return;
+      setModelPreview(undefined);
+      applyError(cause);
+    } finally {
+      if (refreshGeneration.current === generation) setLoading(false);
+    }
+  }, [applyError, localDataControl]);
+
   const removeModel = useCallback(async (): Promise<void> => {
     if (busy || recoveryRequired) return;
     setBusy(true);
@@ -264,7 +289,7 @@ export function useLocalDiagnosticsFlow({
       await localDataControl.removeModel();
       onModelRemoved?.();
       setNotice('model-removed');
-      await refresh();
+      await refreshModel();
     } catch (cause: unknown) {
       applyError(cause);
     } finally {
@@ -276,7 +301,7 @@ export function useLocalDiagnosticsFlow({
     localDataControl,
     onModelRemoved,
     recoveryRequired,
-    refresh,
+    refreshModel,
   ]);
 
   const requestDeleteAll = useCallback((): void => {
@@ -324,6 +349,8 @@ export function useLocalDiagnosticsFlow({
   return {
     diagnosticPreview,
     localDataPreview,
+    modelPreview,
+    refreshModel,
     loading,
     busy,
     recoveryRequired,

@@ -209,4 +209,4 @@ Development follows [AGENTS.md](./AGENTS.md), [CLAUDE.md](./CLAUDE.md), the
 [Definition of Done](./docs/architecture/quality-bar.md), and the
 [Architecture Harness](./docs/architecture/harness.md). An MVP, placeholder, or green CI alone is not complete.
 
-Conversation inference code and native dependencies are removed. Existing model files remain until explicitly deleted through diagnostics; inspection and cleanup require no inference runtime.
+Conversation inference code and native dependencies are removed. Existing model files remain until explicitly deleted through Settings → Legacy model cleanup; inspection and cleanup require no inference runtime.

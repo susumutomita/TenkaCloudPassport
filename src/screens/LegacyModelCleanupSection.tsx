@@ -11,9 +11,9 @@ export type LegacyCleanupFlow = Pick<
   | 'busy'
   | 'loading'
   | 'recoveryRequired'
-  | 'localDataPreview'
+  | 'modelPreview'
   | 'error'
-  | 'refresh'
+  | 'refreshModel'
   | 'removeModel'
 >;
 const COPY = {
@@ -54,7 +54,7 @@ export function LegacyModelCleanupSection({
   const [confirm, setConfirm] = useState(false);
   const t = COPY[locale];
   const blocked = flow.busy || flow.loading || flow.recoveryRequired;
-  const model = flow.localDataPreview?.model;
+  const model = flow.modelPreview;
   function remove() {
     if (!confirm) {
       setConfirm(true);
@@ -73,13 +73,13 @@ export function LegacyModelCleanupSection({
         variant="secondary"
         onPress={() => {
           setConfirm(false);
-          void flow.refresh();
+          void flow.refreshModel();
         }}
       />
       {flow.loading ? (
         <Text accessibilityLiveRegion="polite">{t.loading}</Text>
       ) : null}
-      {flow.localDataPreview ? (
+      {flow.modelPreview !== undefined ? (
         <Text accessibilityLiveRegion="polite">
           {model ? `${model.sizeBytes.toLocaleString()} bytes` : t.empty}
         </Text>
