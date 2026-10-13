@@ -1,0 +1,60 @@
+name: ios-resubmit-1.2.2
+
+on:
+  push:
+    branches: [release/resubmit-1.2.2-build-14]
+    paths: [.github/workflows/ios-resubmit-1.2.2.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-submit-d726ae3e-fe94-4042-bdfe-5975c5f2a930
+  cancel-in-progress: false
+
+jobs:
+  inspect-existing-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect existing build and its submissions
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: python
+        run: |
+          import json, os, urllib.request
+          build_id = 'd726ae3e-fe94-4042-bdfe-5975c5f2a930'
+          query = '''query ExistingReleaseBuild($id: ID!) {
+            builds { byId(buildId: $id) {
+              id status platform appVersion appBuildVersion gitCommitHash
+              project { id }
+              submissions { id status platform error { errorCode message } }
+            } }
+          }'''
+          token = os.environ.get('EXPO_TOKEN')
+          if not token:
+              raise SystemExit('Existing EXPO_TOKEN is unavailable; no submission attempted')
+          request = urllib.request.Request('https://api.expo.dev/graphql',
+              data=json.dumps({'query': query, 'variables': {'id': build_id}}).encode(),
+              headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token})
+          try:
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  result = json.load(response)
+          except Exception:
+              raise SystemExit('EAS read-only query failed; no submission attempted')
+          if result.get('errors'):
+              raise SystemExit('EAS query returned errors; no submission attempted')
+          build = result['data']['builds']['byId']
+          expected = {'id': build_id, 'status': 'FINISHED', 'platform': 'IOS',
+              'appVersion': '1.2.2', 'appBuildVersion': '14',
+              'gitCommitHash': '5bbdb1bd0312093410420e542b66dcd1265636c8'}
+          if any(build.get(key) != value for key, value in expected.items()):
+              raise SystemExit('Existing build identity/status mismatch; no submission attempted')
+          if build['project']['id'] != '82efa217-a2ac-4209-a975-ea7198a51cda':
+              raise SystemExit('Unexpected EAS project; no submission attempted')
+          print(json.dumps({key: build[key] for key in expected}))
+          for submission in build['submissions']:
+              error = submission.get('error') or {}
+              # Only statuses and known agreement error classification are emitted.
+              print(json.dumps({'submissionId': submission['id'], 'status': submission['status'],
+                  'missingAgreement': 'agreement' in error.get('message', '').lower(),
+                  'errorCode': error.get('errorCode')}))
