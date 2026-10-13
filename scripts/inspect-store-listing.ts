@@ -1,7 +1,10 @@
 /** Read-only release/listing inspection using the pinned EAS Metadata authentication route. */
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { applyReviewedListing } from './apply-store-listing.ts';
+import {
+  applyReviewedListing,
+  verifySavedListing,
+} from './apply-store-listing.ts';
 
 const action = process.argv[2] ?? 'inspect';
 if (!['inspect', 'apply'].includes(action))
@@ -181,6 +184,23 @@ class InspectStore extends MetadataPull {
           })
         );
       }
+    }
+    if (
+      action === 'inspect' &&
+      versions.some(
+        (item: { attributes: { versionString: string } }) =>
+          item.attributes.versionString === '1.3.0'
+      )
+    ) {
+      stage = 'saved listing read-only verification';
+      await verifySavedListing({
+        app,
+        versions,
+        builds,
+        releaseBuild: build,
+        projectDir,
+        cliRoot,
+      });
     }
     if (action === 'apply') {
       stage = 'reviewed listing application';

@@ -182,7 +182,7 @@ it('rejects canonical Apple screenshot order that differs from embedded SDK orde
     id,
     attributes: { fileName: `${id}.png`, fileSize: 1 },
   }));
-  let reordered: string[] = [];
+  let requestedOrder: string[] | undefined;
   const set = {
     id: 'synthetic-set',
     context: { token: 'synthetic-token' },
@@ -190,23 +190,59 @@ it('rejects canonical Apple screenshot order that differs from embedded SDK orde
       screenshotDisplayType: 'APP_IPHONE_61',
       appScreenshots: shots,
     },
-    updateAsync: async (input: { appScreenshots: string[] }) => {
-      reordered = input.appScreenshots;
-    },
   };
   await expect(
-    canonicalScreenshotOrder(set, ['first.png', 'second.png'], async () => ({
-      data: [{ id: 'second' }, { id: 'first' }],
-    }))
+    canonicalScreenshotOrder(
+      set,
+      ['first.png', 'second.png'],
+      async (_url, _token, ids) => {
+        requestedOrder = ids;
+        return { data: [{ id: 'second' }, { id: 'first' }] };
+      }
+    )
   ).rejects.toThrow('Canonical screenshot order readback mismatch');
-  expect(reordered).toEqual(['first', 'second']);
+  expect(requestedOrder).toBeUndefined();
   expect(
     await canonicalScreenshotOrder(
       set,
       ['first.png', 'second.png'],
-      async () => ({
-        data: [{ id: 'first' }, { id: 'second' }],
-      })
+      async (_url, _token, ids) => {
+        requestedOrder = ids;
+        return { data: [{ id: 'first' }, { id: 'second' }] };
+      },
+      true
     )
   ).toEqual(shots);
+  expect(requestedOrder).toEqual(['first', 'second']);
+});
+it('accepts empty HTTP204 PATCH then requires canonical GET, while read-only never patches', async () => {
+  const { requestCanonicalScreenshots } = await import('./apply-store-listing');
+  const calls: string[] = [];
+  const client = {
+    patch: async (_url: string, data: unknown) => {
+      calls.push('patch');
+      expect(data).toEqual({ data: [{ type: 'appScreenshots', id: 'first' }] });
+      return { status: 204, data: '' };
+    },
+    get: async () => {
+      calls.push('get');
+      return { data: { data: [{ id: 'first' }] } };
+    },
+  };
+  await requestCanonicalScreenshots(
+    client,
+    'https://example.invalid/relationship',
+    'synthetic-token'
+  );
+  expect(calls).toEqual(['get']);
+  calls.length = 0;
+  expect(
+    await requestCanonicalScreenshots(
+      client,
+      'https://example.invalid/relationship',
+      'synthetic-token',
+      ['first']
+    )
+  ).toEqual({ data: [{ id: 'first' }] });
+  expect(calls).toEqual(['patch', 'get']);
 });

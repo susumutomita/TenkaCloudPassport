@@ -21,7 +21,6 @@ type Shot = {
 type ShotSet = {
   id: string;
   context: { token?: string | { getToken(): Promise<string> } };
-  updateAsync(input: { appScreenshots: string[] }): Promise<unknown>;
   attributes: { screenshotDisplayType: string; appScreenshots: Shot[] };
 };
 type LocaleModel = {
@@ -298,10 +297,44 @@ function verifyScreenshotSet(
       throw new Error('Screenshot content/processing readback mismatch');
   }
 }
+type RelationshipClient = {
+  patch(url: string, data: unknown, options: unknown): Promise<unknown>;
+  get(
+    url: string,
+    options: unknown
+  ): Promise<{ data: { data: { id: string }[] } }>;
+};
+export async function requestCanonicalScreenshots(
+  client: RelationshipClient,
+  url: string,
+  token: string,
+  orderedIds?: string[]
+): Promise<{ data: { id: string }[] }> {
+  const options = {
+    headers: { Authorization: `Bearer ${token}` },
+    timeout: 30000,
+  };
+  // Apple's relationship PATCH can return HTTP 204 with an empty body.
+  // Raw Axios accepts this, unlike the pinned SDK model response parser.
+  if (orderedIds)
+    await client.patch(
+      url,
+      {
+        data: orderedIds.map((id) => ({ type: 'appScreenshots', id })),
+      },
+      options
+    );
+  return (await client.get(url, options)).data;
+}
 export async function canonicalScreenshotOrder(
   set: ShotSet,
   paths: string[],
-  request: (url: string, token: string) => Promise<{ data: { id: string }[] }>
+  request: (
+    url: string,
+    token: string,
+    orderedIds?: string[]
+  ) => Promise<{ data: { id: string }[] }>,
+  reorder = false
 ): Promise<Shot[]> {
   const shots = paths.map((path) => {
     const shot = set.attributes.appScreenshots.find(
@@ -310,13 +343,13 @@ export async function canonicalScreenshotOrder(
     if (!shot) throw new Error('Expected screenshot is missing');
     return shot;
   });
-  await set.updateAsync({ appScreenshots: shots.map((shot) => shot.id) });
   const token = set.context.token;
   const signed = typeof token === 'string' ? token : await token?.getToken();
   if (!signed) throw new Error('Existing Apple API authentication is required');
   const response = await request(
     `https://api.appstoreconnect.apple.com/v1/appScreenshotSets/${set.id}/relationships/appScreenshots`,
-    signed
+    signed,
+    reorder ? shots.map((shot) => shot.id) : undefined
   );
   if (
     response.data.map((item) => item.id).join(',') !==
@@ -329,7 +362,8 @@ async function verifyLocale(
   remote: LocaleModel,
   local: Listing['info'][string],
   projectDir: string,
-  cliRoot: string
+  cliRoot: string,
+  reorder = false
 ): Promise<void> {
   for (const [key, expected] of Object.entries(listingFields(local))) {
     if (Reflect.get(remote.attributes, key) !== expected)
@@ -353,13 +387,9 @@ async function verifyLocale(
     const shots = await canonicalScreenshotOrder(
       set,
       paths,
-      async (url, token) => {
-        const response = await getRequestClient().get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 30000,
-        });
-        return response.data;
-      }
+      (url, token, orderedIds) =>
+        requestCanonicalScreenshots(getRequestClient(), url, token, orderedIds),
+      reorder
     );
     verifyScreenshotSet(shots, paths, projectDir);
   }
@@ -389,7 +419,7 @@ async function syncNativeScreenshots(
     }),
   });
 }
-export async function applyReviewedListing(input: {
+type StoreListingInput = {
   app: StoreApp;
   versions: VersionModel[];
   builds: BuildModel[];
@@ -399,7 +429,53 @@ export async function applyReviewedListing(input: {
   };
   projectDir: string;
   cliRoot: string;
-}): Promise<void> {
+};
+export async function verifySavedListing(
+  input: StoreListingInput
+): Promise<void> {
+  const { app, versions, builds, releaseBuild, projectDir, cliRoot } = input;
+  if (app.id !== '6793516094') throw new Error('Target app identity mismatch');
+  const listing = JSON.parse(
+    readFileSync(join(projectDir, 'store.config.json'), 'utf8')
+  ).apple as Listing;
+  validateReviewedAssets(projectDir, listing);
+  const appleBuild = verifiedAppleBuild(builds, releaseBuild);
+  const version = versions.find(
+    (item) => item.attributes.versionString === '1.3.0'
+  );
+  if (!version) throw new Error('Saved target version is missing');
+  if ((await version.getBuildAsync())?.id !== appleBuild.id)
+    throw new Error('Selected build readback mismatch');
+  const locales = await version.getLocalizationsAsync();
+  for (const name of ['ja', 'en-US']) {
+    const remote = locales.find((item) => item.attributes.locale === name);
+    const local = listing.info[name];
+    if (!remote || !local)
+      throw new Error('Approved localization readback missing');
+    await verifyLocale(remote, local, projectDir, cliRoot, false);
+  }
+  await verifyFallbackLocalesBeforeWrite([version]);
+  console.log(
+    JSON.stringify({
+      listingVerified: {
+        version: '1.3.0',
+        versionId: version.id,
+        state: version.attributes.appStoreState,
+        buildNumber: '15',
+        buildId: appleBuild.id,
+        locales: ['ja', 'en-US'],
+        screenshotCount: 15,
+        canonicalScreenshotOrder: true,
+        readOnly: true,
+        reviewSubmissionAttempted: false,
+        publishAttempted: false,
+      },
+    })
+  );
+}
+export async function applyReviewedListing(
+  input: StoreListingInput
+): Promise<void> {
   const { app, versions, builds, releaseBuild, projectDir, cliRoot } = input;
   const listing = (
     JSON.parse(readFileSync(join(projectDir, 'store.config.json'), 'utf8')) as {
@@ -414,12 +490,13 @@ export async function applyReviewedListing(input: {
   await writeLocaleText(version, listing);
   await syncNativeScreenshots(app, version, listing, projectDir, cliRoot);
   // Associate the existing binary; this neither uploads again nor submits App Review.
-  await version.updateBuildAsync({ buildId: appleBuild.id });
+  if ((await version.getBuildAsync())?.id !== appleBuild.id)
+    await version.updateBuildAsync({ buildId: appleBuild.id });
   if ((await version.getBuildAsync())?.id !== appleBuild.id)
     throw new Error('Selected build readback mismatch');
   for (const remote of await version.getLocalizationsAsync()) {
     const local = listing.info[remote.attributes.locale];
-    if (local) await verifyLocale(remote, local, projectDir, cliRoot);
+    if (local) await verifyLocale(remote, local, projectDir, cliRoot, true);
   }
   console.log(
     JSON.stringify({
