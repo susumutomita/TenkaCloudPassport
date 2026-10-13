@@ -9,6 +9,13 @@ on:
       - store.config.json
       - docs/assets/app-store-screenshots/v1.3.0/**
   workflow_dispatch:
+    inputs:
+      action:
+        description: Store action (apply requires explicit owner approval)
+        type: choice
+        options: [inspect, apply]
+        default: inspect
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -45,6 +52,7 @@ jobs:
       - name: Read or synchronize verified listing
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          STORE_ACTION: ${{ github.event_name == 'workflow_dispatch' && inputs.action || 'inspect' }}
           CI: "true"
           EXPO_NO_TELEMETRY: "1"
-        run: node --experimental-strip-types scripts/inspect-store-listing.ts apply
+        run: node --experimental-strip-types scripts/inspect-store-listing.ts "$STORE_ACTION"
