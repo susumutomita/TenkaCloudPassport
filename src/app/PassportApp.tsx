@@ -573,6 +573,7 @@ function UtilityStageGate({
   if (stage === 'settings') {
     return (
       <SettingsScreen
+        legacyCleanup={diagnosticsFlow}
         dataErasure={{
           busy: diagnosticsFlow.busy,
           cancelDeleteAll: diagnosticsFlow.cancelDeleteAll,

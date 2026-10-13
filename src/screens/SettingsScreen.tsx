@@ -17,6 +17,10 @@ import {
   dataErasureCardOverride,
   dataErasureCardStyles,
 } from './data-erasure-card-styles';
+import {
+  type LegacyCleanupFlow,
+  LegacyModelCleanupSection,
+} from './LegacyModelCleanupSection';
 
 /** Conversation inference is retired; explicit data erasure remains available. */
 interface SettingsScreenProps {
@@ -31,6 +35,7 @@ interface SettingsScreenProps {
    * 作らない。
    */
   readonly dataErasure: SettingsDataErasureProps;
+  readonly legacyCleanup: LegacyCleanupFlow;
 }
 
 export interface SettingsDataErasureProps {
@@ -154,6 +159,7 @@ export default function SettingsScreen({
   onChangeLocale,
   onBack,
   dataErasure,
+  legacyCleanup,
 }: SettingsScreenProps) {
   const t = MESSAGES[locale].settings;
   return (
@@ -184,6 +190,7 @@ export default function SettingsScreen({
           dataErasure.recoveryRequired
         }
       />
+      <LegacyModelCleanupSection flow={legacyCleanup} locale={locale} />
       <DataErasureSection dataErasure={dataErasure} locale={locale} t={t} />
       <ActionButton
         disabled={dataErasure.busy}
