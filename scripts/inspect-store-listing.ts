@@ -1,8 +1,14 @@
 /** Read-only release/listing inspection using the pinned EAS Metadata authentication route. */
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
   applyReviewedListing,
+  collectReviewVersionRows,
+  summarizeAgeDeclaration,
+  summarizePrivacyURLs,
+  summarizeReleaseEncryption,
+  summarizeReviewDetails,
   verifySavedListing,
 } from './apply-store-listing.ts';
 
@@ -22,6 +28,124 @@ const { getAppStoreAuthAsync } = load('./build/metadata/auth');
 const { getProfilesAsync } = load('./build/utils/profiles');
 const { EasJsonAccessor } = load('@expo/eas-json');
 
+async function optionalRead(label: string, read: () => Promise<unknown>) {
+  try {
+    return { status: 'available', result: await read() };
+  } catch (error) {
+    const status =
+      error && typeof error === 'object'
+        ? Reflect.get(Reflect.get(error, 'response') ?? {}, 'status')
+        : undefined;
+    return {
+      status: 'unavailable',
+      area: label,
+      reason:
+        status === 401
+          ? 'unauthorized'
+          : status === 403
+            ? 'forbidden'
+            : status === 404
+              ? 'resource not found'
+              : 'read failed',
+    };
+  }
+}
+type ReadinessAppInfo = {
+  id: string;
+  attributes: { appStoreState?: string; state?: string };
+  getAgeRatingDeclarationAsync(): Promise<{
+    attributes: Record<string, unknown>;
+  } | null>;
+  getLocalizationsAsync(): Promise<
+    { attributes: { locale: string; privacyPolicyUrl?: string } }[]
+  >;
+};
+async function inspectReviewReadiness(
+  app: { id: string; getAppInfoAsync(): Promise<ReadinessAppInfo[]> },
+  versions: {
+    attributes: { versionString: string };
+    getAppStoreReviewDetailAsync(): Promise<{
+      attributes: Record<string, unknown>;
+    } | null>;
+  }[],
+  builds: Parameters<typeof summarizeReleaseEncryption>[0],
+  projectDir: string
+) {
+  const config = JSON.parse(
+    readFileSync(join(projectDir, 'store.config.json'), 'utf8')
+  ).apple;
+  const notesDoc = readFileSync(
+    join(projectDir, 'docs/release/app-store-submission-1.3.0.md'),
+    'utf8'
+  );
+  const preparedNotes = notesDoc
+    .match(/## 審査用 Notes 案\s+([\s\S]*?)\n##/)?.[1]
+    ?.trim();
+  if (!preparedNotes) throw new Error('Prepared review notes are missing');
+  const review = await collectReviewVersionRows(versions, (version) =>
+    optionalRead('review information', async () => {
+      const detail = await version.getAppStoreReviewDetailAsync();
+      return summarizeReviewDetails(detail?.attributes ?? null, preparedNotes);
+    })
+  );
+  const appInfo = await optionalRead(
+    'app information/age/privacy URLs',
+    async () => {
+      const infos = await app.getAppInfoAsync();
+      if (infos.length === 0)
+        return {
+          status: 'absent',
+          reason: 'No app-info records were returned',
+        };
+      const output = [];
+      for (const info of infos) {
+        const declaration = await optionalRead('age rating', async () => {
+          const age = await info.getAgeRatingDeclarationAsync();
+          if (!age) return { status: 'absent' };
+          return summarizeAgeDeclaration(age.attributes, config.advisory);
+        });
+        const privacyURLs = await optionalRead(
+          'privacy policy URLs',
+          async () => {
+            const locales = await info.getLocalizationsAsync();
+            return summarizePrivacyURLs(locales, config.info);
+          }
+        );
+        output.push({
+          id: info.id,
+          state: info.attributes.appStoreState ?? info.attributes.state,
+          ageRating: declaration,
+          privacyURLs,
+        });
+      }
+      return output;
+    }
+  );
+  console.log(
+    JSON.stringify({
+      reviewReadinessReadOnly: {
+        appId: app.id,
+        review,
+        appInfo,
+        exportCompliance: summarizeReleaseEncryption(builds),
+        privacyDataUsageLabels: {
+          status: 'unavailable',
+          reason:
+            'Not exposed by the existing pinned API-key read path; no web-session login attempted',
+        },
+        agreements: {
+          status: 'unavailable',
+          reason:
+            'Pinned agreement API requires an Apple web session/provider; existing API-key authentication is retained without a new login',
+        },
+        submissionAttempted: false,
+        publicationAttempted: false,
+        declarationChangesAttempted: false,
+        uploadAttempted: false,
+      },
+    })
+  );
+}
 let stage = 'EAS context';
 class InspectStore extends MetadataPull {
   async runAsync() {
@@ -132,6 +256,10 @@ class InspectStore extends MetadataPull {
     const versions = await app.getAppStoreVersionsAsync({
       query: { limit: 20, filter: { platform: 'IOS' } },
     });
+    if (action === 'inspect') {
+      stage = 'read-only review readiness audit';
+      await inspectReviewReadiness(app, versions, builds, projectDir);
+    }
     for (const version of versions) {
       console.log(
         JSON.stringify({

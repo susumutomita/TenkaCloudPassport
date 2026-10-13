@@ -530,3 +530,200 @@ export async function applyReviewedListing(
     })
   );
 }
+
+/** Only presence/classification leaves memory; never emit review contact or Notes text. */
+export function summarizeReviewDetails(
+  attributes: Record<string, unknown> | null,
+  preparedNotes: string
+) {
+  if (!attributes) return { status: 'absent' };
+  const present = (key: string) =>
+    typeof attributes[key] === 'string' &&
+    String(attributes[key]).trim().length > 0;
+  const notes =
+    typeof attributes['notes'] === 'string' ? attributes['notes'] : '';
+  return {
+    status: 'available',
+    contact: {
+      firstNamePresent: present('contactFirstName'),
+      lastNamePresent: present('contactLastName'),
+      emailPresent: present('contactEmail'),
+      phonePresent: present('contactPhone'),
+    },
+    demoAccountRequired:
+      typeof attributes['demoAccountRequired'] === 'boolean'
+        ? attributes['demoAccountRequired']
+        : null,
+    demoCredentials: {
+      namePresent: present('demoAccountName'),
+      passwordPresent: present('demoAccountPassword'),
+    },
+    notesPresent: notes.trim().length > 0,
+    notesMatchPreparedCurrentDraft: notes.trim() === preparedNotes.trim(),
+    legacyAIReferencesPresent:
+      /FoundationModels|Apple\s+Intelligence|conversation agent|会話エージェント/i.test(
+        notes
+      ),
+    legacyAIClaimsPresent: notes
+      .split(/[.!?]+/)
+      .some(
+        (sentence) =>
+          /includes an on-device conversation agent|automatically uses[\s\S]{0,100}Apple\s+Intelligence|(?:uses|supports|includes|runs|integrates)[\s\S]{0,80}FoundationModels|finds common ground|共通点.{0,20}見つけ/i.test(
+            sentence
+          ) &&
+          !/\b(?:removed|retired|disabled|no longer|does not|doesn't|not included|not supported)\b|撤去|廃止|利用しない/i.test(
+            sentence
+          )
+      ),
+    currentFeatureMarkers: {
+      learning: /learning catalogs|学習|教材/i.test(notes),
+      inferenceRetired:
+        /inference is removed|AI has been retired|会話\s*AI.{0,12}廃止/i.test(
+          notes
+        ),
+      legacyCleanup: /legacy model cleanup|旧モデル.{0,12}削除/i.test(notes),
+    },
+  };
+}
+
+export function summarizePrivacyURLs(
+  locales: { attributes: { locale: string; privacyPolicyUrl?: string } }[],
+  configured: Record<string, { privacyPolicyUrl?: string }>
+) {
+  return ['ja', 'en-US'].map((locale) => {
+    const remote = locales.find((item) => item.attributes.locale === locale);
+    return {
+      locale,
+      localizationPresent: Boolean(remote),
+      policyURLPresent: Boolean(remote?.attributes.privacyPolicyUrl),
+      matchesConfiguredURL:
+        Boolean(remote?.attributes.privacyPolicyUrl) &&
+        remote?.attributes.privacyPolicyUrl ===
+          configured[locale]?.privacyPolicyUrl,
+    };
+  });
+}
+const AGE_DECLARATION_FIELDS = [
+  'advertising',
+  'ageAssurance',
+  'ageRatingOverride',
+  'ageRatingOverrideV2',
+  'developerAgeRatingInfoUrl',
+  'alcoholTobaccoOrDrugUseOrReferences',
+  'contests',
+  'gambling',
+  'gamblingSimulated',
+  'gunsOrOtherWeapons',
+  'healthOrWellnessTopics',
+  'horrorOrFearThemes',
+  'kidsAgeBand',
+  'koreaAgeRatingOverride',
+  'lootBox',
+  'matureOrSuggestiveThemes',
+  'medicalOrTreatmentInformation',
+  'messagingAndChat',
+  'parentalControls',
+  'profanityOrCrudeHumor',
+  'sexualContentGraphicAndNudity',
+  'sexualContentOrNudity',
+  'socialMedia',
+  'socialMediaAgeRestricted',
+  'unrestrictedWebAccess',
+  'userGeneratedContent',
+  'violenceCartoonOrFantasy',
+  'violenceRealistic',
+  'violenceRealisticProlongedGraphicOrSadistic',
+];
+export function summarizeAgeDeclaration(
+  attributes: Record<string, unknown>,
+  configured: Record<string, unknown>
+) {
+  const configuredKeys = Object.keys(configured);
+  const normalizedURL = (value: unknown) =>
+    typeof value === 'string' && value.trim() ? value.trim() : null;
+  const equal = (key: string) =>
+    key === 'developerAgeRatingInfoUrl'
+      ? normalizedURL(attributes[key]) === normalizedURL(configured[key])
+      : attributes[key] === configured[key];
+  return {
+    status: 'available',
+    configuredFieldsMatch: configuredKeys.every(equal),
+    differentConfiguredFieldNames: configuredKeys.filter((key) => !equal(key)),
+    unconfiguredSupportedFieldNames: AGE_DECLARATION_FIELDS.filter(
+      (key) => !Object.hasOwn(configured, key)
+    ),
+    missingSupportedRemoteFieldNames: AGE_DECLARATION_FIELDS.filter(
+      (key) => !Object.hasOwn(attributes, key)
+    ),
+    unrecognizedRemoteFieldNames: Object.keys(attributes).filter(
+      (key) =>
+        !AGE_DECLARATION_FIELDS.includes(key) &&
+        key !== 'developerAgeRatingInfoUrl'
+    ),
+    developerAgeRatingURLPresent:
+      typeof attributes['developerAgeRatingInfoUrl'] === 'string' &&
+      attributes['developerAgeRatingInfoUrl'].length > 0,
+    currentAnswers: Object.fromEntries(
+      AGE_DECLARATION_FIELDS.map((key) => [
+        key,
+        key === 'developerAgeRatingInfoUrl'
+          ? Boolean(normalizedURL(attributes[key]))
+          : typeof attributes[key] === 'boolean' ||
+              attributes[key] === null ||
+              /^(NONE|INFREQUENT|FREQUENT|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE|FOUR_PLUS|SIX_PLUS|NINE_PLUS|TWELVE_PLUS|THIRTEEN_PLUS|FIFTEEN_PLUS|SIXTEEN_PLUS|SEVENTEEN_PLUS|EIGHTEEN_PLUS|NINETEEN_PLUS|TWENTY_ONE_PLUS|UNRATED|FIVE_AND_UNDER|SIX_TO_EIGHT|NINE_TO_ELEVEN|AGES_5_AND_UNDER|AGES_6_TO_8|AGES_9_TO_11)$/.test(
+                String(attributes[key])
+              )
+            ? attributes[key]
+            : 'unrecognized or unavailable',
+      ])
+    ),
+  };
+}
+
+export async function collectReviewVersionRows<
+  T extends { attributes: { versionString: string } },
+>(versions: T[], read: (version: T) => Promise<unknown>) {
+  const rows = [];
+  for (const version of ['1.2.0', '1.3.0']) {
+    const remote = versions.find(
+      (item) => item.attributes.versionString === version
+    );
+    rows.push({
+      version,
+      details: remote
+        ? await read(remote)
+        : {
+            status: 'unavailable',
+            reason: 'Requested version was not returned by the version query',
+          },
+    });
+  }
+  return rows;
+}
+export function summarizeReleaseEncryption(
+  builds: {
+    attributes: {
+      version: string;
+      preReleaseVersion?: { attributes: { version: string } };
+      usesNonExemptEncryption?: boolean;
+    };
+  }[]
+) {
+  const release = builds.find(
+    (item) =>
+      item.attributes.version === '15' &&
+      item.attributes.preReleaseVersion?.attributes.version === '1.3.0'
+  );
+  return {
+    version: '1.3.0',
+    build: '15',
+    status:
+      typeof release?.attributes.usesNonExemptEncryption === 'boolean'
+        ? 'available'
+        : 'unavailable',
+    usesNonExemptEncryption:
+      typeof release?.attributes.usesNonExemptEncryption === 'boolean'
+        ? release.attributes.usesNonExemptEncryption
+        : null,
+  };
+}

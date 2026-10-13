@@ -316,3 +316,215 @@ it('rejects old nonempty and duplicate remote screenshot display sets', async ()
     )
   ).not.toThrow();
 });
+
+it('review readiness emits presence/classification only, never private contact or Notes values', async () => {
+  const { summarizeReviewDetails } = await import('./apply-store-listing');
+  const privateValues = [
+    'Synthetic private first',
+    'Synthetic private last',
+    'private@example.invalid',
+    '+15550000000',
+  ];
+  const note =
+    'Private note: includes an on-device conversation agent and FoundationModels.';
+  const result = summarizeReviewDetails(
+    {
+      contactFirstName: privateValues[0],
+      contactLastName: privateValues[1],
+      contactEmail: privateValues[2],
+      contactPhone: privateValues[3],
+      notes: note,
+      demoAccountRequired: false,
+    },
+    'Current notes'
+  );
+  const output = JSON.stringify(result);
+  for (const value of [...privateValues, note])
+    expect(output).not.toContain(value);
+  expect(result.legacyAIClaimsPresent).toBe(true);
+  expect(result.notesMatchPreparedCurrentDraft).toBe(false);
+  expect(result.contact).toEqual({
+    firstNamePresent: true,
+    lastNamePresent: true,
+    emailPresent: true,
+    phonePresent: true,
+  });
+  expect(summarizeReviewDetails(null, 'Current notes')).toEqual({
+    status: 'absent',
+  });
+  const current =
+    'Learning catalogs. On-device conversation inference is removed. Legacy model cleanup.';
+  expect(
+    summarizeReviewDetails({ notes: current }, current).legacyAIClaimsPresent
+  ).toBe(false);
+  expect(
+    summarizeReviewDetails({ notes: current }, current)
+      .notesMatchPreparedCurrentDraft
+  ).toBe(true);
+});
+
+it('reports absent privacy locales instead of silently omitting them', async () => {
+  const { summarizePrivacyURLs } = await import('./apply-store-listing');
+  expect(
+    summarizePrivacyURLs(
+      [
+        {
+          attributes: {
+            locale: 'ja',
+            privacyPolicyUrl: 'https://example.invalid/ja',
+          },
+        },
+      ],
+      { ja: { privacyPolicyUrl: 'https://example.invalid/ja' } }
+    )
+  ).toEqual([
+    {
+      locale: 'ja',
+      localizationPresent: true,
+      policyURLPresent: true,
+      matchesConfiguredURL: true,
+    },
+    {
+      locale: 'en-US',
+      localizationPresent: false,
+      policyURLPresent: false,
+      matchesConfiguredURL: false,
+    },
+  ]);
+});
+it('distinguishes removed framework references from affirmative inference claims', async () => {
+  const { summarizeReviewDetails } = await import('./apply-store-listing');
+  const retired =
+    'The FoundationModels integration was removed. The app no longer uses Apple Intelligence.';
+  const result = summarizeReviewDetails({ notes: retired }, retired);
+  expect(result.notesMatchPreparedCurrentDraft).toBe(true);
+  expect(result.legacyAIReferencesPresent).toBe(true);
+  expect(result.legacyAIClaimsPresent).toBe(false);
+  expect(
+    summarizeReviewDetails(
+      { notes: 'The app uses FoundationModels to find common ground.' },
+      retired
+    ).legacyAIClaimsPresent
+  ).toBe(true);
+});
+it('exposes unconfigured supported age answers without emitting unknown values', async () => {
+  const { summarizeAgeDeclaration } = await import('./apply-store-listing');
+  const result = summarizeAgeDeclaration(
+    {
+      gambling: false,
+      socialMedia: true,
+      socialMediaAgeRestricted: false,
+      unknownField: 'private@example.invalid',
+    },
+    { gambling: false }
+  );
+  expect(result.configuredFieldsMatch).toBe(true);
+  expect(result.unconfiguredSupportedFieldNames).toContain('socialMedia');
+  expect(result.unconfiguredSupportedFieldNames).toContain(
+    'socialMediaAgeRestricted'
+  );
+  expect(result.currentAnswers['socialMedia']).toBe(true);
+  expect(result.currentAnswers['socialMediaAgeRestricted']).toBe(false);
+  expect(result.missingSupportedRemoteFieldNames).toContain('messagingAndChat');
+  expect(JSON.stringify(result)).not.toContain('private@example.invalid');
+});
+
+it('preserves current Apple frequency and age override answers without substituting unavailable', async () => {
+  const { summarizeAgeDeclaration } = await import('./apply-store-listing');
+  const actual = summarizeAgeDeclaration(
+    {
+      horrorOrFearThemes: 'INFREQUENT',
+      gamblingSimulated: 'FREQUENT',
+      ageRatingOverride: 'THIRTEEN_PLUS',
+      ageRatingOverrideV2: 'SIXTEEN_PLUS',
+      koreaAgeRatingOverride: 'NINETEEN_PLUS',
+      kidsAgeBand: 'SIX_TO_EIGHT',
+    },
+    {}
+  );
+  expect(actual.currentAnswers['horrorOrFearThemes']).toBe('INFREQUENT');
+  expect(actual.currentAnswers['gamblingSimulated']).toBe('FREQUENT');
+  expect(actual.currentAnswers['ageRatingOverride']).toBe('THIRTEEN_PLUS');
+  expect(actual.currentAnswers['ageRatingOverrideV2']).toBe('SIXTEEN_PLUS');
+  expect(actual.currentAnswers['koreaAgeRatingOverride']).toBe('NINETEEN_PLUS');
+  expect(actual.currentAnswers['kidsAgeBand']).toBe('SIX_TO_EIGHT');
+});
+
+it('binds export compliance to both release version and build string', async () => {
+  const { summarizeReleaseEncryption } = await import('./apply-store-listing');
+  const values = [
+    {
+      attributes: {
+        version: '15',
+        preReleaseVersion: { attributes: { version: '1.2.0' } },
+        usesNonExemptEncryption: true,
+      },
+    },
+    {
+      attributes: {
+        version: '15',
+        preReleaseVersion: { attributes: { version: '1.3.0' } },
+        usesNonExemptEncryption: false,
+      },
+    },
+  ];
+  expect(summarizeReleaseEncryption(values).usesNonExemptEncryption).toBe(
+    false
+  );
+  expect(summarizeReleaseEncryption(values.slice(0, 1)).status).toBe(
+    'unavailable'
+  );
+});
+it('reports missing baseline review version and reads the available target exactly once', async () => {
+  const { collectReviewVersionRows } = await import('./apply-store-listing');
+  const reads: string[] = [];
+  const result = await collectReviewVersionRows(
+    [{ attributes: { versionString: '1.3.0' } }],
+    async (version) => {
+      reads.push(version.attributes.versionString);
+      return { status: 'available' };
+    }
+  );
+  expect(result[0]).toEqual({
+    version: '1.2.0',
+    details: {
+      status: 'unavailable',
+      reason: 'Requested version was not returned by the version query',
+    },
+  });
+  expect(reads).toEqual(['1.3.0']);
+});
+it('reports required demo credential presence without emitting credential values', async () => {
+  const { summarizeReviewDetails } = await import('./apply-store-listing');
+  const secret = 'Synthetic credential never logged';
+  const result = summarizeReviewDetails(
+    {
+      demoAccountRequired: true,
+      demoAccountName: 'synthetic-account',
+      demoAccountPassword: secret,
+    },
+    'Current notes'
+  );
+  expect(result.demoCredentials).toEqual({
+    namePresent: true,
+    passwordPresent: true,
+  });
+  expect(JSON.stringify(result)).not.toContain(secret);
+  expect(JSON.stringify(result)).not.toContain('synthetic-account');
+  expect(
+    summarizeReviewDetails({ demoAccountRequired: true }, '').demoCredentials
+  ).toEqual({ namePresent: false, passwordPresent: false });
+});
+it('includes developer URL differences while keeping its raw value private', async () => {
+  const { summarizeAgeDeclaration } = await import('./apply-store-listing');
+  const url = 'https://example.invalid/private-owner';
+  const result = summarizeAgeDeclaration(
+    { developerAgeRatingInfoUrl: url },
+    { developerAgeRatingInfoUrl: null }
+  );
+  expect(result.configuredFieldsMatch).toBe(false);
+  expect(result.differentConfiguredFieldNames).toContain(
+    'developerAgeRatingInfoUrl'
+  );
+  expect(JSON.stringify(result)).not.toContain(url);
+});
