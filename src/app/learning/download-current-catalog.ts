@@ -21,10 +21,15 @@ export async function downloadCurrentCatalog(
   transport: CatalogTransport,
   state: LearningState,
   manifestURL: string,
+  expectedCatalogID: string,
   signal: AbortSignal,
   onCatalog: () => void
 ): Promise<LearningState> {
   const source = await fetchManifest(transport, manifestURL, signal);
+  if (source.catalogID !== expectedCatalogID)
+    throw new Error(
+      '選択した教材と配信された教材が一致しません。 / Catalog identity mismatch.'
+    );
   const registered = registerSource(state, source);
   onCatalog();
   const catalog = await fetchCatalog(

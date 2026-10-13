@@ -28,6 +28,7 @@ import { emptyLearningState } from './bundled';
 import { fetchCatalog, fetchManifest } from './catalog-download';
 import { catalogTransport } from './default-transport';
 import { downloadCurrentCatalog } from './download-current-catalog';
+import { downloadFailureMessage } from './download-failure-message';
 import type { LearningFilePort } from './file-port';
 import { LearningSession, type LearningStorage } from './storage';
 
@@ -216,7 +217,7 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
       }
     });
   }
-  async function downloadLatest(sourceURL: string) {
+  async function downloadLatest(sourceURL: string, expectedCatalogID: string) {
     const active = session.current;
     if (!active || revision === undefined) return false;
     return run(async () => {
@@ -227,17 +228,20 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
           setDownloadStatus(phase ? { url: sourceURL, phase } : null);
       };
       reportPhase('manifest');
+      let saving = false;
       try {
         const next = await downloadCurrentCatalog(
           catalogTransport,
           active.state,
           sourceURL,
+          expectedCatalogID,
           controller.signal,
           () => reportPhase('catalog')
         );
         if (controller.signal.aborted)
           throw new Error('ダウンロードを中断しました。');
         reportPhase('saving');
+        saving = true;
         await active.commit(revision, () => next);
         if (alive.current) {
           setState(active.state);
@@ -247,9 +251,7 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
         }
       } catch (error: unknown) {
         throw new Error(
-          controller.signal.aborted
-            ? 'ダウンロードを中断しました。保存済みの教材と進捗はそのままです。 / Download cancelled.'
-            : `ダウンロードできませんでした。通信を確認して、もう一度お試しください。保存済みの教材と進捗はそのままです。 / Download failed; retry when connected. ${readableDownloadError(error)}`
+          downloadFailureMessage(controller.signal.aborted, saving, error)
         );
       } finally {
         download.current = null;
@@ -284,8 +286,4 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     downloadStatus,
     cancelDownload,
   };
-}
-
-function readableDownloadError(error: unknown): string {
-  return error instanceof Error ? error.message : '';
 }

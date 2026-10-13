@@ -136,7 +136,10 @@ function CatalogDownloadActions({
 }) {
   const [failed, setFailed] = useState(false);
   async function download() {
-    const saved = await flow.downloadLatest(catalog.manifestURL);
+    const saved = await flow.downloadLatest(
+      catalog.manifestURL,
+      catalog.catalogID
+    );
     setFailed(!saved);
   }
   const active = flow.downloadStatus?.url === catalog.manifestURL;

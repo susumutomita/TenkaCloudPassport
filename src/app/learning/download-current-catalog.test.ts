@@ -75,6 +75,7 @@ it('one explicit download registers the source and preserves saved progress with
     transport(),
     state,
     manifestURL,
+    catalog.catalogID,
     new AbortController().signal,
     () => {
       payloadStage = true;
@@ -94,6 +95,7 @@ it('network failure, integrity failure and cancellation leave saved data intact 
         port,
         state,
         manifestURL,
+        catalog.catalogID,
         new AbortController().signal,
         () => undefined
       )
@@ -105,6 +107,7 @@ it('network failure, integrity failure and cancellation leave saved data intact 
       transport(),
       state,
       manifestURL,
+      catalog.catalogID,
       controller.signal,
       () => controller.abort()
     )
@@ -114,6 +117,7 @@ it('network failure, integrity failure and cancellation leave saved data intact 
     transport(),
     state,
     manifestURL,
+    catalog.catalogID,
     new AbortController().signal,
     () => undefined
   );
@@ -140,4 +144,22 @@ it('chooses the newest numeric version regardless of manifest order', () => {
   expect(() =>
     latestRelease({ ...source, releases: [] } as CatalogSource)
   ).toThrow();
+});
+
+it('rejects a different catalog before fetching payload or changing state', async () => {
+  let payloadStage = false;
+  await expect(
+    downloadCurrentCatalog(
+      transport(),
+      state,
+      manifestURL,
+      'unexpected.catalog',
+      new AbortController().signal,
+      () => {
+        payloadStage = true;
+      }
+    )
+  ).rejects.toThrow('Catalog identity mismatch');
+  expect(payloadStage).toBe(false);
+  expect(state.sources).toEqual([]);
 });

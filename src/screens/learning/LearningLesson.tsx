@@ -205,19 +205,19 @@ function ReasoningDraft() {
         自分で組み立てる / Build your reasoning
       </Text>
       <Text>
-        何を状態として持つ？ 1回の操作でどう変わる？
-        小さい例を手で動かし、計算量と反例を考えてみましょう。
+        この問いの目的と前提を整理し、自分の答えと根拠を書いてみましょう。
+        技術問題なら小さい例・計算量・反例、経験の説明なら状況・行動・結果を確認しましょう。
       </Text>
       <TextInput
-        accessibilityLabel="状態・遷移・トレースのメモ / Reasoning notes"
+        accessibilityLabel="考え方・説明のメモ / Reasoning notes"
         multiline
         maxLength={10_000}
         value={draft}
         onChangeText={setDraft}
-        placeholder="状態：
-遷移：
-小さい例のトレース：
-計算量・反例："
+        placeholder="目的・前提：
+自分の答え・方針：
+例・経験と根拠：
+確認したい点："
         style={styles.code}
       />
       <Text>
