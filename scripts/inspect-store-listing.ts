@@ -87,10 +87,11 @@ class InspectStore extends MetadataPull {
     });
     if (app.id !== '6793516094') throw new Error('Unexpected App Store app');
     stage = 'Apple processing read';
-    const builds = await app.getBuildsAsync({
+    const { Build } = load('@expo/apple-utils');
+    const builds = await Build.getAsync(app.context, {
       query: {
         limit: 10,
-        filter: { version: '15', 'preReleaseVersion.version': '1.3.0' },
+        filter: { app: app.id, version: '15' },
         includes: ['preReleaseVersion'],
       },
     });
@@ -181,7 +182,7 @@ try {
     ? 'unauthorized'
     : /403|FORBIDDEN/i.test(message)
       ? 'forbidden'
-      : /key type|key object|crypto|unsupported/i.test(message)
+      : /key type|key object|crypto|unsupported|does not support/i.test(message)
         ? 'unsupported authentication runtime'
         : /authState|Failed to authenticate/i.test(message)
           ? 'authentication not established'
@@ -189,7 +190,9 @@ try {
             ? 'target app unavailable'
             : /network|fetch|ENOTFOUND|ECONN|socket/i.test(message)
               ? 'network failure'
-              : 'unclassified failure';
+              : /400|bad request|query|parameter/i.test(message)
+                ? 'request parameter rejected'
+                : 'unclassified failure';
   console.error('Store inspection failed; no listing mutation was attempted.', {
     stage,
     reason,
