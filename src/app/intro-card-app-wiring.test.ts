@@ -282,7 +282,7 @@ describe('自己紹介カードピボット Step 1（Issue 79）のメインフ�
 
     expectInOrder(body, [
       'createIntroCard(introCardDraftAsShape())',
-      'encodeIntroCardUrl(card)',
+      'encodeIntroCardUrl(introCardForSharing(card))',
       'await introCardStorage.save(card)',
       "setStage('intro-card')",
     ]);

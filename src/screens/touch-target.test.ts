@@ -93,13 +93,6 @@ describe('Touch Target が 44 pt 以上である', () => {
     expect(text).toContain('minWidth: MIN_TOUCH_TARGET');
   });
 
-  it('ConversationAgentScreen の相手カード削除ボタンは共有定数を使って 44 pt 以上を強制する（Issue 104。Settings リンクは共有 SettingsLinkFooter component 側で担保する）', async () => {
-    const text = await source('ConversationAgentScreen.tsx');
-    expect(text).toContain("from '../ui/touch-target'");
-    expect(text).toContain('minHeight: MIN_TOUCH_TARGET');
-    expect(text).toContain('minWidth: MIN_TOUCH_TARGET');
-  });
-
   it('SettingsLinkFooter（複数画面が共有する Settings 導線）は共有定数を使って 44 pt 以上を強制する（Issue 104）', async () => {
     const text = await source('../components/SettingsLinkFooter.tsx');
     expect(text).toContain("from '../ui/touch-target'");

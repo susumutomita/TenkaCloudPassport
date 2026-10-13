@@ -5,8 +5,6 @@
     "atomic-output-publisher.ts",
     "atomic-output-publisher-darwin.ts",
     "atomic-output-publisher-linux.ts",
-    "llama-native-artifacts.ts",
-    "llama-native-artifacts.test.ts",
     "jsonc-duplicate-key.ts",
     "exclusive-output-writer.ts",
     "process-capture.ts",

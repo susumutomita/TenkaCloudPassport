@@ -301,117 +301,10 @@ export interface AppMessages {
       selected: boolean
     ) => string;
     readonly languageOptionHint: string;
-    readonly modelSectionTitle: string;
-    readonly modelDescription: string;
-    readonly modelBusy: string;
-    /**
-     * Follow-up F-FDRGS4: Document Picker を知らない通常ユーザー向けの
-     * 「オンデバイス AI を有効化」導線。Qwen2.5-1.5B の信頼済みダウンロードを
-     * 起動し、既存 GGUF import/activate へ合流する。
-     */
-    readonly onDeviceAiSectionTitle: string;
-    readonly onDeviceAiDescription: (
-      displayName: string,
-      size: string
-    ) => string;
-    readonly onDeviceAiEnableButton: string;
-    readonly onDeviceAiEnableButtonHint: string;
-    readonly onDeviceAiConsentTitle: string;
-    readonly onDeviceAiConsentBody: (
-      displayName: string,
-      size: string,
-      license: string
-    ) => string;
-    readonly onDeviceAiConsentStartButton: string;
-    readonly onDeviceAiConsentCancelButton: string;
-    readonly onDeviceAiDownloadStatus: (
-      downloaded: string,
-      total: string,
-      percent: number
-    ) => string;
-    readonly onDeviceAiDownloadCancelButton: string;
-    /**
-     * code-reviewer 指摘（Cancel の実効性）: ダウンロード完了後の import・
-     * activate は中止できないため、その区間専用の文言を用意し Cancel 導線は
-     * 出さない。
-     */
-    readonly onDeviceAiFinalizingStatus: string;
-    /**
-     * ADR-0053（実機 blocker 3、DL 完了後の検証フリーズ）: ネイティブ MD5 照合は
-     * 数秒で終わるが、Cancel 導線が無い区間である点は `onDeviceAiFinalizingStatus`
-     * と同じため、専用の文言で「検証中である」ことを明示する。
-     */
-    readonly onDeviceAiVerifyingStatus: string;
-    readonly onDeviceAiActiveStatus: string;
-    readonly onDeviceAiImportedNotActiveStatus: string;
-    readonly onDeviceAiRemoveButton: string;
-    readonly selectModelButton: string;
-    readonly selectModelHint: string;
-    readonly candidateSummary: (name: string, size: string) => string;
-    readonly candidateAvailableStorage: (size: string) => string;
-    readonly candidateWarning: string;
-    readonly confirmImportButton: string;
-    readonly cancelImportButton: string;
-    readonly cancelRunningImportButton: string;
-    readonly importedModelSummary: (
-      name: string,
-      size: string,
-      architecture: string,
-      risk: string,
-      active: boolean
-    ) => string;
-    readonly riskSupported: string;
-    readonly riskCaution: string;
-    readonly riskBlocked: string;
-    readonly riskBasis: (
-      estimatedMemory: string,
-      effectiveMemory: string,
-      ratio: string,
-      reasons: string
-    ) => string;
-    readonly riskMemoryUnavailable: string;
-    readonly riskReasonMemoryUnavailable: string;
-    readonly riskReasonSupported: string;
-    readonly riskReasonCaution: string;
-    readonly riskReasonBlocked: string;
-    readonly riskReasonThermal: string;
-    readonly activateModelButton: string;
-    readonly reassessBlockedModelButton: string;
-    readonly unloadModelButton: string;
-    readonly deleteModelButton: string;
-    readonly providerOperationTitle: string;
-    readonly providerOperationDescription: string;
-    readonly confirmProviderOperationButton: string;
-    readonly cancelProviderOperationButton: string;
-    readonly cautionTitle: string;
-    readonly cautionDescription: string;
-    readonly confirmCautionButton: string;
-    readonly blockedDescription: string;
-    readonly benchmarkSummary: (
-      count: number,
-      importMs: number | null,
-      loadMs: number | null,
-      firstTokenMs: number | null,
-      completionMs: number | null,
-      peakMemory: string,
-      thermalBefore: string,
-      thermalAfter: string,
-      batteryDeltaPermille: number | null,
-      outcome: string
-    ) => string;
-    readonly modelError: (code: string) => string;
     readonly diagnosticsButton: string;
     readonly diagnosticsButtonHint: string;
     readonly pilotMeasurementButton: string;
     readonly pilotMeasurementButtonHint: string;
-    /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く導線。 */
-    readonly conversationAgentButton: string;
-    readonly conversationAgentButtonHint: string;
-    /**
-     * major（Issue 104 PR #132、Codex 指摘）: 自己紹介カード未作成時は入口を
-     * disabled にし、理由を案内する（無効な導線を有効に見せない）。
-     */
-    readonly conversationAgentButtonDisabledHint: string;
     readonly backButton: string;
     /**
      * Issue 138（実機 blocker B）: 診断画面（開発者向け）は `__DEV__` ゲートでは
@@ -630,14 +523,6 @@ export interface AppMessages {
     readonly addLinkButton: string;
     readonly addLinkButtonHint: string;
     readonly removeLinkButtonLabel: (index: number) => string;
-    /**
-     * Issue 104 / ADR-0036: 端末内会話エージェントが使う会話テーマの選択欄
-     * （`ClueSelector` を再利用、`clueSelector` 名前空間のラベルとは別に
-     * この欄固有の見出し・件数表示だけをここで持つ）。
-     */
-    readonly themeIdsLabel: string;
-    readonly themeIdsHint: string;
-    readonly themeIdsCounter: (current: number, max: number) => string;
     readonly byteUsageLabel: (current: number, max: number) => string;
     readonly byteUsageOverBudget: (current: number, max: number) => string;
     readonly saveButton: (saving: boolean) => string;
@@ -658,71 +543,6 @@ export interface AppMessages {
      */
     readonly settingsButton: string;
     readonly settingsButtonHint: string;
-  };
-  /**
-   * Issue 104 / ADR-0036: 端末内会話エージェント画面（`ConversationAgentScreen.tsx`）
-   * の UI chrome。会話理由・最初の質問の本文は Domain 側
-   * （`agent-model-provider.ts` の `evidenceNarrative`）が組み立てた固定文をそのまま
-   * 表示し、ここでは持たない。
-   */
-  readonly conversationAgent: {
-    readonly eyebrow: string;
-    readonly title: string;
-    readonly description: string;
-    readonly selfCardMissingNotice: string;
-    /**
-     * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は
-     * scan/paste/sample の取り込み導線を隠し、代わりにこの CTA だけを表示する。
-     */
-    readonly selfCardMissingCtaButton: string;
-    readonly selfCardMissingCtaButtonHint: string;
-    /**
-     * ADR-0057 / Follow-up F-056000: 起動時の Availability Gate が
-     * `appleIntelligenceUnavailable` を確定させた端末（Apple Intelligence
-     * 非対応、または Web / Android / Expo Go）でだけ表示する簡潔な案内。
-     * 旧 `onDeviceAiNotice*`（Qwen の「モデルを取得する」導線、Issue 180）を
-     * 置き換える。
-     */
-    readonly appleIntelligenceUnavailableNotice: string;
-    readonly peerSectionTitle: string;
-    readonly participantsSectionTitle: string;
-    readonly addMorePeerNotice: string;
-    readonly sessionFullNotice: string;
-    readonly bridgePartnerTitle: string;
-    readonly noPeerNotice: string;
-    readonly scanButton: string;
-    readonly scanButtonHint: string;
-    readonly pasteLabel: string;
-    readonly pasteHint: string;
-    readonly pastePlaceholder: string;
-    readonly pasteSubmitButton: string;
-    readonly pasteSubmitButtonHint: string;
-    readonly sampleButton: string;
-    readonly sampleButtonHint: string;
-    readonly peerLabel: (name: string) => string;
-    readonly removePeerButtonLabel: (name: string) => string;
-    readonly removePeerButtonHint: string;
-    readonly startButton: string;
-    readonly startButtonHint: string;
-    readonly resetButton: string;
-    readonly resetButtonHint: string;
-    readonly runningNotice: string;
-    readonly noSignalTitle: string;
-    readonly noSignalMessage: string;
-    readonly bridgeReasonTitle: string;
-    readonly bridgeOpenerTitle: string;
-    readonly runErrorMessage: string;
-    readonly backButton: string;
-    readonly settingsButton: string;
-    readonly settingsButtonHint: string;
-    /**
-     * Issue 138（実機 blocker C）: 端末内会話エージェント画面を包む Error
-     * Boundary のフォールバック文言。JS 例外で描画が失敗したときだけ表示する
-     * （native 例外はここでは捕まらない）。「戻る」は既存 `backButton` を
-     * 再利用する。
-     */
-    readonly crashNoticeTitle: string;
-    readonly crashNoticeDescription: string;
   };
 }
 
@@ -991,120 +811,12 @@ const ja: AppMessages = {
     languageOptionAccessibilityLabel: (label, selected) =>
       `表示言語 ${label}${selected ? '、選択中' : ''}`,
     languageOptionHint: 'この端末の表示言語をこの言語に切り替えます。',
-    modelSectionTitle: '端末内 Local Model',
-    modelDescription:
-      'Development Build だけで利用できます。GGUF は選択後に Size を確認し、確定した場合だけアプリ専用領域へ Copy します。',
-    modelBusy: 'Local Model の端末内処理を実行中です。',
-    onDeviceAiSectionTitle: 'オンデバイス AI（Qwen）',
-    onDeviceAiDescription: (displayName, size) =>
-      `${displayName}（${size}）を端末内へ取得すると、会話 Agent が Rules ではなく Local LLM を使うようになります。内容はこの端末だけで処理し、サーバーへは送信しません。`,
-    onDeviceAiEnableButton: 'オンデバイス AI を有効化',
-    onDeviceAiEnableButtonHint:
-      '明示同意の確認画面を開きます。この時点ではまだダウンロードを開始しません。',
-    onDeviceAiConsentTitle: 'ダウンロード前に確認してください。',
-    onDeviceAiConsentBody: (displayName, size, license) =>
-      `${displayName} を約 ${size} ダウンロードします。ライセンスは ${license} です。Wi-Fi 接続時の実行を推奨します。ダウンロード後の推論はすべて端末内だけで行い、内容をサーバーへ送信することはありません。`,
-    onDeviceAiConsentStartButton: '同意してダウンロードを開始する',
-    onDeviceAiConsentCancelButton: 'やめる',
-    onDeviceAiDownloadStatus: (downloaded, total, percent) =>
-      `ダウンロード中: ${downloaded} / ${total}（${percent}%）`,
-    onDeviceAiDownloadCancelButton: 'ダウンロードを中止する',
-    onDeviceAiFinalizingStatus:
-      'ダウンロード完了。端末内で仕上げの処理をしています（この処理は中止できません）。',
-    onDeviceAiVerifyingStatus:
-      '検証しています。数秒で完了します（この処理は中止できません）。',
-    onDeviceAiActiveStatus:
-      '有効です。会話 Agent はこの Model を使用しています。',
-    onDeviceAiImportedNotActiveStatus:
-      '取得済みですが、まだ使用していません。下の一覧で状態を確認してください。',
-    onDeviceAiRemoveButton: 'オンデバイス AI を無効化して削除する',
-    selectModelButton: 'GGUF File を選択',
-    selectModelHint:
-      'OS の Document Picker を開きます。選択しただけではアプリ専用領域へ Copy しません。',
-    candidateSummary: (name, size) => `選択候補: ${name}、${size}`,
-    candidateAvailableStorage: (size) => `Copy 前の端末空き容量: ${size}`,
-    candidateWarning:
-      'この Size の File を端末内へ Copy します。SHA-256 は安全性や出所を証明しません。',
-    confirmImportButton: 'この GGUF を端末内へ取り込む',
-    cancelImportButton: '取り込みをやめる',
-    cancelRunningImportButton: '実行中の取り込みを中止する',
-    importedModelSummary: (name, size, architecture, risk, active) =>
-      `${name}、${size}、${architecture}、${risk}${active ? '、使用中' : ''}`,
-    riskSupported: '利用可能',
-    riskCaution: '注意確認が必要',
-    riskBlocked: '現在の端末状態では利用不可',
-    riskBasis: (estimatedMemory, effectiveMemory, ratio, reasons) =>
-      `推定 Working Set ${estimatedMemory} / 利用可能な Memory 基準 ${effectiveMemory}（比率 ${ratio}）。根拠: ${reasons}`,
-    riskMemoryUnavailable: '取得不能',
-    riskReasonMemoryUnavailable: 'Memory 上限情報を取得できない',
-    riskReasonSupported: 'Memory 使用比率 45% 以下',
-    riskReasonCaution: 'Memory 使用比率 45% 超 60% 以下',
-    riskReasonBlocked: 'Memory 使用比率 60% 超',
-    riskReasonThermal: 'Thermal 状態が serious または critical',
-    activateModelButton: 'この Model を使用する',
-    reassessBlockedModelButton: '端末状態を再評価して、利用可能なら使用する',
-    unloadModelButton: 'Local Model を Unload',
-    deleteModelButton: 'Model File と計測記録を削除',
-    providerOperationTitle: '進行中の Local Model 判定を終了します。',
-    providerOperationDescription:
-      'この操作を続けると、現在の Lounge で実行中の Local Model 判定を Cancel し、Native Context の解放完了を待ってから Model を変更します。Lounge 自体は破棄しません。',
-    confirmProviderOperationButton: '判定を終了して操作を続ける',
-    cancelProviderOperationButton: '現在の判定を続ける',
-    cautionTitle: 'この端末にはやや大きめのモデルです。',
-    cautionDescription:
-      'いま計測した空きメモリでは動く見込みですが、メモリは他のアプリとも共有されるため保証はできません。読み込み中や利用中にアプリが終了する場合があります。',
-    confirmCautionButton: '承知のうえで使用する',
-    blockedDescription:
-      'この端末の空きメモリや発熱状態では、このモデルを安全に読み込めないため停止しました。モデルのファイルは削除できます。',
-    benchmarkSummary: (
-      count,
-      importMs,
-      loadMs,
-      firstTokenMs,
-      completionMs,
-      peakMemory,
-      thermalBefore,
-      thermalAfter,
-      batteryDeltaPermille,
-      outcome
-    ) =>
-      `内容を保存しない計測 ${count} 件。直近: Import ${importMs ?? '-'} ms、Load ${loadMs ?? '-'} ms、First Token ${firstTokenMs ?? '-'} ms、完了 ${completionMs ?? '-'} ms、Peak Memory ${peakMemory}、Thermal ${thermalBefore} → ${thermalAfter}、Battery ${batteryDeltaPermille ?? '-'} permille、結果 ${outcome}。`,
-    modelError: (code) => {
-      if (code === 'NATIVE_CONTEXT_UNAVAILABLE') {
-        return 'Local Model の終了処理を確認できませんでした。Model File は変更していません。念のため、この App を完全に終了してから開き直してください。';
-      }
-      if (code === 'MODEL_CONTEXT_BUSY') {
-        return 'Local Model は他の処理で使用中です。少し待ってからもう一度お試しください。現在の設定は変更していません。';
-      }
-      if (code === 'STARTUP_RECOVERY_PENDING') {
-        return '起動時の確認が完了するまでお待ちください。解消しない場合は、この App を再起動してからもう一度お試しください。';
-      }
-      if (code === 'INSUFFICIENT_STORAGE') {
-        return 'この端末の空き容量が不足しています。空き容量を確保してからもう一度お試しください。現在の設定は変更していません。';
-      }
-      if (code === 'DOWNLOAD_FAILED') {
-        return 'ダウンロードに失敗しました。通信状況を確認してもう一度お試しください。現在の設定は変更していません。';
-      }
-      if (code === 'DOWNLOAD_CANCELLED') {
-        return 'ダウンロードを中止しました。現在の設定は変更していません。';
-      }
-      if (code === 'INTEGRITY_MISMATCH') {
-        return 'ダウンロードした内容の検証に失敗しました。もう一度お試しください。現在の設定は変更していません。';
-      }
-      return `Local Model の処理を完了できませんでした（${code}）。File URI や推論内容は記録していません。`;
-    },
     diagnosticsButton: '診断と端末内 Data',
     diagnosticsButtonHint:
       'Network 送信なしの診断 Preview と、分離された削除操作を開きます。',
     pilotMeasurementButton: 'Pilot の匿名 Aggregate',
     pilotMeasurementButtonHint:
       'Process 内 Counter の全項目を Preview し、最低集計単位を満たす場合だけ手動共有できます。',
-    // owner フィードバック: 「試す」は実験機能に見える。中核機能として断定形にする。
-    conversationAgentButton: '会話のきっかけを AI と見つける',
-    conversationAgentButtonHint:
-      '相手の自己紹介カードから、会話のきっかけを端末内だけで見つけます。',
-    conversationAgentButtonDisabledHint:
-      '先に自己紹介カードを作成すると開けます。',
     backButton: '戻る',
     eraseAllDataButton: 'この端末のすべてのデータを削除',
     eraseAllDataButtonHint:
@@ -1396,10 +1108,6 @@ const ja: AppMessages = {
     addLinkButtonHint:
       '自由な URL の入力欄を追加します。名前付き欄と合わせて最大 5 件までです。',
     removeLinkButtonLabel: (index) => `その他のリンク ${index} を削除`,
-    themeIdsLabel: '会話テーマ（任意）',
-    themeIdsHint:
-      '端末内会話エージェントが相手との共通点を探すのに使います。最大 3 件まで選べます。',
-    themeIdsCounter: (current, max) => `${current} / ${max} 件選択`,
     byteUsageLabel: (current, max) => `QR の目安: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `QR の上限を超えています（${current} / ${max} byte）。入力を減らしてください。`,
@@ -1419,60 +1127,6 @@ const ja: AppMessages = {
       '端末内の自己紹介カードを削除します。この操作は取り消せません。',
     settingsButton: '設定',
     settingsButtonHint: '診断など、自己紹介カード以外の設定を開きます。',
-  },
-  conversationAgent: {
-    eyebrow: '端末内会話エージェント',
-    title: '会話のきっかけを見つける。',
-    description:
-      '相手の自己紹介ページ URL を取り込むと、確認済みの会話テーマから共通点と最初の質問を端末内だけで探します。相手の情報は端末のメモリにだけ保持し、終了すると消えます。',
-    selfCardMissingNotice:
-      '自己紹介カードをまだ作成していません。先に自己紹介カードを作成してください。',
-    selfCardMissingCtaButton: '戻って自己紹介カードを作成する',
-    selfCardMissingCtaButtonHint:
-      '設定画面へ戻ります。自己紹介カードを作成すると、この機能を使えます。',
-    appleIntelligenceUnavailableNotice:
-      '現在 Apple Intelligence を利用できないため、会話のきっかけは確認済みテーマから探します。',
-    peerSectionTitle: '相手のカード',
-    participantsSectionTitle: '取り込んだ相手',
-    addMorePeerNotice:
-      'さらに相手を取り込むと、全ペアを端末内で比較し、最も根拠の強い 1 組だけを提示します。',
-    sessionFullNotice:
-      '参加者が上限に達しました。別の相手を試すには、どれかのカードを外してください。',
-    bridgePartnerTitle: '選ばれた相手',
-    noPeerNotice:
-      'まだ相手のカードを受信していません。QR を再スキャンするか、URL を貼り付けてください。',
-    scanButton: 'QR を再スキャン',
-    scanButtonHint: '相手の自己紹介ページ QR を読み取ります。',
-    pasteLabel: '自己紹介ページ URL を貼り付け',
-    pasteHint:
-      'カメラが使えない場合は、相手から共有された URL をそのまま貼り付けてください。',
-    pastePlaceholder: '例: https://card.tenkacloud.com/c/#...',
-    pasteSubmitButton: '追加',
-    pasteSubmitButtonHint: '貼り付けた URL から相手のカードを取り込みます。',
-    sampleButton: 'サンプルで試す',
-    sampleButtonHint:
-      '実在しないサンプルの相手カードで、この機能の流れを一人で確認できます。',
-    peerLabel: (name) => `相手: ${name}`,
-    removePeerButtonLabel: (name) => `${name} を削除`,
-    removePeerButtonHint: '受信したカードをこのセッションから外します。',
-    startButton: '会話のきっかけを見つける',
-    startButtonHint:
-      '確認済みの会話テーマから、共通点と最初の質問を計算します。',
-    resetButton: 'カードを外してやり直す',
-    resetButtonHint: '受信したカードを外し、別のカードを取り込み直せます。',
-    runningNotice: '共通点を探しています…',
-    noSignalTitle: '共通点が見つかりませんでした',
-    noSignalMessage:
-      'お互いが確認済みの会話テーマに重なりがありませんでした。会話テーマを増やすか、お互いのカードに自己紹介文を書くと見つかりやすくなります。',
-    bridgeReasonTitle: '共通点',
-    bridgeOpenerTitle: '最初の質問',
-    runErrorMessage: '計算を完了できませんでした。もう一度お試しください。',
-    backButton: '戻る',
-    settingsButton: 'Settings（言語切り替え等）',
-    settingsButtonHint: 'Settings 画面に戻ります。',
-    crashNoticeTitle: '問題が発生しました。',
-    crashNoticeDescription:
-      '端末内会話エージェントの表示中に問題が発生したため、この画面を終了しました。内容は保存・送信されていません。',
   },
 };
 
@@ -1751,121 +1405,12 @@ const en: AppMessages = {
     languageOptionAccessibilityLabel: (label, selected) =>
       `Display language ${label}${selected ? ', selected' : ''}`,
     languageOptionHint: 'Switches this device’s display language to this one.',
-    modelSectionTitle: 'On-device local models',
-    modelDescription:
-      'Available only in a Development Build. After selection, the app shows the GGUF size and copies it into private storage only after confirmation.',
-    modelBusy: 'Processing the local model on this device.',
-    onDeviceAiSectionTitle: 'On-device AI (Qwen)',
-    onDeviceAiDescription: (displayName, size) =>
-      `Fetching ${displayName} (${size}) on-device switches the conversation agent from Rules to the local LLM. Everything runs on this device only and nothing is sent to a server.`,
-    onDeviceAiEnableButton: 'Enable on-device AI',
-    onDeviceAiEnableButtonHint:
-      'Opens the explicit-consent screen. The download does not start yet.',
-    onDeviceAiConsentTitle: 'Please review before downloading.',
-    onDeviceAiConsentBody: (displayName, size, license) =>
-      `This downloads ${displayName}, about ${size}. License: ${license}. We recommend doing this over Wi-Fi. All inference afterward runs on this device only; nothing is sent to a server.`,
-    onDeviceAiConsentStartButton: 'I agree, start the download',
-    onDeviceAiConsentCancelButton: 'Cancel',
-    onDeviceAiDownloadStatus: (downloaded, total, percent) =>
-      `Downloading: ${downloaded} / ${total} (${percent}%)`,
-    onDeviceAiDownloadCancelButton: 'Cancel the download',
-    onDeviceAiFinalizingStatus:
-      'Download complete. Finishing setup on this device (this step cannot be cancelled).',
-    onDeviceAiVerifyingStatus:
-      'Verifying. This finishes in a few seconds (this step cannot be cancelled).',
-    onDeviceAiActiveStatus:
-      'Enabled. The conversation agent is using this model.',
-    onDeviceAiImportedNotActiveStatus:
-      'Already fetched, but not in use yet. Check the status in the list below.',
-    onDeviceAiRemoveButton: 'Disable on-device AI and delete it',
-    selectModelButton: 'Choose a GGUF file',
-    selectModelHint:
-      'Opens the OS document picker. Selection alone does not copy the file into app-private storage.',
-    candidateSummary: (name, size) => `Selected candidate: ${name}, ${size}`,
-    candidateAvailableStorage: (size) =>
-      `Available on-device storage before copy: ${size}`,
-    candidateWarning:
-      'This file size will be copied on-device. SHA-256 does not prove safety or provenance.',
-    confirmImportButton: 'Import this GGUF on-device',
-    cancelImportButton: 'Cancel import',
-    cancelRunningImportButton: 'Stop the import in progress',
-    importedModelSummary: (name, size, architecture, risk, active) =>
-      `${name}, ${size}, ${architecture}, ${risk}${active ? ', active' : ''}`,
-    riskSupported: 'Supported',
-    riskCaution: 'Confirmation required',
-    riskBlocked: 'Blocked for the current device state',
-    riskBasis: (estimatedMemory, effectiveMemory, ratio, reasons) =>
-      `Estimated working set ${estimatedMemory} / effective memory basis ${effectiveMemory} (ratio ${ratio}). Basis: ${reasons}`,
-    riskMemoryUnavailable: 'unavailable',
-    riskReasonMemoryUnavailable: 'memory ceiling information is unavailable',
-    riskReasonSupported: 'memory ratio is at most 45%',
-    riskReasonCaution: 'memory ratio is over 45% and at most 60%',
-    riskReasonBlocked: 'memory ratio is over 60%',
-    riskReasonThermal: 'thermal state is serious or critical',
-    activateModelButton: 'Use this model',
-    reassessBlockedModelButton:
-      'Reassess device state and use the model if supported',
-    unloadModelButton: 'Unload local model',
-    deleteModelButton: 'Delete model file and measurements',
-    providerOperationTitle: 'This ends the in-progress local model decision.',
-    providerOperationDescription:
-      'Continuing cancels the local model decision running in the current Lounge, waits for native context teardown, and then changes the model. The Lounge itself is not discarded.',
-    confirmProviderOperationButton: 'End the decision and continue',
-    cancelProviderOperationButton: 'Keep the current decision running',
-    cautionTitle: 'This model is on the large side for this device.',
-    cautionDescription:
-      'Based on the memory measured just now it should run, but memory is shared with other apps, so this is not a guarantee. The app may quit while loading or using the model.',
-    confirmCautionButton: 'I understand, use the model',
-    blockedDescription:
-      'Loading was stopped because this device does not have enough free memory, or it is running hot, to load this model safely. You can still delete the model file.',
-    benchmarkSummary: (
-      count,
-      importMs,
-      loadMs,
-      firstTokenMs,
-      completionMs,
-      peakMemory,
-      thermalBefore,
-      thermalAfter,
-      batteryDeltaPermille,
-      outcome
-    ) =>
-      `${count} content-free measurements. Latest: import ${importMs ?? '-'} ms, load ${loadMs ?? '-'} ms, first token ${firstTokenMs ?? '-'} ms, completion ${completionMs ?? '-'} ms, peak memory ${peakMemory}, thermal ${thermalBefore} → ${thermalAfter}, battery ${batteryDeltaPermille ?? '-'} permille, outcome ${outcome}.`,
-    modelError: (code) => {
-      if (code === 'NATIVE_CONTEXT_UNAVAILABLE') {
-        return "We couldn't confirm the local model shut down cleanly. No model file was changed. Just to be safe, fully quit and reopen the app.";
-      }
-      if (code === 'MODEL_CONTEXT_BUSY') {
-        return 'The local model is busy with another operation. Please wait a moment and try again. Your current setting has not changed.';
-      }
-      if (code === 'STARTUP_RECOVERY_PENDING') {
-        return "Please wait for the startup check to finish. If this doesn't clear up, restart the app and try again.";
-      }
-      if (code === 'INSUFFICIENT_STORAGE') {
-        return 'This device does not have enough free storage. Free up space and try again. Your current setting has not changed.';
-      }
-      if (code === 'DOWNLOAD_FAILED') {
-        return 'The download failed. Check your connection and try again. Your current setting has not changed.';
-      }
-      if (code === 'DOWNLOAD_CANCELLED') {
-        return 'The download was cancelled. Your current setting has not changed.';
-      }
-      if (code === 'INTEGRITY_MISMATCH') {
-        return 'The downloaded content failed verification. Please try again. Your current setting has not changed.';
-      }
-      return `The local model operation could not finish (${code}). No file URI or inference content was recorded.`;
-    },
     diagnosticsButton: 'Diagnostics and local data',
     diagnosticsButtonHint:
       'Opens an on-device diagnostic Preview and separate deletion actions.',
     pilotMeasurementButton: 'Anonymous Pilot aggregate',
     pilotMeasurementButtonHint:
       'Previews every in-process counter and permits manual sharing only after the minimum aggregation unit.',
-    conversationAgentButton: 'Find a conversation starter with AI',
-    conversationAgentButtonHint:
-      "Finds a conversation opener from someone's intro card, entirely on this device.",
-    conversationAgentButtonDisabledHint:
-      'Create an intro card first to unlock this.',
     backButton: 'Back',
     eraseAllDataButton: 'Delete all data on this device',
     eraseAllDataButtonHint:
@@ -2149,10 +1694,6 @@ const en: AppMessages = {
     addLinkButtonHint:
       'Adds a free-form URL field. Up to 5 links in total, including the named fields.',
     removeLinkButtonLabel: (index) => `Remove other link ${index}`,
-    themeIdsLabel: 'Conversation topics (optional)',
-    themeIdsHint:
-      'Used by the on-device conversation agent to find common ground with someone you meet. Choose up to 3.',
-    themeIdsCounter: (current, max) => `${current} / ${max} selected`,
     byteUsageLabel: (current, max) => `QR estimate: ${current} / ${max} byte`,
     byteUsageOverBudget: (current, max) =>
       `This exceeds the QR limit (${current} / ${max} byte). Please shorten your input.`,
@@ -2173,60 +1714,6 @@ const en: AppMessages = {
     settingsButton: 'Settings',
     settingsButtonHint:
       'Opens diagnostics and other settings beyond your Intro Card.',
-  },
-  conversationAgent: {
-    eyebrow: 'On-device conversation agent',
-    title: 'Find a conversation opener.',
-    description:
-      'Bring in someone’s intro card URL, and this finds a shared topic and opening question from confirmed conversation topics, entirely on this device. The other person’s card only lives in memory and disappears when you finish.',
-    selfCardMissingNotice:
-      'You have not created an intro card yet. Please create one first.',
-    selfCardMissingCtaButton: 'Go back to create an intro card',
-    selfCardMissingCtaButtonHint:
-      'Returns to Settings. Creating an intro card unlocks this feature.',
-    appleIntelligenceUnavailableNotice:
-      "Apple Intelligence isn't available right now, so conversation openers are found from confirmed themes only.",
-    peerSectionTitle: 'Their card',
-    participantsSectionTitle: 'People you have added',
-    addMorePeerNotice:
-      'Add more people and this compares every pair on-device, then presents only the single best-supported pair.',
-    sessionFullNotice:
-      'This session is full. Remove one of the cards to try someone else.',
-    bridgePartnerTitle: 'Chosen partner',
-    noPeerNotice:
-      'You have not received their card yet. Re-scan the QR code or paste the URL.',
-    scanButton: 'Re-scan QR code',
-    scanButtonHint: "Scans the other person's intro page QR code.",
-    pasteLabel: 'Paste their intro page URL',
-    pasteHint:
-      'If the camera is unavailable, paste the URL they shared with you.',
-    pastePlaceholder: 'e.g., https://card.tenkacloud.com/c/#...',
-    pasteSubmitButton: 'Add',
-    pasteSubmitButtonHint: 'Imports their card from the pasted URL.',
-    sampleButton: 'Try with a sample',
-    sampleButtonHint:
-      'Try this feature by yourself with a fictional sample card.',
-    peerLabel: (name) => `With: ${name}`,
-    removePeerButtonLabel: (name) => `Remove ${name}`,
-    removePeerButtonHint: 'Removes the received card from this session.',
-    startButton: 'Find a conversation opener',
-    startButtonHint:
-      'Computes a shared topic and opening question from confirmed conversation topics.',
-    resetButton: 'Remove card and start over',
-    resetButtonHint: 'Removes the received card so you can bring in another.',
-    runningNotice: 'Looking for common ground…',
-    noSignalTitle: 'No common ground found',
-    noSignalMessage:
-      'Your confirmed conversation topics did not overlap. Adding more topics, or writing a short intro on both cards, makes a match more likely.',
-    bridgeReasonTitle: 'Common ground',
-    bridgeOpenerTitle: 'Opening question',
-    runErrorMessage: 'Could not finish. Please try again.',
-    backButton: 'Back',
-    settingsButton: 'Settings (language, etc.)',
-    settingsButtonHint: 'Returns to the Settings screen.',
-    crashNoticeTitle: 'Something went wrong.',
-    crashNoticeDescription:
-      'The on-device conversation agent hit a problem and this screen was closed. Nothing was saved or sent.',
   },
 };
 

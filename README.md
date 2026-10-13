@@ -207,3 +207,5 @@ Facilitator Kit は現時点で Document Walkthrough 専用です。実参加者
 作業は [AGENTS.md](./AGENTS.md) と [CLAUDE.md](./CLAUDE.md) に従います。完了条件は
 [Definition of Done](./docs/architecture/quality-bar.md)、機械的な禁止事項は
 [Architecture Harness](./docs/architecture/harness.md) が正本です。MVP、仮実装、Green CI だけでは完了しません。
+
+会話推論のソース・ネイティブ依存は撤去済みです。旧モデルは自動削除せず、設定 → 旧モデルの片付けでの容量確認と明示削除を推論依存なしで維持します。

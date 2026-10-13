@@ -13,6 +13,7 @@ import {
   type LocalDataControl,
   LocalDataControlError,
   type LocalDataPreview,
+  type LocalModelInstallation,
 } from './local-data-control';
 
 const DIAGNOSTIC_REPORT_FILE_NAME = 'tenkacloud-passport-diagnostic.json';
@@ -29,6 +30,8 @@ export type DiagnosticNoticeKind =
 export interface LocalDiagnosticsFlow {
   readonly diagnosticPreview: DiagnosticReportPreview | null;
   readonly localDataPreview: LocalDataPreview | null;
+  readonly modelPreview: LocalModelInstallation | null | undefined;
+  readonly refreshModel: () => Promise<void>;
   readonly loading: boolean;
   readonly busy: boolean;
   readonly recoveryRequired: boolean;
@@ -44,6 +47,7 @@ export interface LocalDiagnosticsFlow {
   readonly endAndForgetLounge: () => void;
   readonly resetPassport: () => Promise<void>;
   readonly removeModel: () => Promise<void>;
+  readonly removeLegacyModel: () => Promise<void>;
   readonly requestDeleteAll: () => void;
   readonly cancelDeleteAll: () => void;
   readonly confirmDeleteAll: () => Promise<void>;
@@ -95,6 +99,9 @@ export function useLocalDiagnosticsFlow({
     useState<DiagnosticReportPreview | null>(null);
   const [localDataPreview, setLocalDataPreview] =
     useState<LocalDataPreview | null>(null);
+  const [modelPreview, setModelPreview] = useState<
+    LocalModelInstallation | null | undefined
+  >(undefined);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recoveryRequired, setRecoveryRequired] = useState(false);
@@ -109,6 +116,7 @@ export function useLocalDiagnosticsFlow({
     refreshGeneration.current += 1;
     setDiagnosticPreview(null);
     setLocalDataPreview(null);
+    setModelPreview(undefined);
     setLoading(false);
   }, []);
 
@@ -257,27 +265,58 @@ export function useLocalDiagnosticsFlow({
     refresh,
   ]);
 
-  const removeModel = useCallback(async (): Promise<void> => {
-    if (busy || recoveryRequired) return;
-    setBusy(true);
+  const refreshModel = useCallback(async (): Promise<void> => {
+    const generation = ++refreshGeneration.current;
+    setLoading(true);
+    setError(null);
+    setDiagnosticPreview(null);
+    setLocalDataPreview(null);
     try {
-      await localDataControl.removeModel();
-      onModelRemoved?.();
-      setNotice('model-removed');
-      await refresh();
+      const model = await localDataControl.inspectModel();
+      if (refreshGeneration.current === generation) setModelPreview(model);
     } catch (cause: unknown) {
+      if (refreshGeneration.current !== generation) return;
+      setModelPreview(undefined);
       applyError(cause);
     } finally {
-      setBusy(false);
+      if (refreshGeneration.current === generation) setLoading(false);
     }
-  }, [
-    applyError,
-    busy,
-    localDataControl,
-    onModelRemoved,
-    recoveryRequired,
-    refresh,
-  ]);
+  }, [applyError, localDataControl]);
+
+  const removeStoredModel = useCallback(
+    async (refreshAfter: () => Promise<void>): Promise<void> => {
+      if (busy || loading || recoveryRequired) return;
+      setBusy(true);
+      try {
+        await localDataControl.removeModel();
+        setModelPreview(undefined);
+        onModelRemoved?.();
+        setNotice('model-removed');
+        await refreshAfter();
+      } catch (cause: unknown) {
+        applyError(cause);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      applyError,
+      busy,
+      loading,
+      localDataControl,
+      onModelRemoved,
+      recoveryRequired,
+    ]
+  );
+
+  const removeModel = useCallback(
+    () => removeStoredModel(refresh),
+    [removeStoredModel, refresh]
+  );
+  const removeLegacyModel = useCallback(
+    () => removeStoredModel(refreshModel),
+    [removeStoredModel, refreshModel]
+  );
 
   const requestDeleteAll = useCallback((): void => {
     if (recoveryRequired) return;
@@ -324,6 +363,8 @@ export function useLocalDiagnosticsFlow({
   return {
     diagnosticPreview,
     localDataPreview,
+    modelPreview,
+    refreshModel,
     loading,
     busy,
     recoveryRequired,
@@ -339,6 +380,7 @@ export function useLocalDiagnosticsFlow({
     endAndForgetLounge,
     resetPassport,
     removeModel,
+    removeLegacyModel,
     requestDeleteAll,
     cancelDeleteAll,
     confirmDeleteAll,

@@ -423,12 +423,21 @@ describe('Issue 29: Architecture と状態 Matrix の非誇張契約', () => {
       expect(row.every((cell) => cell.length > 0)).toBe(true);
     }
     for (const [, maturity] of featureRows) {
-      expect(['`Implemented`', '`Experimental`', '`Planned`']).toContain(
-        maturity ?? ''
-      );
+      expect([
+        '`Implemented`',
+        '`Experimental`',
+        '`Planned`',
+        '`Retired`',
+      ]).toContain(maturity ?? '');
     }
-    expect(status).toContain('Draft PR 48 is not on default branch');
-    expect(status).toContain('`Not run`: iPhone / Android arm64 GGUF');
+    expect(
+      featureRows.find((row) => row[0] === 'Local LLM Provider')?.[1]
+    ).toBe('`Retired`');
+    expect(
+      featureRows.find((row) => row[0] === 'GGUF lifecycle / benchmark')?.[1]
+    ).toBe('`Retired`');
+    expect(status).not.toContain('Native / Rules or Local LLM');
+    expect(status).not.toContain('Draft PR 48 is not on default branch');
     expect(status).toContain('Public OSS Alpha: `Blocked`');
     expect(status).toContain('Candidate commit: `Not fixed`');
     expect(status).not.toContain('| `Verified` 2026-07-18:');

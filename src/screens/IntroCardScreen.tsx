@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
+import { introCardForSharing } from '../app/intro-card-sharing';
 import { LearningEntry } from '../app/learning/navigation';
 import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
@@ -54,7 +55,10 @@ export default function IntroCardScreen({
   onOpenSettings,
 }: IntroCardScreenProps) {
   const t = MESSAGES[locale].introCard;
-  const encodedQr = useMemo(() => encodeQr(encodeIntroCardUrl(card)), [card]);
+  const encodedQr = useMemo(
+    () => encodeQr(encodeIntroCardUrl(introCardForSharing(card))),
+    [card]
+  );
 
   return (
     <AppScreen

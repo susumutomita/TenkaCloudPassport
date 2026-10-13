@@ -40,15 +40,6 @@
     "assetBundlePatterns": ["**/*"],
     "plugins": [
       [
-        "llama.rn",
-        {
-          "enableEntitlements": true,
-          "entitlementsProfile": ["preview"],
-          "forceCxx20": true,
-          "enableOpenCLAndHexagon": true
-        }
-      ],
-      [
         "expo-camera",
         {
           "cameraPermission": "対面の相手の自己紹介カード QR を読み取るためにカメラを使います。読み取った内容は端末の中だけで扱います。",

@@ -20,8 +20,7 @@ TestFlight まで自動で届ける経路を説明する。設計判断の背景
    を実行する。
 3. EAS のクラウドビルド環境が `expo prebuild` で `ios/` を生成した直後、`pod install` を
    実行する**前**に、EAS Custom Build（[`.eas/build/ios-device-build.yml`](../../.eas/build/ios-device-build.yml)）
-   の専用ステップで `make setup-llama-native` を実行し、`llama.rn` の Native artifact
-   （`rnllama.xcframework`）を取得してから CocoaPods 解決とビルドに進む。
+   で CocoaPods 解決とビルドに進む。会話推論用の artifact 取得は廃止済み。
 4. ビルド成功後、`--auto-submit` により同じ Build が EAS Submit 経由で App Store Connect
    （TestFlight）へ自動提出される。
 5. owner が TestFlight でテスター（自分 + 友人）へ配布する。
@@ -114,38 +113,12 @@ gh run watch <run-id>
 gh workflow run ios-release.yml --ref v1.0.0
 ```
 
-## npm hook ではなく EAS Custom Build を使う理由
+## EAS Custom Build
 
-`scripts/setup-llama-native.sh` は `node_modules/llama.rn/install/download-native-artifacts.js`
-を実行するため、`llama.rn` パッケージ自体が `node_modules` に解決済みであることが前提になる。
-一方、`node_modules/llama.rn/llama-rn.podspec` は
-`s.vendored_frameworks = "ios/rnllama.xcframework"` を宣言しており、CocoaPods はこの File が
-`pod install` の実行時点で存在しないと参照を解決できない（存在しない glob は黙って空扱いになり、
-Xcode の link 時に undefined symbol になる）。つまり Native artifact の取得は
-「`npm install` 完了後・`pod install` 実行前」という window に入れる必要がある。
+推論依存は撤去済みで、追加のモデル artifact は取得しない。既存の Custom Build 設定、署名、版番号管理、配布経路は維持する。
 
-EAS Build の 2 つの npm hook はどちらもこの window に一致しない。
-
-- `eas-build-pre-install` は `npm install` の**前**に実行されるため、`node_modules/llama.rn`
-  自体がまだ存在せず `scripts/setup-llama-native.sh` が失敗する。
-- `eas-build-post-install` は Android では `npm install` + `prebuild` の直後に実行されるが、
-  **iOS では `pod install` 完了後に実行される**（[Expo 公式ドキュメント](https://docs.expo.dev/build-reference/npm-hooks/)：
-  "For iOS, runs once after the following commands have all completed: `npm install`,
-  `npx expo prebuild` (if needed), and `pod install`."）。つまり Native artifact を取得する前に
-  `pod install` が完了してしまっており手遅れである。
-
-そこで、EAS の [Custom Builds](https://docs.expo.dev/custom-builds/get-started/) 機能で
-Build Step の順序を明示的に組み直し、`eas/prebuild` の直後・`pod install` の直前に
-`make setup-llama-native` を実行する専用ステップを差し込む。
-
-- development プロファイル（Simulator 用）: [`.eas/build/ios-simulator-build.yml`](../../.eas/build/ios-simulator-build.yml)
-- preview / production プロファイル（署名済み実機 Build）: [`.eas/build/ios-device-build.yml`](../../.eas/build/ios-device-build.yml)
-
-いずれも [`eas.json`](../../eas.json) の各プロファイルの `ios.config` から参照する。
-Custom Build を使う場合、npm lifecycle hook（`eas-build-pre-install` / `eas-build-post-install`）
-は自動実行されなくなる（Expo 公式ドキュメントも "lifecycle hooks are not automatically executed
-in custom builds and must be manually extracted and called during the build steps" と明記
-している）ため、`package.json` に `eas-build-post-install` は定義していない。
+- development: [`.eas/build/ios-simulator-build.yml`](../../.eas/build/ios-simulator-build.yml)
+- preview / production: [`.eas/build/ios-device-build.yml`](../../.eas/build/ios-device-build.yml)
 
 Custom Build は既定の Build Step 構成も自前で組み直す必要がある。
 `.eas/build/ios-device-build.yml` には `eas/configure_ios_credentials` の直後に
@@ -170,11 +143,9 @@ warning を出して以降のステップをすべて skip する。owner が上
 - ワークフローに Apple の秘密情報（証明書、Provisioning Profile、API キー）を持ち込まない。
   署名は EAS が管理する認証情報だけで完結させる。
 
-## 既知の制約と follow-up
+## 未確認事項
 
-EAS のクラウドビルド環境で `llama.rn` の Native artifact 取得（`make setup-llama-native`）が
-失敗する場合の代替経路（Development Build のローカルビルドを TestFlight にアップロードする
-経路）は follow-up として記録済みである。`/follow-up list` で確認できる。
+推論依存撤去後のネイティブリンク、旧モデル領域の容量確認と明示削除、学習保存、ソフトウェアキーボードは iOS / Android の実機で確認する。Linux の Web 検証だけで実機確認済みとはしない。
 
 ## 外部資料
 

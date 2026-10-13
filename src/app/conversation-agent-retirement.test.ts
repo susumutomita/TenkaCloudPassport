@@ -14,7 +14,8 @@ it('retires consumer agent routes and startup inference without deleting user da
   );
   expect(root).not.toContain('createDefaultAgentModelProvider');
   expect(root).not.toContain('agentModelProviderStartup');
-  expect(root).toContain('localModelComposition?.modelStorage');
+  expect(root).toContain('modelStorage: legacyModelStorage');
+  expect(root).not.toContain('createDefaultLocalModelManagement');
   expect(root).toContain('learningStorage,');
   expect(root).not.toContain('.remove(');
   expect(app).not.toContain('useConversationAgentFlow');

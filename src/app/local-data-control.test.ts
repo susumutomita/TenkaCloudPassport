@@ -1021,3 +1021,40 @@ describe('write-ahead tombstone による全削除', () => {
     expect(await new WebDeletionJournalAdapter(storage).isPending()).toBeTrue();
   });
 });
+
+it('model-only inspection and erasure stay available when unrelated profile inspection fails', async () => {
+  const root = temporaryDirectories.create();
+  const storage = new FileBackedWebStorage(root);
+  const profileStorage = new WebLocalProfileStorageAdapter(storage);
+  const modelStorage = new CorruptManifestPurgeableModelStorage();
+  const control = createLocalDataControl({
+    profileStorage: {
+      load: () => profileStorage.load(),
+      save: (value) => profileStorage.save(value),
+      remove: () => profileStorage.remove(),
+      inspect: async () => {
+        throw new Error('Synthetic unrelated storage failure');
+      },
+    },
+    modelStorage,
+    modelContexts: new LocalModelContextLeaseRegistry(false),
+    deletionJournal: new WebDeletionJournalAdapter(storage),
+  });
+  await expect(control.preview()).rejects.toBeInstanceOf(LocalDataControlError);
+  expect(await control.inspectModel()).toMatchObject({ sizeBytes: 4096 });
+  await control.removeModel();
+  expect(await control.inspectModel()).toBeNull();
+});
+it('model-only inspection exposes its own I/O failure rather than reporting no model', async () => {
+  const root = temporaryDirectories.create();
+  const storage = new FileBackedWebStorage(root);
+  const control = createLocalDataControl({
+    profileStorage: new WebLocalProfileStorageAdapter(storage),
+    modelStorage: new UnavailableLocalModelStorage(),
+    modelContexts: new LocalModelContextLeaseRegistry(false),
+    deletionJournal: new WebDeletionJournalAdapter(storage),
+  });
+  await expect(control.inspectModel()).rejects.toBeInstanceOf(
+    LocalDataControlError
+  );
+});
