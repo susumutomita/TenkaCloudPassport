@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "uiSourceCommit": "d42f0439639dfdb7b31d1560f83493a7cd4e73b8",
+  "captureSourceCommit": "cf733529b73449161ebc234616940a85b02e0d6e",
+  "workflowRunID": 38431044902,
+  "workflowJobID": 115412990957,
+  "workflowURL": "https://github.com/susumutomita/TenkaCloudPassport/actions/runs/38431044902",
+  "nativeCaptureSucceeded": true,
+  "visuallyReviewed": true,
+  "nativeBinaryKind": "unsigned-release-simulator",
+  "signedReleaseWasRun": false,
+  "xcode": "26.6",
+  "xcodeBuild": "17F113",
+  "simulatorRuntime": "iOS 26.5 (23F77)",
+  "sampleData": "Synthetic Sample Creator, no real contact details",
+  "imageEditing": "None; exact exported XCTest PNG bytes",
+  "artifactID": 11832811406,
+  "artifactZipSHA256": "3f38b96898c0372ecc552c27221a757ba48fe2ef68ea496c8d31200ea2d77741",
+  "artifactZipBytes": 9491660,
+  "assets": [
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-01-intro-card-edit-d0796b3f924a.png",
+      "sha256": "d0796b3f924a074cc806b0bc039d077e0ce6e909abcd4a0cbbd359c575826156",
+      "bytes": 244778,
+      "width": 2064,
+      "height": 2752,
+      "captureAttachment": "ipad-13/attachments/9F7DFFB2-C2EE-4E57-AA94-C3187EE64923.png",
+      "captureTimestamp": "2026-10-13T17:00:50.525Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-02-intro-card-qr-707d4e0f904c.png",
+      "sha256": "707d4e0f904ccd3dd83e9a51aaf713a734f607dda286f71c12f0109d8bea2a4a",
+      "bytes": 217652,
+      "width": 2064,
+      "height": 2752,
+      "captureAttachment": "ipad-13/attachments/6391B31B-47AD-40CF-82F9-98312AD09409.png",
+      "captureTimestamp": "2026-10-13T17:01:18.238Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-03-learning-library-8ec85d9cf82a.png",
+      "sha256": "8ec85d9cf82a93650fe3a825048ba2fb534c2e1a2997ced66aa81788ca80e436",
+      "bytes": 420682,
+      "width": 2064,
+      "height": 2752,
+      "captureAttachment": "ipad-13/attachments/EC608A39-3E52-4CB6-9891-EE0A6CF8F813.png",
+      "captureTimestamp": "2026-10-13T17:01:46.059Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-04-learning-study-b88698dcc2df.png",
+      "sha256": "b88698dcc2dff918302d98c129dca2d9f71b8a1dde0f73e8918c86d98dbe6276",
+      "bytes": 477985,
+      "width": 2064,
+      "height": 2752,
+      "captureAttachment": "ipad-13/attachments/D7D1E993-F89D-48AD-BE9B-8C4B144FCCE7.png",
+      "captureTimestamp": "2026-10-13T17:01:56.469Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/1.3.0-05-settings-d8a7853520ce.png",
+      "sha256": "d8a7853520ceab657b98ad9e6f93597375ce1135a72bdfa7f5e38618f1bd85aa",
+      "bytes": 241445,
+      "width": 2064,
+      "height": 2752,
+      "captureAttachment": "ipad-13/attachments/B5687FC5-B5C7-43C1-B65C-4AA8926FCC6E.png",
+      "captureTimestamp": "2026-10-13T17:02:13.476Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-01-intro-card-edit-2cd412b270be.png",
+      "sha256": "2cd412b270be0ba64a45703ee59be889df5ee7c2db93622cfbf0fadd4fd6171f",
+      "bytes": 287623,
+      "width": 1320,
+      "height": 2868,
+      "captureAttachment": "iphone-6.9/attachments/C5635DBF-FDC5-4AFE-9460-F3A51B31BFBB.png",
+      "captureTimestamp": "2026-10-13T16:54:32.286Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-02-intro-card-qr-fa40d5766a09.png",
+      "sha256": "fa40d5766a09e3efbf05a304211fc34155766d2da054d7f5389e7e838eef4912",
+      "bytes": 243871,
+      "width": 1320,
+      "height": 2868,
+      "captureAttachment": "iphone-6.9/attachments/4D83D34C-A1F0-451C-9B9A-34E37C285CD8.png",
+      "captureTimestamp": "2026-10-13T16:55:04.606Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-03-learning-library-dd9b397c2e2e.png",
+      "sha256": "dd9b397c2e2edaf3642d056ca0c9ac4c82978b73270c2f902216f8a29d2a4bc6",
+      "bytes": 348232,
+      "width": 1320,
+      "height": 2868,
+      "captureAttachment": "iphone-6.9/attachments/689A4B29-9C38-4DF4-99E9-7B23E6216BD7.png",
+      "captureTimestamp": "2026-10-13T16:55:29.545Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-04-learning-study-756ac69b6b75.png",
+      "sha256": "756ac69b6b75a974c2652007fe668f464f7c44cccd0cbf4ae6ff991ac123cfb5",
+      "bytes": 417223,
+      "width": 1320,
+      "height": 2868,
+      "captureAttachment": "iphone-6.9/attachments/4D619F6F-0A59-4B6E-82EB-0FF098D57716.png",
+      "captureTimestamp": "2026-10-13T16:55:39.955Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-6.9/1.3.0-05-settings-78eeefe41aa6.png",
+      "sha256": "78eeefe41aa65390b249b9a7c5d30037a1d76a6bf34f4ba0c3af8d32c6252c58",
+      "bytes": 281007,
+      "width": 1320,
+      "height": 2868,
+      "captureAttachment": "iphone-6.9/attachments/42B16AC9-CED6-4EAA-B918-D61CA71AAB20.png",
+      "captureTimestamp": "2026-10-13T16:55:54.717Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-01-intro-card-edit-0e98a4a6ae39.png",
+      "sha256": "0e98a4a6ae39bc214fd5b16555ec72bb5a85ef492834ddabcc0f43ce5cafc345",
+      "bytes": 264018,
+      "width": 1206,
+      "height": 2622,
+      "captureAttachment": "iphone-medium/attachments/7949FE75-032D-4322-92D5-B28D8B289170.png",
+      "captureTimestamp": "2026-10-13T16:47:54.637Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-02-intro-card-qr-8e887ca3853b.png",
+      "sha256": "8e887ca3853b9c6a4d8b5f0983ff53a5133219ddcc2f3d917a4cf6e50df98943",
+      "bytes": 227363,
+      "width": 1206,
+      "height": 2622,
+      "captureAttachment": "iphone-medium/attachments/CCE63B19-E17B-47D8-8FF8-95EBB33027A3.png",
+      "captureTimestamp": "2026-10-13T16:48:13.430Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-03-learning-library-2d35d7c82aa0.png",
+      "sha256": "2d35d7c82aa0cbf999f78a3b59cc5f940ded1395413576cbe43d1d3f6fb9b13e",
+      "bytes": 306286,
+      "width": 1206,
+      "height": 2622,
+      "captureAttachment": "iphone-medium/attachments/CA5CA974-6A81-4F99-82C0-D6DD8E52FFA3.png",
+      "captureTimestamp": "2026-10-13T16:48:34.683Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-04-learning-study-4d37116439b2.png",
+      "sha256": "4d37116439b2ea5e1cff90ea779789eb38b7326c7c7b3bdd1c9bd65ff2ce40ce",
+      "bytes": 362719,
+      "width": 1206,
+      "height": 2622,
+      "captureAttachment": "iphone-medium/attachments/5F394785-EBCD-45D3-B4C0-066AB67CF504.png",
+      "captureTimestamp": "2026-10-13T16:48:46.196Z"
+    },
+    {
+      "path": "docs/assets/app-store-screenshots/v1.3.0/ja-JP/iphone-medium/1.3.0-05-settings-b162874ef7b4.png",
+      "sha256": "b162874ef7b4aa7488eb6cf9a9cd59bf9af366daceb800c7eddf574c4e21521c",
+      "bytes": 268867,
+      "width": 1206,
+      "height": 2622,
+      "captureAttachment": "iphone-medium/attachments/7F1A5BC8-489C-4440-BC8E-B19F2672FA2D.png",
+      "captureTimestamp": "2026-10-13T16:49:11.387Z"
+    }
+  ]
+}

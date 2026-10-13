@@ -40,6 +40,45 @@ for (const locale of ['ja', 'en-US']) {
   });
 }
 
+it('accepts all fifteen byte-verified native screenshots from the reviewed release UI', async () => {
+  const { validateReviewedAssets } = await import('./apply-store-listing');
+  validateReviewedAssets(new URL('..', import.meta.url).pathname, config.apple);
+  expect(Object.values(config.apple.info.ja.screenshots).flat()).toHaveLength(
+    15
+  );
+});
+
+it('rejects changed image bytes even when capture and visual review are marked complete', async () => {
+  const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } =
+    await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, dirname } = await import('node:path');
+  const { validateReviewedAssets } = await import('./apply-store-listing');
+  const root = new URL('..', import.meta.url).pathname;
+  const folder = mkdtempSync(
+    join(tmpdir(), 'passport-reviewed-image-corruption-')
+  );
+  try {
+    const evidencePath =
+      'docs/assets/app-store-screenshots/v1.3.0/capture-provenance.json';
+    const imagePath = config.apple.info.ja.screenshots.APP_IPHONE_61[0];
+    mkdirSync(dirname(join(folder, evidencePath)), { recursive: true });
+    writeFileSync(
+      join(folder, evidencePath),
+      readFileSync(join(root, evidencePath))
+    );
+    mkdirSync(dirname(join(folder, imagePath)), { recursive: true });
+    const image = readFileSync(join(root, imagePath));
+    image[image.length - 1] = (image[image.length - 1] ?? 0) ^ 1;
+    writeFileSync(join(folder, imagePath), image);
+    expect(() => validateReviewedAssets(folder, config.apple)).toThrow(
+      'Screenshot byte hash mismatch'
+    );
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 it('cannot mutate ASC when native capture has not been prepared', async () => {
   const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import(
     'node:fs'
