@@ -428,3 +428,24 @@ it('exposes unconfigured supported age answers without emitting unknown values',
   expect(result.missingSupportedRemoteFieldNames).toContain('messagingAndChat');
   expect(JSON.stringify(result)).not.toContain('private@example.invalid');
 });
+
+it('preserves current Apple frequency and age override answers without substituting unavailable', async () => {
+  const { summarizeAgeDeclaration } = await import('./apply-store-listing');
+  const actual = summarizeAgeDeclaration(
+    {
+      horrorOrFearThemes: 'INFREQUENT',
+      gamblingSimulated: 'FREQUENT',
+      ageRatingOverride: 'THIRTEEN_PLUS',
+      ageRatingOverrideV2: 'SIXTEEN_PLUS',
+      koreaAgeRatingOverride: 'NINETEEN_PLUS',
+      kidsAgeBand: 'SIX_TO_EIGHT',
+    },
+    {}
+  );
+  expect(actual.currentAnswers['horrorOrFearThemes']).toBe('INFREQUENT');
+  expect(actual.currentAnswers['gamblingSimulated']).toBe('FREQUENT');
+  expect(actual.currentAnswers['ageRatingOverride']).toBe('THIRTEEN_PLUS');
+  expect(actual.currentAnswers['ageRatingOverrideV2']).toBe('SIXTEEN_PLUS');
+  expect(actual.currentAnswers['koreaAgeRatingOverride']).toBe('NINETEEN_PLUS');
+  expect(actual.currentAnswers['kidsAgeBand']).toBe('SIX_TO_EIGHT');
+});
