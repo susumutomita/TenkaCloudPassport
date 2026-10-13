@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, TextInput, View } from 'react-native';
+import { practiceText } from '../../app/learning/presentation';
 import ActionButton from '../../components/ActionButton';
 import {
   type Attempt,
@@ -38,26 +39,16 @@ export function LearningLesson(props: Props) {
   return (
     <>
       <Text style={styles.heading}>{lesson.title}</Text>
-      <Text>{lesson.summary}</Text>
-      <Text>
-        {catalog.catalogID} · v{catalog.version}
-      </Text>
-      <Text>
-        作者 / Authors:{' '}
-        {lesson.authors
-          .map(
-            (author) =>
-              `${author.name}${author.type ? ` (${author.type})` : ''}`
-          )
-          .join(', ')}
-      </Text>
+      <Text>{practiceText(lesson.summary)}</Text>
+      <Text>教材の版 v{catalog.version}</Text>
+      <LessonDetails lesson={lesson} />
       {progress?.completed ? (
         <View accessibilityRole="alert" style={styles.success}>
           <Text style={styles.heading}>
-            ✓ この練習を完了しました / Practice complete
+            ✓ この練習の回答を記録しました / Practice recorded
           </Text>
           <Text>
-            次はヒントを見ずに考え方を説明してみましょう。自己評価は能力の証明ではありません。
+            次はヒントなしで類題を組み立て、手元で実装・テストしましょう。この記録は自己評価で、実装の検証済みを意味しません。
           </Text>
           <ActionButton
             label="もう一度練習 / Practice again"
@@ -111,7 +102,7 @@ function StepBody({
         {index + 1}/{count} · {step.phase}
       </Text>
       {step.title ? <Text style={styles.heading}>{step.title}</Text> : null}
-      <Text style={styles.body}>{step.prompt}</Text>
+      <Text style={styles.body}>{practiceText(step.prompt)}</Text>
       {step.code ? (
         <Text selectable style={styles.code}>
           {step.code}
@@ -147,7 +138,8 @@ function SelfAssessment({
   readonly busy: boolean;
   readonly onAnswer: Props['onAnswer'];
 }) {
-  const [showHelp, setShowHelp] = useState(false);
+  const [revealedHints, setRevealedHints] = useState(0);
+  const [showReference, setShowReference] = useState(false);
   const hints =
     step.hints?.map((text, ordinal) => ({
       id: `${step.id}-hint-${ordinal}`,
@@ -159,27 +151,40 @@ function SelfAssessment({
         口頭または手元で説明してください。説明文は保存しません。下の操作は自己申告で、採点ではありません。
         / Self-assessment only.
       </Text>
-      <ActionButton
-        label="ヒント・参考解答を開く / Reveal guidance"
-        disabled={busy}
-        onPress={() => setShowHelp((value) => !value)}
-        variant="secondary"
-      />
-      {showHelp ? (
-        <>
-          {hints.map((hint) => (
-            <Text key={hint.id}>{hint.text}</Text>
-          ))}
-          {step.reference ? (
-            <Text selectable style={styles.code}>
-              {step.reference}
-            </Text>
-          ) : null}
-        </>
+      <ReasoningDraft />
+      {hints.length ? (
+        <ActionButton
+          label={`次のヒントを開く / Next hint (${revealedHints}/${hints.length})`}
+          disabled={busy || revealedHints >= hints.length}
+          onPress={() => setRevealedHints((value) => value + 1)}
+          variant="secondary"
+        />
       ) : null}
+      <>
+        {hints.slice(0, revealedHints).map((hint) => (
+          <Text key={hint.id}>{hint.text}</Text>
+        ))}
+        {step.reference ? (
+          <ActionButton
+            label={
+              showReference
+                ? '参考解答を閉じる / Hide reference'
+                : '参考解答を開く / Show reference'
+            }
+            disabled={busy}
+            variant="secondary"
+            onPress={() => setShowReference(!showReference)}
+          />
+        ) : null}
+        {showReference && step.reference ? (
+          <Text selectable style={styles.code}>
+            {step.reference}
+          </Text>
+        ) : null}
+      </>
       {step.check ? <Text>{step.check}</Text> : null}
       <ActionButton
-        label="自分で説明できた（自己評価） / Self: ready"
+        label="自分で説明できた（自己評価・実装未検証） / Self: ready"
         disabled={busy}
         onPress={() => onAnswer(null, true)}
       />
@@ -192,6 +197,96 @@ function SelfAssessment({
     </>
   );
 }
+function ReasoningDraft() {
+  const [draft, setDraft] = useState('');
+  return (
+    <View style={styles.success}>
+      <Text style={styles.heading}>
+        自分で組み立てる / Build your reasoning
+      </Text>
+      <Text>
+        何を状態として持つ？ 1回の操作でどう変わる？
+        小さい例を手で動かし、計算量と反例を考えてみましょう。
+      </Text>
+      <TextInput
+        accessibilityLabel="状態・遷移・トレースのメモ / Reasoning notes"
+        multiline
+        maxLength={10_000}
+        value={draft}
+        onChangeText={setDraft}
+        placeholder="状態：
+遷移：
+小さい例のトレース：
+計算量・反例："
+        style={styles.code}
+      />
+      <Text>
+        このメモは保存しません。問題を移動すると消えます。実装・テストは手元の環境で行ってください。
+      </Text>
+    </View>
+  );
+}
+function safeSourceURL(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+function LessonDetails({ lesson }: { readonly lesson: Lesson }) {
+  const [expanded, setExpanded] = useState(false);
+  const [linkError, setLinkError] = useState(false);
+  const sources =
+    lesson.sources?.filter((source) => safeSourceURL(source.url)) ?? [];
+  async function openSource(url: string) {
+    setLinkError(false);
+    try {
+      await Linking.openURL(url);
+    } catch {
+      setLinkError(true);
+    }
+  }
+  return (
+    <>
+      <ActionButton
+        label={
+          expanded ? '教材情報・参考資料を閉じる' : '教材情報・参考資料を開く'
+        }
+        variant="secondary"
+        onPress={() => setExpanded(!expanded)}
+      />
+      {expanded ? (
+        <View style={styles.success}>
+          <Text>
+            独自の練習教材です。参考資料は公式過去問や出題元を意味しません。
+          </Text>
+          <Text>
+            作者：
+            {lesson.authors
+              .map((author) => `${author.name} (${author.type ?? 'author'})`)
+              .join(', ')}
+          </Text>
+          {sources.map((source) => (
+            <ActionButton
+              key={source.url}
+              label={`参考資料：${source.title}`}
+              variant="secondary"
+              onPress={() => void openSource(source.url)}
+            />
+          ))}
+          {sources.length === 0 ? (
+            <Text>この教材には参考資料のリンクがまだありません。</Text>
+          ) : null}
+          {linkError ? (
+            <Text accessibilityRole="alert">
+              参考資料を開けませんでした。通信・ブラウザを確認してください。
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+    </>
+  );
+}
 function Feedback({
   attempt,
   step,
@@ -200,9 +295,10 @@ function Feedback({
   readonly step: Step;
 }) {
   const titles = {
-    correct: '✓ 正解！ / Correct!',
+    correct: '✓ 選択問題の正解 / Correct choice',
     incorrect: 'もう一度考えてみましょう / Try again',
-    'self-ready': '自己評価を記録しました / Self-assessment recorded',
+    'self-ready':
+      '自己評価を記録・実装は未検証 / Self-assessed; implementation not verified',
     'self-review': '復習に追加しました / Added to review',
   };
   return (

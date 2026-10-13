@@ -128,18 +128,9 @@ describe('Settings 画面（言語切り替え）の Accessibility 契約', () =
   it('Issue 138（実機 blocker A、DL 完了後フリーズの是正 / v1.0 ADR-0038）: 会話 Agent・戻るは dataErasure.busy だけを disabled 条件にする（Local Model 管理 UI 自体が無いため busy 連動の過剰 disable も発生し得ない）', async () => {
     const text = await source();
 
-    expect(text).toContain('disabled={dataErasure.busy || !hasIntroCard}');
+    expect(text).not.toContain('onOpenConversationAgent');
     expect(text).toContain(
       '<DataErasureSection dataErasure={dataErasure} locale={locale} t={t} />\n      <ActionButton\n        disabled={dataErasure.busy}\n        label={t.backButton}'
-    );
-  });
-
-  it('major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カード未作成時は会話エージェントの入口を disabled にする', async () => {
-    const text = await source();
-
-    expect(text).toContain('disabled={dataErasure.busy || !hasIntroCard}');
-    expect(text).toContain(
-      'hasIntroCard\n            ? t.conversationAgentButtonHint\n            : t.conversationAgentButtonDisabledHint'
     );
   });
 

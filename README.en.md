@@ -6,6 +6,14 @@ TenkaCloud Passport is a free, account-free Expo app that lets you hand off an i
 card. Just show a QR code and the other person opens your Intro Card page with their phone's standard camera,
 no app required. See the [landing page](https://card.tenkacloud.com/en/) for details.
 
+## Practice
+
+Open Learn algorithms & design, choose Add lessons, then Download and save. Saved lessons work offline.
+Updates retain existing versions and progress. Practice focuses on understanding typical algorithms and applying them in code and new problems.
+These are original exercises, not official or past exam questions. Hints open one at a time; self-assessment is not verified implementation or testing.
+
+The on-device conversation agent and its entry points are retired. Existing cards, progress and stored files are not automatically deleted.
+
 ## Demo video
 
 [![Demo video](https://img.youtube.com/vi/KgMwSKu05a4/hqdefault.jpg)](https://youtube.com/shorts/KgMwSKu05a4)

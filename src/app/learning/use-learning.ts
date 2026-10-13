@@ -27,6 +27,7 @@ import { webCryptoRandomBytes } from '../../protocol/web-crypto-random';
 import { emptyLearningState } from './bundled';
 import { fetchCatalog, fetchManifest } from './catalog-download';
 import { catalogTransport } from './default-transport';
+import { downloadCurrentCatalog } from './download-current-catalog';
 import type { LearningFilePort } from './file-port';
 import { LearningSession, type LearningStorage } from './storage';
 
@@ -42,7 +43,12 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
   const [state, setState] = useState<LearningState | null>(null);
   const [selection, setSelection] = useState<LearningSelection | null>(null);
   const [busy, setBusy] = useState(false);
+  const [messageKind, setMessageKind] = useState<'error' | 'notice'>('notice');
   const [message, setMessage] = useState<string | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState<{
+    url: string;
+    phase: 'manifest' | 'catalog' | 'saving';
+  } | null>(null);
   const [pending, setPending] = useState<LearningState | null>(null);
   const load = useCallback(async () => {
     if (operation.current) return;
@@ -55,6 +61,7 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
       setState(loaded);
       setMessage(null);
     } catch {
+      setMessageKind('error');
       if (alive.current)
         setMessage(
           '保存データを読めませんでした。既存データを変更せず停止しました。 / Could not load saved learning data.'
@@ -78,10 +85,12 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     operation.current = true;
     setBusy(true);
     setMessage(null);
+    setMessageKind('notice');
     try {
       await action();
       return true;
     } catch (error: unknown) {
+      setMessageKind('error');
       if (alive.current)
         setMessage(
           error instanceof Error
@@ -196,10 +205,55 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
         if (alive.current) {
           setState(active.state);
           setSelection(null);
-          setMessage('取得・保存しました。オフラインで利用できます。');
+          setMessage(
+            source && release
+              ? '教材を保存しました。オフラインで利用できます。'
+              : '教材の版一覧を更新しました。教材本体はまだダウンロードしていません。'
+          );
         }
       } finally {
         download.current = null;
+      }
+    });
+  }
+  async function downloadLatest(sourceURL: string) {
+    const active = session.current;
+    if (!active || revision === undefined) return false;
+    return run(async () => {
+      const controller = new AbortController();
+      download.current = controller;
+      const reportPhase = (phase: 'manifest' | 'catalog' | 'saving' | null) => {
+        if (alive.current)
+          setDownloadStatus(phase ? { url: sourceURL, phase } : null);
+      };
+      reportPhase('manifest');
+      try {
+        const next = await downloadCurrentCatalog(
+          catalogTransport,
+          active.state,
+          sourceURL,
+          controller.signal,
+          () => reportPhase('catalog')
+        );
+        if (controller.signal.aborted)
+          throw new Error('ダウンロードを中断しました。');
+        reportPhase('saving');
+        await active.commit(revision, () => next);
+        if (alive.current) {
+          setState(active.state);
+          setMessage(
+            '教材を保存しました。下の「学習を始める」から開けます。オフラインでも使えます。 / Saved for offline practice.'
+          );
+        }
+      } catch (error: unknown) {
+        throw new Error(
+          controller.signal.aborted
+            ? 'ダウンロードを中断しました。保存済みの教材と進捗はそのままです。 / Download cancelled.'
+            : `ダウンロードできませんでした。通信を確認して、もう一度お試しください。保存済みの教材と進捗はそのままです。 / Download failed; retry when connected. ${readableDownloadError(error)}`
+        );
+      } finally {
+        download.current = null;
+        reportPhase(null);
       }
     });
   }
@@ -215,6 +269,7 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     setSelection,
     busy,
     message,
+    messageKind,
     pending,
     setPending,
     load,
@@ -225,6 +280,12 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     apply,
     prepareRemoval,
     retrieve,
+    downloadLatest,
+    downloadStatus,
     cancelDownload,
   };
+}
+
+function readableDownloadError(error: unknown): string {
+  return error instanceof Error ? error.message : '';
 }

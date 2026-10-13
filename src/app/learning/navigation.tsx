@@ -17,11 +17,13 @@ export function LearningEntry({
   return (
     <ActionButton
       label={
-        locale === 'ja' ? '学習・面接の練習' : 'Learning & interview practice'
+        locale === 'ja'
+          ? 'アルゴリズム・設計を学ぶ'
+          : 'Learn algorithms & design'
       }
       onPress={() => open(locale)}
       disabled={disabled}
-      variant="secondary"
+      variant="primary"
     />
   );
 }

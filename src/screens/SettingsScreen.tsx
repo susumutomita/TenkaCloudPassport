@@ -29,14 +29,6 @@ import { modelCardOverride, modelCardStyles } from './model-card-styles';
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
-  /** Issue 104 / ADR-0036: 端末内会話エージェント画面を開く。 */
-  readonly onOpenConversationAgent: () => void;
-  /**
-   * major（Issue 104 PR #132、Codex 指摘 no-op UI）: 自己紹介カードが未作成の
-   * ときは会話エージェントの入口を disabled にし、理由を案内する
-   * （session が作れず intake 導線が no-op になる画面を開かせない）。
-   */
-  readonly hasIntroCard: boolean;
   readonly onBack: () => void;
   /**
    * Issue 138（実機 blocker B）: 診断画面（開発者向け Preview・Share・個別削除）は
@@ -167,8 +159,6 @@ function DataErasureSection({
 export default function SettingsScreen({
   locale = DEFAULT_LOCALE,
   onChangeLocale,
-  onOpenConversationAgent,
-  hasIntroCard,
   onBack,
   dataErasure,
 }: SettingsScreenProps) {
@@ -193,17 +183,6 @@ export default function SettingsScreen({
           );
         })}
       </View>
-      <ActionButton
-        accessibilityHint={
-          hasIntroCard
-            ? t.conversationAgentButtonHint
-            : t.conversationAgentButtonDisabledHint
-        }
-        disabled={dataErasure.busy || !hasIntroCard}
-        label={t.conversationAgentButton}
-        onPress={onOpenConversationAgent}
-        variant="secondary"
-      />
       <LearningEntry
         locale={locale}
         disabled={
