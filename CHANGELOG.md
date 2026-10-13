@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+- Remove retired conversation inference code/native dependencies and artifact setup; preserve explicit legacy model inspection and erasure without inference.
+
 - 端末内会話エージェントの起動・画面・導線を廃止。既存のカード・教材・進捗・保存済みファイルを自動削除しない。
 - 学習を内容別に整理し、教材の選択からダウンロード・保存・学習開始までを簡略化。失敗・再試行・中断・オフラインの状態を明示する。
 - ヒントを段階的に表示し、参考解答を別操作にする。状態・遷移・トレースの一時メモ、参考資料の詳細、自己評価と実装検証の区別を追加する。

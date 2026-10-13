@@ -8,8 +8,8 @@
     "androidTargetSdk": 36,
     "iosMinimum": "16.4",
     "xcodeMinimum": "26.4",
-    "packageJsonSha256": "2d1916e682b89e485a790bf6660c22738ebacdf2575ce12399c3aa04d3695f1a",
-    "bunLockSha256": "e6a53df110adab2d46debf314a30c4f539ada7e8368d54c2c4aeacd2fb6088b6"
+    "packageJsonSha256": "8e9551be0a4f3ba8945fb6063b39ab093cb785d2f2d2eec751908674fefc7a3f",
+    "bunLockSha256": "1d1d67f6e2489f1c48da512b9677ac1e54b0a5804903cb2ef2d36becfc9db167"
   },
   "sources": [
     {

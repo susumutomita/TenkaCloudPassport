@@ -40,8 +40,7 @@
         "react",
         "react-dom",
         "react-native",
-        "react-native-web",
-        "llama.rn"
+        "react-native-web"
       ],
       "groupName": "expo native compatibility",
       "automerge": false

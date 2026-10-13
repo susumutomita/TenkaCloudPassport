@@ -187,7 +187,6 @@
     "scripts/nearby-transport-static-screening.ts",
     "scripts/oss-alpha-release-docs.test.ts",
     "scripts/pre-release-rules.ts",
-    "scripts/setup-llama-native.sh",
     "scripts/source-release-cli.ts",
     "scripts/source-release-inventory.json",
     "scripts/source-release.test.ts",

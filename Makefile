@@ -42,12 +42,6 @@ install_ci:
 setup-hooks:
 	bun run prepare
 
-.PHONY: setup-llama-native
-# llama.rn の lifecycle script は通常 install で信頼しない。将来 package を追加した後も、
-# Version 固定 manifest の表示、強制取得、SHA-256 marker 再検証をこの opt-in 経路だけで行う。
-setup-llama-native:
-	bash scripts/setup-llama-native.sh
-
 .PHONY: build
 build:
 	bun run build

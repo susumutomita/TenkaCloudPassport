@@ -13,19 +13,12 @@ import ActionButton from '../components/ActionButton';
 import AppScreen from '../components/AppScreen';
 import Card from '../components/Card';
 import { colors, spacing } from '../ui/theme';
-import { modelCardOverride, modelCardStyles } from './model-card-styles';
+import {
+  dataErasureCardOverride,
+  dataErasureCardStyles,
+} from './data-erasure-card-styles';
 
-/**
- * ADR-0057 / ADR-0058（Follow-up F-056000）: Apple Intelligence 一本化に伴い、
- * Qwen（GGUF ダウンロード型・`llama.rn`）の消費者向け UI（有効化・DL 進捗・
- * 削除・メモリ注意、旧 `ModelAcquisitionSection` 呼び出し）を Settings から
- * 撤去した。Apple Intelligence は OS 内蔵でダウンロード導線自体が無く、対応可否は
- * 起動時の Availability Gate（`native-agent-model-provider-composition.ts`）が
- * 自動判定するため、消費者が明示的に有効化する UI は不要になった。実装
- * （`use-local-model-management.ts` / `trusted-model-download.ts` /
- * `ModelAcquisitionSection.tsx` 等）は再導入口として残し、削除しない
- * （配線からのみ切断する）。
- */
+/** Conversation inference is retired; explicit data erasure remains available. */
 interface SettingsScreenProps {
   readonly locale?: Locale;
   readonly onChangeLocale: (locale: Locale) => void;
@@ -85,12 +78,12 @@ function DataErasureSection({
       ? diagnosticRecovery(dataErasure.error.code, locale)
       : null;
     return (
-      <Card style={modelCardOverride}>
-        <Text accessibilityRole="alert" style={modelCardStyles.modelTitle}>
+      <Card style={dataErasureCardOverride}>
+        <Text accessibilityRole="alert" style={dataErasureCardStyles.title}>
           {t.eraseAllDataRecoveryTitle}
         </Text>
         {recovery ? (
-          <Text style={modelCardStyles.body}>{recovery.title}</Text>
+          <Text style={dataErasureCardStyles.body}>{recovery.title}</Text>
         ) : null}
         <ActionButton
           disabled={dataErasure.busy || dataErasure.loading}
@@ -103,14 +96,14 @@ function DataErasureSection({
   }
   if (dataErasure.deleteAllConfirmationRequested) {
     return (
-      <Card style={modelCardOverride}>
-        <Text style={modelCardStyles.body}>
+      <Card style={dataErasureCardOverride}>
+        <Text style={dataErasureCardStyles.body}>
           {t.eraseAllDataConfirmDescription}
         </Text>
         {dataErasure.error ? (
           <Text
             accessibilityLiveRegion="assertive"
-            style={modelCardStyles.error}
+            style={dataErasureCardStyles.error}
           >
             {diagnosticRecovery(dataErasure.error.code, locale).title}
           </Text>

@@ -5,8 +5,8 @@ import packageManifest from './package.json';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
 import { createDefaultInitialLocalePort } from './src/app/default-initial-locale-port';
 import { createDefaultIntroCardStorage } from './src/app/default-intro-card-storage';
+import { createDefaultLegacyModelStorage } from './src/app/default-legacy-model-storage';
 import { createDefaultLocalDeletionJournal } from './src/app/default-local-deletion-journal';
-import { createDefaultLocalModelManagement } from './src/app/default-local-model-management';
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
 import { createDefaultLocalePreferenceStorage } from './src/app/default-locale-preference-storage';
 import { DeletionCoordinatedIntroCardStorage } from './src/app/deletion-coordinated-intro-card-storage';
@@ -18,7 +18,6 @@ import {
   createLocalDataControl,
   DeletionCoordinatedLocalProfileStorageAdapter,
   LocalModelContextLeaseRegistry,
-  NoLocalModelStorageAdapter,
 } from './src/app/local-data-control';
 import PassportApp from './src/app/PassportApp';
 import LearningScreen from './src/screens/learning/LearningScreen';
@@ -42,15 +41,13 @@ const introCardStorage = new DeletionCoordinatedIntroCardStorage(
 const backupSharePort = createDefaultBackupSharePort();
 const initialLocalePort = createDefaultInitialLocalePort();
 const localePreferenceStorage = createDefaultLocalePreferenceStorage();
-// Preserve legacy model storage for user-requested erasure; never activate it.
-const localModelComposition =
-  createDefaultLocalModelManagement(localDataLeases);
+// Retired model files remain until the user explicitly requests erasure.
+const legacyModelStorage = createDefaultLegacyModelStorage();
 const localDataControl = createLocalDataControl({
   introCardStorage,
   learningStorage,
   profileStorage: localProfileStorage,
-  modelStorage:
-    localModelComposition?.modelStorage ?? new NoLocalModelStorageAdapter(),
+  modelStorage: legacyModelStorage,
   modelContexts: localDataLeases,
   deletionJournal: localDeletionJournal,
 });
