@@ -136,7 +136,11 @@ jobs:
           import json, os, urllib.request
           query = '''query ExistingReleaseSubmissionStatus($id: ID!) {
             builds { byId(buildId: $id) {
-              id submissions { id status }
+              id submissions { id status
+                appStoreConnectBuildUpload { version buildNumber uploadState
+                  appStoreConnectBuild { buildNumber processingState uploadedDate }
+                }
+              }
             } }
           }'''
           request = urllib.request.Request('https://api.expo.dev/graphql',
@@ -152,4 +156,5 @@ jobs:
           if result.get('errors'):
               raise SystemExit('Final EAS status query returned errors')
           for submission in result['data']['builds']['byId']['submissions']:
-              print(json.dumps({'submissionId': submission['id'], 'status': submission['status']}))
+              print(json.dumps({'submissionId': submission['id'], 'status': submission['status'],
+                  'appleBuildUpload': submission.get('appStoreConnectBuildUpload')}))
