@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
+  applyApprovedReviewNotes,
   applyReviewedListing,
   collectReviewVersionRows,
   summarizeAgeDeclaration,
@@ -13,7 +14,7 @@ import {
 } from './apply-store-listing.ts';
 
 const action = process.argv[2] ?? 'inspect';
-if (!['inspect', 'apply'].includes(action))
+if (!['inspect', 'apply', 'review-notes'].includes(action))
   throw new Error('Unknown store action');
 
 const root = process.env['EAS_CLI_ROOT'];
@@ -60,6 +61,17 @@ type ReadinessAppInfo = {
     { attributes: { locale: string; privacyPolicyUrl?: string } }[]
   >;
 };
+function getPreparedReviewNotes(projectDir: string): string {
+  const notesDoc = readFileSync(
+    join(projectDir, 'docs/release/app-store-submission-1.3.0.md'),
+    'utf8'
+  );
+  const preparedNotes = notesDoc
+    .match(/## 審査用 Notes 案\s+([\s\S]*?)\n##/)?.[1]
+    ?.trim();
+  if (!preparedNotes) throw new Error('Prepared review notes are missing');
+  return preparedNotes;
+}
 async function inspectReviewReadiness(
   app: { id: string; getAppInfoAsync(): Promise<ReadinessAppInfo[]> },
   versions: {
@@ -74,14 +86,7 @@ async function inspectReviewReadiness(
   const config = JSON.parse(
     readFileSync(join(projectDir, 'store.config.json'), 'utf8')
   ).apple;
-  const notesDoc = readFileSync(
-    join(projectDir, 'docs/release/app-store-submission-1.3.0.md'),
-    'utf8'
-  );
-  const preparedNotes = notesDoc
-    .match(/## 審査用 Notes 案\s+([\s\S]*?)\n##/)?.[1]
-    ?.trim();
-  if (!preparedNotes) throw new Error('Prepared review notes are missing');
+  const preparedNotes = getPreparedReviewNotes(projectDir);
   const review = await collectReviewVersionRows(versions, (version) =>
     optionalRead('review information', async () => {
       const detail = await version.getAppStoreReviewDetailAsync();
@@ -256,7 +261,7 @@ class InspectStore extends MetadataPull {
     const versions = await app.getAppStoreVersionsAsync({
       query: { limit: 20, filter: { platform: 'IOS' } },
     });
-    if (action === 'inspect') {
+    if (action !== 'apply') {
       stage = 'read-only review readiness audit';
       await inspectReviewReadiness(app, versions, builds, projectDir);
     }
@@ -313,7 +318,7 @@ class InspectStore extends MetadataPull {
         );
       }
     }
-    if (action === 'inspect') {
+    if (action !== 'apply') {
       stage = 'saved listing read-only verification';
       await verifySavedListing({
         app,
@@ -323,6 +328,14 @@ class InspectStore extends MetadataPull {
         projectDir,
         cliRoot,
       });
+    }
+    if (action === 'review-notes') {
+      stage = 'approved review Notes update';
+      const notes = getPreparedReviewNotes(projectDir);
+      const { getRequestClient } = load('@expo/apple-utils');
+      await applyApprovedReviewNotes(app, versions, notes, getRequestClient());
+      stage = 'post-update read-only readiness audit';
+      await inspectReviewReadiness(app, versions, builds, projectDir);
     }
     if (action === 'apply') {
       stage = 'reviewed listing application';

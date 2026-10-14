@@ -528,3 +528,78 @@ it('includes developer URL differences while keeping its raw value private', asy
   );
   expect(JSON.stringify(result)).not.toContain(url);
 });
+
+it('updates only approved draft Notes and preserves saved contacts without re-uploading', async () => {
+  const { applyApprovedReviewNotes } = await import('./apply-store-listing');
+  const doc = await Bun.file(
+    new URL('../docs/release/app-store-submission-1.3.0.md', import.meta.url)
+  ).text();
+  const notes =
+    doc.match(/## 審査用 Notes 案\s+([\s\S]*?)\n##/)?.[1]?.trim() ?? '';
+  const fields = {
+    notes: 'Synthetic obsolete AI review instructions',
+    contactEmail: 'review@example.invalid',
+    demoAccountRequired: false,
+  };
+  let patches = 0;
+  const detail = {
+    id: '11111111-1111-1111-1111-111111111111',
+    context: { token: 'synthetic-token' },
+    attributes: fields,
+  };
+  const version = {
+    id: '36b9c00b-1d9b-427c-a33c-bf6353f88944',
+    attributes: {
+      versionString: '1.3.0',
+      appStoreState: 'PREPARE_FOR_SUBMISSION',
+      releaseType: 'AFTER_APPROVAL',
+    },
+    getBuildAsync: async () => ({
+      id: '90ef97e8-caf4-43ea-bbdc-6c6464bf85b4',
+      attributes: { version: '15', processingState: 'VALID', expired: false },
+    }),
+    getAppStoreReviewDetailAsync: async () => detail,
+  };
+  const client = {
+    patch: async (_url: string, body: unknown) => {
+      expect(body).toEqual({
+        data: {
+          type: 'appStoreReviewDetails',
+          id: detail.id,
+          attributes: { notes },
+        },
+      });
+      patches++;
+      fields.notes = notes;
+    },
+  };
+  const target = { id: '6793516094', context: {} };
+  await applyApprovedReviewNotes(target, [version], notes, client);
+  expect(patches).toBe(1);
+  expect(fields.contactEmail).toBe('review@example.invalid');
+  await applyApprovedReviewNotes(target, [version], notes, client);
+  expect(patches).toBe(1);
+  await expect(
+    applyApprovedReviewNotes(target, [version], 'Unapproved text', client)
+  ).rejects.toThrow('identity');
+  fields.notes = 'Old instructions';
+  version.attributes.appStoreState = 'WAITING_FOR_REVIEW';
+  await expect(
+    applyApprovedReviewNotes(target, [version], notes, client)
+  ).rejects.toThrow('editable');
+  expect(patches).toBe(1);
+  version.attributes.appStoreState = 'PREPARE_FOR_SUBMISSION';
+  await expect(
+    applyApprovedReviewNotes(target, [version], notes, {
+      patch: async () => undefined,
+    })
+  ).rejects.toThrow('readback');
+  await expect(
+    applyApprovedReviewNotes(target, [version], notes, {
+      patch: async () => {
+        fields.notes = notes;
+        fields.contactEmail = 'changed@example.invalid';
+      },
+    })
+  ).rejects.toThrow('Protected');
+});
