@@ -531,6 +531,105 @@ export async function applyReviewedListing(
   );
 }
 
+type ReviewDetail = {
+  id: string;
+  context: ShotSet['context'];
+  attributes: Record<string, unknown>;
+};
+type ReviewNotesVersion = Pick<
+  VersionModel,
+  'id' | 'attributes' | 'getBuildAsync'
+> & {
+  getAppStoreReviewDetailAsync(): Promise<ReviewDetail | null>;
+};
+
+async function patchReviewNotes(
+  detail: ReviewDetail,
+  notes: string,
+  client: Pick<RelationshipClient, 'patch'>
+): Promise<void> {
+  const token = detail.context.token;
+  const signed = typeof token === 'string' ? token : await token?.getToken();
+  if (!signed) throw new Error('Existing review authentication is unavailable');
+  // The pinned SDK normalizer sets omitted contact fields to null. Send only Notes.
+  await client.patch(
+    `https://api.appstoreconnect.apple.com/v1/appStoreReviewDetails/${detail.id}`,
+    {
+      data: {
+        type: 'appStoreReviewDetails',
+        id: detail.id,
+        attributes: { notes },
+      },
+    },
+    { headers: { Authorization: `Bearer ${signed}` }, timeout: 30000 }
+  );
+}
+
+/** Owner-approved text only; preserve contacts and credentials without logging them. */
+export async function applyApprovedReviewNotes(
+  app: StoreApp,
+  versions: ReviewNotesVersion[],
+  notes: string,
+  client: Pick<RelationshipClient, 'patch'>
+): Promise<void> {
+  if (
+    app.id !== '6793516094' ||
+    createHash('sha256').update(notes).digest('hex') !==
+      '3a821740862aa115d64f27c4c0440eee06afcd021e821812f986998854bbf50e'
+  )
+    throw new Error('Approved review Notes identity mismatch');
+  const version = versions.find(
+    (item) => item.attributes.versionString === '1.3.0'
+  );
+  if (
+    !version ||
+    version.id !== '36b9c00b-1d9b-427c-a33c-bf6353f88944' ||
+    (await version.getBuildAsync())?.id !==
+      '90ef97e8-caf4-43ea-bbdc-6c6464bf85b4'
+  )
+    throw new Error('Approved review version/build mismatch');
+  const detail = await version.getAppStoreReviewDetailAsync();
+  if (!detail || !/^[a-f0-9-]{36}$/i.test(detail.id))
+    throw new Error('Existing review details are required');
+  const before = { ...detail.attributes };
+  const changed = before['notes'] !== notes;
+  if (changed) {
+    if (version.attributes.appStoreState !== 'PREPARE_FOR_SUBMISSION')
+      throw new Error('Review Notes target is not the approved editable draft');
+    await patchReviewNotes(detail, notes, client);
+  }
+  const after = await version.getAppStoreReviewDetailAsync();
+  if (!after || after.id !== detail.id || after.attributes['notes'] !== notes)
+    throw new Error('Review Notes readback mismatch');
+  for (const field of [
+    'contactFirstName',
+    'contactLastName',
+    'contactEmail',
+    'contactPhone',
+    'demoAccountRequired',
+    'demoAccountName',
+    'demoAccountPassword',
+  ]) {
+    if (after.attributes[field] !== before[field])
+      throw new Error('Protected review field readback mismatch');
+  }
+  console.log(
+    JSON.stringify({
+      reviewNotesVerified: {
+        version: '1.3.0',
+        buildNumber: '15',
+        changed,
+        notesMatchApprovedDraft: true,
+        protectedReviewFieldsPreserved: true,
+        screenshotUploadAttempted: false,
+        submissionAttempted: false,
+        publicationAttempted: false,
+        declarationChangesAttempted: false,
+      },
+    })
+  );
+}
+
 /** Only presence/classification leaves memory; never emit review contact or Notes text. */
 export function summarizeReviewDetails(
   attributes: Record<string, unknown> | null,
