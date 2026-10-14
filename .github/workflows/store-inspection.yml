@@ -53,9 +53,9 @@ jobs:
       - name: Read or synchronize verified listing
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          # Only the immutable, owner-approved 1.3.0 Notes are eligible on push.
-          # Existing screenshots/text/build are verified read-only before a Notes-only PATCH.
-          STORE_ACTION: ${{ github.event_name == 'workflow_dispatch' && inputs.action || 'review-notes' }}
+          # Only the first push run of this exact approved merge may update Notes.
+          # Later pushes and reruns remain read-only, even if the draft is still editable.
+          STORE_ACTION: ${{ github.event_name == 'workflow_dispatch' && inputs.action || (github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Correct approved 1.3.0 review Notes (#207)') && 'review-notes' || 'inspect') }}
           CI: "true"
           EXPO_NO_TELEMETRY: "1"
         run: node --experimental-strip-types scripts/inspect-store-listing.ts "$STORE_ACTION"
