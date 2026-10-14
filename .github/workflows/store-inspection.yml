@@ -55,7 +55,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           # Only the first push run of this exact approved merge may update Notes.
           # Later pushes and reruns remain read-only, even if the draft is still editable.
-          STORE_ACTION: ${{ github.event_name == 'workflow_dispatch' && inputs.action || (github.run_attempt == 1 && startsWith(github.event.head_commit.message, 'Correct approved 1.3.0 review Notes (#207)') && 'review-notes' || 'inspect') }}
+          STORE_ACTION: ${{ github.event_name == 'workflow_dispatch' && inputs.action || (github.run_attempt == 1 && github.event.before == '94839cbd326fa165ad9558daff0f4266b5ead59e' && github.event.head_commit.message == 'Correct approved 1.3.0 review Notes (#207)' && 'review-notes' || 'inspect') }}
           CI: "true"
           EXPO_NO_TELEMETRY: "1"
         run: node --experimental-strip-types scripts/inspect-store-listing.ts "$STORE_ACTION"
