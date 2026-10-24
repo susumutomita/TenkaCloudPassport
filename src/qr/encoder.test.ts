@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
 import jsQR, { type QRCode } from 'jsqr';
 import { createLoungeInvite } from '../domain/lounge-invite';
 import { encodeQrPayload, QR_PAYLOAD_MAX_BYTES } from '../protocol/qr-payload';
@@ -339,5 +340,67 @@ describe('jsQR による round-trip 網羅検証（Version 1〜26）', () => {
     }
 
     expect(QR_ENCODER_MAX_BYTES).toBe(version26MaxByteLength);
+  });
+});
+
+// Captured from reviewed a294e234 before the finite-domain refactor. These hashes
+// lock exact matrix bits (including mask selection), not only decoded payloads.
+const PRE_REFACTOR_QR_OUTPUT_SHA256 = [
+  'ff195a911d01fc8d61d499080b95369c4986682dcc1c2ecf0991b77338be00b2',
+  '000fdc9fb8a279401be082b7b7a3f7589f6c32159488bdd374d21c3cc6493456',
+  'e13da8539d5a393797c19d37b89bf66cd66083dfb39327b54c83c29505c1e9cf',
+  '5a71a283481cea1ae1e24ebf77337ea55ee653a811437a0604143adc672c8afc',
+  'db1a892584eaa91a1f137b01c9b9ffdd0e9c9a0a056a8a1021e2766b5de8ad71',
+  '521a7c6ee1e84fede5602c200c98314fac58779298521d68defe27add69f9e21',
+  '8b2983adf51540653fcd2b0f5158c6c62b5ec9c8703cef90cc362480517e58de',
+  'bb500605ecf916a8dae3f21974d3c492ea8d3b268722620e68a83bcfd5f80d87',
+  '698d353e091b12132b9b948eca93d843e1bede6d6384650c08f6eae80c51f9bc',
+  'ad679e9ac3eb33b554b0dc3076cd02f41fe58f2e305cba13fcef812bcaa92e12',
+  '0c00e849e38834f38b7bbad6241f6a82e5956217b8bf22accf22faff14f5c364',
+  '31edd8618b496117d90a6e3dbd7f80bb2bcc1ead58cd56482551061608762940',
+  '1982f26abace7a2e36171564c7c757a05d23501c96401fefda7046a49b06c48d',
+  '847b0daecb122a0a9500a38aaf4eb803411c9d0b98f6fdeac1ac886735fce27e',
+  '6dd1218bc78fec79b51be8a9fef8c9aceadc021c90db42caa80e06df958dca06',
+  'd76b9c113c98bde9ff3cfc6a772d3dbb13c25ffa9e4978787d3e7dea75243512',
+  'b2a8d8ac10c0cd8022e37372c3fa55b6a86e0c210d8647ee3aea8a61945de202',
+  'd4e14ac46c8b8ca32b1e08accb32e4ad4bc55aea3d2b839d4483b9c43af51c9d',
+  '297a9775ee9a6f3f49f94bcd25908a5f32eba46c5a494e9b3f0bab0351ec1741',
+  '8ac8399cadaec5df447d47d1d45f277fd06385a4d1307c789183741ffda63c76',
+  '73de7ca464ad04370286f184f07500aa8a464a0b613ce7d47a4873bdf50184ca',
+  '9ca445f85696f7537eb2b66401e9c8d6a3540f45279954c2c254fd3b6ac69cc9',
+  '39088879bd9dfe00b393a647f61d090db85bd4a6646daac15b524724318f6a52',
+  '497f630eae866d0296b8e7d98b7e14d86665626f6cda153631629a834877b724',
+  'd6e0a64173c7e9cb996e33f533894b8e19f2a4fd9f92a37b92cd81dbb6abc04c',
+  'c0d51fc31d58ffc68f5d9562604a369140dc7cb286335620c5889012cdc512ae',
+] as const;
+
+describe('QR output compatibility at every version capacity', () => {
+  for (const [index, expected] of PRE_REFACTOR_QR_OUTPUT_SHA256.entries()) {
+    it(`preserves exact version ${index + 1} matrix and mask`, () => {
+      const byteLength = VERSION_MAX_BYTE_LENGTH_L[index];
+      expect(byteLength).toBeDefined();
+      if (byteLength === undefined) throw new Error('Missing capacity fixture');
+      const qr = encodeQr('a'.repeat(byteLength));
+      expect(qr.version).toBe(index + 1);
+      expect(
+        createHash('sha256')
+          .update(JSON.stringify({ ok: true, output: qr }))
+          .digest('hex')
+      ).toBe(expected);
+    });
+  }
+
+  it('accepts exactly 1367 UTF-8 bytes and rejects the adjacent multibyte lengths', () => {
+    const prefix = '😀'.repeat(341);
+    expect(encodeQr(`${prefix}abc`).version).toBe(26);
+    for (const suffix of ['abcd', 'ああ']) {
+      const value = prefix + suffix;
+      expect(value.length).toBeLessThan(1367);
+      const error = captureError(() => encodeQr(value));
+      expectDataTooLarge(error);
+      if (error instanceof QrEncodingError) {
+        expect(error.message).toBe('QR encoder は 1367 byte 以下を扱います。');
+      }
+    }
   });
 });

@@ -1,6 +1,6 @@
 # Coverage investigation: Bun modernization
 
-This is a diagnostic record, not a passing-gate claim. The remaining-line inventory below matches the reviewed text-contract correction.
+This is a diagnostic record, not a passing-gate claim. The remaining-line inventory below records the reviewed text-contract correction; the final QR section supersedes its historical QR entries.
 No thresholds or instrumentation rules changed. The 100% thresholds and
 all integrity guards remain unchanged. No coverage-ignore directives or relevant
 file exclusions were added.
@@ -18,7 +18,7 @@ file exclusions were added.
   metadata, inconsistent Git output and unsafe descriptor/cleanup operations.
   Failed candidates never appear at the requested output path; unknown bytes
   survive failed cleanup.
-- Current app run: 1383 tests pass, line summary 99.91%. Current source-release run:
+- Current app run after the QR correction: 1411 tests pass, line summary 99.93%. Current source-release run:
   122 tests pass, line summary 99.15%. Both strict100% coverage gates still fail.
 - The complete missing-line lists below come from the same runs' LCOV reports.
   Bun's displayed aggregate is not the weighted sum of LCOV lines; neither
@@ -47,7 +47,7 @@ missing tests and remain listed as work. Independently of those gaps, the curren
 branches that no normal public input can reach. More public-input tests alone
 cannot make the gate pass while those branches and that contract both remain.
 
-Current invariant findings and corrected design boundaries:
+Historical invariant findings and corrected design boundaries (QR items 1–3 are superseded by the reviewed correction below):
 
 1. `src/qr/encoder.ts:198-201`: `rsBlocks` is called with versions 1–26 from
    `chooseVersion` or a version returned by that function. The private static
@@ -144,13 +144,13 @@ Gate: `app`. SHA256: `b4322e247fef64b2d305a18d4d49f256916e7598e35d66e1b7339f27b1
 
 Gate: `app`. SHA256: `101aac9fb8f51f1c6fe4f42f3a1a1a503f4192dc970a85a378b3880ff664a4e4`.
 
-- Lines 113: Unexpected runtime-error propagation; requires fault injection rather than normal serialized input.
+- Historical line 113: now covered by a decoded-object inspection fault through the JSON boundary, with restored malformed and valid controls. Current QR payload line coverage is 100%.
 
 ### src/qr/encoder.ts
 
 Gate: `app`. SHA256: `7a168b969dd92e87b776e7564d8f36809570d6c2197af006dfcf4f5d89122566`.
 
-- Lines 198-201, 231, 527-528: Unreachable internal invariant under the current public encoder contract.
+- Historical lines 198-201, 231, 527-528: superseded by the reviewed finite-domain correction below. Current encoder line coverage is 100% (505/505 LCOV lines).
 
 ### scripts/atomic-output-publisher.ts
 
@@ -165,3 +165,66 @@ Gate: `source-release`. SHA256: `c6d589b9a147e3fb3a654c37534a46f7a2731904383b660
 Gate: `source-release`. SHA256: `6544336c029a2ba4a770c159e6e12e6b73c85740837b217395a59a12a0764850`.
 
 - Lines 807, 849, 894-895, 978-982, 1007-1012, 1048, 1050-1054, 1092-1095, 1108-1112, 1138-1141, 1150-1154, 1157-1160, 1225-1227, 1317-1318, 1321-1335, 1337-1340, 1356-1371, 1373, 1377-1378, 1382-1383, 1442, 1445, 1481-1483, 2112, 2118-2119, 2155, 2230, 2241, 2257, 2264, 2270, 2273, 2276, 2292, 2515-2518: Reachable validation, rollback or filesystem-failure cases still missing; not claimed unreachable.
+
+## Reviewed QR closed-domain correction
+
+Base: `a294e23460e620a84d517eb732d691a05a0b7edf`.
+
+Private versions and masks previously accepted unrestricted numbers, although
+only versions 1–26 and masks 0–7 can be produced. The correction models those
+closed domains with private literal unions and complete keyed tables. Missing
+alignment rows previously silently fell back to an empty list; incomplete
+alignment or Reed–Solomon tables and an incomplete typed mask switch now fail type checking. No public caller
+can supply a version or mask. No cast admits arbitrary numbers into those types.
+The public interfaces and exported literal byte limit remain unchanged.
+
+Version 26 has `10 * 114 + 2 * 115 = 1370` data codewords, or 10960 bits.
+Subtracting the four mode bits and sixteen count bits leaves 10940 bits:
+`floor(10940 / 8) = 1367` bytes. The independent capacity fixtures cover every
+version. The UTF-16 length guard still rejects oversized strings before UTF-8
+allocation. After encoding, version selection is the single byte-capacity
+admission point; oversized UTF-8 throws the same typed error before codeword
+or matrix construction. The public limit keeps its original literal type.
+
+The eight mask formulas are unchanged. Iteration remains ascending, and strict
+`<` penalty comparison preserves the first mask on ties. Padding, RS arithmetic,
+BCH, placement, scoring and matrix dimensions are unchanged.
+
+Before application, an isolated baseline comparison checked complete public
+outputs and error name/code/message for 321 strings: capacity minus one, exact
+capacity and plus one at all 26 versions, repeated and varied ASCII, three-byte
+Unicode and emoji, plus empty strings, lone surrogates, HELLO WORLD, a dense URL
+and oversized input. Eight untyped runtime probes also matched; those probes
+do not expand the supported string API. All cases matched exactly.
+
+Twenty-six checked-in SHA256 goldens capture the baseline output, including
+mask choice, at every version's maximum ASCII capacity. Existing independent
+HELLO WORLD matrix and jsQR decoding tests remain. Version 23 retains its
+existing documented jsQR limitation; it is covered by baseline equivalence,
+not claimed as an independent decoder success. Additional multibyte cases test
+1367-byte acceptance and adjacent rejection.
+
+Isolated compiler checks accepted the complete implementation and rejected
+missing alignment or RS entries, a missing mask-switch case, and invalid version 27 or mask 8.
+Independent review found no material boundary protection weakening. Malformed
+external wire input is still rejected by the unchanged protocol parser.
+
+This app-source change invalidates the previous native source binding. Affected
+native checks must be renewed before release. Strict 100% gates remain and
+other remaining coverage gaps are not waived.
+
+Final local app verification: 1411 tests pass; both encoder and QR payload files
+report 100% lines. The app aggregate remains 99.93%, so the strict gate fails.
+The remaining LCOV app gaps are:
+
+- `src/adapters/loopback-nearby-transport.ts`: 234, 280, 283, 284, 289, 290, 291, 325, 350, 365, 375, 403, 460, 477, 478, 481, 482, 483, 538, 579, 635, 662, 665, 707, 769, 770, 772, 778, 779, 781, 797, 860, 887, 909, 927, 933, 941, 954, 993, 1000, 1015, 1041, 1042, 1083, 1084, 1087, 1088, 1103, 1165, 1191, 1192, 1266, 1267, 1301, 1328.
+- `src/app/agent-provider-session.ts`: 177.
+- `src/domain/intro-card.ts`: 457, 530.
+- `src/protocol/lounge-handshake.ts`: 317.
+- `src/protocol/peer-protocol-session.ts`: 537.
+
+A bounded local benchmark found the initial mask-function table slower than
+the original switch. The final implementation retains an exhaustive typed
+switch with the original eight formulas. Independent review and negative
+compiler checks confirm that omitting a case is rejected. Complete output
+equivalence was rerun successfully for this final switch revision.
