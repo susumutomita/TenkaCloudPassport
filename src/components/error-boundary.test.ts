@@ -78,9 +78,7 @@ describe('ErrorBoundary（汎用 Error Boundary、Issue 138）', () => {
     expect(text).not.toContain('<AppScreen');
     expect(text).not.toContain("from './ActionButton'");
     expect(text).not.toContain('<ActionButton');
-    expect(text).toContain(
-      "import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';"
-    );
+    expect(text).toContain("from 'react-native-safe-area-context'");
   });
 
   it('Native 側の crash は捕まえられない限界をコメントで明示する', async () => {

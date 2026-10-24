@@ -104,7 +104,7 @@ one environment. They are not interchangeable. See the
 
 | Path | For whom | Prerequisites | First success | Current assurance |
 | --- | --- | --- | --- | --- |
-| Repository gate | Contributor | Git and Bun 1.3.11 | `make before-commit` exits 0. | Repository contract only. |
+| Repository gate | Contributor | Git and Bun 1.4.4 | `make before-commit` exits 0. | Repository contract only. |
 | Web | Rules and shared-UI reviewer | Bun and a supported browser | Metro prints a URL and the first screen opens. | Web Export and Rules Provider. Browser use remains `Not run` in the release matrix. |
 | Expo Go | Physical-device UI reviewer | Compatible Expo Go and same network | The first screen opens from the Metro QR. | Expo Go's bundled native modules only; no Local LLM or real Nearby. |
 | Native development build | Native developer | macOS + Xcode, or Android SDK / JDK | A dedicated build starts on the target device. | `Not run`; a simulator or successful compile is not provider evidence. |

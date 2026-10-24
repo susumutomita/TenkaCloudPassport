@@ -52,8 +52,13 @@ describe('CameraQrCaptureOverlay（実カメラ Preview）のソース契約', (
     const text = await nativeSource();
 
     expect(text).toContain('onRequestClose={port.cancel}');
-    expect(text).toContain('onPress={port.cancel}');
-    expect(text).toContain('accessibilityHint={t.cancelButtonHint}');
+    expect(text).toContain('onCancel={port.cancel}');
+    const panel = await readSourceFile(
+      import.meta.url,
+      'CameraQrCapturePanel.tsx'
+    );
+    expect(panel).toContain('onPress={onCancel}');
+    expect(panel).toContain('accessibilityHint={t.cancelButtonHint}');
   });
 
   it('読み取った内容を保存も送信もしない', async () => {
@@ -65,7 +70,10 @@ describe('CameraQrCaptureOverlay（実カメラ Preview）のソース契約', (
   });
 
   it('文言は Message Catalog から引き、画面へ直書きしない', async () => {
-    const text = await nativeSource();
+    const text = await readSourceFile(
+      import.meta.url,
+      'CameraQrCapturePanel.tsx'
+    );
 
     expect(text).toContain('MESSAGES[locale].cameraQrCapture');
     expect(text).not.toMatch(/#[0-9a-fA-F]{3,8}/);

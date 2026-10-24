@@ -2,21 +2,21 @@
   "schemaVersion": 1,
   "reviewedMonth": "2026-10",
   "baseline": {
-    "expoSdk": "57.0.28",
-    "reactNative": "0.86.3",
-    "androidCompileSdk": 36,
+    "expoSdk": "58.0.17",
+    "reactNative": "0.88.0",
+    "androidCompileSdk": 37,
     "androidTargetSdk": 36,
     "iosMinimum": "16.4",
     "xcodeMinimum": "26.4",
-    "packageJsonSha256": "8e9551be0a4f3ba8945fb6063b39ab093cb785d2f2d2eec751908674fefc7a3f",
-    "bunLockSha256": "1d1d67f6e2489f1c48da512b9677ac1e54b0a5804903cb2ef2d36becfc9db167"
+    "packageJsonSha256": "78b5ff6ebe3fbfc682d26dbb6c41b9cefe1c3ba578601225255ff86f3db4d387",
+    "bunLockSha256": "8dfba4368538eddfbd2e45c410788498d4d99cd01705feb2475d5c4e57b27cdd"
   },
   "sources": [
     {
       "id": "expo-platform-baseline",
       "label": "Expo SDK platform baseline",
-      "url": "https://docs.expo.dev/versions/v57.0.0/",
-      "locator": "SDK 57.0.0 row: Android compileSdk 36, targetSdk 36, iOS 16.4+, Xcode 26.4+"
+      "url": "https://docs.expo.dev/versions/v58.0.0/",
+      "locator": "SDK 58.0.0 row: Android compileSdk 37, targetSdk 36, iOS 16.4+, Xcode 26.4+"
     },
     {
       "id": "expo-modules-api",
@@ -199,7 +199,7 @@
         "android": {
           "buildTool": "Expo SDK Android toolchain",
           "minimumApi": 29,
-          "compileSdk": 36,
+          "compileSdk": 37,
           "targetSdk": 36,
           "framework": "NsdManager, AndroidKeyStore, and JSSE",
           "apiRoute": "NsdManager DNS-SD; Lounge-scoped EC P-256 AndroidKeyStore identity with DIGEST_SHA256 and DIGEST_NONE; KeyStore certificate access and deletion; KeyManagerFactory material loading; X509KeyManager server-alias selection; SSLContext with X509TrustManager leaf-DER SHA-256 pinning; SSLServerSocket and SSLSocket restricted to TLS 1.3"
@@ -324,7 +324,7 @@
         },
         "expoAndNewArchitecture": {
           "status": "Fail",
-          "reason": "The official Expo note requires a Development Client and out-of-tree plugin but does not establish exact Expo SDK 57 and React Native 0.86 compatibility.",
+          "reason": "The official Expo note requires a Development Client and out-of-tree plugin but does not establish exact Expo SDK 58 and React Native 0.88 compatibility.",
           "sourceIds": ["webrtc-expo", "expo-new-architecture"]
         },
         "standardSecureChannel": {
@@ -391,7 +391,7 @@
         },
         "expoAndNewArchitecture": {
           "status": "Fail",
-          "reason": "No exact Expo SDK 57 and React Native 0.86 local-module build route with fixed Android and Swift packages is evidenced.",
+          "reason": "No exact Expo SDK 58 and React Native 0.88 local-module build route with fixed Android and Swift packages is evidenced.",
           "sourceIds": [
             "google-nearby-swift",
             "expo-modules-api",
@@ -437,7 +437,7 @@
         "android": {
           "buildTool": "Expo SDK Android toolchain",
           "minimumApi": 24,
-          "compileSdk": 36,
+          "compileSdk": 37,
           "targetSdk": 36,
           "framework": "BluetoothGattServer and BluetoothGatt",
           "apiRoute": "BluetoothGattServer Host and BluetoothGatt Guest over the same custom GATT service"

@@ -53,9 +53,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 12,
     borderWidth: 1,
-    height: 52,
+    minHeight: 52,
     justifyContent: 'center',
-    width: 52,
+    minWidth: 52,
+    padding: spacing.xs,
   },
   selected: {
     backgroundColor: colors.primarySoft,

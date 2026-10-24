@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 21.0.2",
+    "version": ">= 25.3.0",
     "appVersionSource": "remote"
   },
   "build": {
@@ -9,22 +9,31 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "config": "ios-simulator-build.yml"
-      }
+        "config": "ios-simulator-build.yml",
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      },
+      "node": "24.22.1",
+      "bun": "1.4.4"
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "simulator": false,
-        "config": "ios-device-build.yml"
-      }
+        "config": "ios-device-build.yml",
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      },
+      "node": "24.22.1",
+      "bun": "1.4.4"
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "simulator": false,
-        "config": "ios-device-build.yml"
-      }
+        "config": "ios-device-build.yml",
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      },
+      "node": "24.22.1",
+      "bun": "1.4.4"
     }
   },
   "submit": {

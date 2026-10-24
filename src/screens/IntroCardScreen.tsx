@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   qrWrap: {
-    alignSelf: 'center',
+    width: '100%',
   },
   qrExplanation: {
     color: colors.muted,

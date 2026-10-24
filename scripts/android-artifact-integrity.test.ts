@@ -127,19 +127,22 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
       { expo: { android: { versionCode: 1.5 } } },
       'INVALID_ANDROID_VERSION_CODE',
     ],
-  ] as const)('不正な Android versionCode 設定 %j を拒否する', async (config, code) => {
-    const directory = await temporaryDirectory();
-    const configPath = join(directory, 'app.json');
-    await writeFile(configPath, JSON.stringify(config));
+  ] as const)(
+    '不正な Android versionCode 設定 %j を拒否する',
+    async (config, code) => {
+      const directory = await temporaryDirectory();
+      const configPath = join(directory, 'app.json');
+      await writeFile(configPath, JSON.stringify(config));
 
-    try {
-      await readAndroidReleaseVersionCode(configPath);
-      throw new Error('versionCode 検証は拒否される必要があります。');
-    } catch (error) {
-      expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
-      expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      try {
+        await readAndroidReleaseVersionCode(configPath);
+        throw new Error('versionCode 検証は拒否される必要があります。');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
+        expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      }
     }
-  });
+  );
 
   it('app.json の Symbolic Link を versionCode 設定として拒否する', async () => {
     const directory = await temporaryDirectory();
@@ -351,21 +354,24 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     [`${EXPECTED_SHA256}  ../passport.apk\n`, 'INVALID_CHECKSUM_RECORD'],
     [`${EXPECTED_SHA256}  passport.apk\nextra\n`, 'INVALID_CHECKSUM_RECORD'],
     [`${EXPECTED_SHA256}  another.apk\n`, 'ARTIFACT_NAME_MISMATCH'],
-  ] as const)('不正または別 Artifact の checksum record「%s」を拒否する', async (record, code) => {
-    const directory = await temporaryDirectory();
-    const apkPath = join(directory, 'passport.apk');
-    const checksumPath = `${apkPath}.sha256`;
-    await writeFile(apkPath, 'signed apk bytes');
-    await writeFile(checksumPath, record);
+  ] as const)(
+    '不正または別 Artifact の checksum record「%s」を拒否する',
+    async (record, code) => {
+      const directory = await temporaryDirectory();
+      const apkPath = join(directory, 'passport.apk');
+      const checksumPath = `${apkPath}.sha256`;
+      await writeFile(apkPath, 'signed apk bytes');
+      await writeFile(checksumPath, record);
 
-    try {
-      await verifyAndroidArtifactChecksum(apkPath, checksumPath);
-      throw new Error('検証は拒否される必要があります。');
-    } catch (error) {
-      expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
-      expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      try {
+        await verifyAndroidArtifactChecksum(apkPath, checksumPath);
+        throw new Error('検証は拒否される必要があります。');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
+        expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      }
     }
-  });
+  );
 
   it('空 APK、拡張子違い、Symbolic Link は Release Artifact として拒否する', async () => {
     const directory = await temporaryDirectory();
@@ -674,26 +680,21 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     expect(rejectedResult.stderr).toContain('VERSION_CODE_NOT_INCREMENTED');
   });
 
-  it.each([
-    '',
-    ' ',
-    '00',
-    '+0',
-    '0x0',
-    '0e0',
-    '1.0',
-  ])('CLI の過去 versionCode は正規の 10 進整数でない「%s」を拒否する', async (previousVersionCode) => {
-    const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
-    const appConfigPath = join(import.meta.dir, '..', 'app.json');
-    const result = await runCapturedProcess([
-      'bun',
-      scriptPath,
-      'version',
-      appConfigPath,
-      previousVersionCode,
-    ]);
+  it.each(['', ' ', '00', '+0', '0x0', '0e0', '1.0'])(
+    'CLI の過去 versionCode は正規の 10 進整数でない「%s」を拒否する',
+    async (previousVersionCode) => {
+      const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
+      const appConfigPath = join(import.meta.dir, '..', 'app.json');
+      const result = await runCapturedProcess([
+        'bun',
+        scriptPath,
+        'version',
+        appConfigPath,
+        previousVersionCode,
+      ]);
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('INVALID_PREVIOUS_VERSION_CODE');
-  });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('INVALID_PREVIOUS_VERSION_CODE');
+    }
+  );
 });

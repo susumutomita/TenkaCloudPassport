@@ -481,8 +481,8 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, fontSize: 16 },
   heading: { color: colors.ink, fontSize: 21, fontWeight: '700' },
   tabs: { gap: spacing.sm, flexDirection: 'row', flexWrap: 'wrap' },
-  tab: { width: '47%', flexGrow: 1 },
-  secondaryTab: { width: '28%', flexGrow: 1 },
+  tab: { flexBasis: 180, flexGrow: 1, minWidth: 0 },
+  secondaryTab: { flexBasis: 140, flexGrow: 1, minWidth: 0 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,

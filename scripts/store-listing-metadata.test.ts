@@ -5,6 +5,19 @@ const config = await Bun.file(
   new URL('../store.config.json', import.meta.url)
 ).json();
 const app = await Bun.file(new URL('../app.json', import.meta.url)).json();
+it('keeps the historical inspection adapter and its private EAS API version aligned', async () => {
+  const workflow = await Bun.file(
+    new URL('../.github/workflows/store-inspection.yml', import.meta.url)
+  ).text();
+  const adapter = await Bun.file(
+    new URL('./inspect-store-listing.ts', import.meta.url)
+  ).text();
+  const pinned = adapter.match(
+    /load\('\.\/package\.json'\)\.version !== '([\d.]+)'/
+  );
+  expect(pinned?.[1]).toBe('21.0.2');
+  expect(workflow).toContain(`eas-cli@${pinned?.[1]}`);
+});
 it('targets the current native version and retains existing declarations and release settings', () => {
   expect(config.apple.version).toBe(app.expo.version);
   const { version: _version, info: _info, ...protectedSettings } = config.apple;

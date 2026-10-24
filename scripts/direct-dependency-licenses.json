@@ -1,28 +1,146 @@
 {
   "schemaVersion": 1,
   "packages": {
-    "@biomejs/biome": { "version": "2.4.16", "license": "MIT OR Apache-2.0" },
-    "@expo/metro-runtime": { "version": "57.0.6", "license": "MIT" },
-    "@noble/hashes": { "version": "2.2.0", "license": "MIT" },
+    "@biomejs/biome": {
+      "version": "2.6.2",
+      "license": "MIT OR Apache-2.0"
+    },
+    "@expo/metro-runtime": {
+      "version": "58.0.15",
+      "license": "MIT"
+    },
+    "@noble/hashes": {
+      "version": "2.4.0",
+      "license": "MIT"
+    },
+    "@playwright/test": {
+      "version": "1.64.1",
+      "license": "Apache-2.0"
+    },
+    "@react-native/assets-registry": {
+      "version": "0.88.0",
+      "license": "MIT"
+    },
     "@textlint-ja/textlint-rule-preset-ai-writing": {
       "version": "1.7.0",
       "license": "MIT"
     },
-    "@types/bun": { "version": "1.3.14", "license": "MIT" },
-    "@types/react": { "version": "19.2.17", "license": "MIT" },
-    "expo": { "version": "57.0.7", "license": "MIT" },
-    "expo-status-bar": { "version": "57.0.1", "license": "MIT" },
-    "husky": { "version": "9.1.7", "license": "MIT" },
-    "jscpd": { "version": "5.0.12", "license": "MIT" },
-    "knip": { "version": "6.27.0", "license": "ISC" },
-    "lint-staged": { "version": "17.0.7", "license": "MIT" },
-    "react": { "version": "19.2.3", "license": "MIT" },
-    "react-dom": { "version": "19.2.3", "license": "MIT" },
-    "react-native": { "version": "0.86.0", "license": "MIT" },
-    "react-native-web": { "version": "0.21.2", "license": "MIT" },
-    "rimraf": { "version": "6.1.3", "license": "BlueOak-1.0.0" },
-    "textlint": { "version": "15.7.1", "license": "MIT" },
-    "textlint-rule-ja-no-abusage": { "version": "3.0.0", "license": "MIT" },
+    "@types/bun": {
+      "version": "1.4.4",
+      "license": "MIT"
+    },
+    "@types/pngjs": {
+      "version": "6.0.5",
+      "license": "MIT"
+    },
+    "@types/react": {
+      "version": "19.3.0",
+      "license": "MIT"
+    },
+    "@types/react-dom": {
+      "version": "19.3.0",
+      "license": "MIT"
+    },
+    "esbuild": {
+      "version": "0.28.2",
+      "license": "MIT"
+    },
+    "expo": {
+      "version": "58.0.17",
+      "license": "MIT"
+    },
+    "expo-build-properties": {
+      "version": "58.0.11",
+      "license": "MIT"
+    },
+    "expo-camera": {
+      "version": "58.0.12",
+      "license": "MIT"
+    },
+    "expo-crypto": {
+      "version": "58.0.7",
+      "license": "MIT"
+    },
+    "expo-dev-client": {
+      "version": "58.0.14",
+      "license": "MIT"
+    },
+    "expo-document-picker": {
+      "version": "58.0.4",
+      "license": "MIT"
+    },
+    "expo-file-system": {
+      "version": "58.0.10",
+      "license": "MIT"
+    },
+    "expo-localization": {
+      "version": "58.0.5",
+      "license": "MIT"
+    },
+    "expo-status-bar": {
+      "version": "58.0.4",
+      "license": "MIT"
+    },
+    "husky": {
+      "version": "9.1.7",
+      "license": "MIT"
+    },
+    "jscpd": {
+      "version": "5.4.2",
+      "license": "MIT"
+    },
+    "jsqr": {
+      "version": "1.4.0",
+      "license": "Apache-2.0"
+    },
+    "knip": {
+      "version": "6.42.1",
+      "license": "ISC"
+    },
+    "lint-staged": {
+      "version": "17.6.0",
+      "license": "MIT"
+    },
+    "pngjs": {
+      "version": "7.0.0",
+      "license": "MIT"
+    },
+    "react": {
+      "version": "19.3.0",
+      "license": "MIT"
+    },
+    "react-dom": {
+      "version": "19.3.0",
+      "license": "MIT"
+    },
+    "react-native": {
+      "version": "0.88.0",
+      "license": "MIT"
+    },
+    "react-native-safe-area-context": {
+      "version": "5.10.1",
+      "license": "MIT"
+    },
+    "react-native-svg": {
+      "version": "15.16.0",
+      "license": "MIT"
+    },
+    "react-native-web": {
+      "version": "0.21.4",
+      "license": "MIT"
+    },
+    "rimraf": {
+      "version": "6.1.3",
+      "license": "BlueOak-1.0.0"
+    },
+    "textlint": {
+      "version": "15.8.0",
+      "license": "MIT"
+    },
+    "textlint-rule-ja-no-abusage": {
+      "version": "3.0.0",
+      "license": "MIT"
+    },
     "textlint-rule-ja-no-inappropriate-words": {
       "version": "2.0.0",
       "license": "MIT"
@@ -35,8 +153,14 @@
       "version": "3.0.0",
       "license": "MIT"
     },
-    "textlint-rule-prefer-tari-tari": { "version": "1.0.3", "license": "MIT" },
-    "textlint-rule-preset-ja-spacing": { "version": "2.4.3", "license": "MIT" },
+    "textlint-rule-prefer-tari-tari": {
+      "version": "1.0.3",
+      "license": "MIT"
+    },
+    "textlint-rule-preset-ja-spacing": {
+      "version": "3.0.4",
+      "license": "MIT"
+    },
     "textlint-rule-preset-ja-technical-writing": {
       "version": "12.0.2",
       "license": "MIT"
@@ -45,6 +169,13 @@
       "version": "5.0.0",
       "license": "MIT"
     },
-    "typescript": { "version": "6.0.3", "license": "Apache-2.0" }
+    "typescript": {
+      "version": "6.0.3",
+      "license": "Apache-2.0"
+    },
+    "wrangler": {
+      "version": "4.152.0",
+      "license": "MIT OR Apache-2.0"
+    }
   }
 }

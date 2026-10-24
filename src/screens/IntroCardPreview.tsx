@@ -75,6 +75,8 @@ export default function IntroCardPreview({
 
 const styles = StyleSheet.create({
   summary: {
+    minWidth: 0,
+    maxWidth: '100%',
     gap: spacing.xs,
   },
   name: {

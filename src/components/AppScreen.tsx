@@ -5,13 +5,17 @@ import {
   type LayoutChangeEvent,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   type ScrollViewProps,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { LOCALE_LABELS, LOCALES, type Locale } from '../app/i18n/locale';
 import { MESSAGES } from '../app/i18n/messages';
 import { colors, spacing } from '../ui/theme';
@@ -30,10 +34,8 @@ function nextLocale(current: Locale): Locale {
 }
 
 /**
- * Issue 93 の `content.paddingBottom` 既定値。footer を持つ画面
- * （Issue 117 時点では `IntroCardEditScreen` のみ）では、この基礎値に
- * footer の実測高さを足し込み、フッター表示中でも最後の入力欄が隠れない
- * だけの下部余白を確保する。
+ * 本文末尾の余白。footer は flex の兄弟か本文内に配置するため、
+ * footer の高さを重ねて加算しない。
  */
 const BASE_CONTENT_BOTTOM_PADDING = 56;
 
@@ -107,15 +109,14 @@ interface AppScreenProps {
   readonly keyboardDismissMode?: ScrollViewProps['keyboardDismissMode'];
   /**
    * Issue 93: 保存・生成ボタン等を `ScrollView` の外（画面下部）へ固定したい
-   * 画面向けの optional prop。渡さない既存の全 Screen は今までどおり
-   * `children` の末尾にボタンを並べるだけで、レイアウトは変わらない。
+   * 画面向けの optional prop。高さ不足・文字拡大時は本文内へ戻し、
+   * フォームと操作の両方をスクロールで到達可能にする。
    * `KeyboardAvoidingView` で包む（iOS は `padding` behavior、Android は
    * `windowSoftInputMode` の既定挙動に委ねる。RN の標準パターン）。Issue 117
    * 以降、iOS はキーボード表示中に footer をレンダーツリーから外して隠し
    * （キーボードが閉じると再表示する）、Android は Issue 93 の既定挙動の
    * まま footer がキーボードの上へ自然に再配置される（下の
-   * `useFooterHiddenForKeyboard` を参照）。footer 表示中の下部 padding は
-   * `hasFooter` の有無だけに依存し、キーボードの表示状態では変わらない。
+   * `useFooterHiddenForKeyboard` を参照）。
    */
   readonly footer?: ReactNode;
   /**
@@ -146,23 +147,56 @@ export default function AppScreen({
   const hasFooter = Boolean(footer);
   const hideFooterForKeyboard = useFooterHiddenForKeyboard(hasFooter);
   const [footerHeight, setFooterHeight] = useState(0);
+  const window = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [bounds, setBounds] = useState({
+    width: window.width,
+    height: window.height,
+  });
+  const width = bounds.width - insets.left - insets.right;
+  const height = bounds.height - insets.top - insets.bottom;
+  const horizontalPadding = width < 360 ? spacing.md : spacing.lg;
+  // A docked footer can consume the entire window in landscape, split view or
+  // large text. In those cases it scrolls with the form instead of covering it.
+  const inlineFooter =
+    height < 520 || window.fontScale >= 1.6 || footerHeight > height * 0.3;
 
   function handleFooterLayout(event: LayoutChangeEvent): void {
     setFooterHeight(event.nativeEvent.layout.height);
   }
 
+  const footerContent =
+    hasFooter && !hideFooterForKeyboard ? (
+      <View
+        onLayout={handleFooterLayout}
+        style={styles.footer}
+        testID="screen-footer"
+      >
+        <View
+          style={[
+            styles.footerContent,
+            { paddingHorizontal: inlineFooter ? 0 : horizontalPadding },
+          ]}
+        >
+          {footer}
+        </View>
+      </View>
+    ) : null;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={styles.safeArea}
+      onLayout={(event) => setBounds(event.nativeEvent.layout)}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoiding}
       >
         <ScrollView
+          style={styles.scroll}
           contentContainerStyle={[
             styles.content,
-            hasFooter
-              ? { paddingBottom: BASE_CONTENT_BOTTOM_PADDING + footerHeight }
-              : null,
+            { paddingHorizontal: horizontalPadding },
           ]}
           keyboardDismissMode={keyboardDismissMode}
           keyboardShouldPersistTaps="handled"
@@ -197,17 +231,14 @@ export default function AppScreen({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.description}>{description}</Text>
           <View style={styles.body}>{children}</View>
+          {inlineFooter ? footerContent : null}
         </ScrollView>
         {/* `hasFooter &&` は一見 `hideFooterForKeyboard` に畳み込めそうだが
             省略しない: `hideFooterForKeyboard` は footer が無い画面でも
             常に `false`（`hasFooter && keyboardVisible` の結果）を返すため、
             `hasFooter` を外すと footer を持たない画面にまで空の
             `styles.footer`（border-top 付き）バーが描画されてしまう。 */}
-        {hasFooter && !hideFooterForKeyboard ? (
-          <View onLayout={handleFooterLayout} style={styles.footer}>
-            {footer}
-          </View>
-        ) : null}
+        {!inlineFooter ? footerContent : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -220,6 +251,12 @@ const styles = StyleSheet.create({
   },
   keyboardAvoiding: {
     flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+  },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
   },
   footer: {
     backgroundColor: colors.background,
@@ -227,8 +264,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     gap: spacing.sm,
     paddingBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
+  },
+  footerContent: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 680,
+    minWidth: 0,
   },
   content: {
     alignSelf: 'center',
@@ -236,6 +278,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: BASE_CONTENT_BOTTOM_PADDING,
     width: '100%',
+    minWidth: 0,
   },
   brandRow: {
     alignItems: 'center',
@@ -306,5 +349,6 @@ const styles = StyleSheet.create({
   body: {
     gap: spacing.md,
     marginTop: spacing.xl,
+    minWidth: 0,
   },
 });

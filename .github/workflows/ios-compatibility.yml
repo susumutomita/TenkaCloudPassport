@@ -1,0 +1,42 @@
+name: ios-compatibility
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  responsive:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_TELEMETRY: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24'
+      - name: Build current source without signing
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          test "$(xcodebuild -version | head -1)" = 'Xcode 27.1'
+          bun install --frozen-lockfile --ignore-scripts
+          bun x expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+          cd ..
+          mkdir -p release-output/responsive
+          xcodebuild -workspace ios/TenkaCloudPassport.xcworkspace -scheme TenkaCloudPassport -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/passport-responsive-app CODE_SIGNING_ALLOWED=NO > release-output/responsive/build.log 2>&1
+      - name: Native layout, orientation and keyboard checks
+        run: bash tests/ios-responsive/run.sh
+      - name: Preserve native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: passport-native-responsive-${{ github.run_id }}
+          path: release-output/responsive

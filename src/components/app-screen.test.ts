@@ -51,37 +51,19 @@ describe('AppScreen の footer キーボード表示中非表示のソース契�
     expect(text).toContain(': null');
   });
 
-  it('footer の実測高さぶん ScrollView の contentContainer 下部パディングを確保し、キーボード表示中に footer が隠れていても padding は戻さない（code-reviewer 指摘: 表示切替のたびのスクロール位置ガタつき防止）', async () => {
+  it('footer は実測し、狭い高さでは本文と一緒にスクロールする', async () => {
     const text = await source('AppScreen.tsx');
-
     expect(text).toContain('onLayout={handleFooterLayout}');
-    expect(text).toContain('function handleFooterLayout(');
     expect(text).toContain('event.nativeEvent.layout.height');
-    expect(text).toContain('setFooterHeight(');
-    // padding 加算の条件は hasFooter だけであり、hideFooterForKeyboard では
-    // 分岐しない（footer が一時的に隠れても padding は測定値のまま据え置く）。
-    const paddingConditionStart = text.indexOf('contentContainerStyle={[');
-    const paddingConditionEnd = text.indexOf(']}', paddingConditionStart);
-    const paddingConditionBlock = text.slice(
-      paddingConditionStart,
-      paddingConditionEnd
-    );
-    expect(paddingConditionBlock).toContain(
-      'BASE_CONTENT_BOTTOM_PADDING + footerHeight'
-    );
-    expect(paddingConditionBlock).not.toContain('hideFooterForKeyboard');
-    expect(paddingConditionBlock).toMatch(/hasFooter\s*\n?\s*\?\s*\{/);
+    expect(text).toContain('footerHeight > height * 0.3');
+    expect(text).toContain('{inlineFooter ? footerContent : null}');
+    expect(text).toContain('{!inlineFooter ? footerContent : null}');
   });
 
-  it('footer を持たない既存画面の見た目は変えない（footer が falsy なら hasFooter は false のまま、padding 加算・footer 節ともに従来どおり）', async () => {
+  it('footer が falsy なら空のバーを描画しない', async () => {
     const text = await source('AppScreen.tsx');
-
-    // Issue 93 の既存 `{footer ? <View>...} : null}` と同じ truthy 判定に
-    // 揃える（code-reviewer 指摘: `!== undefined && !== null` だと
-    // `footer={false}` 等でも「footer あり」判定になり、中身が空の
-    // ボーダー付き footer バーが描画されてしまう）。
     expect(text).toContain('const hasFooter = Boolean(footer);');
-    expect(text).toMatch(/hasFooter\s*\n?\s*\?\s*\{/);
+    expect(text).toContain('hasFooter && !hideFooterForKeyboard');
   });
 });
 

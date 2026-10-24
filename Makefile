@@ -144,7 +144,11 @@ dead_code:
 	bun run dead-code
 
 .PHONY: before-commit
-before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export
+before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export responsive_test
+
+.PHONY: responsive_test
+responsive_test:
+	bun run test:responsive
 
 # Development Build (dev-client) 向け。`expo run:ios` / `expo run:android` で
 # 個人端末や Simulator に入れた Development Build と繋ぐときはこちら。Expo Go では

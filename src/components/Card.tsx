@@ -29,6 +29,8 @@ export default function Card({
 
 const styles = StyleSheet.create({
   card: {
+    minWidth: 0,
+    maxWidth: '100%',
     backgroundColor: colors.white,
     borderColor: colors.borderSubtle,
     borderRadius: 14,

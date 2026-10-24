@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  chmodSync,
   constants,
   cpSync,
   existsSync,
@@ -380,6 +381,40 @@ describe('Issue 79 回帰: 継承した GIT_DIR / GIT_WORK_TREE から fixture �
 });
 
 describe('Issue 29: Source Release の Lockfile 境界', () => {
+  it('current direct dependency notices match every frozen top-level version and declared license', async () => {
+    const root = path.join(import.meta.dir, '..');
+    const metadata = JSON.parse(
+      readFileSync(path.join(root, 'package.json'), 'utf8')
+    );
+    const reviewed = JSON.parse(
+      readFileSync(
+        path.join(root, 'scripts/direct-dependency-licenses.json'),
+        'utf8'
+      )
+    );
+    const names = Object.keys({
+      ...metadata.dependencies,
+      ...metadata.devDependencies,
+    }).sort();
+    const locked = parseLockedPackages(
+      readFileSync(path.join(root, 'bun.lock'), 'utf8')
+    );
+    expect(Object.keys(reviewed.packages).sort()).toEqual(names);
+    for (const name of names) {
+      const resolution = locked.find((item) => item.lockKey === name);
+      const installed = JSON.parse(
+        readFileSync(
+          path.join(root, 'node_modules', name, 'package.json'),
+          'utf8'
+        )
+      );
+      expect(reviewed.packages[name]).toEqual({
+        version: resolution?.version,
+        license: installed.license,
+      });
+      expect(installed.version).toBe(resolution?.version);
+    }
+  });
   it('同名の異なる Version を別 Package として決定順で保持する', () => {
     const packages = parseLockedPackages(`{
       "lockfileVersion": 1,
@@ -449,10 +484,320 @@ describe('Issue 29: Source Release の Lockfile 境界', () => {
     expect(packages).toContainEqual({
       lockKey: 'react',
       name: 'react',
-      version: '19.2.3',
+      version: '19.3.0',
       sha512:
-        '2aefe18586d58ce4275c3645bf6f9189b98b146c0575e78a1c570e4e5aedef1a65067c9ae4e1a7fe12110eca8389251c7ce46c0c2ecc3f1c28ae4f23070b0858',
+        '13c2d471bb415addb46db9766281dfc7864305dc554df38ab42667f5c0d227897afe7ba8029729201723e3bb76c19a155fc836647b8c1db892860091d53e52a2',
     });
+  });
+});
+
+describe('source release rejects malformed tracked metadata before publication', () => {
+  const validPackage = {
+    name: 'tenkacloud-passport',
+    version: TEST_VERSION,
+    license: 'MIT',
+    dependencies: { 'direct-dep': '1.2.3' },
+    devDependencies: { 'dev-dep': '2.0.0' },
+  };
+  const cases = [
+    [
+      'malformed package JSON',
+      'package.json',
+      '{',
+      'INVALID_PACKAGE_METADATA',
+      'not valid JSON',
+    ],
+    [
+      'non-object package',
+      'package.json',
+      '[]',
+      'INVALID_PACKAGE_METADATA',
+      'must be an object',
+    ],
+    [
+      'incomplete package identity',
+      'package.json',
+      JSON.stringify({ ...validPackage, name: 'other-app' }),
+      'INVALID_PACKAGE_METADATA',
+      'metadata is incomplete',
+    ],
+    [
+      'non-object dependencies',
+      'package.json',
+      JSON.stringify({ ...validPackage, dependencies: [] }),
+      'INVALID_PACKAGE_METADATA',
+      'dependencies must be an object',
+    ],
+    [
+      'non-string dependency range',
+      'package.json',
+      JSON.stringify({ ...validPackage, dependencies: { 'direct-dep': 42 } }),
+      'INVALID_PACKAGE_METADATA',
+      'ranges must be strings',
+    ],
+    [
+      'malformed reviewed licenses',
+      'scripts/direct-dependency-licenses.json',
+      '{',
+      'INVALID_PACKAGE_METADATA',
+      'license manifest is invalid',
+    ],
+    [
+      'non-object reviewed licenses',
+      'scripts/direct-dependency-licenses.json',
+      'null',
+      'INVALID_PACKAGE_METADATA',
+      'license manifest is invalid',
+    ],
+    [
+      'missing reviewed dependencies',
+      'scripts/direct-dependency-licenses.json',
+      JSON.stringify({ schemaVersion: 1, packages: {} }),
+      'INVALID_PACKAGE_METADATA',
+      'exactly cover direct dependencies',
+    ],
+    [
+      'stale reviewed version',
+      'scripts/direct-dependency-licenses.json',
+      JSON.stringify({
+        schemaVersion: 1,
+        packages: {
+          'direct-dep': { version: '0.0.1', license: 'MIT' },
+          'dev-dep': { version: '2.0.0', license: 'MIT' },
+        },
+      }),
+      'INVALID_PACKAGE_METADATA',
+      'does not match the top-level lock resolution',
+    ],
+    [
+      'malformed inventory',
+      'scripts/source-release-inventory.json',
+      '{',
+      'FORBIDDEN_RELEASE_PATH',
+      'reviewed source inventory',
+    ],
+    [
+      'non-object inventory',
+      'scripts/source-release-inventory.json',
+      '[]',
+      'FORBIDDEN_RELEASE_PATH',
+      'reviewed source inventory',
+    ],
+  ] as const;
+  it.each(cases)('%s', async (_label, file, contents, code, message) => {
+    const root = await createReleaseRepository();
+    writeFileSync(path.join(root, file), contents);
+    await runGit(root, ['add', file]);
+    await runGit(root, ['commit', '-m', 'test: malformed release metadata']);
+    const outputDirectory = path.join(
+      root,
+      'release-output',
+      'must-not-publish'
+    );
+    const result = buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    await expect(result).rejects.toMatchObject({ code });
+    await expect(result).rejects.toThrow(message);
+    expect(existsSync(outputDirectory)).toBe(false);
+  });
+  it.each(['missing-path', 'unreviewed-binary'] as const)(
+    'refuses an inventory with %s',
+    async (mutation) => {
+      const root = await createReleaseRepository();
+      const inventoryPath = path.join(
+        root,
+        'scripts/source-release-inventory.json'
+      );
+      const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+      if (mutation === 'missing-path') inventory.paths = ['README.md'];
+      else inventory.binaryAssets = { 'assets/unlisted.png': 'a'.repeat(64) };
+      writeFileSync(inventoryPath, JSON.stringify(inventory));
+      await runGit(root, ['add', 'scripts/source-release-inventory.json']);
+      await runGit(root, ['commit', '-m', 'test: mismatched source inventory']);
+      const outputDirectory = path.join(
+        root,
+        'release-output',
+        'must-not-publish'
+      );
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_PATH' });
+      expect(existsSync(outputDirectory)).toBe(false);
+    }
+  );
+  it('reports a nonexistent Git ref as a command failure without publishing', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(
+      root,
+      'release-output',
+      'must-not-publish'
+    );
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'missing-ref',
+        outputDirectory,
+      })
+    ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+    expect(existsSync(outputDirectory)).toBe(false);
+  });
+  it.each(['commit', 'blob-size', 'blob-content'] as const)(
+    'rejects inconsistent Git %s output without publishing',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const tools = mkdtempSync(path.join(tmpdir(), 'passport-git-boundary-'));
+      tempRoots.push(tools);
+      const realGit = Bun.which('git');
+      if (!realGit) throw new Error('Git is required');
+      const shim = path.join(tools, 'git');
+      writeFileSync(
+        shim,
+        `#!${process.execPath}\nimport { spawnSync } from 'node:child_process';\nconst args=process.argv.slice(2);\nconst fault=${JSON.stringify(fault)};\nif(fault==='commit'&&args[0]==='rev-parse'){process.stdout.write('not-a-commit\\n');process.exit(0);}\nif(args[0]==='cat-file'&&args.at(-1)?.endsWith(':README.md')){\nif(fault==='blob-size'&&args[1]==='-s'){process.stdout.write('invalid-size\\n');process.exit(0);}\nif(fault==='blob-content'&&args[1]==='blob'){process.stdout.write('short');process.exit(0);}\n}\nconst result=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(result.status??1);\n`
+      );
+      chmodSync(shim, 0o755);
+      const previousPath = process.env['PATH'];
+      const outputDirectory = path.join(
+        root,
+        'release-output',
+        'must-not-publish'
+      );
+      process.env['PATH'] = `${tools}${path.delimiter}${previousPath ?? ''}`;
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({
+          code:
+            fault === 'commit'
+              ? 'INVALID_GIT_REF'
+              : 'FORBIDDEN_RELEASE_CONTENT',
+        });
+        expect(existsSync(outputDirectory)).toBe(false);
+      } finally {
+        if (previousPath === undefined) delete process.env['PATH'];
+        else process.env['PATH'] = previousPath;
+      }
+    }
+  );
+});
+
+describe('descriptor and cleanup failure boundaries', () => {
+  it('rejects an invalid directory descriptor before reading a release file', async () => {
+    await expect(
+      readRegularFileNoFollowAt(-1, 'LICENSE', 1024)
+    ).rejects.toMatchObject({ code: 'INVALID_PUBLICATION_PATH' });
+  });
+  it('rejects empty or malformed identity lists and missing entries', async () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), 'passport-identity-boundary-')
+    );
+    tempRoots.push(root);
+    const handle = await open(root, constants.O_RDONLY | constants.O_DIRECTORY);
+    const valid = {
+      byteLength: 0,
+      changeTimeNanoseconds: '0',
+      device: 0,
+      fileName: 'missing',
+      inode: 0,
+      modificationTimeNanoseconds: '0',
+    };
+    try {
+      await expect(
+        assertRegularFileIdentitiesNoFollowAt(handle.fd, [])
+      ).rejects.toMatchObject({ code: 'INVALID_PUBLICATION_PATH' });
+      for (const changed of [
+        { ...valid, fileName: '../outside' },
+        { ...valid, byteLength: -1 },
+        { ...valid, inode: -1 },
+        { ...valid, changeTimeNanoseconds: 'unknown' },
+      ]) {
+        await expect(
+          assertRegularFileIdentitiesNoFollowAt(handle.fd, [changed])
+        ).rejects.toMatchObject({ code: 'INVALID_PUBLICATION_PATH' });
+      }
+      await expect(
+        assertRegularFileIdentitiesNoFollowAt(handle.fd, [valid])
+      ).rejects.toMatchObject({ code: 'ENTRY_READ_FAILED' });
+    } finally {
+      await handle.close();
+    }
+  });
+  async function cleanupFixture() {
+    const parentPath = mkdtempSync(
+      path.join(tmpdir(), 'passport-cleanup-boundary-')
+    );
+    tempRoots.push(parentPath);
+    const directoryPath = path.join(parentPath, 'staging');
+    mkdirSync(directoryPath);
+    writeFileSync(
+      path.join(directoryPath, 'unknown-data'),
+      'Synthetic retained bytes'
+    );
+    const parentHandle = await open(
+      parentPath,
+      constants.O_RDONLY | constants.O_DIRECTORY
+    );
+    const handle = await open(
+      directoryPath,
+      constants.O_RDONLY | constants.O_DIRECTORY
+    );
+    const parent = await parentHandle.stat();
+    const directory = await handle.stat();
+    return {
+      parent: { path: parentPath, device: parent.dev, inode: parent.ino },
+      parentHandle,
+      directory: {
+        path: directoryPath,
+        device: directory.dev,
+        inode: directory.ino,
+      },
+      handle,
+      files: [],
+    };
+  }
+  it('refuses cleanup through a closed descriptor and preserves the directory', async () => {
+    const fixture = await cleanupFixture();
+    await fixture.handle.close();
+    expect(await cleanupRecordedOutputDirectory(fixture)).toBe(false);
+    expect(
+      readFileSync(path.join(fixture.directory.path, 'unknown-data'), 'utf8')
+    ).toBe('Synthetic retained bytes');
+  });
+  it('reports failed handle closure after quarantining, without deleting unknown bytes', async () => {
+    const fixture = await cleanupFixture();
+    const close = spyOn(fixture.handle, 'close').mockRejectedValue(
+      new Error('Synthetic close failure')
+    );
+    try {
+      expect(await cleanupRecordedOutputDirectory(fixture)).toBe(false);
+      const quarantined = readdirSync(fixture.parent.path).find((name) =>
+        name.startsWith('.tenkacloud-passport-failed-')
+      );
+      expect(quarantined).toBeDefined();
+      expect(
+        readFileSync(
+          path.join(fixture.parent.path, quarantined ?? '', 'unknown-data'),
+          'utf8'
+        )
+      ).toBe('Synthetic retained bytes');
+    } finally {
+      close.mockRestore();
+      await fixture.handle.close();
+    }
   });
 });
 
@@ -612,6 +957,96 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         'Usage: source release verify <version> <candidate-directory>'
       )
     );
+  });
+
+  it('rejects malformed public manifests and SPDX relationships before accepting a candidate', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(
+      root,
+      'release-output/validation-boundaries'
+    );
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const sbom = JSON.parse(
+      readFileSync(
+        path.join(
+          outputDirectory,
+          `tenkacloud-passport-${TEST_VERSION}.spdx.json`
+        ),
+        'utf8'
+      )
+    );
+    const manifest = JSON.parse(
+      readFileSync(path.join(outputDirectory, 'release-manifest.json'), 'utf8')
+    );
+    for (const malformed of [
+      null,
+      { ...sbom, packages: [null] },
+      { ...sbom, relationships: [null] },
+      {
+        ...sbom,
+        relationships: [...sbom.relationships, sbom.relationships[0]],
+      },
+      {
+        ...sbom,
+        relationships: [
+          { ...sbom.relationships[0], spdxElementId: 'SPDXRef-Unknown' },
+        ],
+      },
+      {
+        ...sbom,
+        relationships: [{ ...sbom.relationships[0], relationshipType: 42 }],
+      },
+      {
+        ...sbom,
+        packages: sbom.packages.map(
+          (item: Record<string, unknown>, index: number) =>
+            index === 1 ? { ...item, checksums: [null] } : item
+        ),
+      },
+    ]) {
+      expect(() => validateSpdxDocument(malformed)).toThrow(
+        new ReleaseCandidateError(
+          'INVALID_SBOM',
+          'Generated SPDX document is internally inconsistent.'
+        )
+      );
+    }
+    for (const malformed of [
+      null,
+      { ...manifest, files: null },
+      { ...manifest, files: [null] },
+      { ...manifest, commitTimestamp: 'not-a-canonical-timestamp' },
+      {
+        ...manifest,
+        files: manifest.files.map(
+          (item: Record<string, unknown>, index: number) =>
+            index === 0 ? { ...item, unexpected: true } : item
+        ),
+      },
+      {
+        ...manifest,
+        files: manifest.files.map(
+          (item: Record<string, unknown>, index: number) =>
+            index === 0 ? { ...item, byteLength: 0 } : item
+        ),
+      },
+      {
+        ...manifest,
+        files: manifest.files.map(
+          (item: Record<string, unknown>, index: number) =>
+            index === 0 ? { ...item, fileName: '../LICENSE' } : item
+        ),
+      },
+    ]) {
+      expect(() => validateReleaseManifest(malformed)).toThrow(
+        ReleaseCandidateError
+      );
+    }
   });
 
   it('同じ Commit から2回作った全成果物が byte 単位で一致する', async () => {

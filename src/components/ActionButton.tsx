@@ -50,6 +50,9 @@ export default function ActionButton({
 
 const styles = StyleSheet.create({
   button: {
+    minWidth: 0,
+    maxWidth: '100%',
+    flexShrink: 1,
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
@@ -85,6 +88,9 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
   },
   label: {
+    minWidth: 0,
+    maxWidth: '100%',
+    flexShrink: 1,
     color: colors.white,
     fontSize: 16,
     fontWeight: '600',
