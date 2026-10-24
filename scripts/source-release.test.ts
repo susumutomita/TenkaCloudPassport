@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import * as syncFsBoundary from 'node:fs';
 import {
   chmodSync,
   constants,
@@ -17,6 +18,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import * as fsBoundary from 'node:fs/promises';
 import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -2707,7 +2709,9 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         '-e',
         `
           import { constants } from 'node:fs';
-          import { open } from 'node:fs/promises';
+          import * as syncFsBoundary from 'node:fs';
+import * as fsBoundary from 'node:fs/promises';
+import { open } from 'node:fs/promises';
           const { hashRegularFileNoFollowAt } = await import('./scripts/atomic-output-publisher.ts');
           const handle = await open(
             process.env.TASK_STREAM_DIRECTORY,
@@ -2773,4 +2777,253 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     expect(source).not.toContain('rmdir(');
     expect(source).toContain('await validateOpenedSourceReleaseDirectory(');
   });
+});
+
+describe('release filesystem failure boundaries', () => {
+  it.each(['parent-open', 'staging-create', 'staging-open'] as const)(
+    'rejects %s failure without publication and succeeds after restoring the boundary',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const parent = path.join(root, 'release-output');
+      const outputDirectory = path.join(parent, 'filesystem-fault');
+      const originalOpen = fsBoundary.open;
+      const originalMkdtemp = fsBoundary.mkdtemp;
+      let intercepted = 0;
+      const opening = spyOn(fsBoundary, 'open').mockImplementation(
+        async (file, ...options) => {
+          const name = String(file);
+          if (
+            (fault === 'parent-open' && name === parent) ||
+            (fault === 'staging-open' &&
+              name.startsWith(
+                path.join(parent, '.tenkacloud-passport-release-')
+              ))
+          ) {
+            intercepted += 1;
+            throw Object.assign(new Error('fixture open denial'), {
+              code: 'EACCES',
+            });
+          }
+          return originalOpen(file, ...options);
+        }
+      );
+      const creating = spyOn(fsBoundary, 'mkdtemp').mockImplementation(
+        async (prefix, ...options) => {
+          if (
+            fault === 'staging-create' &&
+            String(prefix).startsWith(
+              path.join(parent, '.tenkacloud-passport-release-')
+            )
+          ) {
+            intercepted += 1;
+            throw Object.assign(new Error('fixture create denial'), {
+              code: 'EACCES',
+            });
+          }
+          return Reflect.apply(originalMkdtemp, fsBoundary, [
+            prefix,
+            ...options,
+          ]);
+        }
+      );
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({
+          code: 'UNSAFE_OUTPUT_DIRECTORY',
+          message:
+            fault === 'parent-open'
+              ? 'Release output parent could not be opened safely.'
+              : fault === 'staging-create'
+                ? 'Release staging directory could not be created safely.'
+                : 'Release staging directory could not be opened safely.',
+        });
+        expect(intercepted).toBe(1);
+        expect(existsSync(outputDirectory)).toBe(false);
+      } finally {
+        opening.mockRestore();
+        creating.mockRestore();
+      }
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).resolves.toMatchObject({ outputDirectory });
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
+
+  it.each(['read-failure', 'hash-mismatch'] as const)(
+    'rejects writer-record rebind %s and leaves no published output',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(root, 'release-output/rebind-fault');
+      const originalHash = publication.hashRegularFileNoFollowAt;
+      let intercepted = 0;
+      const hashing = spyOn(
+        publication,
+        'hashRegularFileNoFollowAt'
+      ).mockImplementation(async (descriptor, name, maximumBytes) => {
+        const result = await originalHash(descriptor, name, maximumBytes);
+        if (name !== 'LICENSE' || intercepted > 0) return result;
+        intercepted += 1;
+        if (fault === 'read-failure')
+          throw new Error('fixture descriptor hash failure');
+        return { ...result, sha256: '0'.repeat(64) };
+      });
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({
+          code: 'UNSAFE_OUTPUT_DIRECTORY',
+          message:
+            fault === 'read-failure'
+              ? 'Release output could not be rebound to its writer record.'
+              : 'Release output differs from the file closed by its writer.',
+        });
+        expect(intercepted).toBe(1);
+        expect(existsSync(outputDirectory)).toBe(false);
+      } finally {
+        hashing.mockRestore();
+      }
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).resolves.toMatchObject({ outputDirectory });
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
+});
+
+describe('descriptor reads reject mutation during the actual read', () => {
+  it.each(['read', 'hash'] as const)(
+    'rejects in-place truncation during %s and validates restored bytes',
+    async (operation) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(root, 'release-output/during-read');
+      await buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      });
+      const target = path.join(outputDirectory, 'LICENSE');
+      const original = readFileSync(target);
+      const inode = syncFsBoundary.statSync(target, { bigint: true }).ino;
+      const directory = await open(
+        outputDirectory,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+      );
+      const originalRead = syncFsBoundary.readSync;
+      let mutated = false;
+      const reading = spyOn(syncFsBoundary, 'readSync').mockImplementation(
+        (...arguments_: [number, NodeJS.ArrayBufferView, ...unknown[]]) => {
+          const bytes = Reflect.apply(originalRead, syncFsBoundary, arguments_);
+          if (
+            !mutated &&
+            syncFsBoundary.fstatSync(arguments_[0], { bigint: true }).ino ===
+              inode
+          ) {
+            mutated = true;
+            writeFileSync(target, Buffer.alloc(0));
+          }
+          return bytes;
+        }
+      );
+      try {
+        const pending =
+          operation === 'read'
+            ? publication.readRegularFileNoFollowAtWithIdentity(
+                directory.fd,
+                'LICENSE',
+                original.byteLength
+              )
+            : publication.hashRegularFileNoFollowAt(
+                directory.fd,
+                'LICENSE',
+                original.byteLength
+              );
+        await expect(pending).rejects.toMatchObject({
+          code: 'ENTRY_READ_FAILED',
+          message:
+            operation === 'read'
+              ? 'Release candidate entry identity changed while reading.'
+              : 'Release candidate entry identity changed while hashing.',
+        });
+        expect(mutated).toBe(true);
+      } finally {
+        reading.mockRestore();
+        await directory.close();
+      }
+      expect(readFileSync(target).byteLength).toBe(0);
+      writeFileSync(target, original);
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
+});
+
+it('rejects a version changed by the caller during generation rather than publishing mixed-version files', async () => {
+  const root = await createReleaseRepository();
+  const outputDirectory = path.join(root, 'release-output/mutated-version');
+  const options = {
+    repositoryRoot: root,
+    version: TEST_VERSION,
+    ref: 'HEAD',
+    outputDirectory,
+  };
+  const originalCapture = processCapture.runCapturedProcess;
+  let mutated = false;
+  const capturing = spyOn(
+    processCapture,
+    'runCapturedProcess'
+  ).mockImplementation(async (command, processOptions) => {
+    const result = await originalCapture(command, processOptions);
+    if (!mutated && command.includes('--format=%cI')) {
+      mutated = true;
+      options.version = '0.2.0-alpha.1';
+    }
+    return result;
+  });
+  try {
+    await expect(buildSourceRelease(options)).rejects.toMatchObject({
+      code: 'UNSAFE_OUTPUT_DIRECTORY',
+      message:
+        'Release output was not created by the retained writer boundary.',
+    });
+    expect(mutated).toBe(true);
+    expect(existsSync(outputDirectory)).toBe(false);
+  } finally {
+    capturing.mockRestore();
+  }
+  options.version = TEST_VERSION;
+  await expect(buildSourceRelease(options)).resolves.toMatchObject({
+    outputDirectory,
+    version: TEST_VERSION,
+  });
+  await expect(
+    validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+  ).resolves.toHaveLength(6);
 });

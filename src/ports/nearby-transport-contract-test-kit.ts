@@ -222,6 +222,176 @@ export function runNearbyTransportContract(
   createHarness: CreateNearbyTransportContractHarness
 ): void {
   describe(`NearbyTransport Contract: ${label}`, () => {
+    it('disposed endpoints reject join and leave without restarting a session', async () => {
+      const { host, guest, invite } = await connectedPair(createHarness());
+      const input = await joinInput(invite, GUEST_IDS[0]);
+      await guest.dispose();
+      await expectTransportError(guest.join(input), 'DISPOSED');
+      await expectTransportError(guest.leave('owner-left'), 'DISPOSED');
+      await host.dispose();
+    });
+
+    it('idle leave and guest hosting reject invalid state without ending the host', async () => {
+      const harness = createHarness();
+      const idle = harness.createTransport();
+      await expectTransportError(idle.leave('owner-left'), 'INVALID_STATE');
+      const { host, guest } = await connectedPair(harness);
+      await expectTransportError(guest.host(invitePolicy()), 'INVALID_STATE');
+      await guest.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'still-connected',
+      });
+      await idle.dispose();
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('invite issuance failures are typed and do not leak provider details', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const message = await expectTransportError(
+        host.host({
+          ...invitePolicy(),
+          issueInvite() {
+            throw new Error('private-issuer-detail');
+          },
+        }),
+        'INVALID_CONFIGURATION'
+      );
+      expect(message).not.toContain('private-issuer-detail');
+      const invite = await host.host(invitePolicy());
+      const guest = harness.createTransport();
+      await guest.join(await joinInput(invite, GUEST_IDS[0]));
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('replacing host capacity disposes only the rejected authorization', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const original = await host.host(invitePolicy());
+      let disposed = 0;
+      await expectTransportError(
+        host.host(
+          invitePolicy(undefined, 2, (authorization) => ({
+            ...authorization,
+            dispose() {
+              disposed += 1;
+              authorization.dispose();
+            },
+          }))
+        ),
+        'INVALID_CONFIGURATION'
+      );
+      expect(disposed).toBe(1);
+      const guest = harness.createTransport();
+      await guest.join(await joinInput(original, GUEST_IDS[0]));
+      await guest.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'original-still-valid',
+      });
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('failed old authorization cleanup aborts replacement and disposes the candidate', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      await host.host(
+        invitePolicy(undefined, 6, (authorization) => ({
+          ...authorization,
+          dispose() {
+            authorization.dispose();
+            throw new Error('private-cleanup-detail');
+          },
+        }))
+      );
+      const hostEvents = recordEvents(host);
+      let candidateDisposals = 0;
+      await expectTransportError(
+        host.host(
+          invitePolicy(undefined, 6, (authorization) => ({
+            ...authorization,
+            dispose() {
+              candidateDisposals += 1;
+              authorization.dispose();
+            },
+          }))
+        ),
+        'CONNECTION_INTERRUPTED'
+      );
+      expect(candidateDisposals).toBe(1);
+      await expectTransportError(
+        host.send({
+          delivery: { kind: 'broadcast' },
+          payload: 'must-not-send',
+        }),
+        'NOT_READY'
+      );
+      expect(hostEvents.events).toContainEqual({
+        kind: 'connection-state-changed',
+        state: 'terminal',
+        reason: 'connection-interrupted',
+      });
+      hostEvents.unsubscribe();
+      await host.dispose();
+    });
+
+    it('host leave reports cleanup failure while terminating connected guests', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const guest = harness.createTransport();
+      const invite = await host.host(
+        invitePolicy(undefined, 6, (authorization) => ({
+          ...authorization,
+          dispose() {
+            authorization.dispose();
+            throw new Error('private-cleanup-detail');
+          },
+        }))
+      );
+      await guest.join(await joinInput(invite, GUEST_IDS[0]));
+      const events = recordEvents(guest);
+      await expectTransportError(
+        host.leave('owner-left'),
+        'CONNECTION_INTERRUPTED'
+      );
+      expect(events.events).toContainEqual({
+        kind: 'connection-state-changed',
+        state: 'terminal',
+        reason: 'host-ended',
+      });
+      events.unsubscribe();
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it.each(['host', 'guest'] as const)(
+      'rejects a queued %s send when a recoverable condition starts before delivery',
+      async (sender) => {
+        const harness = createHarness();
+        const pair = await connectedPair(harness);
+        const hostEvents = recordEvents(pair.host);
+        const guestEvents = recordEvents(pair.guest);
+        const transport = pair[sender];
+        const rejected = expectTransportError(
+          transport.send({
+            delivery: { kind: 'broadcast' },
+            payload: 'must-not-deliver-during-reconnect',
+          }),
+          'CONNECTION_INTERRUPTED'
+        );
+        harness.interrupt(transport, 'network-changed');
+        await rejected;
+        expect(receivedPayloads(hostEvents.events)).toEqual([]);
+        expect(receivedPayloads(guestEvents.events)).toEqual([]);
+        hostEvents.unsubscribe();
+        guestEvents.unsubscribe();
+        await pair.guest.dispose();
+        await pair.host.dispose();
+      }
+    );
+
     it('実 Join Proof と Host / Guest Ready の完了後だけ接続し送信を許可する', async () => {
       const harness = createHarness();
       const host = harness.createTransport();

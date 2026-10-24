@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fsBoundary from 'node:fs/promises';
 import {
   access,
   mkdir,
@@ -17,8 +18,11 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import {
   assertOpenedFilePathUnchanged,
+  canonicalFilesystemInode,
   openStableFileForRead,
   type StableFileReadPolicy,
+  sameStableFileSnapshot,
+  stableFileSnapshot,
 } from './android-artifact-file-guard';
 import {
   AndroidArtifactIntegrityError,
@@ -697,4 +701,111 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
       expect(result.stderr).toContain('INVALID_PREVIOUS_VERSION_CODE');
     }
   );
+});
+
+describe('unsigned filesystem inode identity', () => {
+  it('canonicalizes signed high-bit identities without wrapping invalid integers', () => {
+    const high = 1n << 63n;
+    expect(canonicalFilesystemInode(-high)).toBe(high);
+    expect(canonicalFilesystemInode(-1n)).toBe((1n << 64n) - 1n);
+    expect(canonicalFilesystemInode(high)).toBe(high);
+    expect(canonicalFilesystemInode(1n)).toBe(1n);
+    expect(canonicalFilesystemInode(0n)).toBeNull();
+    expect(canonicalFilesystemInode(-high - 1n)).toBeNull();
+    expect(canonicalFilesystemInode(1n << 64n)).toBeNull();
+    expect(canonicalFilesystemInode((1n << 64n) + 1n)).toBeNull();
+  });
+
+  it('compares identical high-bit representations while rejecting distinct or invalid snapshots', () => {
+    const status = {
+      dev: 27n,
+      ino: -(1n << 63n) + 42n,
+      size: 5n,
+      ctimeNs: 100n,
+      mtimeNs: 99n,
+    };
+    const signed = stableFileSnapshot(status);
+    const unsigned = stableFileSnapshot({ ...status, ino: (1n << 63n) + 42n });
+    expect(sameStableFileSnapshot(signed, unsigned)).toBe(true);
+    for (const ino of [
+      1n,
+      (1n << 63n) + 43n,
+      0n,
+      -(1n << 63n) - 1n,
+      1n << 64n,
+    ]) {
+      expect(
+        sameStableFileSnapshot(signed, stableFileSnapshot({ ...status, ino }))
+      ).toBe(false);
+    }
+    expect(
+      sameStableFileSnapshot(
+        stableFileSnapshot({ ...status, ino: 0n }),
+        unsigned
+      )
+    ).toBe(false);
+    expect(sameStableFileSnapshot(signed, { ...unsigned, device: 28n })).toBe(
+      false
+    );
+    expect(sameStableFileSnapshot(signed, { ...unsigned, size: 6n })).toBe(
+      false
+    );
+    expect(
+      sameStableFileSnapshot(signed, {
+        ...unsigned,
+        changedAtNanoseconds: 101n,
+      })
+    ).toBe(false);
+    expect(
+      sameStableFileSnapshot(signed, {
+        ...unsigned,
+        modifiedAtNanoseconds: 100n,
+      })
+    ).toBe(false);
+  });
+});
+
+it('binds signed lstat and unsigned descriptor identities and rejects a later different inode', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'identity.apk');
+  await writeFile(file, 'stable bytes');
+  const handle = await open(file, 'r');
+  const status = await handle.stat({ bigint: true });
+  const unsigned = Object.assign(
+    Object.create(Object.getPrototypeOf(status)),
+    status,
+    { ino: (1n << 63n) + 42n }
+  );
+  const signed = Object.assign(
+    Object.create(Object.getPrototypeOf(status)),
+    status,
+    { ino: -(1n << 63n) + 42n }
+  );
+  const replaced = Object.assign(
+    Object.create(Object.getPrototypeOf(status)),
+    status,
+    { ino: (1n << 63n) + 43n }
+  );
+  const stating = spyOn(fsBoundary, 'lstat')
+    .mockResolvedValueOnce(signed)
+    .mockResolvedValueOnce(unsigned)
+    .mockResolvedValueOnce(replaced);
+  const opening = spyOn(fsBoundary, 'open').mockResolvedValueOnce(handle);
+  const descriptorStat = spyOn(handle, 'stat').mockResolvedValueOnce(unsigned);
+  try {
+    const opened = await openStableFileForRead(file, PORTABLE_APK_POLICY);
+    expect(opened.handle).toBe(handle);
+    expect(opened.identity).toEqual({
+      device: status.dev,
+      inode: unsigned.ino,
+    });
+    await expect(
+      assertOpenedFilePathUnchanged(file, opened.identity, PORTABLE_APK_POLICY)
+    ).rejects.toMatchObject({ code: 'ARTIFACT_CHANGED' });
+  } finally {
+    stating.mockRestore();
+    opening.mockRestore();
+    descriptorStat.mockRestore();
+    await handle.close();
+  }
 });

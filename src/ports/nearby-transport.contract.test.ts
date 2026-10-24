@@ -200,3 +200,50 @@ describe('Nearby Transport 共有 Binding Validator', () => {
     expect(disposeCount).toBe(1);
   });
 });
+
+describe('reference network configuration boundaries', () => {
+  it('rejects transports owned by a different network without registering them', async () => {
+    const network = createLoopbackNearbyNetwork();
+    const other = createLoopbackNearbyNetwork();
+    const foreign = other.createTransport();
+    expect(() => network.activeListenerCount(foreign)).toThrow(
+      NearbyTransportError
+    );
+    expect(() => network.queuedEnvelopeCount(foreign)).toThrow(
+      NearbyTransportError
+    );
+    expect(network.activeEndpointCount).toBe(0);
+    const foreignAdapter = {
+      host: foreign.host.bind(foreign),
+      join: foreign.join.bind(foreign),
+      send: foreign.send.bind(foreign),
+      leave: foreign.leave.bind(foreign),
+      subscribe: foreign.subscribe.bind(foreign),
+      dispose: foreign.dispose.bind(foreign),
+    };
+    expect(() => network.activeListenerCount(foreignAdapter)).toThrow(
+      NearbyTransportError
+    );
+    await foreign.dispose();
+  });
+
+  it('rejects unknown runtime conditions and noncallable listeners while retaining valid subscriptions', async () => {
+    const network = createLoopbackNearbyNetwork();
+    const transport = network.createTransport();
+    expect(() =>
+      Reflect.apply(network.reportCondition, network, [
+        transport,
+        'unsupported-condition',
+      ])
+    ).toThrow(NearbyTransportError);
+    expect(() => Reflect.apply(transport.subscribe, transport, [null])).toThrow(
+      NearbyTransportError
+    );
+    const listener = () => undefined;
+    const unsubscribe = transport.subscribe(listener);
+    expect(network.activeListenerCount(transport)).toBe(1);
+    unsubscribe();
+    expect(network.activeListenerCount(transport)).toBe(0);
+    await transport.dispose();
+  });
+});

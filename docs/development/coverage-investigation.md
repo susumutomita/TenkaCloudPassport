@@ -18,8 +18,8 @@ file exclusions were added.
   metadata, inconsistent Git output and unsafe descriptor/cleanup operations.
   Failed candidates never appear at the requested output path; unknown bytes
   survive failed cleanup.
-- Current app run after the QR correction: 1411 tests pass, line summary 99.93%. Current source-release run:
-  122 tests pass, line summary 99.15%. Both strict100% coverage gates still fail.
+- Current app run after the reviewed corrections: 1423 tests pass, line summary 99.96%. Current source-release run:
+  130 tests pass, line summary 99.44%. Both strict100% coverage gates still fail.
 - The complete missing-line lists below come from the same runs' LCOV reports.
   Bun's displayed aggregate is not the weighted sum of LCOV lines; neither
   calculation reaches 100% here.
@@ -228,3 +228,91 @@ the original switch. The final implementation retains an exhaustive typed
 switch with the original eight formulas. Independent review and negative
 compiler checks confirm that omitting a case is rejected. Complete output
 equivalence was rerun successfully for this final switch revision.
+
+## Filesystem identity failure: reproduced and corrected
+
+The four Linux failures were actual guard failures, not dismissed as generic
+environment noise. Two expected a valid app version/CLI success but received
+`ANDROID_CONFIG_CHANGED`/exit 1. Two expected wrong-hash or replacement-ref
+rejection but instead failed earlier with `INVALID_ANDROID_TOOL_PATH`.
+
+On the saved filesystem, Python and `stat` report app inode
+`9223372036855939972` and Git inode `9223372036855113675`. Both Node 24 and
+Bun 1.4.4 report the same 64-bit patterns as signed BigInts:
+`-9223372036853611644` and `-9223372036854437941`. Adding `2^64` recovers the
+unsigned values exactly. The unchanged positive-inode checks rejected them.
+
+Baseline `5040fd2` has identical affected guard code. Its materialized checkout
+reproduced both Git failures (44/46 tests passed). Its newly written app file had
+a low inode and passed; invoking the baseline reader on the exact saved app
+path reproduced `ANDROID_CONFIG_CHANGED`. Current pre-fix tests reproduced
+all four failures (42/46 passed). This distinguishes code from file allocation.
+
+The reviewed correction canonicalizes valid signed-64 representations to unsigned
+inodes after checking bounds. Zero and out-of-range values are rejected before
+conversion; overflow cannot alias inode 1. Device equality, descriptor identity,
+canonical paths, executable permission, timestamps, size, hashes and symlink
+protections remain. Publisher and external record contracts are unchanged.
+Portable tests compare signed/unsigned snapshots and exercise lstat/descriptor
+representations, then reject a distinct inode. Existing replacement, deletion,
+symlink, content-mutation and wrong-tool-hash tests remain. All 56 targeted
+Android tests passed after correction.
+
+## Additional reachable fault cases and invariant limit
+
+New tests exercise real truncation during descriptor reads/hashes, staging
+creation/open failures, writer-record read/hash failures, mutable caller version
+changes, disposed/idle endpoint operations, issuer failures, replacement cleanup,
+capacity mismatch and unexpected text-normalization failures. Boundary mocks
+are restored and valid retry controls run. No production fallback was added.
+
+Independent review found public counterexamples to two earlier hypotheses.
+A queued send followed synchronously by network change reaches the nonconnected
+drain guard; both host and guest cases now require rejection without delivery.
+Changing caller-owned options.version across a real Git await reaches the
+missing-writer-record guard; a test requires rejection without mixed publication
+and verifies a restored successful retry. Neither guard is classified unreachable.
+
+Two narrower retained defenses have no supported public path identified:
+
+- `recordCreatedFile` rejects a mismatching or duplicate writer filename. The
+  parser has already checked the requested name and returns a new plain record;
+  the private write sequence uses distinct names and exposes neither its Map nor
+  the recorder. Ordinary filesystem/process faults cannot forge that private
+  parsed record or duplicate the call sequence.
+- The disposed branch in the synchronous transport drain follows queue shift
+  without an await or callback. Public disposal rejects and empties the queue
+  synchronously before marking disposed. A previously queued microtask therefore
+  sees an empty queue. The reachable reconnect case is separately tested.
+
+These are narrow control-flow findings, not exceptions or a proof that every
+other missing branch is unreachable. Strict 100% still fails. Reaching these
+branches would require corrupting private state, replacing unrelated standard
+operations solely to force impossible states, or changing the implementation.
+No such metric-only test, exclusion, threshold change or guard deletion is made.
+A separately reviewed transaction/state invariant design would be needed before
+changing retained defenses; a coverage waiver is explicitly prohibited.
+
+## Latest strict-gate inventory after fault regressions
+
+App: 1423 tests pass, 99.96% lines. Source-release: 130 tests pass, 99.44%
+lines. Both strict gates still fail. This inventory supersedes earlier missing
+line inventories; it does not classify all remaining cases as unreachable.
+
+### app current missing lines
+
+- `src/adapters/loopback-nearby-transport.ts` (SHA256 `3ebcb933ebd84e387bdb9e4e114c3a9113d76c9320be5962089fd8b426778783`): 280, 283, 284, 289, 290, 291, 325, 350, 365, 375, 403, 538, 635, 662, 665, 707, 769, 770, 772, 778, 779, 781, 797, 860, 887, 909, 1015, 1083, 1084, 1103, 1165, 1191, 1192, 1266, 1267, 1301, 1328.
+- `src/app/agent-provider-session.ts` (SHA256 `c869c03e9a6374e1a895613c6db84fb6b57f9f7cb02ef21f0022bd1247552588`): 177.
+- `src/protocol/lounge-handshake.ts` (SHA256 `d092f98a6a946811106add658ce785544ded5103549e6dbfd81afcefd4358633`): 317.
+- `src/protocol/peer-protocol-session.ts` (SHA256 `b4322e247fef64b2d305a18d4d49f256916e7598e35d66e1b7339f27b1a1834e`): 537.
+
+### release current missing lines
+
+- `scripts/atomic-output-publisher.ts` (SHA256 `c6d589b9a147e3fb3a654c37534a46f7a2731904383b6605ebbcc5f5748826d9`): 113, 117, 119, 120, 121, 122.
+- `scripts/source-release.ts` (SHA256 `6544336c029a2ba4a770c159e6e12e6b73c85740837b217395a59a12a0764850`): 807, 849, 894, 895, 978, 979, 980, 981, 982, 1048, 1050, 1051, 1052, 1053, 1054, 1092, 1093, 1094, 1095, 1108, 1109, 1110, 1111, 1112, 1225, 1226, 1227, 1317, 1318, 1321, 1322, 1323, 1324, 1325, 1326, 1327, 1328, 1329, 1330, 1331, 1332, 1333, 1334, 1335, 1337, 1338, 1339, 1340, 1356, 1357, 1358, 1359, 1360, 1361, 1362, 1363, 1364, 1365, 1366, 1367, 1368, 1369, 1370, 1371, 1373, 1377, 1378, 1382, 1383, 1442, 1445, 1481, 1482, 1483, 2112, 2118, 2119, 2155, 2230, 2241, 2257, 2264, 2270, 2273, 2276, 2292, 2515, 2516, 2517, 2518.
+
+Final `make -k before-commit` on this correction/test slice: 502 script tests,
+1423 app tests and 17 browser scenarios pass. Architecture/pre-release, lint,
+three typechecks, textlint, duplication and web export pass. Only the unchanged
+coverage gates fail (99.96% app; 99.44% source-release). No native validation
+was reused or rerun for the changed QR source.
