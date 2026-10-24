@@ -900,6 +900,41 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
 });
 
 describe('Issue 29: 再現可能 Source Release Candidate', () => {
+  it.each([{ resolved: null }, { resolved: 42 }])(
+    'rejects a native helper whose callable then export resolves to %j',
+    async ({ resolved }) => {
+      const nativeName =
+        process.platform === 'darwin'
+          ? 'atomic-output-publisher-darwin.ts'
+          : 'atomic-output-publisher-linux.ts';
+      const script = `
+        import { mock } from 'bun:test';
+        let thenCalls = 0;
+        mock.module(${JSON.stringify(path.join(import.meta.dir, nativeName))}, () => ({
+          then(resolve) { thenCalls += 1; resolve(${JSON.stringify(resolved)}); },
+          openEntryNoFollowNative() { throw new Error('native descriptor operation must not run'); },
+          renameEntryNoReplaceNative() { throw new Error('native rename must not run'); },
+        }));
+        const { atomicRenameDirectoryNoReplace } = await import(${JSON.stringify(path.join(import.meta.dir, 'atomic-output-publisher.ts'))});
+        try {
+          await atomicRenameDirectoryNoReplace(0, 'staging', 'candidate', {device: 0, inode: 0});
+          process.exit(1);
+        } catch (error) {
+          process.stdout.write(JSON.stringify({code: error.code, message: error.message, thenCalls}));
+        }
+      `;
+      const result = await runCapturedProcess([process.execPath, '-e', script]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      const failure = JSON.parse(new TextDecoder().decode(result.stdout));
+      expect(failure).toMatchObject({
+        code: 'UNSUPPORTED_PLATFORM',
+        message: 'Descriptor-relative release operations could not be loaded.',
+      });
+      expect(failure.thenCalls).toBeGreaterThan(0);
+    }
+  );
+
   it('rejects a nonexistent output parent without creating it implicitly', async () => {
     const root = await createReleaseRepository();
     const parent = path.join(root, 'missing-parent');

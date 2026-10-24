@@ -432,15 +432,20 @@ async function runExclusiveOutputWriter(
   fileName: string,
   source:
     | { readonly command: readonly string[] }
-    | { readonly contents: string | Uint8Array }
+    | { readonly contents: string }
 ): Promise<ExclusiveOutputRecord> {
   const command = 'command' in source ? source.command : [];
   const stdin =
     'contents' in source
-      ? typeof source.contents === 'string'
-        ? new TextEncoder().encode(source.contents)
-        : source.contents
+      ? new TextEncoder().encode(source.contents)
       : undefined;
+  const expectedContents =
+    stdin === undefined
+      ? undefined
+      : {
+          byteLength: stdin.byteLength,
+          sha256: createHash('sha256').update(stdin).digest('hex'),
+        };
   const captured = await runCapturedProcess(
     [
       'bun',
@@ -468,15 +473,10 @@ async function runExclusiveOutputWriter(
     );
   }
   const record = parseExclusiveOutputRecord(stdout, fileName);
-  if ('contents' in source) {
-    const expected =
-      typeof source.contents === 'string'
-        ? new TextEncoder().encode(source.contents)
-        : source.contents;
-    const expectedHash = createHash('sha256').update(expected).digest('hex');
+  if (expectedContents !== undefined) {
     if (
-      record.byteLength !== expected.byteLength ||
-      record.sha256 !== expectedHash
+      record.byteLength !== expectedContents.byteLength ||
+      record.sha256 !== expectedContents.sha256
     ) {
       throw new ReleaseCandidateError(
         'UNSAFE_OUTPUT_DIRECTORY',
@@ -570,7 +570,7 @@ async function pipeCommandToExclusiveFile(
 async function writeExclusiveFile(
   transaction: SafeOutputTransaction,
   fileName: string,
-  contents: string | Uint8Array
+  contents: string
 ): Promise<ExclusiveOutputRecord> {
   return runExclusiveOutputWriter(transaction, fileName, { contents });
 }
@@ -1058,7 +1058,7 @@ async function assertDirectoryIdentity(
 async function writeOutputExclusive(
   transaction: SafeOutputTransaction,
   fileName: string,
-  contents: string | Uint8Array
+  contents: string
 ): Promise<void> {
   await assertDirectoryIdentity(transaction);
   const record = await writeExclusiveFile(transaction, fileName, contents);

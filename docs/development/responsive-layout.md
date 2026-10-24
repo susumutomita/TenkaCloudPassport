@@ -74,8 +74,8 @@ workflow nor physical-device checks can be executed on the Linux workspace.
 ## Aggregate check limits found during modernization
 
 Bun 1.4.4 reports different line coverage for the unchanged original source.
-After adding public boundary and failure tests, 1378 application tests pass with
-99.89% line coverage, and 85 source-release tests pass with 98.63%. Both unchanged
+After adding public boundary and failure tests, 1383 application tests pass with
+99.91% line coverage, and 122 source-release tests pass with 99.15%. Both unchanged
 100% gates still fail. The [coverage investigation](./coverage-investigation.md)
 records exact missing locations, reachable missing cases, proved internal
 invariants and a standalone reproduction. No Bun execution bug was reproduced.
@@ -92,7 +92,7 @@ assertion failure was reported. The Mac passed the prior snapshot's script suite
 
 ## Reconciled Mac verification evidence (2026-10-24)
 
-The parent Mac task reports ten passing simulator scenarios: SE, Pro Max, iPad,
+Historical SDK 58.0.17 evidence: the parent Mac task reported ten passing simulator scenarios: SE, Pro Max, iPad,
 Duo outer and Duo inner, each at normal and maximum text size. Official fold
 controls were also exercised while opening Duo with the name and keyboard
 retained. These are reported native simulator results, not Linux execution.
@@ -119,3 +119,10 @@ expo-dev-client 58.0.15 and expo-file-system 58.0.11. Package metadata, frozen
 lockfile, direct-license notices and static-screening hash bindings were updated
 without altering the gates. Earlier reported Mac native results used 58.0.17;
 the signed release candidate needs native validation on this patch set.
+
+Updated SDK 58.0.19 evidence: the parent Mac task reports the unsigned build and
+8/10 scenarios passing (SE, Pro Max, iPad and Duo outer at normal/max text).
+Duo inner normal/max and fold retention on the updated modules remain pending:
+the Mac is locked and supported CUA needs manual unlock. This is not a permanent
+tool absence. Earlier ten-scenario results do not establish current full coverage.
+Hardware and all Duo rotations remain explicitly unverified.
