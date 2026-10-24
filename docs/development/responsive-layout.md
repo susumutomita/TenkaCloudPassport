@@ -1,6 +1,6 @@
 # Responsive layout verification
 
-The current app uses Expo SDK 58.0.17, React Native 0.88.0 and React 19.3.0,
+The current app uses Expo SDK 58.0.19, React Native 0.88.0 and React 19.3.0,
 matching the [Expo SDK compatibility table](https://docs.expo.dev/versions/v58.0.0/)
 and SDK 58's bundled native package versions. SDK 58 adopts the scene lifecycle
 and scene-aware geometry needed for iOS 27 and Duo. See the
@@ -113,3 +113,9 @@ attempts. Its parent-supplied SHA256 is not independently verified here; the
 standalone patch's exact byte checksum is verified. Source tests and script
 syntax can run on Linux; Swift/XCTest compilation and native execution cannot.
 This evidence records validation limits, not release approval.
+
+Release CI on 2026-10-24 required the SDK 58 patch set Expo 58.0.19,
+expo-dev-client 58.0.15 and expo-file-system 58.0.11. Package metadata, frozen
+lockfile, direct-license notices and static-screening hash bindings were updated
+without altering the gates. Earlier reported Mac native results used 58.0.17;
+the signed release candidate needs native validation on this patch set.
