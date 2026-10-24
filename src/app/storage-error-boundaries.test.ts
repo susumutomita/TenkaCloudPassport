@@ -20,6 +20,7 @@ import {
 import { WebDeletionJournalAdapter } from './local-deletion-journal';
 import { ExpoFileSystemLocalePreferenceStorageAdapter } from './locale-preference-storage';
 import {
+  DeleteFailingWebStorage,
   FileBackedWebStorage,
   trackTemporaryDirectories,
 } from './storage-test-kit';
@@ -86,6 +87,25 @@ const profile = createLocalPrivateProfile({
 });
 
 describe('storage adapter error boundaries', () => {
+  it('an explicit profile removal still works after a failed write and preserves unrelated storage', async () => {
+    const root = roots.create();
+    const saved = new FileBackedWebStorage(root);
+    await new WebLocalProfileStorageAdapter(saved).save(profile);
+    saved.setItem('unrelated-preference', 'retain');
+    const bytes = saved.getItem(LOCAL_PROFILE_STORAGE_KEY);
+    const adapter = new WebLocalProfileStorageAdapter(
+      new DeleteFailingWebStorage(root, ioFailure, 'set')
+    );
+    await expect(adapter.save(profile)).rejects.toMatchObject({
+      code: 'WRITE_FAILED',
+      cause: ioFailure,
+    });
+    expect(saved.getItem(LOCAL_PROFILE_STORAGE_KEY)).toBe(bytes);
+    await adapter.remove();
+    expect(await adapter.load()).toBeNull();
+    expect(saved.getItem('unrelated-preference')).toBe('retain');
+  });
+
   it('blocks a write when the deletion journal cannot be read and releases the write lease', async () => {
     const leases = new LocalModelContextLeaseRegistry(false);
     let written = false;

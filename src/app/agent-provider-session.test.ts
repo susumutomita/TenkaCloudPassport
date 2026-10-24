@@ -409,6 +409,52 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     }
   });
 
+  it('cancellation cannot make an unconfirmed native teardown reusable', async () => {
+    let announceStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      announceStarted = resolve;
+    });
+    let calls = 0;
+    const provider = localProvider((_input, options) => {
+      calls += 1;
+      return new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener(
+          'abort',
+          () =>
+            reject(
+              new AgentModelProviderError(
+                'CANCELLED',
+                'Synthetic teardown failure',
+                { nativeLaneQuarantined: true }
+              )
+            ),
+          { once: true }
+        );
+        announceStarted?.();
+      });
+    });
+    const runner = createAgentProviderSessionRunner();
+    const pending = runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'cancelled-quarantine-source',
+      provider,
+      input: INPUT,
+    });
+    await started;
+    await expect(runner.cancelAllAndWait()).rejects.toMatchObject({
+      nativeLaneQuarantined: true,
+    });
+    expect((await pending).outcome.switchReason).toBe('cancelled');
+    const blocked = await runner.run({
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: 'cancelled-quarantine-follower',
+      provider,
+      input: INPUT,
+    });
+    expect(blocked.outcome.switchReason).toBe('load-error');
+    expect(calls).toBe(1);
+  });
+
   it('forget で UI Key を破棄した後も cancelAllAndWait は残る Native teardown を drain する', async () => {
     let markStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {

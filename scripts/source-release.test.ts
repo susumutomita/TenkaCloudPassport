@@ -33,6 +33,7 @@ import {
   writeExclusiveOutput,
 } from './exclusive-output-writer';
 import { isolatedGitEnv } from './git-env-isolation';
+import * as processCapture from './process-capture';
 import { runCapturedProcess } from './process-capture';
 import {
   assertNoKnownSecretContent,
@@ -492,6 +493,37 @@ describe('Issue 29: Source Release の Lockfile 境界', () => {
 });
 
 describe('source release rejects malformed tracked metadata before publication', () => {
+  it.each([
+    { name: 'invalid UTF-8', bytes: Buffer.from([0xff, 0xfe, 0x61]) },
+    { name: 'embedded NUL', bytes: Buffer.from('unreviewed\0binary') },
+  ])(
+    'rejects unreviewed binary content in a tracked text path: $name',
+    async ({ bytes }) => {
+      const root = await createReleaseRepository();
+      writeFileSync(path.join(root, 'README.md'), bytes);
+      await runGit(root, ['add', 'README.md']);
+      await runGit(root, [
+        'commit',
+        '-m',
+        'test: malformed tracked text bytes',
+      ]);
+      const outputDirectory = path.join(
+        root,
+        'release-output/unreviewed-bytes'
+      );
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_PATH' });
+      expect(existsSync(outputDirectory)).toBe(false);
+      expect(readFileSync(path.join(root, 'README.md'))).toEqual(bytes);
+    }
+  );
+
   const validPackage = {
     name: 'tenkacloud-passport',
     version: TEST_VERSION,
@@ -882,6 +914,317 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
 });
 
 describe('Issue 29: 再現可能 Source Release Candidate', () => {
+  it.each([
+    { mode: 0o000, message: 'Release output path cannot be inspected safely.' },
+    {
+      mode: 0o111,
+      message: 'Release output parent could not be opened safely.',
+    },
+    {
+      mode: 0o555,
+      message: 'Release staging directory could not be created safely.',
+    },
+  ])(
+    'rejects an inaccessible output parent at mode $mode without touching its bytes',
+    async ({ mode, message }) => {
+      const root = await createReleaseRepository();
+      const parent = path.join(root, 'release-output/restricted-parent');
+      mkdirSync(parent);
+      writeFileSync(
+        path.join(parent, 'sentinel'),
+        'preserve existing parent bytes'
+      );
+      const originalMode = lstatSync(parent).mode & 0o777;
+      const outputDirectory = path.join(parent, 'candidate');
+      chmodSync(parent, mode);
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({ code: 'UNSAFE_OUTPUT_DIRECTORY', message });
+      } finally {
+        chmodSync(parent, originalMode);
+      }
+      expect(readdirSync(parent)).toEqual(['sentinel']);
+      expect(readFileSync(path.join(parent, 'sentinel'), 'utf8')).toBe(
+        'preserve existing parent bytes'
+      );
+      expect(existsSync(outputDirectory)).toBe(false);
+    }
+  );
+
+  function faultyWriterRecord(
+    fault: string,
+    fileName: string,
+    input: Uint8Array
+  ): string {
+    if (fault === 'invalid-json') return '{';
+    if (fault === 'non-object') return '42';
+    const record = {
+      byteLength: input.byteLength,
+      changeTimeNanoseconds: '1',
+      device: 0,
+      fileName,
+      inode: 1,
+      modificationTimeNanoseconds: '1',
+      sha256: createHash('sha256').update(input).digest('hex'),
+    };
+    const changes: Record<string, Partial<typeof record>> = {
+      'negative-length': { byteLength: -1 },
+      'wrong-name': { fileName: 'other-output' },
+      'negative-inode': { inode: -1 },
+      'invalid-timestamp': { modificationTimeNanoseconds: 'invalid' },
+      'invalid-hash': { sha256: 'invalid' },
+      'length-mismatch': { byteLength: input.byteLength + 1 },
+      'hash-mismatch': {
+        sha256: (record.sha256[0] === '0' ? '1' : '0') + record.sha256.slice(1),
+      },
+    };
+    return JSON.stringify({
+      ...record,
+      ...changes[fault],
+      ...(fault === 'extra-key' ? { unexpected: true } : {}),
+    });
+  }
+
+  function faultyWriterFileName(
+    command: readonly string[],
+    suffix: string
+  ): string | undefined {
+    if (command[0] !== 'bun') return undefined;
+    const index = command.findIndex((arg) =>
+      arg.endsWith('/exclusive-output-writer.ts')
+    );
+    if (index < 0) return undefined;
+    const fileName = command[index + 1];
+    return fileName?.endsWith(suffix) ? fileName : undefined;
+  }
+
+  async function faultyWriterResult(
+    fault: string,
+    fileName: string,
+    options: processCapture.RunCapturedProcessOptions | undefined
+  ): Promise<processCapture.CapturedProcessResult> {
+    if (fault === 'partial-write') {
+      if (!options?.cwd)
+        throw new Error('Writer must be bound to its staging directory');
+      writeFileSync(
+        path.join(options.cwd, 'incomplete-output'),
+        'preserve these incomplete bytes'
+      );
+    }
+    const exitCode =
+      fault.startsWith('exit-') || fault === 'partial-write' ? 7 : 0;
+    return {
+      exitCode,
+      stderr:
+        fault === 'exit-empty' || exitCode === 0
+          ? ''
+          : 'synthetic writer failure',
+      stdout: new TextEncoder().encode(
+        faultyWriterRecord(fault, fileName, options?.stdin ?? new Uint8Array())
+      ),
+    };
+  }
+
+  function expectedWriterFailure(fault: string) {
+    if (fault.startsWith('exit-') || fault === 'partial-write')
+      return {
+        code: 'COMMAND_FAILED',
+        message: `Exclusive output writer failed: ${fault === 'exit-empty' ? 'exit 7' : 'synthetic writer failure'}`,
+      };
+    return {
+      code: 'UNSAFE_OUTPUT_DIRECTORY',
+      message: fault.endsWith('-mismatch')
+        ? 'Release output writer record differs from the requested contents.'
+        : 'Release output writer did not return one valid file record.',
+    };
+  }
+
+  it.each([
+    'missing-newline',
+    'extra-newline',
+    'invalid-hash',
+    'duplicate-name',
+    'missing-name',
+    'foreign-name',
+  ])(
+    'rejects malformed checksum documents (%s) and accepts the restored original',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(
+        root,
+        'release-output/checksum-boundary'
+      );
+      await buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      });
+      const file = path.join(outputDirectory, 'checksums.txt');
+      const original = readFileSync(file, 'utf8');
+      const lines = original.trimEnd().split('\n');
+      const candidates: Record<string, string> = {
+        'missing-newline': original.trimEnd(),
+        'extra-newline': `${original}\n`,
+        'invalid-hash': original.replace(/^[0-9a-f]/, 'z'),
+        'duplicate-name': `${original}${lines[0]}\n`,
+        'missing-name': `${lines.slice(1).join('\n')}\n`,
+        'foreign-name': original.replace(/ {2}[^\n]+/, '  foreign-file.txt'),
+      };
+      const changed = candidates[fault];
+      if (changed === undefined)
+        throw new Error('Missing checksum fault fixture');
+      writeFileSync(file, changed);
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).rejects.toMatchObject({ code: 'INVALID_CHECKSUM' });
+      expect(readFileSync(file, 'utf8')).toBe(changed);
+      writeFileSync(file, original);
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
+
+  it.each(['foreign-prefix', 'backslash-path', 'missing-entry'])(
+    'rejects inconsistent tar inventory (%s) before publishing',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(
+        root,
+        'release-output/archive-inventory-boundary'
+      );
+      const originalCapture = processCapture.runCapturedProcess;
+      let intercepted = 0;
+      const capture = spyOn(
+        processCapture,
+        'runCapturedProcess'
+      ).mockImplementation(async (command, options) => {
+        const result = await originalCapture(command, options);
+        if (command[0] !== 'tar' || command[1] !== '-tzf') return result;
+        intercepted += 1;
+        const source = new TextDecoder().decode(result.stdout);
+        const changed =
+          fault === 'foreign-prefix'
+            ? `unexpected-root/file\n${source}`
+            : fault === 'backslash-path'
+              ? `${source}tenkacloud-passport-${TEST_VERSION}/bad\\path\n`
+              : source
+                  .split('\n')
+                  .filter((line) => !line.endsWith('/README.md'))
+                  .join('\n');
+        return { ...result, stdout: new TextEncoder().encode(changed) };
+      });
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({
+          code: 'FORBIDDEN_RELEASE_PATH',
+          message:
+            'Generated archive inventory differs from the reviewed Git tree.',
+        });
+        expect(intercepted).toBe(1);
+        expect(existsSync(outputDirectory)).toBe(false);
+      } finally {
+        capture.mockRestore();
+      }
+    }
+  );
+
+  it.each([
+    'exit-stderr',
+    'exit-empty',
+    'invalid-json',
+    'non-object',
+    'extra-key',
+    'negative-length',
+    'wrong-name',
+    'negative-inode',
+    'invalid-timestamp',
+    'invalid-hash',
+    'hash-mismatch',
+    'length-mismatch',
+    'partial-write',
+  ])(
+    'rejects a faulty exclusive writer (%s) without publishing a candidate',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(root, 'release-output/faulty-writer');
+      const capturedFileNames: string[] = [];
+      const originalCapture = processCapture.runCapturedProcess;
+      const capture = spyOn(
+        processCapture,
+        'runCapturedProcess'
+      ).mockImplementation(async (command, options) => {
+        const suffix = fault.endsWith('-mismatch') ? '.spdx.json' : '.tar.gz';
+        const fileName = faultyWriterFileName(command, suffix);
+        if (fileName === undefined) return originalCapture(command, options);
+        capturedFileNames.push(fileName);
+        return faultyWriterResult(fault, fileName, options);
+      });
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject(expectedWriterFailure(fault));
+        expect(capturedFileNames).toHaveLength(1);
+        expect(existsSync(outputDirectory)).toBe(false);
+        const parent = path.dirname(outputDirectory);
+        const failed = readdirSync(parent).filter((name) =>
+          name.startsWith('.tenkacloud-passport-failed-')
+        );
+        expect(failed).toHaveLength(1);
+        if (fault === 'partial-write')
+          expect(
+            readFileSync(
+              path.join(parent, failed[0] ?? 'missing', 'incomplete-output'),
+              'utf8'
+            )
+          ).toBe('preserve these incomplete bytes');
+      } finally {
+        capture.mockRestore();
+      }
+      if (fault === 'partial-write') {
+        const failed = readdirSync(path.dirname(outputDirectory)).find((name) =>
+          name.startsWith('.tenkacloud-passport-failed-')
+        );
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).resolves.toMatchObject({ outputDirectory });
+        expect(
+          readFileSync(
+            path.join(
+              path.dirname(outputDirectory),
+              failed ?? 'missing',
+              'incomplete-output'
+            ),
+            'utf8'
+          )
+        ).toBe('preserve these incomplete bytes');
+      }
+    }
+  );
+
   it('CLI は引数不足を拒否し、成功時に固定 Commit と File 数を報告する', async () => {
     await expect(runCli([])).rejects.toEqual(
       new ReleaseCandidateError(
@@ -2117,6 +2460,98 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
       })
     ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_CONTENT' });
   });
+
+  it('a reviewed binary hash cannot turn plain text into an approved binary asset', async () => {
+    const root = await createReleaseRepository();
+    const bytes = Buffer.from('plain text disguised as an image');
+    mkdirSync(path.join(root, 'assets'));
+    writeFileSync(path.join(root, 'assets/icon.png'), bytes);
+    const inventoryPath = path.join(
+      root,
+      'scripts/source-release-inventory.json'
+    );
+    const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+    inventory.paths.push('assets/icon.png');
+    inventory.paths.sort();
+    inventory.binaryAssets['assets/icon.png'] = createHash('sha256')
+      .update(bytes)
+      .digest('hex');
+    writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+    await runGit(root, [
+      'add',
+      'assets/icon.png',
+      'scripts/source-release-inventory.json',
+    ]);
+    await runGit(root, [
+      'commit',
+      '-m',
+      'test: reviewed hash with incorrect asset kind',
+    ]);
+    const outputDirectory = path.join(root, 'release-output/disguised-text');
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      })
+    ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_PATH' });
+    expect(existsSync(outputDirectory)).toBe(false);
+    expect(readFileSync(path.join(root, 'assets/icon.png'))).toEqual(bytes);
+  });
+
+  it.each([{ matching: true }, { matching: false }])(
+    'binds reviewed binary asset bytes to their exact hash: %j',
+    async ({ matching }) => {
+      const root = await createReleaseRepository();
+      const bytes = readFileSync(
+        path.join(import.meta.dir, '../assets/icon.png')
+      );
+      mkdirSync(path.join(root, 'assets'));
+      writeFileSync(path.join(root, 'assets/icon.png'), bytes);
+      const inventoryPath = path.join(
+        root,
+        'scripts/source-release-inventory.json'
+      );
+      const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+      inventory.paths.push('assets/icon.png');
+      inventory.paths.sort();
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      inventory.binaryAssets['assets/icon.png'] = matching
+        ? hash
+        : (hash[0] === '0' ? '1' : '0') + hash.slice(1);
+      writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+      await runGit(root, [
+        'add',
+        'assets/icon.png',
+        'scripts/source-release-inventory.json',
+      ]);
+      await runGit(root, [
+        'commit',
+        '-m',
+        'test: reviewed binary integrity binding',
+      ]);
+      const outputDirectory = path.join(root, 'release-output/reviewed-binary');
+      const candidate = buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      });
+      if (matching) {
+        await expect(candidate).resolves.toMatchObject({ outputDirectory });
+        await expect(
+          validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+        ).resolves.toHaveLength(6);
+      } else {
+        await expect(candidate).rejects.toMatchObject({
+          code: 'FORBIDDEN_RELEASE_PATH',
+        });
+        expect(existsSync(outputDirectory)).toBe(false);
+      }
+      expect(readFileSync(path.join(root, 'assets/icon.png'))).toEqual(bytes);
+    }
+  );
 
   it('Review 済み Text でも 5 MiB を超える Blob を拒否する', async () => {
     const root = await createReleaseRepository();
