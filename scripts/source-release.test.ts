@@ -15,18 +15,20 @@ import {
   rmSync,
   symlinkSync,
   unlinkSync,
-  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import * as publication from './atomic-output-publisher';
 import {
   AtomicOutputPublicationError,
   assertRegularFileIdentitiesNoFollowAt,
   atomicRenameDirectoryNoReplace,
   readRegularFileNoFollowAt,
 } from './atomic-output-publisher';
+import * as darwinPublication from './atomic-output-publisher-darwin';
+import * as linuxPublication from './atomic-output-publisher-linux';
 import {
   assertWrittenOutputSnapshot,
   openExclusiveEntryAt,
@@ -99,71 +101,55 @@ async function validateDuringCandidateMutation(
   outputDirectory: string,
   mutation: 'add-entry' | 'replace-license' | 'rewrite-license'
 ): Promise<{
-  readonly competitorExitCode: number;
+  readonly mutationApplied: boolean;
   readonly validation: PromiseSettledResult<readonly string[]>;
 }> {
   const watchedFile = path.join(outputDirectory, 'LICENSE');
-  const watchedStatus = lstatSync(watchedFile);
-  const readyFile = path.join(
-    path.dirname(outputDirectory),
-    `verification-race-ready-${randomUUID()}`
-  );
   const replacementFile = path.join(
     path.dirname(outputDirectory),
-    `verification-race-replacement-${randomUUID()}`
+    `verification-replacement-${randomUUID()}`
   );
   writeFileSync(replacementFile, readFileSync(watchedFile));
-  const oldAccessTime = new Date('2000-01-01T00:00:00.000Z');
-  utimesSync(watchedFile, oldAccessTime, watchedStatus.mtime);
-  const accessTimeThreshold = lstatSync(watchedFile).atimeMs;
-  const competitorResult = runCapturedProcess(
-    [
-      'bun',
-      '-e',
-      `
-        import { renameSync, statSync, writeFileSync } from 'node:fs';
-        const watched = process.env.TASK_WATCHED_FILE;
-        const ready = process.env.TASK_READY_FILE;
-        const replacement = process.env.TASK_REPLACEMENT_FILE;
-        const extra = process.env.TASK_EXTRA_FILE;
-        const threshold = Number(process.env.TASK_ACCESS_TIME_THRESHOLD);
-        const mutation = process.env.TASK_MUTATION;
-        writeFileSync(ready, 'ready');
-        const deadline = Date.now() + 5_000;
-        while (Date.now() < deadline) {
-          if (statSync(watched).atimeMs > threshold) {
-            if (mutation === 'replace-license') renameSync(replacement, watched);
-            else if (mutation === 'rewrite-license') {
-              writeFileSync(watched, Buffer.alloc(statSync(watched).size, 0x78));
-            } else writeFileSync(extra, 'unreviewed entry');
-            process.exit(0);
-          }
-        }
-        process.exit(2);
-      `,
-    ],
-    {
-      cwd: process.cwd(),
-      env: {
-        ...processEnv(),
-        TASK_ACCESS_TIME_THRESHOLD: String(accessTimeThreshold),
-        TASK_EXTRA_FILE: path.join(outputDirectory, 'unreviewed-race.txt'),
-        TASK_MUTATION: mutation,
-        TASK_READY_FILE: readyFile,
-        TASK_REPLACEMENT_FILE: replacementFile,
-        TASK_WATCHED_FILE: watchedFile,
-      },
+  const originalHash = publication.hashRegularFileNoFollowAt;
+  let mutationApplied = false;
+  const hashing = spyOn(
+    publication,
+    'hashRegularFileNoFollowAt'
+  ).mockImplementation(async (descriptor, name, maximumBytes) => {
+    const result = await originalHash(descriptor, name, maximumBytes);
+    if (name !== 'LICENSE' || mutationApplied) return result;
+    mutationApplied = true;
+    if (mutation === 'replace-license')
+      renameSync(replacementFile, watchedFile);
+    else if (mutation === 'rewrite-license')
+      writeFileSync(
+        watchedFile,
+        Buffer.alloc(lstatSync(watchedFile).size, 0x78)
+      );
+    else
+      writeFileSync(
+        path.join(outputDirectory, 'unreviewed-race.txt'),
+        'unreviewed entry'
+      );
+    return result;
+  });
+  try {
+    let validation: PromiseSettledResult<readonly string[]>;
+    try {
+      validation = {
+        status: 'fulfilled',
+        value: await validateSourceReleaseDirectory(
+          outputDirectory,
+          TEST_VERSION
+        ),
+      };
+    } catch (reason) {
+      validation = { status: 'rejected', reason };
     }
-  );
-  while (!existsSync(readyFile)) await Bun.sleep(1);
-  const [validation, competitor] = await Promise.all([
-    Promise.allSettled([
-      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION),
-    ]).then(([result]) => result),
-    competitorResult,
-  ]);
-  expect(competitor.stderr).toBe('');
-  return { competitorExitCode: competitor.exitCode, validation };
+    return { mutationApplied, validation };
+  } finally {
+    hashing.mockRestore();
+  }
 }
 
 async function createReleaseRepository(): Promise<string> {
@@ -914,6 +900,87 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
 });
 
 describe('Issue 29: 再現可能 Source Release Candidate', () => {
+  it('rejects a nonexistent output parent without creating it implicitly', async () => {
+    const root = await createReleaseRepository();
+    const parent = path.join(root, 'missing-parent');
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory: path.join(parent, 'candidate'),
+      })
+    ).rejects.toMatchObject({
+      code: 'UNSAFE_OUTPUT_DIRECTORY',
+      message: 'Release output parent must be an existing real directory.',
+    });
+    expect(existsSync(parent)).toBe(false);
+  });
+
+  it.each([
+    'negative-descriptor',
+    'non-integer-descriptor',
+    'rollback-conflict',
+  ])(
+    'preserves generated and competing bytes when publication inspection fails: %s',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const parent = path.join(root, 'release-output/inspection-boundary');
+      const sourceName = 'staging';
+      const destinationName = 'candidate';
+      mkdirSync(path.join(parent, sourceName), { recursive: true });
+      writeFileSync(
+        path.join(parent, sourceName, 'sentinel'),
+        'generated bytes'
+      );
+      const identity = lstatSync(path.join(parent, sourceName));
+      const handle = await open(
+        parent,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+      );
+      const native =
+        process.platform === 'darwin' ? darwinPublication : linuxPublication;
+      const opener = spyOn(
+        native,
+        'openEntryNoFollowNative'
+      ).mockImplementation(() => {
+        if (fault === 'rollback-conflict')
+          writeFileSync(path.join(parent, sourceName), 'competing bytes');
+        return fault === 'non-integer-descriptor' ? Number.NaN : -1;
+      });
+      try {
+        await expect(
+          atomicRenameDirectoryNoReplace(
+            handle.fd,
+            sourceName,
+            destinationName,
+            { device: identity.dev, inode: identity.ino }
+          )
+        ).rejects.toMatchObject({
+          code: 'ATOMIC_RENAME_FAILED',
+          message:
+            fault === 'rollback-conflict'
+              ? 'Atomic publication validation failed and Output rollback was not possible.'
+              : 'Atomically published directory could not be inspected.',
+        });
+        expect(opener).toHaveBeenCalledTimes(1);
+      } finally {
+        opener.mockRestore();
+        await handle.close();
+      }
+      const retained =
+        fault === 'rollback-conflict' ? destinationName : sourceName;
+      expect(
+        readFileSync(path.join(parent, retained, 'sentinel'), 'utf8')
+      ).toBe('generated bytes');
+      if (fault === 'rollback-conflict')
+        expect(readFileSync(path.join(parent, sourceName), 'utf8')).toBe(
+          'competing bytes'
+        );
+      else expect(existsSync(path.join(parent, destinationName))).toBe(false);
+    }
+  );
+
   it.each([
     { mode: 0o000, message: 'Release output path cannot be inspected safely.' },
     {
@@ -1017,6 +1084,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         'preserve these incomplete bytes'
       );
     }
+    if (fault === 'mutated-input-mismatch') options?.stdin?.fill(0);
     const exitCode =
       fault.startsWith('exit-') || fault === 'partial-write' ? 7 : 0;
     return {
@@ -1154,6 +1222,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     'invalid-timestamp',
     'invalid-hash',
     'hash-mismatch',
+    'mutated-input-mismatch',
     'length-mismatch',
     'partial-write',
   ])(
@@ -1698,10 +1767,10 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
       outputDirectory: output,
     });
 
-    const { competitorExitCode, validation } =
+    const { mutationApplied, validation } =
       await validateDuringCandidateMutation(output, 'replace-license');
 
-    expect(competitorExitCode).toBe(0);
+    expect(mutationApplied).toBe(true);
     expect(validation.status).toBe('rejected');
     if (validation.status === 'rejected') {
       expect(validation.reason).toMatchObject({ code: 'INVALID_CHECKSUM' });
@@ -1718,10 +1787,10 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
       outputDirectory: output,
     });
 
-    const { competitorExitCode, validation } =
+    const { mutationApplied, validation } =
       await validateDuringCandidateMutation(output, 'add-entry');
 
-    expect(competitorExitCode).toBe(0);
+    expect(mutationApplied).toBe(true);
     expect(validation.status).toBe('rejected');
     if (validation.status === 'rejected') {
       expect(validation.reason).toMatchObject({ code: 'INVALID_CHECKSUM' });
@@ -1738,10 +1807,10 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
       outputDirectory: output,
     });
 
-    const { competitorExitCode, validation } =
+    const { mutationApplied, validation } =
       await validateDuringCandidateMutation(output, 'rewrite-license');
 
-    expect(competitorExitCode).toBe(0);
+    expect(mutationApplied).toBe(true);
     expect(validation.status).toBe('rejected');
     if (validation.status === 'rejected') {
       expect(validation.reason).toMatchObject({ code: 'INVALID_CHECKSUM' });
