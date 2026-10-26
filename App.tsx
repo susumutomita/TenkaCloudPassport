@@ -23,6 +23,7 @@ import {
   LocalModelContextLeaseRegistry,
 } from './src/app/local-data-control';
 import PassportApp from './src/app/PassportApp';
+import { createGenerationProvider } from './src/app/practice-generation/default-provider';
 import LearningScreen from './src/screens/learning/LearningScreen';
 
 const localDataLeases = new LocalModelContextLeaseRegistry();
@@ -37,6 +38,7 @@ const learningStorage = createLearningStorage(
   localDeletionJournal
 );
 const forensicHost = createForensicHost(localDataLeases, localDeletionJournal);
+const generationProvider = createGenerationProvider();
 const ownedLearningData = combineOwnedLearningData(
   learningStorage,
   forensicHost
@@ -84,6 +86,7 @@ export default function App() {
         </View>
         {learningLocale ? (
           <LearningScreen
+            generationProvider={generationProvider}
             {...(forensicHost.available ? { forensicHost } : {})}
             storage={learningStorage}
             files={learningFiles}

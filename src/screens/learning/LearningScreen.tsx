@@ -10,6 +10,7 @@ import {
   type LearningSelection,
   useLearning,
 } from '../../app/learning/use-learning';
+import type { GenerationPort } from '../../app/practice-generation/provider';
 import ActionButton from '../../components/ActionButton';
 import AppScreen from '../../components/AppScreen';
 import {
@@ -31,8 +32,10 @@ import { colors, spacing } from '../../ui/theme';
 import ForensicScreen from '../forensic/ForensicScreen';
 import { CatalogPicker } from './CatalogPicker';
 import { LearningLesson } from './LearningLesson';
+import PracticeGenerationPanel from './PracticeGenerationPanel';
 
 interface Props {
+  readonly generationProvider?: GenerationPort;
   readonly forensicHost?: ForensicPort;
   readonly storage: LearningStorage;
   readonly files: LearningFilePort;
@@ -42,6 +45,7 @@ interface Props {
 type Tab = 'library' | 'add' | 'review' | 'history' | 'files';
 type Flow = ReturnType<typeof useLearning>;
 export default function LearningScreen({
+  generationProvider,
   forensicHost,
   storage,
   files,
@@ -82,6 +86,11 @@ export default function LearningScreen({
           : 'Offline practice. Explanations are self-assessed; code is not executed or automatically graded. No mastery or interview outcome is guaranteed.'
       }
     >
+      <PracticeEntry
+        provider={generationProvider}
+        flow={flow}
+        locale={locale}
+      />
       {forensicHost && (
         <ActionButton
           label={
@@ -107,6 +116,25 @@ export default function LearningScreen({
     </AppScreen>
   );
 }
+function PracticeEntry({
+  provider,
+  flow,
+  locale,
+}: {
+  readonly provider: GenerationPort | undefined;
+  readonly flow: Flow;
+  readonly locale: Locale;
+}) {
+  if (!provider || flow.selection || flow.pending) return null;
+  return (
+    <PracticeGenerationPanel
+      provider={provider}
+      locale={locale}
+      disabled={flow.busy || !flow.state}
+      onCatalog={flow.prepareCatalog}
+    />
+  );
+}
 function LearningBody({
   flow,
   locale,
@@ -114,6 +142,7 @@ function LearningBody({
   readonly flow: Flow;
   readonly locale: Locale;
 }) {
+  if (flow.pending) return <PendingChanges flow={flow} />;
   if (!flow.state)
     return (
       <>
