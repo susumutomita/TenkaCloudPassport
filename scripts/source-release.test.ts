@@ -3932,6 +3932,8 @@ it('binds the checked-in binary inventory to the actual reviewed source assets',
     inventory.binaryAssets
   )) {
     assertSafeTrackedPaths([relativePath]);
+    if (typeof expectedHash !== 'string')
+      throw new Error('Expected a reviewed binary SHA256 string');
     const bytes = readFileSync(path.join(import.meta.dir, '..', relativePath));
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(expectedHash);
   }
