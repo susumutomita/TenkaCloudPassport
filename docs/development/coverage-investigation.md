@@ -316,3 +316,175 @@ Final `make -k before-commit` on this correction/test slice: 502 script tests,
 three typechecks, textlint, duplication and web export pass. Only the unchanged
 coverage gates fail (99.96% app; 99.44% source-release). No native validation
 was reused or rerun for the changed QR source.
+
+## Ownership and isolated ABI contract correction
+
+The current ownership component retains both mismatch and duplicate admission
+guards. It privately owns copied, frozen records and returns immutable snapshots,
+so verification and cleanup cannot lose ownership through mutable aliases. The
+shared error module is re-exported from the original entry point; constructor
+identity, error codes and messages remain. Contract tests use an actual exclusive
+writer record, reject mismatching/duplicate admissions without changing it,
+mutate the input/returned aliases, and validate retained descriptor identities.
+The earlier private-recorder coverage finding is historical, not guard removal.
+
+Bun 1.4.4 supports fresh globals and module registries with
+[`--isolate`](https://bun.com/docs/test/parallel).
+[`mock.restore()` does not reset module mocks](https://bun.com/docs/test/mocks).
+Canonical package/test/watch/script runners therefore isolate discovered module
+mocks. The release coverage gate includes the ABI fault file and the original
+release suite; actual loader guards execute and Bun combines their coverage.
+The ABI file runs first so subsequent real publication tests verify isolation.
+No files or assertions are omitted, no manual coverage is merged, and threshold
+1 remains unchanged. Application-only coverage retains its existing source scope.
+
+The package script change also changes its source fingerprint. Static screening
+now binds the exact package.json SHA256
+`994ac4f006f961de0898db256ac1e6908c5de93708a0dc716e7a4de51035a6bb`;
+its dependency versions, lockfile fingerprint, checks and physical-test statuses
+are unchanged. The 15 screening tests pass after that exact binding update.
+
+Additional reconnect tests cover terminal guests retained after readiness failure
+and authorization rotation during pending reconnect readiness. They require
+rejection/no stale delivery, then explicit cleanup and a working fresh connection.
+These disprove two earlier lifecycle hypotheses; no blanket unreachable claim
+is made. Remaining lifecycle guards need individual control-flow/design review.
+
+A shared generation/verification metadata-binding policy exists only as a
+separate scratch proposal. It retains runtime checks but rejects inconsistent
+generated metadata before manifest/checksum writes, changing quarantine contents
+from six files to four. That observable change is awaiting an explicit decision;
+it has not been applied to this source tree.
+
+## Final reviewed ownership/isolation slice
+
+The complete aggregate passes 525 script tests, 153 release tests, 1448 app tests
+and 17 browser scenarios. Architecture/pre-release, duplication, textlint, lint,
+three typechecks and web export pass. Only the unchanged 100% gates fail:
+release 99.98%, app 99.99%. The race fixture orders actual path resolution after
+actual replacement and retains its exact error assertion; 12 repeated cases
+and the full aggregate pass. No coverage exclusions, ignore directives or
+threshold changes were made.
+
+The native ABI loader, ownership component, error module and provider session
+now report 100% lines. Remaining release lines are `source-release.ts`
+2207, 2223, 2230, 2236, 2239 and 2242: fallbacks after the full schema validators.
+The unapplied shared-binding proposal passes 164 tests with strict release
+coverage 100%, typechecks and lint. Its semantic decision remains the earlier
+rejection/quarantine/error-ordering change; those results are not this tree's
+release-gate result.
+
+All remaining app gaps are in the loopback reference adapter:
+
+- 289–291: fallback after valid host, guest, pending, idle and terminal branches.
+- 365 and 403: preparation checks established earlier without a callback between.
+- 707 and 797: retained reconnect identity and reserved-capacity correlations.
+- 769–772: inactive-host handling after generation checks; shutdown invalidates
+  member/pending generations before invoking callbacks.
+- 1083–1084 and 1103: disposed delivery and route context; disposal empties the
+  queue and drain checks connection state immediately before routing.
+- 1191–1192: missing guest membership during removal; Map/record/role are cleared
+  before callbacks can reenter removal.
+
+Independent control-flow review found no supported public counterexamples for
+these specific paths. Runtime defenses remain. A further substantive model would
+need to own pending deliveries and host memberships/reservations/auth revisions,
+including retained terminal members after failed reconnect. Merely exporting
+private helpers or removing checks to make these lines disappear is prohibited.
+No such model change has been applied.
+
+## Resumed queue ownership verification (2026-10-25)
+
+The independently reviewed pending-delivery component is now integrated locally.
+It owns immutable envelope snapshots, bounded admission and once-only settlement;
+the adapter retains scheduling, live host-session state and recipient guards.
+Accessor snapshot and reentrant admission regressions accompany the component.
+The terminal-guest contract now asserts that no event is emitted, rather than
+testing only the absence of a reconnecting event in an empty event list.
+
+The complete aggregate runs 1469 app tests, 153 release tests and 17 rendered
+browser scenarios successfully, but the unchanged coverage gates still fail at
+99.99% and 99.98%. Script tests report 524 passes and one 5000ms icon-generation
+timeout; the same ten icon tests pass in an isolated rerun with unchanged timeout.
+This rerun does not convert the failed aggregate into a success. Architecture,
+pre-release checks, duplication, textlint, lint, typechecks and web export pass.
+
+The current queue slice has not received native validation. No earlier native
+result certifies it. Metadata's earlier-rejection proposal remains unapplied:
+its four-versus-six quarantined files and combined-fault precedence need an
+explicit decision. All required gates must pass before merging PR #208.
+
+Independent review identifies the remaining state-model boundary as a membership
+ledger owning reservations, identities and capacity, separate reconnect-attempt
+tokens owning generation/authorization revision, and one endpoint affiliation
+value replacing independently mutable role/record/identity links. The model must
+retain terminal membership after failed reconnect, admitted deliveries through
+invite refresh, generation-first shutdown and departure callback identity/order.
+A Map wrapper alone does not establish those correlations. This design has not
+been implemented; no stale-operation errors, automatic detach or callback ordering
+changes have been selected. The two top-level metadata-reference fallbacks remain
+distinct from mutable decoded-field faults, which have tests without code changes.
+
+The subsequent aggregate includes four decoded-field regression tests. It reports
+529 script passes, 157 release passes and 1469 app passes, with both unchanged
+line-coverage gates at 99.99%. The icon timeout did not reproduce in that aggregate.
+Release gaps are now only the stable top-level object-reference fallbacks at
+`source-release.ts` lines 2207 and 2230. App gaps are adapter lines 283–285, 359,
+397, 701, 763–764, 766, 791 and 1177–1178; pending-delivery ownership has 100%
+coverage. These results do not establish 100% or authorize a merge.
+
+## Stable metadata-root contract correction
+
+Both schema validators now express their existing non-null, non-array object-root
+guarantee as a TypeScript assertion. Their runtime validation bodies are unchanged.
+After successful validation, the verifier reads fields from those established
+roots directly, while all nested mutable-field checks and cross-file integrity
+guards remain. The assertion deliberately makes no claim about nested types or
+immutability. Unknown-root compile checks, primitive rejection cases and the
+four changing-field regressions verify that distinction.
+
+The strict release gate passes 158 tests at 100% with the same threshold and no
+exclusions. No generation-stage call was added: six-file quarantine, existing
+domain errors and validation/write ordering remain. The independent reviewer
+approved this correction. A replaced decoder returning an exotic revoked Proxy
+can still produce a native TypeError at a different operation, with different
+native wording; standard JSON bytes cannot construct that case, and it remains
+fail-closed. No native-error wording equivalence is claimed for a replaced parser.
+
+GitHub writes remain paused. The authorized retry of create_blob for
+`docs/development/coverage-investigation.md` in susumutomita/TenkaCloudPassport
+returned `aborted before dispatch`, without an approval prompt or reason. This
+does not establish a new authorization requirement: the October 25 authorization
+already covers this PR publication. No dispatch or ref update occurred. A separate
+read of main branch protection returned integration error 403; it was not retried
+through another surface. Neither failure is being bypassed.
+
+## Integrated membership and lifecycle ownership
+
+HostMembership owns private admission/member indices, capacity and immutable
+reservation/identity copies. EndpointLifecycle owns phase, generation and one
+atomic affiliation value; departing identity remains available through callbacks
+after the affiliation is detached. Join checks compare the attempt's captured
+generation and authorization identity with current lifetime/session state, while
+membership remains stable across invite refresh. Terminal reconnect failures keep
+their membership and capacity until explicit removal.
+
+The existing stale/foreign admission, phase, inactive-session and removal guards
+now execute within these owners. Tests exercise real ownership operations,
+immutable aliases, ended sessions, stale observations, terminal retention,
+departure reentrancy and generation/error precedence. No guard is excluded or
+replaced by a mock fallback. The network retains event dispatch, delivery and
+generation-first shutdown ordering.
+
+Independent review caught a missing recovery state notification in the first
+prototype despite its 100% report. The correction announces the committed phase
+before rereading affiliation for host refresh, preserving reentrant detach and
+disposal behavior. Removing that announcement makes the new regression fail;
+the restored implementation passes. Independent final comparison of the unchanged
+059666f network and this proposal passes 110 shared-contract cases with matching
+reviewed production hashes and no blocking review findings.
+
+The combined candidate passes 1485 app tests with strict function/line coverage
+100%, all three typechecks and targeted lint. The previously corrected release
+gate remains 158 tests at 100%; the integrated aggregate is recorded separately
+when complete. Native evidence is still required for the exact final tree.

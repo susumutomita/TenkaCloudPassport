@@ -31,7 +31,7 @@
     "build:web": "expo export --platform web --output-dir dist",
     "build:ios:testflight": "bun add -g --ignore-scripts --safe-chain-skip-minimum-package-age eas-cli@25.3.0 && eas build --platform ios --profile production --non-interactive --auto-submit",
     "submit:ios": "bun add -g --ignore-scripts eas-cli@25.3.0 && eas submit --platform ios --profile production --non-interactive",
-    "test": "bun test",
+    "test": "bun test --isolate",
     "test:coverage": "bun test src --coverage",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.scripts.json && tsc --noEmit -p tests/responsive/tsconfig.json",
     "expo:check": "expo install --check",

@@ -18,6 +18,12 @@ import {
   readRegularFileNoFollowAtWithIdentity,
 } from './atomic-output-publisher';
 import type { ExclusiveOutputRecord } from './exclusive-output-writer';
+import { ReleaseOutputOwnership } from './release-output-ownership';
+import { ReleaseCandidateError } from './source-release-error';
+
+export type { ReleaseCandidateErrorCode } from './source-release-error';
+export { ReleaseCandidateError } from './source-release-error';
+
 import { isolatedGitEnv } from './git-env-isolation';
 import { firstDecodedDuplicateJsoncKey } from './jsonc-duplicate-key';
 import { runCapturedProcess } from './process-capture';
@@ -127,30 +133,6 @@ const FORBIDDEN_RELEASE_PATHS = [
 ] as const;
 const KNOWN_SECRET_CONTENT =
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|github_pat_[0-9A-Za-z_]{60,}|gh[pousr]_[0-9A-Za-z]{36,}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[0-9A-Za-z-]{20,}|sk-[0-9A-Za-z]{32,}/;
-
-export type ReleaseCandidateErrorCode =
-  | 'INVALID_VERSION'
-  | 'INVALID_GIT_REF'
-  | 'VERSION_MISMATCH'
-  | 'INVALID_LOCKFILE'
-  | 'INVALID_PACKAGE_METADATA'
-  | 'FORBIDDEN_RELEASE_PATH'
-  | 'FORBIDDEN_RELEASE_CONTENT'
-  | 'UNSAFE_OUTPUT_DIRECTORY'
-  | 'INVALID_SBOM'
-  | 'INVALID_MANIFEST'
-  | 'INVALID_CHECKSUM'
-  | 'COMMAND_FAILED';
-
-export class ReleaseCandidateError extends Error {
-  constructor(
-    readonly code: ReleaseCandidateErrorCode,
-    message: string
-  ) {
-    super(message);
-    this.name = 'ReleaseCandidateError';
-  }
-}
 
 export interface LockedPackage {
   readonly lockKey: string;
@@ -799,7 +781,7 @@ interface SafeOutputTransaction {
   readonly staging: DirectoryIdentity;
   readonly handle: FileHandle;
   readonly inspectionPath: string;
-  readonly createdFiles: Map<string, ExclusiveOutputRecord>;
+  readonly createdFiles: ReleaseOutputOwnership;
 }
 
 function fileSystemErrorCode(error: unknown): string | undefined {
@@ -1002,7 +984,7 @@ async function createSafeOutputTransaction(
       staging: identity,
       handle,
       inspectionPath: stagingPath,
-      createdFiles: new Map(),
+      createdFiles: new ReleaseOutputOwnership(),
     };
   } catch {
     await openedParent.handle.close();
@@ -1062,7 +1044,7 @@ async function writeOutputExclusive(
 ): Promise<void> {
   await assertDirectoryIdentity(transaction);
   const record = await writeExclusiveFile(transaction, fileName, contents);
-  recordCreatedFile(transaction, fileName, record);
+  transaction.createdFiles.record(fileName, record);
   await assertDirectoryIdentity(transaction);
   await assertRecordedOutputFiles(transaction);
 }
@@ -1078,23 +1060,9 @@ async function streamOutputExclusive(
     transaction,
     fileName
   );
-  recordCreatedFile(transaction, fileName, record);
+  transaction.createdFiles.record(fileName, record);
   await assertDirectoryIdentity(transaction);
   await assertRecordedOutputFiles(transaction);
-}
-
-function recordCreatedFile(
-  transaction: SafeOutputTransaction,
-  fileName: string,
-  record: ExclusiveOutputRecord
-): void {
-  if (record.fileName !== fileName || transaction.createdFiles.has(fileName)) {
-    throw new ReleaseCandidateError(
-      'UNSAFE_OUTPUT_DIRECTORY',
-      'Release output writer did not create one unique regular file.'
-    );
-  }
-  transaction.createdFiles.set(fileName, record);
 }
 
 async function assertRecordedOutputFiles(
@@ -1254,13 +1222,11 @@ async function cleanupSafeOutput(
     parentHandle: transaction.parentHandle,
     directory: transaction.staging,
     handle: transaction.handle,
-    files: [...transaction.createdFiles.entries()].map(
-      ([fileName, identity]) => ({
-        fileName,
-        device: identity.device,
-        inode: identity.inode,
-      })
-    ),
+    files: transaction.createdFiles.values().map((record) => ({
+      fileName: record.fileName,
+      device: record.device,
+      inode: record.inode,
+    })),
   });
   return stagingClean;
 }
@@ -1756,7 +1722,9 @@ function isValidSpdxRelationship(
   return true;
 }
 
-export function validateSpdxDocument(value: unknown): void {
+export function validateSpdxDocument(
+  value: unknown
+): asserts value is Record<string, unknown> {
   const document = isRecord(value) ? value : undefined;
   const packageValues =
     document === undefined ? undefined : Reflect.get(document, 'packages');
@@ -1870,7 +1838,9 @@ function isCanonicalTimestamp(value: unknown): value is string {
   }
 }
 
-export function validateReleaseManifest(value: unknown): void {
+export function validateReleaseManifest(
+  value: unknown
+): asserts value is Record<string, unknown> {
   const manifest = isRecord(value) ? value : undefined;
   const version =
     manifest === undefined ? undefined : Reflect.get(manifest, 'version');
@@ -2236,9 +2206,7 @@ export async function validateOpenedSourceReleaseDirectory(
   );
   validateReleaseManifest(manifest);
   validateSpdxDocument(sbom);
-  const manifestFiles = isRecord(manifest)
-    ? Reflect.get(manifest, 'files')
-    : undefined;
+  const manifestFiles = Reflect.get(manifest, 'files');
   const payloadNames = expectedPayloadNames(version);
   const actualPayloadFiles = actualFiles
     .filter(({ fileName }) => payloadNames.includes(fileName))
@@ -2259,9 +2227,7 @@ export async function validateOpenedSourceReleaseDirectory(
   const archiveFile = actualPayloadFiles.find(
     ({ fileName }) => fileName === archiveName
   );
-  const sbomPackages = isRecord(sbom)
-    ? Reflect.get(sbom, 'packages')
-    : undefined;
+  const sbomPackages = Reflect.get(sbom, 'packages');
   const rootPackage = Array.isArray(sbomPackages)
     ? sbomPackages.find(
         (item) =>

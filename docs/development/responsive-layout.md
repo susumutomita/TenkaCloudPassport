@@ -126,3 +126,33 @@ Duo inner normal/max and fold retention on the updated modules remain pending:
 the Mac is locked and supported CUA needs manual unlock. This is not a permanent
 tool absence. Earlier ten-scenario results do not establish current full coverage.
 Hardware and all Duo rotations remain explicitly unverified.
+
+## Final-candidate native handoff requirements
+
+The current Linux workspace has no Xcode or simulator runtime. A final native
+handoff must carry the exact local commit, its base commit, a checked patch and
+SHA256 manifest for app source, configuration and locked dependencies. Apply the
+patch in an isolated checkout after verifying the base and clean application;
+do not overwrite the Mac's existing work. A prior artifact or successful build
+does not certify a later source tree.
+
+Use Xcode 27.1 with the installed compatible runtimes, frozen dependencies and
+the unsigned build commands in `.github/workflows/ios-compatibility.yml`. The
+existing `tests/ios-responsive/run.sh` creates test-only simulators and records
+source revision, Xcode, runtime/device identities, XCTest logs and screenshots.
+Its automated matrix is four models at two text sizes; it does not automate the
+Duo hinge. Include a large phone, SE and tablet at normal and maximum text, and
+Duo outer/inner at both sizes. Record the actual model identifiers rather than
+relabeling the runner's Pro model as Pro Max.
+
+On Duo, additionally use official fold controls to verify opening/closing during
+editing with text and keyboard retained, readable QR and reachable actions on
+both displays. Exercise applicable rotation and resize checks, saving/reopening
+the card, learning controls and camera cancellation. Preserve the actual tested
+coverage and list any missing rotations, hardware or system-permission behavior.
+Loopback membership tests establish reference-adapter behavior; they do not
+establish real radio transport or hardware compatibility.
+
+No signing, tag, TestFlight or Store operation is part of this merge-only handoff.
+Do not dispatch a workflow or report native success before the final source
+binding and its evidence have been verified.

@@ -39,6 +39,7 @@ import {
 import { isolatedGitEnv } from './git-env-isolation';
 import * as processCapture from './process-capture';
 import { runCapturedProcess } from './process-capture';
+import { ReleaseOutputOwnership } from './release-output-ownership';
 import {
   assertNoKnownSecretContent,
   assertSafeTrackedPaths,
@@ -56,6 +57,7 @@ import {
   executeSourceReleaseCli,
   formatSourceReleaseCliError,
 } from './source-release-cli';
+import { ReleaseCandidateError as SharedReleaseCandidateError } from './source-release-error';
 import { verifySourceReleaseCli } from './source-release-verify-cli';
 
 const tempRoots: string[] = [];
@@ -902,41 +904,6 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
 });
 
 describe('Issue 29: 再現可能 Source Release Candidate', () => {
-  it.each([{ resolved: null }, { resolved: 42 }])(
-    'rejects a native helper whose callable then export resolves to %j',
-    async ({ resolved }) => {
-      const nativeName =
-        process.platform === 'darwin'
-          ? 'atomic-output-publisher-darwin.ts'
-          : 'atomic-output-publisher-linux.ts';
-      const script = `
-        import { mock } from 'bun:test';
-        let thenCalls = 0;
-        mock.module(${JSON.stringify(path.join(import.meta.dir, nativeName))}, () => ({
-          then(resolve) { thenCalls += 1; resolve(${JSON.stringify(resolved)}); },
-          openEntryNoFollowNative() { throw new Error('native descriptor operation must not run'); },
-          renameEntryNoReplaceNative() { throw new Error('native rename must not run'); },
-        }));
-        const { atomicRenameDirectoryNoReplace } = await import(${JSON.stringify(path.join(import.meta.dir, 'atomic-output-publisher.ts'))});
-        try {
-          await atomicRenameDirectoryNoReplace(0, 'staging', 'candidate', {device: 0, inode: 0});
-          process.exit(1);
-        } catch (error) {
-          process.stdout.write(JSON.stringify({code: error.code, message: error.message, thenCalls}));
-        }
-      `;
-      const result = await runCapturedProcess([process.execPath, '-e', script]);
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toBe('');
-      const failure = JSON.parse(new TextDecoder().decode(result.stdout));
-      expect(failure).toMatchObject({
-        code: 'UNSUPPORTED_PLATFORM',
-        message: 'Descriptor-relative release operations could not be loaded.',
-      });
-      expect(failure.thenCalls).toBeGreaterThan(0);
-    }
-  );
-
   it('rejects a nonexistent output parent without creating it implicitly', async () => {
     const root = await createReleaseRepository();
     const parent = path.join(root, 'missing-parent');
@@ -2709,9 +2676,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         '-e',
         `
           import { constants } from 'node:fs';
-          import * as syncFsBoundary from 'node:fs';
-import * as fsBoundary from 'node:fs/promises';
-import { open } from 'node:fs/promises';
+          import { open } from 'node:fs/promises';
           const { hashRegularFileNoFollowAt } = await import('./scripts/atomic-output-publisher.ts');
           const handle = await open(
             process.env.TASK_STREAM_DIRECTORY,
@@ -3026,4 +2991,1009 @@ it('rejects a version changed by the caller during generation rather than publis
   await expect(
     validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
   ).resolves.toHaveLength(6);
+});
+
+describe('publication rollback fault boundaries', () => {
+  it.each([
+    {
+      failure: 'metadata-read',
+      denyRollback: false,
+      expectedMessage:
+        'Published Output path changed and was rolled back safely.',
+    },
+    {
+      failure: 'verification',
+      denyRollback: false,
+      expectedMessage:
+        'Release output no longer names the file closed by its writer.',
+    },
+    {
+      failure: 'metadata-read',
+      denyRollback: true,
+      expectedMessage:
+        'Release generation failed and staging cleanup could not be verified.',
+    },
+    {
+      failure: 'verification',
+      denyRollback: true,
+      expectedMessage:
+        'Release generation failed and staging cleanup could not be verified.',
+    },
+  ] as const)(
+    'preserves bytes on $failure (rollback denied: $denyRollback)',
+    async ({ failure, denyRollback, expectedMessage }) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(root, 'release-output/published-fault');
+      const originalRename = publication.atomicRenameDirectoryNoReplace;
+      const originalLstat = fsBoundary.lstat;
+      let published = false;
+      let intercepted = false;
+      let rollbackCalls = 0;
+      const renaming = spyOn(
+        publication,
+        'atomicRenameDirectoryNoReplace'
+      ).mockImplementation(async (...arguments_) => {
+        if (arguments_[1] === path.basename(outputDirectory)) {
+          rollbackCalls += 1;
+          if (denyRollback) throw new Error('fixture rollback denial');
+        }
+        await originalRename(...arguments_);
+        if (arguments_[2] === path.basename(outputDirectory)) {
+          published = true;
+          if (failure === 'verification')
+            writeFileSync(
+              path.join(outputDirectory, 'LICENSE'),
+              'changed after publication'
+            );
+        }
+      });
+      const stating = spyOn(fsBoundary, 'lstat').mockImplementation(
+        new Proxy(originalLstat, {
+          async apply(_target, _receiver, arguments_) {
+            const [file, ...options] = arguments_;
+            if (
+              failure === 'metadata-read' &&
+              published &&
+              !intercepted &&
+              String(file) === outputDirectory
+            ) {
+              intercepted = true;
+              throw Object.assign(new Error('temporary stat denial'), {
+                code: 'EACCES',
+              });
+            }
+            return Reflect.apply(originalLstat, fsBoundary, [file, ...options]);
+          },
+        })
+      );
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({
+          code: 'UNSAFE_OUTPUT_DIRECTORY',
+          message: expectedMessage,
+        });
+        expect(published).toBe(true);
+        expect(rollbackCalls).toBe(1);
+        expect(intercepted).toBe(failure === 'metadata-read');
+        const parent = path.dirname(outputDirectory);
+        const retainedName = denyRollback
+          ? path.basename(outputDirectory)
+          : readdirSync(parent).find((name) =>
+              name.startsWith('.tenkacloud-passport-failed-')
+            );
+        expect(retainedName).toBeDefined();
+        if (!retainedName) throw new Error('Expected retained candidate bytes');
+        expect(
+          readFileSync(path.join(parent, retainedName, 'LICENSE'), 'utf8')
+        ).toBe(
+          failure === 'verification'
+            ? 'changed after publication'
+            : 'Fixture MIT License\n'
+        );
+        expect(existsSync(outputDirectory)).toBe(denyRollback);
+      } finally {
+        renaming.mockRestore();
+        stating.mockRestore();
+      }
+      if (denyRollback) {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({ code: 'UNSAFE_OUTPUT_DIRECTORY' });
+        expect(existsSync(path.join(outputDirectory, 'LICENSE'))).toBe(true);
+      } else {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).resolves.toMatchObject({ outputDirectory });
+        await expect(
+          validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+        ).resolves.toHaveLength(6);
+      }
+    }
+  );
+
+  it.each(['parent', 'staging'] as const)(
+    'preserves validated publication after %s close reports an error after closing',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const parent = path.join(root, 'release-output');
+      const outputDirectory = path.join(parent, 'close-error');
+      const originalOpen = fsBoundary.open;
+      const originalRename = publication.atomicRenameDirectoryNoReplace;
+      const restore: Array<() => void> = [];
+      let published = false;
+      let closeFaults = 0;
+      const renaming = spyOn(
+        publication,
+        'atomicRenameDirectoryNoReplace'
+      ).mockImplementation(async (...arguments_) => {
+        await originalRename(...arguments_);
+        if (arguments_[2] === path.basename(outputDirectory)) published = true;
+      });
+      const opening = spyOn(fsBoundary, 'open').mockImplementation(
+        async (file, ...options) => {
+          const handle = await originalOpen(file, ...options);
+          if (
+            (fault === 'parent' && String(file) === parent) ||
+            (fault === 'staging' &&
+              String(file).startsWith(
+                path.join(parent, '.tenkacloud-passport-release-')
+              ))
+          ) {
+            const originalClose = handle.close.bind(handle);
+            const closing = spyOn(handle, 'close').mockImplementation(
+              async () => {
+                await originalClose();
+                if (published) {
+                  closeFaults += 1;
+                  throw new Error('fixture close EIO after closed');
+                }
+              }
+            );
+            restore.push(() => closing.mockRestore());
+          }
+          return handle;
+        }
+      );
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).resolves.toMatchObject({ outputDirectory });
+        expect(closeFaults).toBe(1);
+      } finally {
+        opening.mockRestore();
+        renaming.mockRestore();
+        for (const close of restore) close();
+      }
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
+});
+
+describe('directory generation identity races', () => {
+  it.each(['open-snapshot', 'before-open'] as const)(
+    'rejects parent replacement %s without publication',
+    async (phase) => {
+      const root = await createReleaseRepository();
+      const parent = path.join(root, 'release-output');
+      const held = path.join(root, 'held-output-parent');
+      const outputDirectory = path.join(parent, 'parent-replaced');
+      const originalOpen = fsBoundary.open;
+      const originalLstat = fsBoundary.lstat;
+      const originalRealpath = fsBoundary.realpath;
+      let markReplacement: (() => void) | undefined;
+      const replacementComplete = new Promise<void>((resolve) => {
+        markReplacement = resolve;
+      });
+      let changed = false;
+      const replaceParent = () => {
+        renameSync(parent, held);
+        mkdirSync(parent);
+        changed = true;
+        markReplacement?.();
+      };
+      const resolving = spyOn(fsBoundary, 'realpath').mockImplementation(
+        new Proxy(originalRealpath, {
+          async apply(target, receiver, arguments_) {
+            if (phase === 'before-open' && String(arguments_[0]) === parent)
+              await replacementComplete;
+            return Reflect.apply(target, receiver, arguments_);
+          },
+        })
+      );
+      const stating = spyOn(fsBoundary, 'lstat').mockImplementation(
+        new Proxy(originalLstat, {
+          async apply(_target, _receiver, arguments_) {
+            const [file, ...options] = arguments_;
+            const result = await Reflect.apply(originalLstat, fsBoundary, [
+              file,
+              ...options,
+            ]);
+            if (phase === 'before-open' && !changed && String(file) === parent)
+              replaceParent();
+            return result;
+          },
+        })
+      );
+      const opening = spyOn(fsBoundary, 'open').mockImplementation(
+        async (file, ...options) => {
+          if (phase === 'open-snapshot' && !changed && String(file) === parent)
+            replaceParent();
+          return originalOpen(file, ...options);
+        }
+      );
+      try {
+        await expect(
+          buildSourceRelease({
+            repositoryRoot: root,
+            version: TEST_VERSION,
+            ref: 'HEAD',
+            outputDirectory,
+          })
+        ).rejects.toMatchObject({
+          code: 'UNSAFE_OUTPUT_DIRECTORY',
+          message:
+            phase === 'before-open'
+              ? 'Release output parent identity changed before staging.'
+              : 'Release output parent could not be opened safely.',
+        });
+        expect(changed).toBe(true);
+        expect(existsSync(outputDirectory)).toBe(false);
+        expect(existsSync(held)).toBe(true);
+      } finally {
+        stating.mockRestore();
+        opening.mockRestore();
+        resolving.mockRestore();
+      }
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).resolves.toMatchObject({ outputDirectory });
+    }
+  );
+
+  it('rejects a candidate directory replaced between its path and descriptor checks', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(
+      root,
+      'release-output/replaced-candidate'
+    );
+    const held = path.join(root, 'release-output/held-candidate');
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const originalLstat = fsBoundary.lstat;
+    let changed = false;
+    const stating = spyOn(fsBoundary, 'lstat').mockImplementation(
+      new Proxy(originalLstat, {
+        async apply(_target, _receiver, arguments_) {
+          const [file, ...options] = arguments_;
+          const result = await Reflect.apply(originalLstat, fsBoundary, [
+            file,
+            ...options,
+          ]);
+          if (!changed && String(file) === outputDirectory) {
+            changed = true;
+            renameSync(outputDirectory, held);
+            mkdirSync(outputDirectory);
+          }
+          return result;
+        },
+      })
+    );
+    try {
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).rejects.toMatchObject({ code: 'UNSAFE_OUTPUT_DIRECTORY' });
+      expect(changed).toBe(true);
+      expect(readFileSync(path.join(held, 'LICENSE'), 'utf8')).toBe(
+        'Fixture MIT License\n'
+      );
+    } finally {
+      stating.mockRestore();
+    }
+    syncFsBoundary.rmdirSync(outputDirectory);
+    renameSync(held, outputDirectory);
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).resolves.toHaveLength(6);
+  });
+
+  it('rejects replaced writer output while quarantining original and competing bytes', async () => {
+    const root = await createReleaseRepository();
+    const parent = path.join(root, 'release-output');
+    const outputDirectory = path.join(parent, 'replaced-writer-output');
+    const originalCapture = processCapture.runCapturedProcess;
+    let replaced = false;
+    const capturing = spyOn(
+      processCapture,
+      'runCapturedProcess'
+    ).mockImplementation(async (command, options) => {
+      const result = await originalCapture(command, options);
+      if (
+        !replaced &&
+        command[0] === 'bun' &&
+        command.includes('LICENSE') &&
+        options?.cwd
+      ) {
+        replaced = true;
+        const license = path.join(options.cwd, 'LICENSE');
+        renameSync(
+          license,
+          path.join(options.cwd, 'original-license-retained')
+        );
+        writeFileSync(license, 'competing bytes');
+      }
+      return result;
+    });
+    try {
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).rejects.toMatchObject({
+        code: 'UNSAFE_OUTPUT_DIRECTORY',
+        message:
+          'Release output no longer names the file closed by its writer.',
+      });
+      expect(replaced).toBe(true);
+      expect(existsSync(outputDirectory)).toBe(false);
+      const failed = readdirSync(parent).find((name) =>
+        name.startsWith('.tenkacloud-passport-failed-')
+      );
+      expect(failed).toBeDefined();
+      if (!failed) throw new Error('Expected retained failure directory');
+      expect(readFileSync(path.join(parent, failed, 'LICENSE'), 'utf8')).toBe(
+        'competing bytes'
+      );
+      expect(
+        readFileSync(
+          path.join(parent, failed, 'original-license-retained'),
+          'utf8'
+        )
+      ).toBe('Fixture MIT License\n');
+    } finally {
+      capturing.mockRestore();
+    }
+  });
+});
+
+it('retains uniquely admitted writer ownership across input and returned aliases', async () => {
+  const root = await createReleaseRepository();
+  const directory = path.join(root, 'release-output/ownership');
+  mkdirSync(directory);
+  const status = lstatSync(directory);
+  const record = await writeExclusiveOutput(
+    ['owned.txt', String(status.dev), String(status.ino), '--'],
+    new Blob(['owned bytes']).stream(),
+    directory
+  );
+  const ownership = new ReleaseOutputOwnership();
+  expect(SharedReleaseCandidateError).toBe(ReleaseCandidateError);
+  expect(ownership.size).toBe(0);
+  expect(ownership.get('missing')).toBeUndefined();
+  ownership.record('owned.txt', record);
+  const expected = { ...record };
+  expect(ownership.size).toBe(1);
+  expect(() => ownership.record('other.txt', record)).toThrow(
+    new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output writer did not create one unique regular file.'
+    )
+  );
+  expect(() => ownership.record('owned.txt', record)).toThrow(
+    new ReleaseCandidateError(
+      'UNSAFE_OUTPUT_DIRECTORY',
+      'Release output writer did not create one unique regular file.'
+    )
+  );
+  Object.assign(record, {
+    fileName: 'changed.txt',
+    sha256: '0'.repeat(64),
+    inode: record.inode + 1,
+  });
+  expect(ownership.get('owned.txt')).toEqual(expected);
+  const retained = ownership.get('owned.txt');
+  if (retained === undefined) throw new Error('Expected retained ownership');
+  expect(Object.isFrozen(retained)).toBe(true);
+  expect(() => Object.assign(retained, { inode: 1 })).toThrow(TypeError);
+  const snapshots = ownership.values();
+  expect(Object.isFrozen(snapshots)).toBe(true);
+  expect(() =>
+    Reflect.apply(Array.prototype.push, snapshots, [expected])
+  ).toThrow(TypeError);
+  expect(ownership.values()).toEqual([expected]);
+  const handle = await open(
+    directory,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+  );
+  try {
+    await expect(
+      assertRegularFileIdentitiesNoFollowAt(handle.fd, ownership.values())
+    ).resolves.toBeUndefined();
+  } finally {
+    await handle.close();
+  }
+});
+
+function refreshCandidateChecksums(directory: string): void {
+  const manifestFile = path.join(directory, 'release-manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+  const names = readdirSync(directory).sort();
+  manifest.files = names
+    .filter(
+      (name) => name !== 'checksums.txt' && name !== 'release-manifest.json'
+    )
+    .map((fileName) => {
+      const bytes = readFileSync(path.join(directory, fileName));
+      return {
+        fileName,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+        byteLength: bytes.byteLength,
+      };
+    });
+  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(
+    path.join(directory, 'checksums.txt'),
+    names
+      .filter((name) => name !== 'checksums.txt')
+      .map(
+        (name) =>
+          `${createHash('sha256')
+            .update(readFileSync(path.join(directory, name)))
+            .digest('hex')}  ${name}\n`
+      )
+      .join('')
+  );
+}
+
+describe('release metadata cross-file binding', () => {
+  it.each(['bad-json', 'different-commit', 'different-root-hash'] as const)(
+    'rejects self-consistent checksums with %s metadata',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(
+        root,
+        'release-output/metadata-binding'
+      );
+      await buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      });
+      const originals = new Map(
+        readdirSync(outputDirectory).map((name) => [
+          name,
+          readFileSync(path.join(outputDirectory, name)),
+        ])
+      );
+      const sbomName = `tenkacloud-passport-${TEST_VERSION}.spdx.json`;
+      if (fault === 'bad-json')
+        writeFileSync(path.join(outputDirectory, sbomName), '{');
+      else if (fault === 'different-commit') {
+        const file = path.join(outputDirectory, 'release-manifest.json');
+        const manifest = JSON.parse(readFileSync(file, 'utf8'));
+        manifest.commit = 'f'.repeat(40);
+        validateReleaseManifest(manifest);
+        writeFileSync(file, JSON.stringify(manifest));
+      } else {
+        const file = path.join(outputDirectory, sbomName);
+        const sbom = JSON.parse(readFileSync(file, 'utf8'));
+        sbom.packages[0].checksums[0].checksumValue = 'f'.repeat(64);
+        validateSpdxDocument(sbom);
+        writeFileSync(file, JSON.stringify(sbom));
+      }
+      refreshCandidateChecksums(outputDirectory);
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).rejects.toMatchObject({ code: 'INVALID_CHECKSUM' });
+      for (const [name, bytes] of originals)
+        writeFileSync(path.join(outputDirectory, name), bytes);
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
+
+  it('rejects changed payload bytes without a corresponding checksum update', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(root, 'release-output/payload-mutation');
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const file = path.join(outputDirectory, 'LICENSE');
+    const original = readFileSync(file);
+    writeFileSync(file, 'unreviewed payload bytes');
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).rejects.toMatchObject({ code: 'INVALID_CHECKSUM' });
+    expect(readFileSync(file, 'utf8')).toBe('unreviewed payload bytes');
+    writeFileSync(file, original);
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).resolves.toHaveLength(6);
+  });
+
+  it('rebinds metadata to the hashed file rather than a later replacement', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(
+      root,
+      'release-output/metadata-read-race'
+    );
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const name = `tenkacloud-passport-${TEST_VERSION}.spdx.json`;
+    const file = path.join(outputDirectory, name);
+    const original = readFileSync(file);
+    const originalHash = publication.hashRegularFileNoFollowAt;
+    let changed = false;
+    const hashing = spyOn(
+      publication,
+      'hashRegularFileNoFollowAt'
+    ).mockImplementation(async (...arguments_) => {
+      const result = await originalHash(...arguments_);
+      if (!changed && arguments_[1] === name) {
+        changed = true;
+        writeFileSync(file, Buffer.concat([original, Buffer.from(' ')]));
+      }
+      return result;
+    });
+    try {
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).rejects.toMatchObject({ code: 'INVALID_CHECKSUM' });
+      expect(changed).toBe(true);
+    } finally {
+      hashing.mockRestore();
+    }
+    writeFileSync(file, original);
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).resolves.toHaveLength(6);
+  });
+
+  it('detects directory mutation after metadata was read even when the final file list is restored', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(
+      root,
+      'release-output/final-directory-fingerprint'
+    );
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const originalRead = publication.readRegularFileNoFollowAtWithIdentity;
+    let changed = false;
+    const reading = spyOn(
+      publication,
+      'readRegularFileNoFollowAtWithIdentity'
+    ).mockImplementation(async (...arguments_) => {
+      const result = await originalRead(...arguments_);
+      if (!changed && arguments_[1].endsWith('.spdx.json')) {
+        changed = true;
+        const transient = path.join(
+          outputDirectory,
+          'transient-unreviewed-entry'
+        );
+        writeFileSync(transient, 'transient bytes');
+        unlinkSync(transient);
+      }
+      return result;
+    });
+    try {
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).rejects.toMatchObject({ code: 'INVALID_CHECKSUM' });
+      expect(changed).toBe(true);
+    } finally {
+      reading.mockRestore();
+    }
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).resolves.toHaveLength(6);
+  });
+});
+
+describe('reviewed dependency resolution boundaries', () => {
+  it('rejects non-object reviewed dependency records and accepts the restored committed record', async () => {
+    const root = await createReleaseRepository();
+    const name = 'scripts/direct-dependency-licenses.json';
+    const file = path.join(root, name);
+    const original = readFileSync(file);
+    const reviewed = JSON.parse(original.toString('utf8'));
+    reviewed.packages['direct-dep'] = null;
+    writeFileSync(file, JSON.stringify(reviewed));
+    await runGit(root, ['add', name]);
+    await runGit(root, ['commit', '-m', 'invalid reviewed dependency record']);
+    const outputDirectory = path.join(root, 'release-output/reviewed-record');
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      })
+    ).rejects.toMatchObject({
+      code: 'INVALID_PACKAGE_METADATA',
+      message:
+        'Reviewed dependency does not match the top-level lock resolution: direct-dep',
+    });
+    expect(existsSync(outputDirectory)).toBe(false);
+    writeFileSync(file, original);
+    await runGit(root, ['add', name]);
+    await runGit(root, ['commit', '-m', 'restore reviewed dependency record']);
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      })
+    ).resolves.toMatchObject({ outputDirectory });
+  });
+
+  it('binds scoped dependency names to their exact escaped npm package URLs', async () => {
+    const root = await createReleaseRepository();
+    const names = [
+      'package.json',
+      'bun.lock',
+      'scripts/direct-dependency-licenses.json',
+    ];
+    for (const name of names) {
+      const file = path.join(root, name);
+      writeFileSync(
+        file,
+        readFileSync(file, 'utf8').replaceAll('direct-dep', '@scope/direct-dep')
+      );
+    }
+    await runGit(root, ['add', ...names]);
+    await runGit(root, ['commit', '-m', 'review scoped dependency fixture']);
+    const outputDirectory = path.join(root, 'release-output/scoped-dependency');
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const sbom = JSON.parse(
+      readFileSync(
+        path.join(
+          outputDirectory,
+          `tenkacloud-passport-${TEST_VERSION}.spdx.json`
+        ),
+        'utf8'
+      )
+    );
+    expect(
+      sbom.packages.some(
+        (value: {
+          name: string;
+          externalRefs?: Array<{ referenceLocator: string }>;
+        }) =>
+          value.name === '@scope/direct-dep' &&
+          value.externalRefs?.some(
+            (reference) =>
+              reference.referenceLocator === 'pkg:npm/%40scope/direct-dep@1.2.3'
+          )
+      )
+    ).toBe(true);
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).resolves.toHaveLength(6);
+  });
+});
+
+it('rejects an unclassified output-path inspection failure and succeeds after restoring it', async () => {
+  const root = await createReleaseRepository();
+  const outputDirectory = path.join(root, 'release-output/unclassified-stat');
+  const originalLstat = fsBoundary.lstat;
+  let intercepted = false;
+  const stating = spyOn(fsBoundary, 'lstat').mockImplementation(
+    new Proxy(originalLstat, {
+      async apply(target, receiver, arguments_) {
+        if (!intercepted && String(arguments_[0]) === outputDirectory) {
+          intercepted = true;
+          throw new Error('unclassified filesystem failure');
+        }
+        return Reflect.apply(target, receiver, arguments_);
+      },
+    })
+  );
+  try {
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      })
+    ).rejects.toMatchObject({
+      code: 'UNSAFE_OUTPUT_DIRECTORY',
+      message: 'Release output path cannot be inspected safely.',
+    });
+    expect(intercepted).toBe(true);
+    expect(existsSync(outputDirectory)).toBe(false);
+  } finally {
+    stating.mockRestore();
+  }
+  await expect(
+    buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    })
+  ).resolves.toMatchObject({ outputDirectory });
+});
+
+it('rejects an observed staging replacement even when the original directory is restored before cleanup', async () => {
+  const root = await createReleaseRepository();
+  const parent = path.join(root, 'release-output');
+  const outputDirectory = path.join(parent, 'staging-identity-aba');
+  const held = path.join(parent, 'held-original-staging');
+  const originalCapture = processCapture.runCapturedProcess;
+  const originalLstat = fsBoundary.lstat;
+  let writerCompleted = false;
+  let replaced = false;
+  const capturing = spyOn(
+    processCapture,
+    'runCapturedProcess'
+  ).mockImplementation(async (command, options) => {
+    const result = await originalCapture(command, options);
+    if (
+      command[0] === 'bun' &&
+      command.includes(`tenkacloud-passport-${TEST_VERSION}.tar.gz`)
+    )
+      writerCompleted = true;
+    return result;
+  });
+  const stating = spyOn(fsBoundary, 'lstat').mockImplementation(
+    new Proxy(originalLstat, {
+      async apply(target, receiver, arguments_) {
+        const file = String(arguments_[0]);
+        if (
+          writerCompleted &&
+          !replaced &&
+          file.startsWith(path.join(parent, '.tenkacloud-passport-release-'))
+        ) {
+          replaced = true;
+          renameSync(file, held);
+          mkdirSync(file);
+          try {
+            return await Reflect.apply(target, receiver, arguments_);
+          } finally {
+            syncFsBoundary.rmdirSync(file);
+            renameSync(held, file);
+          }
+        }
+        return Reflect.apply(target, receiver, arguments_);
+      },
+    })
+  );
+  try {
+    await expect(
+      buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      })
+    ).rejects.toMatchObject({
+      code: 'UNSAFE_OUTPUT_DIRECTORY',
+      message: 'Release output directory identity changed during generation.',
+    });
+    expect(replaced).toBe(true);
+    expect(existsSync(outputDirectory)).toBe(false);
+    const failed = readdirSync(parent).find((name) =>
+      name.startsWith('.tenkacloud-passport-failed-')
+    );
+    expect(failed).toBeDefined();
+    if (!failed) throw new Error('Expected quarantined source archive');
+    expect(
+      lstatSync(
+        path.join(parent, failed, `tenkacloud-passport-${TEST_VERSION}.tar.gz`)
+      ).size
+    ).toBeGreaterThan(0);
+  } finally {
+    capturing.mockRestore();
+    stating.mockRestore();
+  }
+  await expect(
+    buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    })
+  ).resolves.toMatchObject({ outputDirectory });
+});
+
+describe('metadata binding rechecks mutable decoded fields after schema validation', () => {
+  it('establishes only the root-object type while retaining the validator return and rejection contracts', async () => {
+    const root = await createReleaseRepository();
+    const outputDirectory = path.join(root, 'release-output/root-object-proof');
+    await buildSourceRelease({
+      repositoryRoot: root,
+      version: TEST_VERSION,
+      ref: 'HEAD',
+      outputDirectory,
+    });
+    const manifest: unknown = JSON.parse(
+      readFileSync(path.join(outputDirectory, 'release-manifest.json'), 'utf8')
+    );
+    const sbom: unknown = JSON.parse(
+      readFileSync(
+        path.join(
+          outputDirectory,
+          `tenkacloud-passport-${TEST_VERSION}.spdx.json`
+        ),
+        'utf8'
+      )
+    );
+    // These calls narrow unknown roots without asserting mutable field types.
+    validateReleaseManifest(manifest);
+    validateSpdxDocument(sbom);
+    expect(Reflect.get(manifest, 'version')).toBe(TEST_VERSION);
+    expect(Reflect.get(sbom, 'spdxVersion')).toBe('SPDX-2.3');
+    expect(validateReleaseManifest(manifest)).toBeUndefined();
+    expect(validateSpdxDocument(sbom)).toBeUndefined();
+    for (const value of [null, undefined, false, 42, 'record', [], () => 0]) {
+      expect(() => validateReleaseManifest(value)).toThrow(
+        new ReleaseCandidateError(
+          'INVALID_MANIFEST',
+          'Generated release manifest is internally inconsistent.'
+        )
+      );
+      expect(() => validateSpdxDocument(value)).toThrow(
+        new ReleaseCandidateError(
+          'INVALID_SBOM',
+          'Generated SPDX document is internally inconsistent.'
+        )
+      );
+    }
+    await expect(
+      validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+    ).resolves.toHaveLength(6);
+  });
+
+  it.each(['files', 'packages', 'root-package', 'checksums'] as const)(
+    'rejects a decoded %s field that changes after its valid schema observation',
+    async (fault) => {
+      const root = await createReleaseRepository();
+      const outputDirectory = path.join(
+        root,
+        'release-output/decoded-field-race'
+      );
+      await buildSourceRelease({
+        repositoryRoot: root,
+        version: TEST_VERSION,
+        ref: 'HEAD',
+        outputDirectory,
+      });
+      const originals = new Map(
+        readdirSync(outputDirectory).map((name) => [
+          name,
+          readFileSync(path.join(outputDirectory, name)),
+        ])
+      );
+      const documentName =
+        fault === 'files'
+          ? 'release-manifest.json'
+          : `tenkacloud-passport-${TEST_VERSION}.spdx.json`;
+      const documentText = readFileSync(
+        path.join(outputDirectory, documentName),
+        'utf8'
+      );
+      const property = {
+        files: 'files',
+        packages: 'packages',
+        'root-package': 'packages',
+        checksums: 'checksums',
+      }[fault];
+      const originalParse = JSON.parse;
+      let intercepted = 0;
+      let reads = 0;
+      const parsing = spyOn(JSON, 'parse').mockImplementation(
+        new Proxy(originalParse, {
+          apply(target, receiver, arguments_) {
+            const parsed = Reflect.apply(target, receiver, arguments_);
+            if (arguments_[0] !== documentText) return parsed;
+            intercepted += 1;
+            const owner =
+              fault === 'checksums'
+                ? parsed.packages.find(
+                    (item: Record<string, unknown>) =>
+                      Reflect.get(item, 'SPDXID') ===
+                      'SPDXRef-Package-TenkaCloudPassport'
+                  )
+                : parsed;
+            const original = Reflect.get(owner, property);
+            const changed =
+              fault === 'root-package'
+                ? original.filter(
+                    (item: Record<string, unknown>) =>
+                      Reflect.get(item, 'SPDXID') !==
+                      'SPDXRef-Package-TenkaCloudPassport'
+                  )
+                : null;
+            Object.defineProperty(owner, property, {
+              configurable: true,
+              enumerable: true,
+              get() {
+                reads += 1;
+                return reads === 1 ? original : changed;
+              },
+            });
+            return parsed;
+          },
+        })
+      );
+      try {
+        const validation = validateSourceReleaseDirectory(
+          outputDirectory,
+          TEST_VERSION
+        );
+        await expect(validation).rejects.toBeInstanceOf(ReleaseCandidateError);
+        await expect(validation).rejects.toMatchObject({
+          code: 'INVALID_CHECKSUM',
+          message:
+            'Release candidate files or checksums are internally inconsistent.',
+        });
+        expect(intercepted).toBe(1);
+        expect(reads).toBe(2);
+      } finally {
+        parsing.mockRestore();
+      }
+      expect(readdirSync(outputDirectory).sort()).toEqual(
+        [...originals.keys()].sort()
+      );
+      for (const [name, bytes] of originals)
+        expect(readFileSync(path.join(outputDirectory, name))).toEqual(bytes);
+      await expect(
+        validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
+      ).resolves.toHaveLength(6);
+    }
+  );
 });

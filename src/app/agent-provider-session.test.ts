@@ -1202,3 +1202,55 @@ describe('runAgentProviderSession: 同一 Contract・Fallback-once・Status 遷�
     expect(gate.settle(current)).toBe(true);
   });
 });
+
+it.each([0, 1, 2, 3, 4, 5, 6, 7, 8])(
+  'keeps the native lane quarantined when cancellation races a teardown failure after %i promise turns',
+  async (turns) => {
+    let announceStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      announceStarted = resolve;
+    });
+    let rejectProvider: ((error: Error) => void) | undefined;
+    const completion = new Promise<never>((_resolve, reject) => {
+      rejectProvider = reject;
+    });
+    let calls = 0;
+    const provider = localProvider(() => {
+      calls += 1;
+      announceStarted?.();
+      return completion;
+    });
+    const runner = createAgentProviderSessionRunner();
+    const request = {
+      state: INITIAL_PROVIDER_RUNTIME_STATE,
+      encounterKey: `quarantine-cancel-race-${turns}`,
+      provider,
+      input: INPUT,
+    };
+    const pending = runner.run(request);
+    await started;
+    rejectProvider?.(
+      new AgentModelProviderError(
+        'LOAD_ERROR',
+        'private-native-release-detail',
+        { nativeLaneQuarantined: true }
+      )
+    );
+    for (let step = 0; step < turns; step += 1) await Promise.resolve();
+    runner.forget(request.encounterKey);
+    const result = await pending;
+    expect(
+      result.outcome.switchReason === 'cancelled' ||
+        result.outcome.switchReason === 'load-error'
+    ).toBe(true);
+    const follower = await runner.run({
+      ...request,
+      encounterKey: `${request.encounterKey}-follower`,
+    });
+    expect(follower.outcome.switchReason).toBe('load-error');
+    expect(calls).toBe(1);
+    await expect(runner.cancelAllAndWait()).rejects.toMatchObject({
+      nativeLaneQuarantined: true,
+    });
+  }
+);
