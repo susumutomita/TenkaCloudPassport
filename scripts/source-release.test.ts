@@ -854,6 +854,21 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
     'docs/field-study-participant-notes.md',
     'docs/bad\nname.md',
     'unknown-root/source.ts',
+    '.eas/build/credentials.json',
+    '.eas/build/unreviewed-workflow.yml',
+    '.symphony/token.md',
+    '.symphony/unreviewed.md',
+    'tests/fixtures/participants.json',
+    'tests/.env.production',
+    'tests/fixtures/model.gguf',
+    'tests/dist/index.ts',
+    'tests/ios/project.xcodeproj',
+    'site/credentials.html',
+    'site/dist/index.html',
+    'site/extra.png',
+    'docs/assets/unreviewed.png',
+    'docs/assets/app-store-screenshots/participant-session.png',
+    'docs/assets/app-store-screenshots/model.bin',
   ])('禁止 Path「%s」を追跡 Release Tree に含めない', (trackedPath) => {
     expect(() => assertSafeTrackedPaths([trackedPath])).toThrow(
       new ReleaseCandidateError(
@@ -874,6 +889,26 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
         '.claude/state/.gitkeep',
         'docs/design/.keep',
         'assets/icon.png',
+        '.eas/build/ios-device-build.yml',
+        '.eas/build/ios-simulator-build.yml',
+        '.symphony/README.md',
+        '.symphony/WORKFLOW.md',
+        'GNUmakefile',
+        'eas.json',
+        'store.config.json',
+        'wrangler.toml',
+        'docs/assets/app-store-screenshots/v1.3.0/capture-provenance.json',
+        'docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/intro.png',
+        'site/index.html',
+        'site/og.png',
+        'tests/fixtures/learning/catalogs.ts',
+        'tests/fixtures/learning/native-design.json',
+        'tests/ios-learning/PassportLearningQA.swift',
+        'tests/ios-learning/README.md',
+        'tests/ios-learning/generate-project.rb',
+        'tests/responsive/run.sh',
+        'tests/responsive/entry.tsx',
+        'tests/responsive/server.mjs',
         'LICENSE',
       ])
     ).not.toThrow();
@@ -2498,105 +2533,133 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_PATH' });
   });
 
-  it('Review 済み Binary 内の既知 Secret byte を値を出さず拒否する', async () => {
-    const root = await createReleaseRepository();
-    const secret = Buffer.concat([
-      Buffer.from([0, 255]),
-      Buffer.from(`github_pat_${'A'.repeat(82)}`),
-    ]);
-    mkdirSync(path.join(root, 'assets'));
-    writeFileSync(path.join(root, 'assets/icon.png'), secret);
-    const inventoryPath = path.join(
-      root,
-      'scripts/source-release-inventory.json'
-    );
-    const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
-    inventory.paths.push('assets/icon.png');
-    inventory.paths.sort();
-    inventory.binaryAssets['assets/icon.png'] = createHash('sha256')
-      .update(secret)
-      .digest('hex');
-    writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
-    await runGit(root, [
-      'add',
-      'assets/icon.png',
-      'scripts/source-release-inventory.json',
-    ]);
-    await runGit(root, ['commit', '-m', 'test: add binary secret']);
-
-    await expect(
-      buildSourceRelease({
-        repositoryRoot: root,
-        version: TEST_VERSION,
-        ref: 'HEAD',
-        outputDirectory: path.join(root, 'release-output/binary-secret'),
-      })
-    ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_CONTENT' });
-  });
-
-  it('a reviewed binary hash cannot turn plain text into an approved binary asset', async () => {
-    const root = await createReleaseRepository();
-    const bytes = Buffer.from('plain text disguised as an image');
-    mkdirSync(path.join(root, 'assets'));
-    writeFileSync(path.join(root, 'assets/icon.png'), bytes);
-    const inventoryPath = path.join(
-      root,
-      'scripts/source-release-inventory.json'
-    );
-    const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
-    inventory.paths.push('assets/icon.png');
-    inventory.paths.sort();
-    inventory.binaryAssets['assets/icon.png'] = createHash('sha256')
-      .update(bytes)
-      .digest('hex');
-    writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
-    await runGit(root, [
-      'add',
-      'assets/icon.png',
-      'scripts/source-release-inventory.json',
-    ]);
-    await runGit(root, [
-      'commit',
-      '-m',
-      'test: reviewed hash with incorrect asset kind',
-    ]);
-    const outputDirectory = path.join(root, 'release-output/disguised-text');
-    await expect(
-      buildSourceRelease({
-        repositoryRoot: root,
-        version: TEST_VERSION,
-        ref: 'HEAD',
-        outputDirectory,
-      })
-    ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_PATH' });
-    expect(existsSync(outputDirectory)).toBe(false);
-    expect(readFileSync(path.join(root, 'assets/icon.png'))).toEqual(bytes);
-  });
-
-  it.each([{ matching: true }, { matching: false }])(
-    'binds reviewed binary asset bytes to their exact hash: %j',
-    async ({ matching }) => {
+  it.each([
+    'assets/icon.png',
+    'docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/intro.png',
+    'site/og.png',
+  ])(
+    'Review 済み Binary 内の既知 Secret byte を値を出さず拒否する: %s',
+    async (binaryPath) => {
       const root = await createReleaseRepository();
-      const bytes = readFileSync(
-        path.join(import.meta.dir, '../assets/icon.png')
-      );
-      mkdirSync(path.join(root, 'assets'));
-      writeFileSync(path.join(root, 'assets/icon.png'), bytes);
+      const secret = Buffer.concat([
+        Buffer.from([0, 255]),
+        Buffer.from(`github_pat_${'A'.repeat(82)}`),
+      ]);
+      mkdirSync(path.dirname(path.join(root, binaryPath)), { recursive: true });
+      writeFileSync(path.join(root, binaryPath), secret);
       const inventoryPath = path.join(
         root,
         'scripts/source-release-inventory.json'
       );
       const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
-      inventory.paths.push('assets/icon.png');
+      inventory.paths.push(binaryPath);
       inventory.paths.sort();
-      const hash = createHash('sha256').update(bytes).digest('hex');
-      inventory.binaryAssets['assets/icon.png'] = matching
-        ? hash
-        : (hash[0] === '0' ? '1' : '0') + hash.slice(1);
+      inventory.binaryAssets[binaryPath] = createHash('sha256')
+        .update(secret)
+        .digest('hex');
       writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
       await runGit(root, [
         'add',
-        'assets/icon.png',
+        binaryPath,
+        'scripts/source-release-inventory.json',
+      ]);
+      await runGit(root, ['commit', '-m', 'test: add binary secret']);
+
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory: path.join(root, 'release-output/binary-secret'),
+        })
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_CONTENT' });
+    }
+  );
+
+  it.each([
+    'assets/icon.png',
+    'docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/intro.png',
+    'site/og.png',
+  ])(
+    'a reviewed binary hash cannot turn plain text into an approved binary asset: %s',
+    async (binaryPath) => {
+      const root = await createReleaseRepository();
+      const bytes = Buffer.from('plain text disguised as an image');
+      mkdirSync(path.dirname(path.join(root, binaryPath)), { recursive: true });
+      writeFileSync(path.join(root, binaryPath), bytes);
+      const inventoryPath = path.join(
+        root,
+        'scripts/source-release-inventory.json'
+      );
+      const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+      inventory.paths.push(binaryPath);
+      inventory.paths.sort();
+      inventory.binaryAssets[binaryPath] = createHash('sha256')
+        .update(bytes)
+        .digest('hex');
+      writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+      await runGit(root, [
+        'add',
+        binaryPath,
+        'scripts/source-release-inventory.json',
+      ]);
+      await runGit(root, [
+        'commit',
+        '-m',
+        'test: reviewed hash with incorrect asset kind',
+      ]);
+      const outputDirectory = path.join(root, 'release-output/disguised-text');
+      await expect(
+        buildSourceRelease({
+          repositoryRoot: root,
+          version: TEST_VERSION,
+          ref: 'HEAD',
+          outputDirectory,
+        })
+      ).rejects.toMatchObject({ code: 'FORBIDDEN_RELEASE_PATH' });
+      expect(existsSync(outputDirectory)).toBe(false);
+      expect(readFileSync(path.join(root, binaryPath))).toEqual(bytes);
+    }
+  );
+
+  it.each(
+    [
+      'assets/icon.png',
+      'docs/assets/app-store-screenshots/v1.3.0/ja-JP/ipad-13/intro.png',
+      'site/og.png',
+    ].flatMap((binaryPath) =>
+      ['matching', 'mismatching', 'unreviewed'].map((review) => ({
+        binaryPath,
+        review,
+      }))
+    )
+  )(
+    'binds reviewed binary asset bytes to their exact hash: %j',
+    async ({ binaryPath, review }) => {
+      const root = await createReleaseRepository();
+      const bytes = readFileSync(
+        path.join(import.meta.dir, '../assets/icon.png')
+      );
+      mkdirSync(path.dirname(path.join(root, binaryPath)), { recursive: true });
+      writeFileSync(path.join(root, binaryPath), bytes);
+      const inventoryPath = path.join(
+        root,
+        'scripts/source-release-inventory.json'
+      );
+      const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+      inventory.paths.push(binaryPath);
+      inventory.paths.sort();
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      if (review !== 'unreviewed') {
+        inventory.binaryAssets[binaryPath] =
+          review === 'matching'
+            ? hash
+            : (hash[0] === '0' ? '1' : '0') + hash.slice(1);
+      }
+      writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+      await runGit(root, [
+        'add',
+        binaryPath,
         'scripts/source-release-inventory.json',
       ]);
       await runGit(root, [
@@ -2611,7 +2674,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         ref: 'HEAD',
         outputDirectory,
       });
-      if (matching) {
+      if (review === 'matching') {
         await expect(candidate).resolves.toMatchObject({ outputDirectory });
         await expect(
           validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
@@ -2622,7 +2685,7 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
         });
         expect(existsSync(outputDirectory)).toBe(false);
       }
-      expect(readFileSync(path.join(root, 'assets/icon.png'))).toEqual(bytes);
+      expect(readFileSync(path.join(root, binaryPath))).toEqual(bytes);
     }
   );
 
@@ -3848,6 +3911,30 @@ it('rejects an observed staging replacement even when the original directory is 
       outputDirectory,
     })
   ).resolves.toMatchObject({ outputDirectory });
+});
+
+it('binds the checked-in binary inventory to the actual reviewed source assets', () => {
+  const inventory = JSON.parse(
+    readFileSync(
+      path.join(import.meta.dir, 'source-release-inventory.json'),
+      'utf8'
+    )
+  );
+  for (const asset of [
+    'assets/icon.png',
+    'assets/adaptive-icon.png',
+    'assets/favicon.png',
+    'assets/splash-icon.png',
+    'site/og.png',
+  ])
+    expect(Object.hasOwn(inventory.binaryAssets, asset)).toBe(true);
+  for (const [relativePath, expectedHash] of Object.entries(
+    inventory.binaryAssets
+  )) {
+    assertSafeTrackedPaths([relativePath]);
+    const bytes = readFileSync(path.join(import.meta.dir, '..', relativePath));
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(expectedHash);
+  }
 });
 
 describe('metadata binding rechecks mutable decoded fields after schema validation', () => {

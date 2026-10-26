@@ -18,12 +18,22 @@ it('keeps the historical inspection adapter and its private EAS API version alig
   expect(pinned?.[1]).toBe('21.0.2');
   expect(workflow).toContain(`eas-cli@${pinned?.[1]}`);
 });
-it('targets the current native version and retains existing declarations and release settings', () => {
-  expect(config.apple.version).toBe(app.expo.version);
+it('preserves the reviewed historical Store snapshot and its release settings independently of a new TestFlight version', () => {
+  expect(config.apple.version).toBe('1.3.0');
   const { version: _version, info: _info, ...protectedSettings } = config.apple;
   expect(
     createHash('sha256').update(JSON.stringify(protectedSettings)).digest('hex')
   ).toBe('e4ea7afa57cafc78932c0978bef75d24f0fbda703c18d0ebe5654bf12e332c8f');
+});
+it('rejects relabeling historical screenshot evidence as the current TestFlight version', async () => {
+  const { validateReviewedAssets } = await import('./apply-store-listing');
+  expect(app.expo.version).toBe('1.4.0');
+  expect(() =>
+    validateReviewedAssets(new URL('..', import.meta.url).pathname, {
+      ...config.apple,
+      version: app.expo.version,
+    })
+  ).toThrow('Listing version mismatch');
 });
 for (const locale of ['ja', 'en-US']) {
   it(`accurately describes current features within listing limits (${locale})`, () => {

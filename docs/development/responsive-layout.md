@@ -156,3 +156,24 @@ establish real radio transport or hardware compatibility.
 No signing, tag, TestFlight or Store operation is part of this merge-only handoff.
 Do not dispatch a workflow or report native success before the final source
 binding and its evidence have been verified.
+
+## Reported current-source simulator evidence (2026-10-26)
+
+The Mac validation task reports ten passing scenarios for source a520c88:
+SE, Pro Max, iPad and Duo outer/inner, each at normal/maximum text. Duo
+outer-to-inner-to-outer retains unsaved input and the visible keyboard. The
+worker verified 328 native inputs and installed JavaScript/executable hashes,
+QR decoding and saved-card retention after restart on that candidate. This is
+simulator evidence, not physical-device or all-rotation verification.
+
+The 1.4.0 release preparation preserves those app sources and locked dependencies
+but changes app.json's marketing version. Its new native metadata/binary binding
+must be checked separately; the old binary hashes are not relabeled as 1.4.0.
+
+Native camera cancellation is N/A for the shipped composition. App.tsx mounts
+PassportApp and LearningScreen. PassportApp creates createInProcessQrScannerPort;
+neither entry mounts CameraQrCaptureOverlay or creates the native capture port.
+QrScanScreen renders permission/scan actions without a CameraView. The camera
+overlay/panel remain separately tested components; the browser fixture mounts
+the panel directly. This is not a successful native camera-cancellation test,
+and no camera feature is added merely to make that test reachable.
