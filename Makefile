@@ -144,7 +144,7 @@ dead_code:
 	bun run dead-code
 
 .PHONY: before-commit
-before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export responsive_test
+before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export responsive_test offline_test
 
 .PHONY: responsive_test
 responsive_test:
@@ -210,3 +210,7 @@ stop:
 restart:
 	$(MAKE) stop
 	$(MAKE) dev
+
+.PHONY: offline_test
+offline_test:
+	bun run test:offline

@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/susumutomita/TenkaCloudChallenge",
+  "revision": "68b9fbe0d49f5f1d01e04cf8b52f284fd3153ee1",
+  "path": "battles/forensic-casebook/game",
+  "license": "Apache-2.0",
+  "adaptation": "SHA-256/HMAC import adapter; extensionless imports and project formatting; index-signature notation; equivalent operation-key/question validation helper extraction; control-character check expressed with charCodeAt; non-null assertions replaced by explicit fail-closed invariant checks. Questions, generated evidence, answers, hints, scoring and replay semantics are retained.",
+  "sha256": {
+    "index.ts": "aa73b169964017c43ff658c4d031e7f6f50acc61a275bc8b2cc3314f01c4f218",
+    "fixtures.ts": "f1f818cf26673a07555ce57dd7468496d16fcffe04dc4da4547a85970f431fed",
+    "endpoint.ts": "78da5a0655d16788dbc051fadf9fecb60fe1bcb1b4d8035f7e26824e28eabd37",
+    "types.ts": "83f18f83de988cd459e8fccfc691d801591e1d48b749ded90d590bc9d2e5bc6b"
+  }
+}

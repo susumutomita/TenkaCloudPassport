@@ -7,6 +7,20 @@
 
 - Public OSS Alpha は `Blocked / Not run`。物理 Gate と外部 Pilot の証拠待ち。
 
+## [1.5.0] - 2026-10-26
+
+### Added
+
+- 既存の TenkaCloudChallenge「フォレンジック調査室」4ケース・15問・400点を、元の証拠生成・回答判定・ヒント・採点規則のまま端末内で学べるようにする。
+- SQLite への確定保存と再起動後の復元、同じ操作の再送による二重加点防止、Keychain での練習用秘密値の保持、既存の全データ削除・回復処理への統合。
+
+### Validation boundary
+
+- 新しいネイティブビルドが必要。ブラウザーと制御した保存ポートの検証は、iOS SQLite・Keychain や実機の検証を代替しない。
+- 審査中の 1.4.0 は取り下げ・差し替えない。次版のビルド・TestFlight・App Store 審査は別の状態として確認する。
+- 対応は同梱した問題に限定する。コンテナ・AWS 実環境を必要とする問題や、AI による動的な問題生成を対応済みとはしない。
+- 検証範囲と未確認事項は `docs/development/offline-tenkacloud.md` に記録する。
+
 ## [1.4.0] - 2026-10-26
 
 ### Changed

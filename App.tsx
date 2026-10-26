@@ -11,10 +11,12 @@ import { createDefaultLocalDeletionJournal } from './src/app/default-local-delet
 import { createDefaultLocalProfileStorage } from './src/app/default-local-profile-storage';
 import { createDefaultLocalePreferenceStorage } from './src/app/default-locale-preference-storage';
 import { DeletionCoordinatedIntroCardStorage } from './src/app/deletion-coordinated-intro-card-storage';
+import { createForensicHost } from './src/app/forensic/default-host';
 import type { Locale } from './src/app/i18n/locale';
 import { learningFiles } from './src/app/learning/default-files';
 import { createLearningStorage } from './src/app/learning/default-storage';
 import { LearningNavigation } from './src/app/learning/navigation';
+import { combineOwnedLearningData } from './src/app/learning/owned-learning-data';
 import {
   createLocalDataControl,
   DeletionCoordinatedLocalProfileStorageAdapter,
@@ -34,6 +36,11 @@ const learningStorage = createLearningStorage(
   localDataLeases,
   localDeletionJournal
 );
+const forensicHost = createForensicHost(localDataLeases, localDeletionJournal);
+const ownedLearningData = combineOwnedLearningData(
+  learningStorage,
+  forensicHost
+);
 const introCardStorage = new DeletionCoordinatedIntroCardStorage(
   createDefaultIntroCardStorage(),
   localDataLeases,
@@ -46,7 +53,7 @@ const localePreferenceStorage = createDefaultLocalePreferenceStorage();
 const legacyModelStorage = createDefaultLegacyModelStorage();
 const localDataControl = createLocalDataControl({
   introCardStorage,
-  learningStorage,
+  learningStorage: ownedLearningData,
   profileStorage: localProfileStorage,
   modelStorage: legacyModelStorage,
   modelContexts: localDataLeases,
@@ -77,6 +84,7 @@ export default function App() {
         </View>
         {learningLocale ? (
           <LearningScreen
+            {...(forensicHost.available ? { forensicHost } : {})}
             storage={learningStorage}
             files={learningFiles}
             locale={learningLocale}

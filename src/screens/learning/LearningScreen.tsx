@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+import type { ForensicPort } from '../../app/forensic/host';
 import type { Locale } from '../../app/i18n/locale';
 import type { LearningFilePort } from '../../app/learning/file-port';
 import { catalogTitle, orderedCatalogs } from '../../app/learning/presentation';
@@ -27,10 +28,12 @@ import {
 import { createRoundId } from '../../domain/session-identifiers';
 import { webCryptoRandomBytes } from '../../protocol/web-crypto-random';
 import { colors, spacing } from '../../ui/theme';
+import ForensicScreen from '../forensic/ForensicScreen';
 import { CatalogPicker } from './CatalogPicker';
 import { LearningLesson } from './LearningLesson';
 
 interface Props {
+  readonly forensicHost?: ForensicPort;
   readonly storage: LearningStorage;
   readonly files: LearningFilePort;
   readonly locale: Locale;
@@ -39,17 +42,27 @@ interface Props {
 type Tab = 'library' | 'add' | 'review' | 'history' | 'files';
 type Flow = ReturnType<typeof useLearning>;
 export default function LearningScreen({
+  forensicHost,
   storage,
   files,
   locale,
   onClose,
 }: Props) {
+  const [practice, setPractice] = useState(false);
   const flow = useLearning(storage, files);
   const ja = locale === 'ja';
   const screenKey =
     flow.selection && flow.state
       ? `${lessonKey(flow.selection.catalog, flow.selection.lesson)}-${currentProgress(flow.state, flow.selection.catalog, flow.selection.lesson)?.index ?? 0}`
       : 'home';
+  if (practice && forensicHost)
+    return (
+      <ForensicScreen
+        host={forensicHost}
+        locale={locale}
+        onClose={() => setPractice(false)}
+      />
+    );
   return (
     <AppScreen
       key={screenKey}
@@ -69,6 +82,18 @@ export default function LearningScreen({
           : 'Offline practice. Explanations are self-assessed; code is not executed or automatically graded. No mastery or interview outcome is guaranteed.'
       }
     >
+      {forensicHost && (
+        <ActionButton
+          label={
+            ja
+              ? '端末内でTenkaCloudの演習を開く'
+              : 'Open on-device TenkaCloud practice'
+          }
+          disabled={flow.busy}
+          onPress={() => setPractice(true)}
+          variant="secondary"
+        />
+      )}
       {flow.message ? (
         <Text
           accessibilityRole={flow.messageKind === 'error' ? 'alert' : 'summary'}
