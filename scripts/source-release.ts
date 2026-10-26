@@ -39,6 +39,8 @@ const ALLOWED_RELEASE_ROOT_DIRECTORIES = new Set([
   'docs',
   'scripts',
   'src',
+  'site',
+  'tests',
 ]);
 const ALLOWED_RELEASE_ROOT_FILES = new Set([
   '.editorconfig',
@@ -56,6 +58,7 @@ const ALLOWED_RELEASE_ROOT_FILES = new Set([
   'CLAUDE.md',
   'CONCEPT.md',
   'CONTRIBUTING.md',
+  'GNUmakefile',
   'LICENSE',
   'Makefile',
   'Plan.md',
@@ -63,6 +66,7 @@ const ALLOWED_RELEASE_ROOT_FILES = new Set([
   'README.md',
   'SECURITY.md',
   'app.json',
+  'eas.json',
   'babel.config.js',
   'biome.json',
   'bun.lock',
@@ -72,18 +76,46 @@ const ALLOWED_RELEASE_ROOT_FILES = new Set([
   'metro.config.cjs',
   'package.json',
   'renovate.json',
+  'store.config.json',
   'tsconfig.base.json',
   'tsconfig.json',
+  'wrangler.toml',
+]);
+const ALLOWED_RELEASE_IMAGE_EXTENSIONS = new Set([
+  '.ico',
+  '.jpeg',
+  '.jpg',
+  '.png',
+  '.svg',
+  '.webp',
+]);
+const ALLOWED_RELEASE_SUPPORT_FILES = new Set([
+  '.eas/build/ios-device-build.yml',
+  '.eas/build/ios-simulator-build.yml',
+  '.symphony/README.md',
+  '.symphony/WORKFLOW.md',
+  'docs/assets/app-store-screenshots/v1.3.0/capture-provenance.json',
 ]);
 const ALLOWED_RELEASE_EXTENSIONS_BY_ROOT: Readonly<
   Record<string, ReadonlySet<string>>
 > = {
   '.claude': new Set(['.json', '.md', '.sh']),
   '.github': new Set(['.md', '.yaml', '.yml']),
-  assets: new Set(['.ico', '.jpeg', '.jpg', '.png', '.svg', '.webp']),
+  assets: ALLOWED_RELEASE_IMAGE_EXTENSIONS,
   docs: new Set(['.md']),
   scripts: new Set(['.json', '.sh', '.ts']),
   src: new Set(['.json', '.snap', '.ts', '.tsx']),
+  site: new Set(['.html']),
+  tests: new Set([
+    '.json',
+    '.md',
+    '.mjs',
+    '.rb',
+    '.sh',
+    '.swift',
+    '.ts',
+    '.tsx',
+  ]),
 };
 const ALLOWED_EXTENSIONLESS_FILES = new Set([
   '.github/workflows/CODEOWNERS',
@@ -276,7 +308,23 @@ export function parseLockedPackages(source: string): readonly LockedPackage[] {
   );
 }
 
+function isAllowedReleaseBinaryPath(trackedPath: string): boolean {
+  const extension = path.extname(trackedPath).toLowerCase();
+  return (
+    (trackedPath.startsWith('assets/') &&
+      ALLOWED_RELEASE_IMAGE_EXTENSIONS.has(extension)) ||
+    (trackedPath.startsWith('docs/assets/app-store-screenshots/') &&
+      extension === '.png') ||
+    trackedPath === 'site/og.png'
+  );
+}
+
 function isAllowedReleasePath(trackedPath: string): boolean {
+  if (
+    ALLOWED_RELEASE_SUPPORT_FILES.has(trackedPath) ||
+    isAllowedReleaseBinaryPath(trackedPath)
+  )
+    return true;
   const [root, ...rest] = trackedPath.split('/');
   if (root === undefined || root.length === 0) return false;
   if (rest.length === 0) return ALLOWED_RELEASE_ROOT_FILES.has(root);
@@ -612,7 +660,7 @@ async function readSourceReleaseInventory(
     binaryEntries.some(
       ([binaryPath, sha256]) =>
         !reviewedPaths.includes(binaryPath) ||
-        !binaryPath.startsWith('assets/') ||
+        !isAllowedReleaseBinaryPath(binaryPath) ||
         typeof sha256 !== 'string' ||
         !/^[0-9a-f]{64}$/.test(sha256)
     )

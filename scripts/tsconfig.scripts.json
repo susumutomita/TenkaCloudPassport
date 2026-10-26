@@ -38,7 +38,8 @@
     "inspect-store-listing.ts",
     "store-listing-metadata.test.ts",
     "apply-store-listing.ts",
-    "ios-responsive-runner.test.ts"
+    "ios-responsive-runner.test.ts",
+    "store-inspection-context.test.ts"
   ],
   "compilerOptions": {
     "allowImportingTsExtensions": true

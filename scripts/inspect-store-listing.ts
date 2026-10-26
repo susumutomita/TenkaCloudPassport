@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   applyApprovedReviewNotes,
   applyReviewedListing,
@@ -12,6 +13,10 @@ import {
   summarizeReviewDetails,
   verifySavedListing,
 } from './apply-store-listing.ts';
+import {
+  storeInspectionSourceDirectory,
+  validateStoreInspectionContext,
+} from './store-inspection-context.ts';
 
 const action = process.argv[2] ?? 'inspect';
 if (!['inspect', 'apply', 'review-notes'].includes(action))
@@ -23,6 +28,11 @@ const cliRoot = root;
 const load = createRequire(join(root, 'package.json'));
 if (load('./package.json').version !== '21.0.2')
   throw new Error('Unexpected EAS CLI version');
+const sourceProjectDir = fileURLToPath(new URL('..', import.meta.url));
+const inspectionProjectDir = process.cwd();
+validateStoreInspectionContext(sourceProjectDir, inspectionProjectDir);
+// Metadata uses static public identity, never ambient project dotenv files.
+process.env['EXPO_NO_DOTENV'] = '1';
 const MetadataPull = load('./build/commands/metadata/pull').default;
 const { CredentialsContext } = load('./build/credentials/context');
 const { getAppStoreAuthAsync } = load('./build/metadata/auth');
@@ -163,7 +173,16 @@ class InspectStore extends MetadataPull {
       }
     );
     const { actor, graphqlClient } = context.loggedIn;
-    const { exp, projectId, projectDir } = context.privateProjectConfig;
+    const {
+      exp,
+      projectId,
+      projectDir: resolvedProjectDir,
+    } = context.privateProjectConfig;
+    const projectDir = storeInspectionSourceDirectory(
+      sourceProjectDir,
+      inspectionProjectDir,
+      resolvedProjectDir
+    );
     if (
       projectId !== '82efa217-a2ac-4209-a975-ea7198a51cda' ||
       exp.ios?.bundleIdentifier !== 'cloud.tenka.passport'
@@ -197,15 +216,15 @@ class InspectStore extends MetadataPull {
     console.log(JSON.stringify({ releaseBuild: build }));
     const profiles = await getProfilesAsync({
       type: 'submit',
-      easJsonAccessor: EasJsonAccessor.fromProjectPath(projectDir),
+      easJsonAccessor: EasJsonAccessor.fromProjectPath(inspectionProjectDir),
       platforms: ['ios'],
       profileName: 'production',
-      projectDir,
+      projectDir: inspectionProjectDir,
     });
     if (profiles.length !== 1) throw new Error('Unexpected submit profile');
     const credentialsCtx = new CredentialsContext({
       projectInfo: { exp, projectId },
-      projectDir,
+      projectDir: inspectionProjectDir,
       user: actor,
       graphqlClient,
       analytics: context.analytics,
@@ -215,7 +234,7 @@ class InspectStore extends MetadataPull {
     });
     stage = 'existing ASC authentication';
     const { app } = await getAppStoreAuthAsync({
-      projectDir,
+      projectDir: inspectionProjectDir,
       profile: profiles[0].profile,
       exp,
       credentialsCtx,
