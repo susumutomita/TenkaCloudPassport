@@ -39,7 +39,8 @@
     "store-listing-metadata.test.ts",
     "apply-store-listing.ts",
     "ios-responsive-runner.test.ts",
-    "store-inspection-context.test.ts"
+    "store-inspection-context.test.ts",
+    "forensic-native-config.test.ts"
   ],
   "compilerOptions": {
     "allowImportingTsExtensions": true

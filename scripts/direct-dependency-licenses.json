@@ -77,6 +77,14 @@
       "version": "58.0.5",
       "license": "MIT"
     },
+    "expo-secure-store": {
+      "version": "58.0.2",
+      "license": "MIT"
+    },
+    "expo-sqlite": {
+      "version": "58.0.14",
+      "license": "MIT"
+    },
     "expo-status-bar": {
       "version": "58.0.4",
       "license": "MIT"

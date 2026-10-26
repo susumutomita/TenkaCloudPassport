@@ -195,11 +195,11 @@ export class LocalModelContextLeaseRegistry {
   }
 }
 
-export async function withLocalDataWrite(
+export async function withLocalDataWrite<T>(
   leases: LocalModelContextLeaseRegistry,
   deletionJournal: LocalDeletionJournalPort,
-  write: () => Promise<void>
-): Promise<void> {
+  write: () => Promise<T>
+): Promise<T> {
   const lease = leases.acquireProfileWrite();
   try {
     let deletionPending: boolean;
@@ -211,7 +211,7 @@ export async function withLocalDataWrite(
     if (deletionPending) {
       throw new LocalDataAccessBlockedError('pending-deletion');
     }
-    await write();
+    return await write();
   } finally {
     lease.release();
   }
