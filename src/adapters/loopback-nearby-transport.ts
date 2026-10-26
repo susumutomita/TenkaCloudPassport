@@ -6,13 +6,11 @@ import {
   createNearbyJoinDescriptor,
   NEARBY_TRANSPORT_MAX_BYTES_PER_WINDOW,
   NEARBY_TRANSPORT_MAX_LISTENERS,
-  NEARBY_TRANSPORT_MAX_QUEUE_SIZE,
   NEARBY_TRANSPORT_MAX_SENDS_PER_WINDOW,
   NEARBY_TRANSPORT_RATE_WINDOW_MS,
   type NearbyEnvelopeDelivery,
   type NearbyHostBinding,
   type NearbyHostInvitePolicy,
-  type NearbyJoinDescriptor,
   type NearbyJoinInput,
   type NearbyOutboundEnvelope,
   type NearbyTransport,
@@ -29,7 +27,6 @@ import {
   immutableNearbyTransportEvent,
   nearbyJoinDescriptorsMatch,
   type ValidatedNearbyEnvelope,
-  type ValidatedNearbyHostAuthorization,
   type ValidatedNearbyJoinInput,
   validateAuthenticatedTransportIdentity,
   validateNearbyEnvelope,
@@ -39,6 +36,12 @@ import {
   validateNearbyJoinInput,
 } from '../ports/nearby-transport-validation';
 import type { AuthenticatedTransportIdentity } from '../protocol/peer-envelope';
+import { EndpointLifecycle } from './endpoint-lifecycle';
+import {
+  HostMembership,
+  type StoredHostAuthorization,
+} from './host-membership';
+import { PendingDeliveries } from './pending-deliveries';
 
 const LOOPBACK_REFERENCE_ADAPTER_LABEL =
   'TENKACLOUD_LOOPBACK_REFERENCE_V1_NOT_FOR_PRODUCTION';
@@ -50,47 +53,19 @@ const TRANSPORT_CONDITIONS = [
 ] as const;
 const LEAVE_REASONS = ['owner-left', 'network-lost'] as const;
 
-type StoredHostAuthorization = Omit<ValidatedNearbyHostAuthorization, 'invite'>;
-
-interface HostRecord {
-  readonly host: Endpoint;
-  readonly binding: NearbyHostBinding;
-  readonly hostParticipantId: ParticipantId;
-  readonly loungeId: LoungeInvite['loungeId'];
-  readonly capacity: number;
-  descriptor: NearbyJoinDescriptor;
-  authorization: StoredHostAuthorization;
-  readonly guests: Map<ParticipantId, Endpoint>;
-  readonly pendingGuests: Map<ParticipantId, Endpoint>;
-  active: boolean;
-}
+type HostRecord = HostMembership<Endpoint>;
 
 interface RateCharge {
   readonly chargedAtMonotonicMs: number;
   readonly bytes: number;
 }
 
-interface QueueItem {
-  readonly envelope: NearbyOutboundEnvelope;
-  readonly resolve: () => void;
-  readonly reject: (error: NearbyTransportError) => void;
-}
-
-interface Endpoint {
-  state: NearbyTransportConnectionState;
-  role: 'host' | 'guest' | null;
-  identity: AuthenticatedTransportIdentity | null;
-  record: HostRecord | null;
+interface Endpoint extends EndpointLifecycle<HostRecord> {
   readonly listeners: Set<NearbyTransportEventListener>;
-  readonly queue: QueueItem[];
+  readonly deliveries: PendingDeliveries<HostRecord>;
   readonly rateCharges: RateCharge[];
   drainScheduled: boolean;
   joinInFlight: boolean;
-  pendingReservation: {
-    readonly record: HostRecord;
-    readonly participantId: ParticipantId;
-  } | null;
-  operationGeneration: number;
 }
 
 interface ValidatedAuthorization {
@@ -199,19 +174,23 @@ export class LoopbackNearbyNetwork {
 
   createTransport(): NearbyTransport {
     const transport = new LoopbackNearbyTransport(this);
-    const endpoint: Endpoint = {
-      state: 'idle',
-      role: null,
-      identity: null,
-      record: null,
-      listeners: new Set(),
-      queue: [],
-      rateCharges: [],
-      drainScheduled: false,
-      joinInFlight: false,
-      pendingReservation: null,
-      operationGeneration: 0,
-    };
+    const rateCharges: RateCharge[] = [];
+    const endpoint: Endpoint = Object.assign(
+      new EndpointLifecycle<HostRecord>((state, reason) =>
+        this.#emit(endpoint, {
+          kind: 'connection-state-changed',
+          state,
+          ...(reason ? { reason } : {}),
+        })
+      ),
+      {
+        listeners: new Set<NearbyTransportEventListener>(),
+        deliveries: new PendingDeliveries<HostRecord>(),
+        rateCharges,
+        drainScheduled: false,
+        joinInFlight: false,
+      }
+    );
     this.#endpoints.set(transport, endpoint);
     return transport;
   }
@@ -221,7 +200,7 @@ export class LoopbackNearbyNetwork {
   }
 
   queuedEnvelopeCount(transport: NearbyTransport): number {
-    return this.#externalEndpoint(transport).queue.length;
+    return this.#externalEndpoint(transport).deliveries.size;
   }
 
   reportCondition(
@@ -241,8 +220,7 @@ export class LoopbackNearbyNetwork {
     ) {
       return;
     }
-    const generation = endpoint.operationGeneration + 1;
-    endpoint.operationGeneration = generation;
+    const generation = endpoint.advanceGeneration();
     const hostedRecord = this.#activeHostedRecord(endpoint);
     if (condition === 'local-network-permission-denied') {
       this.#reportTerminalCondition(endpoint, condition);
@@ -273,23 +251,11 @@ export class LoopbackNearbyNetwork {
       this.#emitCommittedConnectionState(guestHost, 'reconnecting');
       return;
     }
-    if (
-      endpoint.operationGeneration !== generation ||
-      ['disposed', 'terminal'].includes(endpoint.state)
-    ) {
-      return;
-    }
-    if (endpoint.pendingReservation) {
-      this.#terminateForCondition(endpoint, condition);
-      return;
-    }
-    if (endpoint.state === 'idle' && !endpoint.role && !endpoint.record) {
-      return;
-    }
-    this.#setState(endpoint, 'reconnecting');
-    if (endpoint.role === 'guest' && endpoint.record?.active) {
-      this.#refreshHostState(endpoint.record);
-    }
+    endpoint.finishRecoverableCondition(
+      generation,
+      () => this.#terminateForCondition(endpoint, condition),
+      this.#refreshHostState
+    );
   }
 
   #reportTerminalCondition(
@@ -304,9 +270,7 @@ export class LoopbackNearbyNetwork {
   }
 
   #activeHostedRecord(endpoint: Endpoint): HostRecord | null {
-    return endpoint.role === 'host' && endpoint.record?.active
-      ? endpoint.record
-      : null;
+    return endpoint.activeHostedRecord();
   }
 
   #reportConditionToHostedGuests(
@@ -357,50 +321,30 @@ export class LoopbackNearbyNetwork {
     endpoint: Endpoint,
     hostedRecord: HostRecord
   ): readonly PreparedConditionRecipient[] {
-    if (
-      endpoint.record !== hostedRecord ||
-      !hostedRecord.active ||
-      ['disposed', 'terminal'].includes(endpoint.state)
-    ) {
-      return [];
-    }
-    endpoint.state = 'reconnecting';
-    const prepared: PreparedConditionRecipient[] = [];
-    for (const [participantId, guest] of hostedRecord.guests) {
-      if (
-        guest.record !== hostedRecord ||
-        guest.role !== 'guest' ||
-        ['disposed', 'terminal'].includes(guest.state)
-      ) {
-        continue;
+    return endpoint.prepareHostedCondition(hostedRecord, () => {
+      const prepared: PreparedConditionRecipient[] = [];
+      for (const [participantId, guest] of hostedRecord.guests) {
+        if (
+          guest.record !== hostedRecord ||
+          guest.role !== 'guest' ||
+          ['disposed', 'terminal'].includes(guest.state)
+        ) {
+          continue;
+        }
+        const guestGeneration = guest.advanceGeneration();
+        guest.setPhase('reconnecting');
+        prepared.push({
+          endpoint: guest,
+          participantId,
+          generation: guestGeneration,
+        });
       }
-      const guestGeneration = guest.operationGeneration + 1;
-      guest.operationGeneration = guestGeneration;
-      guest.state = 'reconnecting';
-      prepared.push({
-        endpoint: guest,
-        participantId,
-        generation: guestGeneration,
-      });
-    }
-    return prepared;
+      return prepared;
+    });
   }
 
   #prepareGuestCondition(endpoint: Endpoint): Endpoint | null {
-    const record = endpoint.record;
-    if (
-      endpoint.role !== 'guest' ||
-      !record?.active ||
-      ['disposed', 'terminal'].includes(endpoint.state)
-    ) {
-      return null;
-    }
-    endpoint.state = 'reconnecting';
-    if (!['disposed', 'terminal'].includes(record.host.state)) {
-      record.host.state = 'reconnecting';
-      return record.host;
-    }
-    return null;
+    return endpoint.prepareGuestCondition((record) => record.host);
   }
 
   async host(
@@ -413,8 +357,7 @@ export class LoopbackNearbyNetwork {
     const validatedPolicy = validateNearbyHostPolicy(policy);
     this.#assertValidationActive(endpoint, validationGeneration);
     const existing = this.#existingHostRecord(endpoint);
-    const generation = endpoint.operationGeneration + 1;
-    endpoint.operationGeneration = generation;
+    const generation = endpoint.advanceGeneration();
     const binding = existing?.binding ?? this.#newBinding();
     const candidate = await this.#issueAuthorization(validatedPolicy, binding);
     this.#assertHostOperationActive(endpoint, generation, candidate);
@@ -545,26 +488,21 @@ export class LoopbackNearbyNetwork {
     binding: NearbyHostBinding,
     candidate: ValidatedAuthorization
   ): LoungeInvite {
-    const record: HostRecord = {
-      host: endpoint,
+    const record = new HostMembership(
+      endpoint,
       binding,
-      hostParticipantId: policy.hostParticipantId,
-      loungeId: candidate.invite.loungeId,
-      capacity: candidate.invite.capacity,
-      descriptor: createNearbyJoinDescriptor(candidate.invite),
-      authorization: candidate.stored,
-      guests: new Map(),
-      pendingGuests: new Map(),
-      active: true,
-    };
+      policy.hostParticipantId,
+      candidate.invite.loungeId,
+      candidate.invite.capacity,
+      createNearbyJoinDescriptor(candidate.invite),
+      candidate.stored
+    );
     this.#hostsByHint.set(binding.hostDiscoveryHint, record);
-    endpoint.role = 'host';
-    endpoint.identity = {
+    endpoint.attachHost(record, {
       kind: 'authenticated',
       loungeId: record.loungeId,
       participantId: record.hostParticipantId,
-    };
-    endpoint.record = record;
+    });
     this.#registeredEndpoints.add(endpoint);
     this.#setState(endpoint, 'hosting');
     return candidate.invite;
@@ -583,8 +521,7 @@ export class LoopbackNearbyNetwork {
     this.#assertValidationActive(endpoint, validationGeneration);
     const resolved = this.#resolveJoin(endpoint, input);
     const { record, authorization, reconnecting } = resolved;
-    const generation = endpoint.operationGeneration + 1;
-    endpoint.operationGeneration = generation;
+    const generation = endpoint.advanceGeneration();
     try {
       this.#setState(endpoint, reconnecting ? 'reconnecting' : 'joining');
       this.#assertJoinActive(endpoint, record, authorization, generation);
@@ -648,36 +585,7 @@ export class LoopbackNearbyNetwork {
     participantId: ParticipantId,
     reconnecting: boolean
   ): void {
-    if (endpoint.joinInFlight) throw fixedError('INVALID_STATE');
-    const existingGuest = record.guests.get(participantId);
-    const pendingGuest = record.pendingGuests.get(participantId);
-    if (
-      participantId === record.hostParticipantId ||
-      pendingGuest ||
-      (existingGuest && !reconnecting)
-    ) {
-      throw fixedError('PARTICIPANT_IN_USE');
-    }
-    if (!reconnecting && endpoint.state !== 'idle') {
-      throw fixedError('INVALID_STATE');
-    }
-    if (reconnecting && endpoint.state !== 'reconnecting') {
-      throw fixedError('INVALID_STATE');
-    }
-    if (
-      !reconnecting &&
-      record.guests.size + record.pendingGuests.size + 1 >= record.capacity
-    ) {
-      throw fixedError('CAPACITY_EXCEEDED');
-    }
-    endpoint.joinInFlight = true;
-    if (!reconnecting) {
-      record.pendingGuests.set(participantId, endpoint);
-      endpoint.pendingReservation = {
-        record,
-        participantId,
-      };
-    }
+    record.reserve(endpoint, participantId, reconnecting);
   }
 
   #isReconnecting(
@@ -701,10 +609,7 @@ export class LoopbackNearbyNetwork {
     generation: number
   ): Promise<AuthenticatedTransportIdentity> {
     if (reconnecting) {
-      if (endpoint.identity) {
-        return Object.freeze({ ...endpoint.identity });
-      }
-      throw fixedError('AUTHENTICATION_MISMATCH');
+      return record.reconnectIdentity(endpoint, input.participantId);
     }
     let candidateIdentity: unknown;
     try {
@@ -761,25 +666,9 @@ export class LoopbackNearbyNetwork {
     authorization: StoredHostAuthorization,
     generation: number
   ): void {
-    if (endpoint.state === 'disposed') throw fixedError('DISPOSED');
-    if (endpoint.operationGeneration !== generation) {
-      throw fixedError('CONNECTION_INTERRUPTED');
-    }
-    if (!record.active) {
-      if (endpoint.state !== 'terminal') {
-        this.#setState(endpoint, 'terminal', 'host-ended');
-      }
-      throw fixedError('CONNECTION_INTERRUPTED');
-    }
-    if (
-      record.authorization !== authorization ||
-      !['joining', 'reconnecting'].includes(endpoint.state)
-    ) {
-      if (endpoint.state !== 'terminal') {
-        this.#setState(endpoint, 'terminal', 'connection-interrupted');
-      }
-      throw fixedError('CONNECTION_INTERRUPTED');
-    }
+    endpoint.assertJoinActive(record, authorization, generation, (reason) =>
+      this.#setState(endpoint, 'terminal', reason)
+    );
   }
 
   #completeJoin(
@@ -789,24 +678,13 @@ export class LoopbackNearbyNetwork {
     reconnecting: boolean
   ): void {
     if (!reconnecting) {
-      if (
-        record.pendingGuests.get(identity.participantId) !== endpoint ||
-        record.guests.has(identity.participantId) ||
-        record.guests.size + 1 >= record.capacity
-      ) {
-        throw fixedError('CONNECTION_INTERRUPTED');
-      }
-      record.pendingGuests.delete(identity.participantId);
-      endpoint.role = 'guest';
-      endpoint.identity = identity;
-      endpoint.record = record;
-      record.guests.set(identity.participantId, endpoint);
+      record.commit(endpoint, identity);
       this.#registeredEndpoints.add(endpoint);
     }
     const previousHostState = record.host.state;
-    endpoint.state = 'connected';
+    endpoint.setPhase('connected');
     const nextHostState = this.#nextHostState(record);
-    record.host.state = nextHostState;
+    record.host.setPhase(nextHostState);
     if (!reconnecting) {
       this.#broadcastMembership(record, 'joined', identity);
       this.#assertJoinedMembershipActive(endpoint, record, identity);
@@ -875,7 +753,7 @@ export class LoopbackNearbyNetwork {
     ) {
       return Promise.reject(fixedError('TARGET_NOT_FOUND'));
     }
-    if (endpoint.queue.length >= NEARBY_TRANSPORT_MAX_QUEUE_SIZE) {
+    if (endpoint.deliveries.isFull) {
       return Promise.reject(fixedError('QUEUE_LIMIT_EXCEEDED'));
     }
     try {
@@ -887,14 +765,9 @@ export class LoopbackNearbyNetwork {
           : fixedError('DELIVERY_FAILED')
       );
     }
-    return new Promise<void>((resolve, reject) => {
-      endpoint.queue.push({
-        envelope: validated.envelope,
-        resolve,
-        reject,
-      });
-      this.#scheduleDrain(endpoint);
-    });
+    const pending = endpoint.deliveries.enqueue(validated.envelope);
+    this.#scheduleDrain(endpoint);
+    return pending;
   }
 
   #sendStateError(
@@ -932,7 +805,7 @@ export class LoopbackNearbyNetwork {
     if (!endpoint.record?.active || !endpoint.role) {
       return Promise.reject(fixedError('INVALID_STATE'));
     }
-    endpoint.operationGeneration += 1;
+    endpoint.advanceGeneration();
     this.#rejectQueue(endpoint, 'CONNECTION_INTERRUPTED');
     if (endpoint.role === 'host') {
       const cleanupSucceeded = this.#endHost(endpoint.record, reason, false);
@@ -968,7 +841,7 @@ export class LoopbackNearbyNetwork {
   async dispose(transport: LoopbackNearbyTransport): Promise<void> {
     const endpoint = this.#endpoint(transport);
     if (endpoint.state === 'disposed') return;
-    endpoint.operationGeneration += 1;
+    endpoint.advanceGeneration();
     this.#rejectQueue(endpoint, 'DISPOSED');
     this.#releasePendingReservation(endpoint);
     let cleanupSucceeded = true;
@@ -978,9 +851,7 @@ export class LoopbackNearbyNetwork {
       this.#removeGuest(endpoint.record, endpoint, 'owner-left');
     }
     this.#registeredEndpoints.delete(endpoint);
-    endpoint.record = null;
-    endpoint.identity = null;
-    endpoint.role = null;
+    endpoint.resetAffiliation();
     endpoint.rateCharges.length = 0;
     this.#setState(endpoint, 'disposed');
     endpoint.listeners.clear();
@@ -1076,31 +947,28 @@ export class LoopbackNearbyNetwork {
 
   #drain(endpoint: Endpoint): void {
     endpoint.drainScheduled = false;
-    while (endpoint.queue.length > 0) {
-      const item = endpoint.queue.shift();
-      if (!item) break;
-      if (endpoint.state === 'disposed') {
-        item.reject(fixedError('DISPOSED'));
-        continue;
-      }
-      if (endpoint.state !== 'connected' || !endpoint.record?.active) {
-        item.reject(fixedError('CONNECTION_INTERRUPTED'));
-        continue;
-      }
+    for (;;) {
+      const lease = endpoint.deliveries.takeNext({
+        phase: endpoint.state,
+        membership: endpoint.record,
+        identity: endpoint.identity,
+      });
+      if (lease === undefined) break;
       try {
-        this.#route(endpoint, item.envelope);
-        item.resolve();
+        this.#route(endpoint, lease.envelope, lease.membership, lease.identity);
+        lease.succeed();
       } catch {
-        item.reject(fixedError('DELIVERY_FAILED'));
+        lease.fail();
       }
     }
   }
 
-  #route(endpoint: Endpoint, envelope: NearbyOutboundEnvelope): void {
-    const record = endpoint.record;
-    const identity = endpoint.identity;
-    if (!record?.active || !identity)
-      throw fixedError('CONNECTION_INTERRUPTED');
+  #route(
+    endpoint: Endpoint,
+    envelope: NearbyOutboundEnvelope,
+    record: HostRecord,
+    identity: AuthenticatedTransportIdentity
+  ): void {
     const recipients = this.#routeRecipients(record, endpoint, envelope);
     for (const recipient of recipients) {
       this.#assertRouteActive(record, endpoint, recipient);
@@ -1186,20 +1054,16 @@ export class LoopbackNearbyNetwork {
     endpoint: Endpoint,
     reason: NearbyTransportTerminalReason
   ): void {
-    const identity = endpoint.identity;
-    if (!identity || record.guests.get(identity.participantId) !== endpoint) {
-      this.#setState(endpoint, 'terminal', reason);
-      return;
-    }
-    record.guests.delete(identity.participantId);
-    this.#registeredEndpoints.delete(endpoint);
-    endpoint.record = null;
-    endpoint.role = null;
-    const terminalCommitted = this.#commitTerminal(endpoint);
-    this.#broadcastMembership(record, 'left', identity, endpoint);
-    if (terminalCommitted) this.#emitCommittedTerminal(endpoint, reason);
-    endpoint.identity = null;
-    this.#refreshHostState(record);
+    record.depart(endpoint, reason, {
+      unregister: (departing) => {
+        this.#registeredEndpoints.delete(departing);
+      },
+      broadcast: (identity) =>
+        this.#broadcastMembership(record, 'left', identity, endpoint),
+      terminal: (departing, terminalReason) =>
+        this.#emitCommittedTerminal(departing, terminalReason),
+      refresh: () => this.#refreshHostState(record),
+    });
   }
 
   #endHost(
@@ -1207,8 +1071,7 @@ export class LoopbackNearbyNetwork {
     hostReason: NearbyTransportTerminalReason,
     hostDisposing: boolean
   ): boolean {
-    if (!record.active) return true;
-    record.active = false;
+    if (!record.deactivate()) return true;
     this.#hostsByHint.delete(record.binding.hostDiscoveryHint);
     const pendingGuests = [...new Set(record.pendingGuests.values())];
     const guests = [...record.guests.values()];
@@ -1216,7 +1079,7 @@ export class LoopbackNearbyNetwork {
     const committedGuests: Endpoint[] = [];
     const hostTerminalCommitted = this.#commitTerminal(record.host);
     for (const pendingGuest of pendingGuests) {
-      pendingGuest.operationGeneration += 1;
+      pendingGuest.advanceGeneration();
       this.#rejectQueue(pendingGuest, 'CONNECTION_INTERRUPTED');
       this.#releasePendingReservation(pendingGuest);
       if (this.#commitTerminal(pendingGuest)) {
@@ -1224,17 +1087,15 @@ export class LoopbackNearbyNetwork {
       }
     }
     for (const guest of guests) {
-      guest.operationGeneration += 1;
+      guest.advanceGeneration();
       this.#rejectQueue(guest, 'CONNECTION_INTERRUPTED');
       this.#registeredEndpoints.delete(guest);
-      guest.record = null;
-      guest.role = null;
+      guest.detachPreservingIdentity();
       if (this.#commitTerminal(guest)) committedGuests.push(guest);
     }
-    record.guests.clear();
+    record.clearMembers();
     this.#registeredEndpoints.delete(record.host);
-    record.host.record = null;
-    record.host.role = null;
+    record.host.detachPreservingIdentity();
     const cleanupSucceeded = disposeAuthorization(record.authorization);
     for (const pendingGuest of committedPendingGuests) {
       this.#emitCommittedTerminal(pendingGuest, 'host-ended');
@@ -1243,12 +1104,12 @@ export class LoopbackNearbyNetwork {
       this.#emitCommittedTerminal(guest, 'host-ended');
     }
     for (const guest of guests) {
-      guest.identity = null;
+      guest.clearIdentity();
     }
     if (!hostDisposing && hostTerminalCommitted) {
       this.#emitCommittedTerminal(record.host, hostReason);
     }
-    record.host.identity = null;
+    record.host.clearIdentity();
     return cleanupSucceeded;
   }
 
@@ -1280,9 +1141,12 @@ export class LoopbackNearbyNetwork {
       reservation.record.pendingGuests.get(reservation.participantId) ===
       endpoint
     ) {
-      reservation.record.pendingGuests.delete(reservation.participantId);
+      reservation.record.releaseReservation(
+        reservation.participantId,
+        endpoint
+      );
     }
-    endpoint.pendingReservation = null;
+    endpoint.releaseReservation();
   }
 
   #interruptPendingGuests(
@@ -1300,8 +1164,7 @@ export class LoopbackNearbyNetwork {
       ) {
         continue;
       }
-      const guestGeneration = pendingGuest.operationGeneration + 1;
-      pendingGuest.operationGeneration = guestGeneration;
+      const guestGeneration = pendingGuest.advanceGeneration();
       if (condition) {
         this.#emit(pendingGuest, { kind: 'transport-condition', condition });
       }
@@ -1320,7 +1183,7 @@ export class LoopbackNearbyNetwork {
     }
   }
 
-  #refreshHostState(record: HostRecord): void {
+  readonly #refreshHostState = (record: HostRecord): void => {
     if (
       !record.active ||
       ['disposed', 'terminal'].includes(record.host.state)
@@ -1331,7 +1194,7 @@ export class LoopbackNearbyNetwork {
     if (record.host.state !== nextState) {
       this.#setState(record.host, nextState);
     }
-  }
+  };
 
   #nextHostState(record: HostRecord): 'hosting' | 'connected' | 'reconnecting' {
     if (record.guests.size === 0) return 'hosting';
@@ -1411,38 +1274,26 @@ export class LoopbackNearbyNetwork {
   }
 
   #rejectQueue(endpoint: Endpoint, code: NearbyTransportErrorCode): void {
-    const pending = endpoint.queue.splice(0);
+    endpoint.deliveries.invalidate(code);
     endpoint.drainScheduled = false;
-    for (const item of pending) item.reject(fixedError(code));
   }
 
   #commitTerminal(endpoint: Endpoint): boolean {
-    if (['disposed', 'terminal'].includes(endpoint.state)) return false;
-    endpoint.state = 'terminal';
-    return true;
+    return endpoint.commitTerminal();
   }
 
   #emitCommittedTerminal(
     endpoint: Endpoint,
     reason: NearbyTransportTerminalReason
   ): void {
-    if (endpoint.state !== 'terminal') return;
-    this.#emit(endpoint, {
-      kind: 'connection-state-changed',
-      state: 'terminal',
-      reason,
-    });
+    endpoint.announceCommittedState('terminal', reason);
   }
 
   #emitCommittedConnectionState(
     endpoint: Endpoint,
     state: NearbyTransportConnectionState
   ): void {
-    if (endpoint.state !== state) return;
-    this.#emit(endpoint, {
-      kind: 'connection-state-changed',
-      state,
-    });
+    endpoint.announceCommittedState(state);
   }
 
   #setState(
@@ -1450,18 +1301,8 @@ export class LoopbackNearbyNetwork {
     state: NearbyTransportConnectionState,
     reason?: NearbyTransportTerminalReason
   ): void {
-    if (
-      (endpoint.state === 'disposed' && state !== 'disposed') ||
-      (endpoint.state === 'terminal' && state !== 'disposed')
-    ) {
-      return;
-    }
-    endpoint.state = state;
-    this.#emit(endpoint, {
-      kind: 'connection-state-changed',
-      state,
-      ...(reason ? { reason } : {}),
-    });
+    if (!endpoint.transition(state)) return;
+    endpoint.announceCommittedState(state, reason);
   }
 
   #emit(endpoint: Endpoint, event: NearbyTransportEvent): void {

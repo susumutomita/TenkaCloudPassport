@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { CATALOG_VERSION } from '../domain/clue-catalog';
 import {
   LOUNGE_INVITE_SCHEMA_VERSION,
@@ -245,4 +245,35 @@ describe('QR の Privacy 契約', () => {
       ].sort()
     );
   });
+});
+
+it('propagates an unexpected decoded-object inspection failure without disguising it as invalid input', () => {
+  const failure = new Error('decoded object inspection failed');
+  const decoded = new Proxy(
+    {
+      qrProtocolVersion: { major: 1, minor: 2 },
+      kind: 'public-passport',
+      value: {},
+    },
+    {
+      getPrototypeOf() {
+        throw failure;
+      },
+    }
+  );
+  const parse = spyOn(JSON, 'parse').mockReturnValueOnce(decoded);
+  try {
+    let captured: unknown;
+    try {
+      decodeQrPayload('TCPQ1:{}', new Set());
+    } catch (error: unknown) {
+      captured = error;
+    }
+    expect(captured).toBe(failure);
+  } finally {
+    parse.mockRestore();
+  }
+  expect(() => decodeQrPayload('TCPQ1:{}', new Set())).toThrow(QrPayloadError);
+  const payload: QrPayload = { kind: 'public-passport', value: passport() };
+  expect(decodeQrPayload(encodeQrPayload(payload), new Set())).toEqual(payload);
 });

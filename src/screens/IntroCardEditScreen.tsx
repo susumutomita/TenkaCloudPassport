@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ComponentRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Keyboard,
   Pressable,
@@ -148,7 +155,9 @@ function FieldError({ message }: { readonly message: string | null }) {
  * （最後の欄は `submitBehavior` の値に関係なく明示 `Keyboard.dismiss()` で閉じる）。
  */
 function useFieldFocusChain() {
-  const fieldRefs = useRef<Record<string, TextInput | null>>({});
+  const fieldRefs = useRef<
+    Record<string, ComponentRef<typeof TextInput> | null>
+  >({});
   // Issue 93 の altitude レビュー指摘: 保存失敗時に focus したい欄が、
   // 折りたたまれた任意項目セクションの中にあってまだ mount されていない
   // ケースがある（`optionalSectionExpanded` が自動的に `true` へ変わっても、
@@ -168,7 +177,7 @@ function useFieldFocusChain() {
   // 閉じ込めるため `useCallback` で安定化し、根本から解消する（対症療法の
   // 追加 ref ガードを effect 側に持たせない）。
   const registerFieldRef = useCallback(
-    (key: string) => (instance: TextInput | null) => {
+    (key: string) => (instance: ComponentRef<typeof TextInput> | null) => {
       fieldRefs.current[key] = instance;
       if (instance && pendingFocusKeyRef.current === key) {
         pendingFocusKeyRef.current = undefined;
@@ -824,6 +833,7 @@ const styles = StyleSheet.create({
   },
   otherLinkInput: {
     flex: 1,
+    minWidth: 0,
   },
   removeLinkButton: {
     alignItems: 'center',

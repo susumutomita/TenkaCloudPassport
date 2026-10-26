@@ -99,6 +99,43 @@ describe('Loopback Reference Adapter の Production 境界', () => {
 });
 
 describe('Nearby Transport 共有 Binding Validator', () => {
+  it('invalid authorization cleanup failures preserve the fixed boundary error', () => {
+    const binding = {
+      hostDiscoveryHint: 'nearby://host-1',
+      transportFingerprint: `sha256_${'01'.repeat(32)}` as const,
+    };
+    let disposeCount = 0;
+    const authorization = {
+      invite: null,
+      async authorizeJoin() {
+        throw new Error('must-not-run');
+      },
+      async waitUntilReady() {
+        throw new Error('must-not-run');
+      },
+      dispose() {
+        disposeCount += 1;
+        throw new Error('native cleanup detail must not escape');
+      },
+    };
+    for (const candidateBinding of [
+      binding,
+      { ...binding, hostDiscoveryHint: 'invalid hint' },
+    ]) {
+      try {
+        validateNearbyHostAuthorization(authorization, candidateBinding);
+        throw new Error('expected rejection');
+      } catch (error) {
+        expect(error).toBeInstanceOf(NearbyTransportError);
+        expect((error as NearbyTransportError).code).toBe(
+          'INVALID_CONFIGURATION'
+        );
+        expect(String(error)).not.toContain('native cleanup detail');
+      }
+    }
+    expect(disposeCount).toBe(2);
+  });
+
   it('既知data fieldだけを凍結して再構築する', () => {
     const binding = validateNearbyHostBinding({
       hostDiscoveryHint: 'nearby://host-1',
@@ -161,5 +198,52 @@ describe('Nearby Transport 共有 Binding Validator', () => {
       )
     ).toThrow(NearbyTransportError);
     expect(disposeCount).toBe(1);
+  });
+});
+
+describe('reference network configuration boundaries', () => {
+  it('rejects transports owned by a different network without registering them', async () => {
+    const network = createLoopbackNearbyNetwork();
+    const other = createLoopbackNearbyNetwork();
+    const foreign = other.createTransport();
+    expect(() => network.activeListenerCount(foreign)).toThrow(
+      NearbyTransportError
+    );
+    expect(() => network.queuedEnvelopeCount(foreign)).toThrow(
+      NearbyTransportError
+    );
+    expect(network.activeEndpointCount).toBe(0);
+    const foreignAdapter = {
+      host: foreign.host.bind(foreign),
+      join: foreign.join.bind(foreign),
+      send: foreign.send.bind(foreign),
+      leave: foreign.leave.bind(foreign),
+      subscribe: foreign.subscribe.bind(foreign),
+      dispose: foreign.dispose.bind(foreign),
+    };
+    expect(() => network.activeListenerCount(foreignAdapter)).toThrow(
+      NearbyTransportError
+    );
+    await foreign.dispose();
+  });
+
+  it('rejects unknown runtime conditions and noncallable listeners while retaining valid subscriptions', async () => {
+    const network = createLoopbackNearbyNetwork();
+    const transport = network.createTransport();
+    expect(() =>
+      Reflect.apply(network.reportCondition, network, [
+        transport,
+        'unsupported-condition',
+      ])
+    ).toThrow(NearbyTransportError);
+    expect(() => Reflect.apply(transport.subscribe, transport, [null])).toThrow(
+      NearbyTransportError
+    );
+    const listener = () => undefined;
+    const unsubscribe = transport.subscribe(listener);
+    expect(network.activeListenerCount(transport)).toBe(1);
+    unsubscribe();
+    expect(network.activeListenerCount(transport)).toBe(0);
+    await transport.dispose();
   });
 });

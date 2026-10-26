@@ -61,6 +61,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
     justifyContent: 'space-between',
     minHeight: 52,
     padding: spacing.md,
@@ -73,11 +75,14 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   label: {
+    flexShrink: 1,
+    maxWidth: '100%',
     color: colors.ink,
     fontSize: 15,
     fontWeight: '700',
   },
   state: {
+    flexShrink: 1,
     color: colors.primary,
     fontSize: 12,
     fontWeight: '800',

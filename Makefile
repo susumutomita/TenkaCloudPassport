@@ -60,7 +60,7 @@ test_coverage:
 
 .PHONY: test_watch
 test_watch:
-	bun test --watch
+	bun test --isolate --watch
 
 .PHONY: lint
 lint:
@@ -95,7 +95,7 @@ architecture_harness:
 # harness 自体の invariant 検出ロジックを検証する。Expo 依存の解決前でも動くため、
 # before-commit の先頭側で実行する。
 harness_test:
-	bun test scripts/
+	bun test --isolate scripts/
 
 .PHONY: pre_release_check
 pre_release_check:
@@ -121,7 +121,7 @@ release_verify:
 
 .PHONY: release_test_coverage
 release_test_coverage:
-	bun test --coverage scripts/source-release.test.ts
+	bun test --isolate --coverage scripts/atomic-output-publisher-abi.test.ts scripts/source-release.test.ts
 
 # jscpd ベースライン・ラチェット。重複ゼロは強制しない (意図的な類似は baseline に
 # 焼き込み済み)。baseline を超える新規コピー&ペーストだけ fail させる (ADR-0012)。
@@ -144,7 +144,11 @@ dead_code:
 	bun run dead-code
 
 .PHONY: before-commit
-before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export
+before-commit: architecture_harness harness_test release_test_coverage pre_release_check dup_check lint_text lint typecheck app_test web_export responsive_test
+
+.PHONY: responsive_test
+responsive_test:
+	bun run test:responsive
 
 # Development Build (dev-client) 向け。`expo run:ios` / `expo run:android` で
 # 個人端末や Simulator に入れた Development Build と繋ぐときはこちら。Expo Go では

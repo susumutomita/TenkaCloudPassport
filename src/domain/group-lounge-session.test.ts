@@ -737,6 +737,158 @@ describe('Chaos と仮想 Soak', () => {
 });
 
 describe('型付き失敗', () => {
+  it('ignores stale reconnect generations without changing membership', () => {
+    const joined = joinParticipants(createSession(), [2]);
+    const stale = reconnectGroupParticipant(joined, {
+      participantId: participant(2).participantId,
+      connectionGeneration: 0,
+      clock: clock(0),
+    });
+    expect(stale).toBe(joined);
+    expect(groupMembershipSnapshot(stale)?.revision).toBe(1);
+  });
+
+  it('reconnects after settlement without reopening or recomputing the round', () => {
+    const forming = joinParticipants(createSession(), [2]);
+    const settled = settleGroupRound(
+      readyParticipants(forming, [HOST_ID, participant(2).participantId]),
+      {
+        roundId: ROUND_1,
+        clock: clock(1),
+      }
+    );
+    if (settled.status !== 'settled')
+      throw new Error('Expected settled fixture');
+    const disconnected = disconnectGroupParticipant(settled, {
+      participantId: participant(2).participantId,
+      connectionGeneration: 0,
+      clock: clock(2),
+    });
+    const reconnected = reconnectGroupParticipant(disconnected, {
+      participantId: participant(2).participantId,
+      connectionGeneration: 1,
+      clock: clock(3),
+    });
+    expect(reconnected.status).toBe('settled');
+    if (reconnected.status !== 'settled')
+      throw new Error('Settlement must survive reconnect');
+    expect(reconnected.outcomes).toBe(settled.outcomes);
+    expect(
+      reconnected.participants.find(
+        (item) => item.participantId === participant(2).participantId
+      )?.connection
+    ).toEqual({ status: 'connected' });
+  });
+
+  it('a departing unrelated guest preserves an existing bridge between remaining peers', () => {
+    const forming = joinGroupParticipant(
+      joinParticipants(createSession(), [2]),
+      {
+        participant: {
+          ...participant(3),
+          publicPassport: passport(['accessibility'], ['en'], 'Unrelated'),
+        },
+        clock: clock(0),
+      }
+    );
+    const settled = settleGroupRound(
+      readyParticipants(forming, [
+        HOST_ID,
+        participant(2).participantId,
+        participant(3).participantId,
+      ]),
+      {
+        roundId: ROUND_1,
+        clock: clock(1),
+      }
+    );
+    if (settled.status !== 'settled')
+      throw new Error('Expected settled fixture');
+    const remaining = settled.outcomes.filter(
+      (item) => item.participantId !== participant(3).participantId
+    );
+    expect(remaining.every((item) => item.result.kind === 'bridge')).toBe(true);
+    expect(remaining).toHaveLength(2);
+    const left = leaveGroupParticipant(settled, {
+      participantId: participant(3).participantId,
+      clock: clock(2),
+    });
+    if (left.status !== 'settled')
+      throw new Error('Settlement must survive departure');
+    expect(left.outcomes).toEqual(remaining);
+    expect(left.outcomes[0]).toBe(remaining[0]);
+    expect(left.outcomes[1]).toBe(remaining[1]);
+  });
+
+  it('late connection and ready events cannot resurrect a destroyed or departed participant', () => {
+    const destroyed = destroyGroupLoungeSession(createSession(), 'host-ended');
+    const event = {
+      participantId: HOST_ID,
+      connectionGeneration: 1,
+      clock: clock(1),
+    };
+    expect(reconnectGroupParticipant(destroyed, event)).toBe(destroyed);
+    expect(disconnectGroupParticipant(destroyed, event)).toBe(destroyed);
+    expect(
+      markGroupParticipantReady(destroyed, { ...event, roundId: ROUND_1 })
+    ).toBe(destroyed);
+    expect(
+      beginNextGroupRound(destroyed, { roundId: ROUND_2, clock: clock(1) })
+    ).toBe(destroyed);
+    const departed = leaveGroupParticipant(
+      joinParticipants(createSession(), [2]),
+      {
+        participantId: participant(2).participantId,
+        clock: clock(0),
+      }
+    );
+    const late = {
+      ...event,
+      participantId: participant(2).participantId,
+      clock: clock(0),
+    };
+    expect(reconnectGroupParticipant(departed, late)).toBe(departed);
+    expect(
+      markGroupParticipantReady(departed, { ...late, roundId: ROUND_1 })
+    ).toBe(departed);
+    expect(groupMembershipSnapshot(departed)?.participantIds).toEqual([
+      HOST_ID,
+    ]);
+  });
+
+  it('rejects malformed participant IDs and next-round IDs without changing a settled round', () => {
+    const initial = createSession();
+    expectSessionError(
+      () =>
+        joinGroupParticipant(initial, {
+          participant: { ...participant(2), participantId: 'ptc_' },
+          clock: clock(0),
+        }),
+      'INVALID_CONFIGURATION'
+    );
+    const forming = joinParticipants(initial, [2]);
+    const settled = settleGroupRound(
+      readyParticipants(forming, [HOST_ID, participant(2).participantId]),
+      {
+        roundId: ROUND_1,
+        clock: clock(1),
+      }
+    );
+    expect(settled.status).toBe('settled');
+    expectSessionError(
+      () =>
+        beginNextGroupRound(settled, {
+          roundId: 'rnd_',
+          clock: clock(1),
+        }),
+      'INVALID_CONFIGURATION'
+    );
+    expect(groupMembershipSnapshot(settled)?.participantIds).toEqual([
+      HOST_ID,
+      participant(2).participantId,
+    ]);
+  });
+
   it('非 finite Clock、存在しない Participant、同じ Round ID の再利用を拒否する', () => {
     expectSessionError(
       () =>

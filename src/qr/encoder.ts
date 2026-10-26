@@ -3,7 +3,7 @@
 //   1. 旧構成（誤り訂正 M）で 1,024 byte の payload が選んでいた QR Version は 26
 //      （encoder.test.ts の '1,024 byte 境界の入力を Version 26 で encode' で固定）。
 //      これが現状の最密 QR の Version であり、変えてはならない。
-//   2. Version 26・誤り訂正 L のデータ容量は RS_BLOCKS_L[25] から
+//   2. Version 26・誤り訂正 L のデータ容量は RS_BLOCKS_L[26] から
 //      data codewords 合計 = 10 * 114 + 2 * 115 = 1,370 byte、
 //      capacity bit = 1,370 * 8 = 10,960 bit。
 //      Byte mode のオーバーヘッド（mode 指示子 4 bit + 文字数指示子 16 bit
@@ -14,6 +14,7 @@
 //      つまり 1,367 byte が「Version 26 のまま収まる最大値」＝新しい上限として
 //      厳密に一致する。
 // 1,024 → 1,367 で約 33.5%（≈ 30%）の容量増。
+
 export const QR_ENCODER_MAX_BYTES = 1367;
 
 export type QrEncodingErrorCode = 'DATA_TOO_LARGE' | 'INVALID_DATA';
@@ -42,34 +43,48 @@ interface RsBlock {
 type MutableCell = boolean | null;
 type MutableMatrix = MutableCell[][];
 
-const ALIGNMENT_PATTERN_POSITIONS: readonly (readonly number[])[] = [
-  [],
-  [6, 18],
-  [6, 22],
-  [6, 26],
-  [6, 30],
-  [6, 34],
-  [6, 22, 38],
-  [6, 24, 42],
-  [6, 26, 46],
-  [6, 28, 50],
-  [6, 30, 54],
-  [6, 32, 58],
-  [6, 34, 62],
-  [6, 26, 46, 66],
-  [6, 26, 48, 70],
-  [6, 26, 50, 74],
-  [6, 30, 54, 78],
-  [6, 30, 56, 82],
-  [6, 30, 58, 86],
-  [6, 34, 62, 90],
-  [6, 28, 50, 72, 94],
-  [6, 26, 50, 74, 98],
-  [6, 30, 54, 78, 102],
-  [6, 28, 54, 80, 106],
-  [6, 32, 58, 84, 110],
-  [6, 30, 58, 86, 114],
+// These private closed domains make every supported table lookup total.
+const QR_VERSIONS = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+  23, 24, 25, 26,
+] as const;
+type QrVersion = (typeof QR_VERSIONS)[number];
+const QR_MASKS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
+type QrMask = (typeof QR_MASKS)[number];
+type RsBlockDefinition = readonly [
+  count: number,
+  totalCodewords: number,
+  dataCodewords: number,
 ];
+
+const ALIGNMENT_PATTERN_POSITIONS = {
+  1: [],
+  2: [6, 18],
+  3: [6, 22],
+  4: [6, 26],
+  5: [6, 30],
+  6: [6, 34],
+  7: [6, 22, 38],
+  8: [6, 24, 42],
+  9: [6, 26, 46],
+  10: [6, 28, 50],
+  11: [6, 30, 54],
+  12: [6, 32, 58],
+  13: [6, 34, 62],
+  14: [6, 26, 46, 66],
+  15: [6, 26, 48, 70],
+  16: [6, 26, 50, 74],
+  17: [6, 30, 54, 78],
+  18: [6, 30, 56, 82],
+  19: [6, 30, 58, 86],
+  20: [6, 34, 62, 90],
+  21: [6, 28, 50, 72, 94],
+  22: [6, 26, 50, 74, 98],
+  23: [6, 30, 54, 78, 102],
+  24: [6, 28, 54, 80, 106],
+  25: [6, 32, 58, 84, 110],
+  26: [6, 30, 58, 86, 114],
+} as const satisfies Readonly<Record<QrVersion, readonly number[]>>;
 
 // ISO/IEC 18004 Table 9（誤り訂正レベル L）の Reed-Solomon ブロック構成を
 // Version 1〜26（旧 RS_BLOCKS_M と同じ Version 数）ぶん転記した正準値。
@@ -83,80 +98,81 @@ const ALIGNMENT_PATTERN_POSITIONS: readonly (readonly number[])[] = [
 //     （`toqr`、EC level enum 値が ISO の format info indicator と同じ 0=M/1=L/2=H/3=Q）
 //     を一時スクリプトで実行し、各 Version の「収まる最大 byte 数」の境界が
 //     この表からの計算値と全 Version で一致すること。
-const RS_BLOCKS_L: readonly (readonly (readonly [number, number, number])[])[] =
-  [
-    [[1, 26, 19]],
-    [[1, 44, 34]],
-    [[1, 70, 55]],
-    [[1, 100, 80]],
-    [[1, 134, 108]],
-    [[2, 86, 68]],
-    [[2, 98, 78]],
-    [[2, 121, 97]],
-    [[2, 146, 116]],
-    [
-      [2, 86, 68],
-      [2, 87, 69],
-    ],
-    [[4, 101, 81]],
-    [
-      [2, 116, 92],
-      [2, 117, 93],
-    ],
-    [[4, 133, 107]],
-    [
-      [3, 145, 115],
-      [1, 146, 116],
-    ],
-    [
-      [5, 109, 87],
-      [1, 110, 88],
-    ],
-    [
-      [5, 122, 98],
-      [1, 123, 99],
-    ],
-    [
-      [1, 135, 107],
-      [5, 136, 108],
-    ],
-    [
-      [5, 150, 120],
-      [1, 151, 121],
-    ],
-    [
-      [3, 141, 113],
-      [4, 142, 114],
-    ],
-    [
-      [3, 135, 107],
-      [5, 136, 108],
-    ],
-    [
-      [4, 144, 116],
-      [4, 145, 117],
-    ],
-    [
-      [2, 139, 111],
-      [7, 140, 112],
-    ],
-    [
-      [4, 151, 121],
-      [5, 152, 122],
-    ],
-    [
-      [6, 147, 117],
-      [4, 148, 118],
-    ],
-    [
-      [8, 132, 106],
-      [4, 133, 107],
-    ],
-    [
-      [10, 142, 114],
-      [2, 143, 115],
-    ],
-  ];
+const RS_BLOCKS_L = {
+  1: [[1, 26, 19]],
+  2: [[1, 44, 34]],
+  3: [[1, 70, 55]],
+  4: [[1, 100, 80]],
+  5: [[1, 134, 108]],
+  6: [[2, 86, 68]],
+  7: [[2, 98, 78]],
+  8: [[2, 121, 97]],
+  9: [[2, 146, 116]],
+  10: [
+    [2, 86, 68],
+    [2, 87, 69],
+  ],
+  11: [[4, 101, 81]],
+  12: [
+    [2, 116, 92],
+    [2, 117, 93],
+  ],
+  13: [[4, 133, 107]],
+  14: [
+    [3, 145, 115],
+    [1, 146, 116],
+  ],
+  15: [
+    [5, 109, 87],
+    [1, 110, 88],
+  ],
+  16: [
+    [5, 122, 98],
+    [1, 123, 99],
+  ],
+  17: [
+    [1, 135, 107],
+    [5, 136, 108],
+  ],
+  18: [
+    [5, 150, 120],
+    [1, 151, 121],
+  ],
+  19: [
+    [3, 141, 113],
+    [4, 142, 114],
+  ],
+  20: [
+    [3, 135, 107],
+    [5, 136, 108],
+  ],
+  21: [
+    [4, 144, 116],
+    [4, 145, 117],
+  ],
+  22: [
+    [2, 139, 111],
+    [7, 140, 112],
+  ],
+  23: [
+    [4, 151, 121],
+    [5, 152, 122],
+  ],
+  24: [
+    [6, 147, 117],
+    [4, 148, 118],
+  ],
+  25: [
+    [8, 132, 106],
+    [4, 133, 107],
+  ],
+  26: [
+    [10, 142, 114],
+    [2, 143, 115],
+  ],
+} as const satisfies Readonly<Record<QrVersion, readonly RsBlockDefinition[]>>;
+
+// The highest supported byte-mode capacity is the public admission limit.
 
 class BitBuffer {
   private readonly bytes: number[];
@@ -192,27 +208,21 @@ class BitBuffer {
   }
 }
 
-function rsBlocks(version: number): RsBlock[] {
-  const definition = RS_BLOCKS_L[version - 1];
-  if (!definition) {
-    throw new QrEncodingError(
-      'INVALID_DATA',
-      '対応する QR Version がありません。'
-    );
-  }
+function rsBlocks(version: QrVersion): RsBlock[] {
+  const definition: readonly RsBlockDefinition[] = RS_BLOCKS_L[version];
   return definition.flatMap(([count, totalCodewords, dataCodewords]) =>
     Array.from({ length: count }, () => ({ totalCodewords, dataCodewords }))
   );
 }
 
-function dataCapacityBits(version: number): number {
+function dataCapacityBits(version: QrVersion): number {
   return rsBlocks(version).reduce(
     (sum, block) => sum + block.dataCodewords * 8,
     0
   );
 }
 
-function characterCountBits(version: number): number {
+function characterCountBits(version: QrVersion): number {
   return version < 10 ? 8 : 16;
 }
 
@@ -223,15 +233,15 @@ function dataTooLargeError(): QrEncodingError {
   );
 }
 
-function chooseVersion(byteLength: number): number {
-  for (let version = 1; version <= RS_BLOCKS_L.length; version += 1) {
+function chooseVersion(byteLength: number): QrVersion {
+  for (const version of QR_VERSIONS) {
     const requiredBits = 4 + characterCountBits(version) + byteLength * 8;
     if (requiredBits <= dataCapacityBits(version)) return version;
   }
   throw dataTooLargeError();
 }
 
-function createDataBytes(data: Uint8Array, version: number): number[] {
+function createDataBytes(data: Uint8Array, version: QrVersion): number[] {
   const capacity = dataCapacityBits(version);
   const buffer = new BitBuffer();
   buffer.put(0b0100, 4);
@@ -305,7 +315,7 @@ function errorCorrectionBytes(
   return remainder;
 }
 
-function interleavedCodewords(data: Uint8Array, version: number): number[] {
+function interleavedCodewords(data: Uint8Array, version: QrVersion): number[] {
   const dataBytes = createDataBytes(data, version);
   const blocks = rsBlocks(version);
   const blockData: number[][] = [];
@@ -393,8 +403,11 @@ function placeAlignmentPattern(
   }
 }
 
-function setupAlignmentPatterns(matrix: MutableMatrix, version: number): void {
-  const positions = ALIGNMENT_PATTERN_POSITIONS[version - 1] ?? [];
+function setupAlignmentPatterns(
+  matrix: MutableMatrix,
+  version: QrVersion
+): void {
+  const positions = ALIGNMENT_PATTERN_POSITIONS[version];
   for (const row of positions) {
     for (const column of positions) {
       if (matrix[row]?.[column] === null) {
@@ -441,7 +454,7 @@ function bchTypeInfo(value: number): number {
   return ((value << 10) | data) ^ 0x5412;
 }
 
-function bchVersionInfo(version: number): number {
+function bchVersionInfo(version: QrVersion): number {
   let data = version << 12;
   const generator = 0x1f25;
   while (bchDigit(data) - bchDigit(generator) >= 0) {
@@ -477,7 +490,7 @@ function writeTypeInfoBit(
 
 function setupTypeInfo(
   matrix: MutableMatrix,
-  mask: number,
+  mask: QrMask,
   test: boolean
 ): void {
   const bits = bchTypeInfo((ERROR_CORRECTION_LEVEL_INDICATOR_L << 3) | mask);
@@ -491,7 +504,7 @@ function setupTypeInfo(
 
 function setupVersionInfo(
   matrix: MutableMatrix,
-  version: number,
+  version: QrVersion,
   test: boolean
 ): void {
   if (version < 7) return;
@@ -506,7 +519,7 @@ function setupVersionInfo(
   }
 }
 
-function maskBit(mask: number, row: number, column: number): boolean {
+function maskBit(mask: QrMask, row: number, column: number): boolean {
   switch (mask) {
     case 0:
       return (row + column) % 2 === 0;
@@ -524,8 +537,6 @@ function maskBit(mask: number, row: number, column: number): boolean {
       return (((row * column) % 2) + ((row * column) % 3)) % 2 === 0;
     case 7:
       return (((row * column) % 3) + ((row + column) % 2)) % 2 === 0;
-    default:
-      throw new QrEncodingError('INVALID_DATA', 'QR mask が不正です。');
   }
 }
 
@@ -539,7 +550,7 @@ interface MappingCursor {
 function writeMappedCell(
   matrix: MutableMatrix,
   codewords: readonly number[],
-  mask: number,
+  mask: QrMask,
   column: number,
   cursor: MappingCursor
 ): void {
@@ -558,7 +569,7 @@ function writeMappedCell(
 function mapColumnPair(
   matrix: MutableMatrix,
   codewords: readonly number[],
-  mask: number,
+  mask: QrMask,
   column: number,
   cursor: MappingCursor
 ): void {
@@ -574,7 +585,7 @@ function mapColumnPair(
 function mapCodewords(
   matrix: MutableMatrix,
   codewords: readonly number[],
-  mask: number
+  mask: QrMask
 ): void {
   const cursor: MappingCursor = {
     row: matrix.length - 1,
@@ -589,9 +600,9 @@ function mapCodewords(
 }
 
 function buildMatrix(
-  version: number,
+  version: QrVersion,
   codewords: readonly number[],
-  mask: number,
+  mask: QrMask,
   test: boolean
 ): boolean[][] {
   const size = version * 4 + 17;
@@ -693,12 +704,12 @@ function penalty(matrix: readonly (readonly boolean[])[]): number {
 }
 
 function bestMatrix(
-  version: number,
+  version: QrVersion,
   codewords: readonly number[]
 ): boolean[][] {
-  let selectedMask = 0;
+  let selectedMask: QrMask = QR_MASKS[0];
   let selectedPenalty = Number.POSITIVE_INFINITY;
-  for (let mask = 0; mask < 8; mask += 1) {
+  for (const mask of QR_MASKS) {
     const candidate = buildMatrix(version, codewords, mask, true);
     const candidatePenalty = penalty(candidate);
     if (candidatePenalty < selectedPenalty) {
@@ -715,9 +726,6 @@ export function encodeQr(value: string): EncodedQr {
     throw dataTooLargeError();
   }
   const data = new TextEncoder().encode(value);
-  if (data.byteLength > QR_ENCODER_MAX_BYTES) {
-    throw dataTooLargeError();
-  }
   const version = chooseVersion(data.byteLength);
   const codewords = interleavedCodewords(data, version);
   return {

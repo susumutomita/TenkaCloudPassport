@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { PixelRatio, StyleSheet, View } from 'react-native';
 import { colors } from '../ui/theme';
 
 export interface RealQrViewProps {
@@ -8,8 +8,7 @@ export interface RealQrViewProps {
 }
 
 const QUIET_ZONE_MODULES = 4;
-const MIN_RENDER_SIZE = 240;
-const MIN_PIXELS_PER_MODULE = 2;
+const PREFERRED_RENDER_SIZE = 240;
 
 /**
  * 実 QR（`encodeQr` が返す `EncodedQr.matrix`）を描く純表示コンポーネント。
@@ -18,9 +17,9 @@ const MIN_PIXELS_PER_MODULE = 2;
  *
  * - 白地固定。ダークモードでも反転しない（誤り訂正の予算を消費する明暗反転を禁止する）。
  * - Quiet zone 4 module。
- * - 最小レンダリングサイズ 240px、かつ 1 module あたり物理 2px 以上。
- *   （誤り訂正 M・schema v2 Lounge Invite の最大 Version 26 = 121 module の場合、
- *   quiet zone を含む 129 module × 2px = 258px 四方が必要になる。）
+ * - 通常は 240pt 以上。狭いウィンドウでは親の実測幅まで縮め、QR 全体と
+ *   quiet zone が欠けないことを優先する。画面サイズや機種名は参照しない。
+ *   密な QR の読取は実際の描画をデコードする回帰テストで確認する。
  *
  * 既存の `QrCodeView`（装飾用のハッシュベース QR）とは別コンポーネントであり、
  * こちらは実際にスキャン可能な QR だけを描く。Accessibility Label は呼び出し側
@@ -29,57 +28,76 @@ const MIN_PIXELS_PER_MODULE = 2;
  */
 export default function RealQrView({ matrix, size }: RealQrViewProps) {
   const modulesPerSide = matrix.length + QUIET_ZONE_MODULES * 2;
-  const resolvedSize = useMemo(
-    () =>
-      Math.max(
-        size ?? MIN_RENDER_SIZE,
-        MIN_RENDER_SIZE,
-        modulesPerSide * MIN_PIXELS_PER_MODULE
-      ),
-    [size, modulesPerSide]
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const preferredSize = Math.max(
+    size ?? PREFERRED_RENDER_SIZE,
+    modulesPerSide * 2
   );
-  const cellSize = resolvedSize / modulesPerSide;
+  const maximumSize = Math.min(preferredSize, availableWidth);
+  // Align every module to the physical pixel grid. Fractional cell edges blur
+  // dense codes after a narrow resize even when the bounding box fits.
+  const density = PixelRatio.get();
+  const pixelsPerModule = Math.floor((maximumSize * density) / modulesPerSide);
+  const cellSize =
+    pixelsPerModule > 0
+      ? pixelsPerModule / density
+      : maximumSize / modulesPerSide;
+  const resolvedSize = cellSize * modulesPerSide;
   const quietZoneSize = cellSize * QUIET_ZONE_MODULES;
 
   return (
     <View
-      accessibilityRole="image"
-      style={[
-        styles.frame,
-        {
-          height: resolvedSize,
-          padding: quietZoneSize,
-          width: resolvedSize,
-        },
-      ]}
+      style={styles.container}
+      onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)}
     >
-      {matrix.map((row, rowIndex) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: 固定サイズの Grid であり行の並び替えは発生しない
-        <View key={`row-${rowIndex}`} style={styles.row}>
-          {row.map((filled, columnIndex) => (
-            <View
-              // biome-ignore lint/suspicious/noArrayIndexKey: 固定サイズの Grid であり Cell の並び替えは発生しない
-              key={`cell-${rowIndex}-${columnIndex}`}
-              style={{
-                backgroundColor: filled ? colors.ink : colors.white,
-                height: cellSize,
-                width: cellSize,
-              }}
-            />
-          ))}
-        </View>
-      ))}
+      <View
+        accessibilityRole="image"
+        style={[
+          styles.frame,
+          {
+            height: resolvedSize,
+            padding: quietZoneSize,
+            width: resolvedSize,
+            marginLeft: PixelRatio.roundToNearestPixel(
+              (availableWidth - resolvedSize) / 2
+            ),
+          },
+        ]}
+      >
+        {matrix.map((row, rowIndex) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 固定サイズの Grid であり行の並び替えは発生しない
+          <View key={`row-${rowIndex}`} style={styles.row}>
+            {row.map((filled, columnIndex) => (
+              <View
+                // biome-ignore lint/suspicious/noArrayIndexKey: 固定サイズの Grid であり Cell の並び替えは発生しない
+                key={`cell-${rowIndex}-${columnIndex}`}
+                style={{
+                  backgroundColor: filled ? colors.ink : colors.white,
+                  height: cellSize,
+                  width: cellSize,
+                  flexShrink: 0,
+                }}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+    minWidth: 0,
+  },
   frame: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     // 白地固定。テーマや OS のダークモード設定を一切参照しない（M3 受け入れ基準）。
     backgroundColor: colors.white,
   },
   row: {
     flexDirection: 'row',
+    flexShrink: 0,
   },
 });

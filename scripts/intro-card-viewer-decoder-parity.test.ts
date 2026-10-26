@@ -289,28 +289,26 @@ function buildFixtures(): readonly Fixture[] {
 }
 
 describe('intro-card-url の本体デコーダとビューアデコーダの parity（Issue 130 major）', () => {
-  it.each(
-    buildFixtures()
-  )('$name: 受理/拒否の判定と復元結果が本体・ビューアで一致する', async ({
-    fragment,
-    expectValid,
-  }) => {
-    const decoder = await loadViewerDecoder();
-    const tsResult = decodeWithTypeScript(fragment);
-    const viewerResult = decodeWithViewer(decoder, fragment);
+  it.each(buildFixtures())(
+    '$name: 受理/拒否の判定と復元結果が本体・ビューアで一致する',
+    async ({ fragment, expectValid }) => {
+      const decoder = await loadViewerDecoder();
+      const tsResult = decodeWithTypeScript(fragment);
+      const viewerResult = decodeWithViewer(decoder, fragment);
 
-    expect(tsResult.ok).toBe(expectValid);
-    expect(viewerResult.ok).toBe(tsResult.ok);
+      expect(tsResult.ok).toBe(expectValid);
+      expect(viewerResult.ok).toBe(tsResult.ok);
 
-    if (tsResult.ok && viewerResult.ok) {
-      expect(viewerResult.name).toBe(tsResult.name);
-      expect(viewerResult.title).toBe(tsResult.title);
-      expect(viewerResult.organization).toBe(tsResult.organization);
-      expect(viewerResult.selfIntro).toBe(tsResult.selfIntro);
-      expect(viewerResult.links).toEqual(tsResult.links);
-      expect(viewerResult.email).toBe(tsResult.email);
-      expect(viewerResult.phone).toBe(tsResult.phone);
-      expect(viewerResult.themeIds).toEqual(tsResult.themeIds);
+      if (tsResult.ok && viewerResult.ok) {
+        expect(viewerResult.name).toBe(tsResult.name);
+        expect(viewerResult.title).toBe(tsResult.title);
+        expect(viewerResult.organization).toBe(tsResult.organization);
+        expect(viewerResult.selfIntro).toBe(tsResult.selfIntro);
+        expect(viewerResult.links).toEqual(tsResult.links);
+        expect(viewerResult.email).toBe(tsResult.email);
+        expect(viewerResult.phone).toBe(tsResult.phone);
+        expect(viewerResult.themeIds).toEqual(tsResult.themeIds);
+      }
     }
-  });
+  );
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { LoungeInvite } from '../domain/lounge-invite';
 import type { RandomBytes } from '../domain/session-identifiers';
 import {
@@ -467,4 +467,38 @@ describe('一時 Lounge Handshake の認証と Replay 防止', () => {
       'INVALID_PROOF'
     );
   });
+});
+
+it('propagates an unexpected decoded-record fault without consuming the invite', async () => {
+  const issued = await issueLoungeHandshake(issueInput());
+  const request = await createLoungeJoinRequest(issued.invite, PARTICIPANT_ID);
+  const raw = encodeLoungeJoinRequest(request);
+  const failure = new Error('decoded record inspection failed');
+  const parsed = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        throw failure;
+      },
+    }
+  );
+  const parsing = spyOn(JSON, 'parse').mockReturnValueOnce(parsed);
+  let caught: unknown;
+  try {
+    await issued.host.authorizeJoin(raw, authorizeInput());
+  } catch (error: unknown) {
+    caught = error;
+  } finally {
+    parsing.mockRestore();
+  }
+  expect(caught).toBe(failure);
+  expect(issued.host.status).toBe('available');
+  await expect(
+    issued.host.authorizeJoin(raw, authorizeInput())
+  ).resolves.toEqual({
+    kind: 'authenticated',
+    loungeId: LOUNGE_ID,
+    participantId: PARTICIPANT_ID,
+  });
+  issued.host.dispose();
 });

@@ -45,11 +45,11 @@ describe('Touch Target が 44 pt 以上である', () => {
     ).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
   });
 
-  it('PetEmojiSelector の各選択肢は height が 44 pt 以上', async () => {
+  it('PetEmojiSelector の各選択肢は minHeight が 44 pt 以上', async () => {
     const text = await source('../components/PetEmojiSelector.tsx');
-    expect(extractStyleNumber(text, 'option', 'height')).toBeGreaterThanOrEqual(
-      MIN_TOUCH_TARGET
-    );
+    expect(
+      extractStyleNumber(text, 'option', 'minHeight')
+    ).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
   });
 
   it('LanguageSelector の各選択肢は minHeight が 44 pt 以上', async () => {

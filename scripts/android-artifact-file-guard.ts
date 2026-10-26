@@ -49,6 +49,16 @@ export interface StableFileDigest {
   readonly sha256: string;
 }
 
+// ino_t is unsigned64 on Linux, but Node/Bun can expose its high bit as a
+// signed BigInt. Check the representation bounds before normalizing: wrapping
+// an arbitrary integer would alias invalid identities to real files.
+export function canonicalFilesystemInode(inode: bigint): bigint | null {
+  if (inode === 0n || inode < -(1n << 63n) || inode > (1n << 64n) - 1n) {
+    return null;
+  }
+  return inode < 0n ? inode + (1n << 64n) : inode;
+}
+
 export function stableFileSnapshot(status: {
   readonly ctimeNs: bigint;
   readonly dev: bigint;
@@ -69,10 +79,14 @@ export function sameStableFileSnapshot(
   left: StableFileSnapshot,
   right: StableFileSnapshot
 ): boolean {
+  const leftInode = canonicalFilesystemInode(left.inode);
+  const rightInode = canonicalFilesystemInode(right.inode);
   return (
+    leftInode !== null &&
+    rightInode !== null &&
+    leftInode === rightInode &&
     left.changedAtNanoseconds === right.changedAtNanoseconds &&
     left.device === right.device &&
-    left.inode === right.inode &&
     left.modifiedAtNanoseconds === right.modifiedAtNanoseconds &&
     left.size === right.size
   );
@@ -112,13 +126,6 @@ function symbolicLinkError(
   );
 }
 
-function fileIdentity(status: {
-  readonly dev: bigint;
-  readonly ino: bigint;
-}): FileIdentity {
-  return { device: status.dev, inode: status.ino };
-}
-
 function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
   return left.device === right.device && left.inode === right.inode;
 }
@@ -127,8 +134,8 @@ function usableFileIdentity(status: {
   readonly dev: bigint;
   readonly ino: bigint;
 }): FileIdentity | null {
-  const identity = fileIdentity(status);
-  return identity.inode > 0n ? identity : null;
+  const inode = canonicalFilesystemInode(status.ino);
+  return inode === null ? null : { device: status.dev, inode };
 }
 
 async function initialFileIdentity(

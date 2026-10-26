@@ -31,11 +31,12 @@ describe('RealQrView（実 QR 表示）のソース契約', () => {
     expect(text).toContain('QUIET_ZONE_MODULES = 4');
   });
 
-  it('最小レンダリングサイズ 240px、かつ 1 module あたり物理 2px 以上を強制する', async () => {
+  it('240pt を通常サイズとし、親の実測幅に収める', async () => {
     const text = await source();
 
-    expect(text).toContain('MIN_RENDER_SIZE = 240');
-    expect(text).toContain('MIN_PIXELS_PER_MODULE = 2');
+    expect(text).toContain('PREFERRED_RENDER_SIZE = 240');
+    expect(text).toContain('event.nativeEvent.layout.width');
+    expect(text).toContain('Math.min(preferredSize, availableWidth)');
     expect(text).toContain('Math.max(');
   });
 

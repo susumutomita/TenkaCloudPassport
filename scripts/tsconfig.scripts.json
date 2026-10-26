@@ -37,7 +37,8 @@
     "generate-app-icons.test.ts",
     "inspect-store-listing.ts",
     "store-listing-metadata.test.ts",
-    "apply-store-listing.ts"
+    "apply-store-listing.ts",
+    "ios-responsive-runner.test.ts"
   ],
   "compilerOptions": {
     "allowImportingTsExtensions": true

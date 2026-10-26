@@ -3,6 +3,7 @@ import { access, lstat, realpath, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { platform } from 'node:process';
 import {
+  canonicalFilesystemInode,
   digestStableFile,
   type StableFileReadPolicy,
 } from './android-artifact-file-guard';
@@ -450,11 +451,12 @@ async function toolSnapshot(
       'Android release tool path must be an executable regular file.'
     );
   }
+  const inode = canonicalFilesystemInode(status.ino);
   if (
     canonicalPath !== path ||
     status.isSymbolicLink() ||
     !status.isFile() ||
-    status.ino <= 0n
+    inode === null
   ) {
     throw new AndroidArtifactIntegrityError(
       'INVALID_ANDROID_TOOL_PATH',
@@ -471,7 +473,7 @@ async function toolSnapshot(
   return {
     changedAtNanoseconds: status.ctimeNs,
     device: status.dev,
-    inode: status.ino,
+    inode,
     modifiedAtNanoseconds: status.mtimeNs,
     sha256,
     size: status.size,

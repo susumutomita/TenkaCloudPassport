@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { CATALOG_VERSION } from '../domain/clue-catalog';
 import type { PublicPassport } from '../domain/passport';
 import type { LoungeId, ParticipantId } from '../domain/session-identifiers';
@@ -107,6 +107,158 @@ function rulesOnlySession() {
     localRequiredCapabilities: [RULES_PROVIDER_CAPABILITY],
   });
 }
+
+describe('negotiated peer control-plane regression cases', () => {
+  it.each([{ retired: false }, { retired: true }])(
+    'rejects stale membership and reintroduction of retired identities: %j',
+    ({ retired }) => {
+      const session = createPeerProtocolSession({
+        loungeId: LOUNGE_ID,
+        hostParticipantId: HOST_ID,
+        localParticipantId: GUEST_ID,
+        loungeExpiresAtEpochMs: LOUNGE_EXPIRES_AT,
+        localSupportedCapabilities: [RULES_PROVIDER_CAPABILITY],
+        localRequiredCapabilities: [RULES_PROVIDER_CAPABILITY],
+      });
+      const messages = [
+        envelope(0, { kind: 'hello', role: 'host' }, HOST_ID),
+        envelope(
+          1,
+          {
+            kind: 'capability',
+            supported: [RULES_PROVIDER_CAPABILITY],
+            required: [RULES_PROVIDER_CAPABILITY],
+          },
+          HOST_ID
+        ),
+        envelope(
+          2,
+          {
+            kind: 'membership',
+            revision: 1,
+            participantIds: [HOST_ID, GUEST_ID, THIRD_ID],
+          },
+          HOST_ID
+        ),
+      ];
+      for (const message of messages)
+        expect(session.receive(authenticatedRaw(message)).kind).toBe(
+          'accepted'
+        );
+      if (retired)
+        expect(
+          session.receive(
+            authenticatedRaw(
+              envelope(
+                3,
+                {
+                  kind: 'membership',
+                  revision: 2,
+                  participantIds: [HOST_ID, GUEST_ID],
+                },
+                HOST_ID
+              )
+            )
+          ).kind
+        ).toBe('accepted');
+      const before = session.lateJoinSnapshot();
+      expect(
+        session.receive(
+          authenticatedRaw(
+            envelope(
+              retired ? 4 : 3,
+              {
+                kind: 'membership',
+                revision: retired ? 3 : 1,
+                participantIds: [HOST_ID, GUEST_ID, THIRD_ID],
+              },
+              HOST_ID
+            )
+          )
+        )
+      ).toEqual({
+        kind: 'peer-rejected',
+        participantId: HOST_ID,
+        code: 'INVALID_ENVELOPE',
+      });
+      expect(session.lateJoinSnapshot()).toEqual(before);
+    }
+  );
+
+  it.each([
+    { kind: 'hello', role: 'guest' },
+    {
+      kind: 'capability',
+      supported: [RULES_PROVIDER_CAPABILITY],
+      required: [RULES_PROVIDER_CAPABILITY],
+    },
+  ] as const)(
+    'rejects repeated $kind after negotiation without accepting control data',
+    (payload) => {
+      const session = rulesOnlySession();
+      completeHandshake(session);
+      expect(session.receive(authenticatedRaw(envelope(2, payload)))).toEqual({
+        kind: 'peer-rejected',
+        participantId: GUEST_ID,
+        code: 'INVALID_ENVELOPE',
+      });
+      expect(session.lateJoinSnapshot()).toEqual({
+        membership: null,
+        publicPassports: [],
+      });
+    }
+  );
+
+  it.each([
+    { participantIds: [HOST_ID, THIRD_ID] },
+    { participantIds: [GUEST_ID, THIRD_ID] },
+  ])(
+    'rejects host membership that excludes a required endpoint: %j',
+    ({ participantIds }) => {
+      const session = createPeerProtocolSession({
+        loungeId: LOUNGE_ID,
+        hostParticipantId: HOST_ID,
+        localParticipantId: GUEST_ID,
+        loungeExpiresAtEpochMs: LOUNGE_EXPIRES_AT,
+        localSupportedCapabilities: [RULES_PROVIDER_CAPABILITY],
+        localRequiredCapabilities: [RULES_PROVIDER_CAPABILITY],
+      });
+      for (const value of [
+        envelope(0, { kind: 'hello', role: 'host' }, HOST_ID),
+        envelope(
+          1,
+          {
+            kind: 'capability',
+            supported: [RULES_PROVIDER_CAPABILITY],
+            required: [RULES_PROVIDER_CAPABILITY],
+          },
+          HOST_ID
+        ),
+      ])
+        expect(session.receive(authenticatedRaw(value)).kind).toBe('accepted');
+      expect(
+        session.receive(
+          authenticatedRaw(
+            envelope(
+              2,
+              {
+                kind: 'membership',
+                revision: 1,
+                participantIds,
+              },
+              HOST_ID
+            )
+          )
+        )
+      ).toEqual({
+        kind: 'peer-rejected',
+        participantId: HOST_ID,
+        code: 'INVALID_ENVELOPE',
+      });
+      expect(session.lateJoinSnapshot().membership).toBeNull();
+    }
+  );
+});
 
 function authenticatedRaw(value: PeerEnvelope): {
   readonly raw: string;
@@ -1713,4 +1865,29 @@ describe('Issue 23: 認証済み Peer Protocol receiver', () => {
       publicPassports: [],
     });
   });
+});
+
+it('propagates a decoded-record runtime fault without consuming or rejecting the peer message', () => {
+  const session = rulesOnlySession();
+  const message = authenticatedRaw(envelope(0, PAYLOADS[0]));
+  const failure = new Error('decoded record inspection failed');
+  const parsed = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        throw failure;
+      },
+    }
+  );
+  const parsing = spyOn(JSON, 'parse').mockReturnValueOnce(parsed);
+  let caught: unknown;
+  try {
+    session.receive(message);
+  } catch (error: unknown) {
+    caught = error;
+  } finally {
+    parsing.mockRestore();
+  }
+  expect(caught).toBe(failure);
+  expect(session.receive(message).kind).toBe('accepted');
 });

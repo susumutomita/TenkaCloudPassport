@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
   createIntroCard,
   INTRO_CARD_LINK_MAX_LENGTH,
@@ -633,3 +633,28 @@ describe('createIntroCard の themeIds（Issue 104: 端末内会話エージェ�
     expect((error as IntroCardError).code).toBe('INVALID_THEME_IDS');
   });
 });
+
+it.each(['name', 'title'] as const)(
+  'propagates unexpected text normalization faults for %s',
+  (field) => {
+    const failure = new Error('text normalization failed');
+    const normalize = spyOn(
+      String.prototype,
+      'normalize'
+    ).mockImplementationOnce(() => {
+      throw failure;
+    });
+    let captured: unknown;
+    try {
+      captured = captureError(() =>
+        validateIntroCardFieldValue({ field, value: 'valid name' })
+      );
+    } finally {
+      normalize.mockRestore();
+    }
+    expect(captured).toBe(failure);
+    expect(
+      validateIntroCardFieldValue({ field, value: 'valid name' })
+    ).toBeNull();
+  }
+);

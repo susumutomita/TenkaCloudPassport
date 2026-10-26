@@ -610,9 +610,9 @@ describe('Issue 29: Release Gate と Version の一致契約', () => {
         read('Makefile'),
       ]);
 
-    expect(packageSource).toContain('"packageManager": "bun@1.3.11"');
-    expect(readme).toContain('Bun 1.3.11');
-    expect(english).toContain('Bun 1.3.11');
+    expect(packageSource).toContain('"packageManager": "bun@1.4.4"');
+    expect(readme).toContain('Bun 1.4.4');
+    expect(english).toContain('Bun 1.4.4');
     expect(workflow).toContain('bun-version-file: package.json');
     expect(makefile).toContain('release_test_coverage:');
     expect(makefile).toMatch(/before-commit:.*\brelease_test_coverage\b/);

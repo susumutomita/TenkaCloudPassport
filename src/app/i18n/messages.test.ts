@@ -56,19 +56,20 @@ describe('Message Catalog（src/app/i18n/messages.ts）', () => {
     expect(enPaths).toEqual(jaPaths);
   });
 
-  it.each([
-    ...LOCALES,
-  ])('%s のすべての文字列 Leaf は空文字列でない', (locale: Locale) => {
-    const paths = collectLeafPaths(MESSAGES[locale], '');
-    for (const path of paths) {
-      const leaf = readPath(MESSAGES[locale], path) as Leaf;
-      const text =
-        typeof leaf === 'function'
-          ? sampleCall(leaf as (...args: never[]) => string)
-          : leaf;
-      expect(text.length).toBeGreaterThan(0);
+  it.each([...LOCALES])(
+    '%s のすべての文字列 Leaf は空文字列でない',
+    (locale: Locale) => {
+      const paths = collectLeafPaths(MESSAGES[locale], '');
+      for (const path of paths) {
+        const leaf = readPath(MESSAGES[locale], path) as Leaf;
+        const text =
+          typeof leaf === 'function'
+            ? sampleCall(leaf as (...args: never[]) => string)
+            : leaf;
+        expect(text.length).toBeGreaterThan(0);
+      }
     }
-  });
+  );
 
   it('ja と en は少なくとも半分以上の Leaf で異なる文字列を持つ（コピーではなく翻訳されている）', () => {
     const paths = collectLeafPaths(MESSAGES.ja, '');

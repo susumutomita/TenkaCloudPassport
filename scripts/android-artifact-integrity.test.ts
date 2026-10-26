@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fsBoundary from 'node:fs/promises';
 import {
   access,
   mkdir,
@@ -17,8 +18,11 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import {
   assertOpenedFilePathUnchanged,
+  canonicalFilesystemInode,
   openStableFileForRead,
   type StableFileReadPolicy,
+  sameStableFileSnapshot,
+  stableFileSnapshot,
 } from './android-artifact-file-guard';
 import {
   AndroidArtifactIntegrityError,
@@ -127,19 +131,22 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
       { expo: { android: { versionCode: 1.5 } } },
       'INVALID_ANDROID_VERSION_CODE',
     ],
-  ] as const)('不正な Android versionCode 設定 %j を拒否する', async (config, code) => {
-    const directory = await temporaryDirectory();
-    const configPath = join(directory, 'app.json');
-    await writeFile(configPath, JSON.stringify(config));
+  ] as const)(
+    '不正な Android versionCode 設定 %j を拒否する',
+    async (config, code) => {
+      const directory = await temporaryDirectory();
+      const configPath = join(directory, 'app.json');
+      await writeFile(configPath, JSON.stringify(config));
 
-    try {
-      await readAndroidReleaseVersionCode(configPath);
-      throw new Error('versionCode 検証は拒否される必要があります。');
-    } catch (error) {
-      expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
-      expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      try {
+        await readAndroidReleaseVersionCode(configPath);
+        throw new Error('versionCode 検証は拒否される必要があります。');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
+        expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      }
     }
-  });
+  );
 
   it('app.json の Symbolic Link を versionCode 設定として拒否する', async () => {
     const directory = await temporaryDirectory();
@@ -351,21 +358,24 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     [`${EXPECTED_SHA256}  ../passport.apk\n`, 'INVALID_CHECKSUM_RECORD'],
     [`${EXPECTED_SHA256}  passport.apk\nextra\n`, 'INVALID_CHECKSUM_RECORD'],
     [`${EXPECTED_SHA256}  another.apk\n`, 'ARTIFACT_NAME_MISMATCH'],
-  ] as const)('不正または別 Artifact の checksum record「%s」を拒否する', async (record, code) => {
-    const directory = await temporaryDirectory();
-    const apkPath = join(directory, 'passport.apk');
-    const checksumPath = `${apkPath}.sha256`;
-    await writeFile(apkPath, 'signed apk bytes');
-    await writeFile(checksumPath, record);
+  ] as const)(
+    '不正または別 Artifact の checksum record「%s」を拒否する',
+    async (record, code) => {
+      const directory = await temporaryDirectory();
+      const apkPath = join(directory, 'passport.apk');
+      const checksumPath = `${apkPath}.sha256`;
+      await writeFile(apkPath, 'signed apk bytes');
+      await writeFile(checksumPath, record);
 
-    try {
-      await verifyAndroidArtifactChecksum(apkPath, checksumPath);
-      throw new Error('検証は拒否される必要があります。');
-    } catch (error) {
-      expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
-      expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      try {
+        await verifyAndroidArtifactChecksum(apkPath, checksumPath);
+        throw new Error('検証は拒否される必要があります。');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AndroidArtifactIntegrityError);
+        expect((error as AndroidArtifactIntegrityError).code).toBe(code);
+      }
     }
-  });
+  );
 
   it('空 APK、拡張子違い、Symbolic Link は Release Artifact として拒否する', async () => {
     const directory = await temporaryDirectory();
@@ -674,26 +684,128 @@ describe('Issue 28: Android Release APK の SHA-256 完全性契約', () => {
     expect(rejectedResult.stderr).toContain('VERSION_CODE_NOT_INCREMENTED');
   });
 
-  it.each([
-    '',
-    ' ',
-    '00',
-    '+0',
-    '0x0',
-    '0e0',
-    '1.0',
-  ])('CLI の過去 versionCode は正規の 10 進整数でない「%s」を拒否する', async (previousVersionCode) => {
-    const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
-    const appConfigPath = join(import.meta.dir, '..', 'app.json');
-    const result = await runCapturedProcess([
-      'bun',
-      scriptPath,
-      'version',
-      appConfigPath,
-      previousVersionCode,
-    ]);
+  it.each(['', ' ', '00', '+0', '0x0', '0e0', '1.0'])(
+    'CLI の過去 versionCode は正規の 10 進整数でない「%s」を拒否する',
+    async (previousVersionCode) => {
+      const scriptPath = join(import.meta.dir, 'android-artifact-integrity.ts');
+      const appConfigPath = join(import.meta.dir, '..', 'app.json');
+      const result = await runCapturedProcess([
+        'bun',
+        scriptPath,
+        'version',
+        appConfigPath,
+        previousVersionCode,
+      ]);
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('INVALID_PREVIOUS_VERSION_CODE');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('INVALID_PREVIOUS_VERSION_CODE');
+    }
+  );
+});
+
+describe('unsigned filesystem inode identity', () => {
+  it('canonicalizes signed high-bit identities without wrapping invalid integers', () => {
+    const high = 1n << 63n;
+    expect(canonicalFilesystemInode(-high)).toBe(high);
+    expect(canonicalFilesystemInode(-1n)).toBe((1n << 64n) - 1n);
+    expect(canonicalFilesystemInode(high)).toBe(high);
+    expect(canonicalFilesystemInode(1n)).toBe(1n);
+    expect(canonicalFilesystemInode(0n)).toBeNull();
+    expect(canonicalFilesystemInode(-high - 1n)).toBeNull();
+    expect(canonicalFilesystemInode(1n << 64n)).toBeNull();
+    expect(canonicalFilesystemInode((1n << 64n) + 1n)).toBeNull();
   });
+
+  it('compares identical high-bit representations while rejecting distinct or invalid snapshots', () => {
+    const status = {
+      dev: 27n,
+      ino: -(1n << 63n) + 42n,
+      size: 5n,
+      ctimeNs: 100n,
+      mtimeNs: 99n,
+    };
+    const signed = stableFileSnapshot(status);
+    const unsigned = stableFileSnapshot({ ...status, ino: (1n << 63n) + 42n });
+    expect(sameStableFileSnapshot(signed, unsigned)).toBe(true);
+    for (const ino of [
+      1n,
+      (1n << 63n) + 43n,
+      0n,
+      -(1n << 63n) - 1n,
+      1n << 64n,
+    ]) {
+      expect(
+        sameStableFileSnapshot(signed, stableFileSnapshot({ ...status, ino }))
+      ).toBe(false);
+    }
+    expect(
+      sameStableFileSnapshot(
+        stableFileSnapshot({ ...status, ino: 0n }),
+        unsigned
+      )
+    ).toBe(false);
+    expect(sameStableFileSnapshot(signed, { ...unsigned, device: 28n })).toBe(
+      false
+    );
+    expect(sameStableFileSnapshot(signed, { ...unsigned, size: 6n })).toBe(
+      false
+    );
+    expect(
+      sameStableFileSnapshot(signed, {
+        ...unsigned,
+        changedAtNanoseconds: 101n,
+      })
+    ).toBe(false);
+    expect(
+      sameStableFileSnapshot(signed, {
+        ...unsigned,
+        modifiedAtNanoseconds: 100n,
+      })
+    ).toBe(false);
+  });
+});
+
+it('binds signed lstat and unsigned descriptor identities and rejects a later different inode', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'identity.apk');
+  await writeFile(file, 'stable bytes');
+  const handle = await open(file, 'r');
+  const status = await handle.stat({ bigint: true });
+  const unsigned = Object.assign(
+    Object.create(Object.getPrototypeOf(status)),
+    status,
+    { ino: (1n << 63n) + 42n }
+  );
+  const signed = Object.assign(
+    Object.create(Object.getPrototypeOf(status)),
+    status,
+    { ino: -(1n << 63n) + 42n }
+  );
+  const replaced = Object.assign(
+    Object.create(Object.getPrototypeOf(status)),
+    status,
+    { ino: (1n << 63n) + 43n }
+  );
+  const stating = spyOn(fsBoundary, 'lstat')
+    .mockResolvedValueOnce(signed)
+    .mockResolvedValueOnce(unsigned)
+    .mockResolvedValueOnce(replaced);
+  const opening = spyOn(fsBoundary, 'open').mockResolvedValueOnce(handle);
+  const descriptorStat = spyOn(handle, 'stat').mockResolvedValueOnce(unsigned);
+  try {
+    const opened = await openStableFileForRead(file, PORTABLE_APK_POLICY);
+    expect(opened.handle).toBe(handle);
+    expect(opened.identity).toEqual({
+      device: status.dev,
+      inode: unsigned.ino,
+    });
+    await expect(
+      assertOpenedFilePathUnchanged(file, opened.identity, PORTABLE_APK_POLICY)
+    ).rejects.toMatchObject({ code: 'ARTIFACT_CHANGED' });
+  } finally {
+    stating.mockRestore();
+    opening.mockRestore();
+    descriptorStat.mockRestore();
+    await handle.close();
+  }
 });

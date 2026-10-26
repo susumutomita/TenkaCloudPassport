@@ -1,11 +1,11 @@
 import { CameraView } from 'expo-camera';
 import { useSyncExternalStore } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { CameraQrCapturePort } from '../app/camera-qr-capture';
 import { DEFAULT_LOCALE, type Locale } from '../app/i18n/locale';
-import { MESSAGES } from '../app/i18n/messages';
-import { colors, spacing } from '../ui/theme';
-import ActionButton from './ActionButton';
+import { colors } from '../ui/theme';
+import CameraQrCapturePanel from './CameraQrCapturePanel';
 
 /**
  * Issue 146: 実カメラで相手の QR を読み取る間だけ全画面に出す Overlay。
@@ -31,32 +31,22 @@ export default function CameraQrCaptureOverlay({
     () => port.status,
     () => port.status
   );
-  const t = MESSAGES[locale].cameraQrCapture;
   // `visible={false}` の Modal が children を保持するかは Platform 実装の詳細に
   // 依るため、そこへカメラの停止を任せない。capturing 以外では Component ごと
   // 描画しないことで、`CameraView` の unmount とカメラの解放を保証する。
   if (status !== 'capturing') return null;
   return (
     <Modal animationType="slide" onRequestClose={port.cancel} visible>
-      <View style={styles.container}>
-        <CameraView
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={(result) => port.deliver(result.data)}
-          style={styles.camera}
-        />
-        <View style={styles.panel}>
-          <Text accessibilityRole="header" style={styles.title}>
-            {t.title}
-          </Text>
-          <Text style={styles.hint}>{t.hint}</Text>
-          <ActionButton
-            accessibilityHint={t.cancelButtonHint}
-            label={t.cancelButton}
-            onPress={port.cancel}
-            variant="secondary"
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <CameraView
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={(result) => port.deliver(result.data)}
+            style={styles.camera}
           />
+          <CameraQrCapturePanel locale={locale} onCancel={port.cancel} />
         </View>
-      </View>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -64,24 +54,10 @@ export default function CameraQrCaptureOverlay({
 const styles = StyleSheet.create({
   camera: {
     flex: 1,
+    minHeight: 0,
   },
   container: {
     backgroundColor: colors.ink,
     flex: 1,
-  },
-  hint: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  panel: {
-    backgroundColor: colors.white,
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: '600',
   },
 });

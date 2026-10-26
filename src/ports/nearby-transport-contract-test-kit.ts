@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { RULES_PROVIDER_CAPABILITY } from '../domain/capability';
 import type { LoungeInvite } from '../domain/lounge-invite';
 import type { LoungeId, ParticipantId } from '../domain/session-identifiers';
@@ -222,6 +222,654 @@ export function runNearbyTransportContract(
   createHarness: CreateNearbyTransportContractHarness
 ): void {
   describe(`NearbyTransport Contract: ${label}`, () => {
+    it('disposed endpoints reject join and leave without restarting a session', async () => {
+      const { host, guest, invite } = await connectedPair(createHarness());
+      const input = await joinInput(invite, GUEST_IDS[0]);
+      await guest.dispose();
+      await expectTransportError(guest.join(input), 'DISPOSED');
+      await expectTransportError(guest.leave('owner-left'), 'DISPOSED');
+      await host.dispose();
+    });
+
+    it('idle leave and guest hosting reject invalid state without ending the host', async () => {
+      const harness = createHarness();
+      const idle = harness.createTransport();
+      await expectTransportError(idle.leave('owner-left'), 'INVALID_STATE');
+      const { host, guest } = await connectedPair(harness);
+      await expectTransportError(guest.host(invitePolicy()), 'INVALID_STATE');
+      await guest.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'still-connected',
+      });
+      await idle.dispose();
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('invite issuance failures are typed and do not leak provider details', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const message = await expectTransportError(
+        host.host({
+          ...invitePolicy(),
+          issueInvite() {
+            throw new Error('private-issuer-detail');
+          },
+        }),
+        'INVALID_CONFIGURATION'
+      );
+      expect(message).not.toContain('private-issuer-detail');
+      const invite = await host.host(invitePolicy());
+      const guest = harness.createTransport();
+      await guest.join(await joinInput(invite, GUEST_IDS[0]));
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('replacing host capacity disposes only the rejected authorization', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const original = await host.host(invitePolicy());
+      let disposed = 0;
+      await expectTransportError(
+        host.host(
+          invitePolicy(undefined, 2, (authorization) => ({
+            ...authorization,
+            dispose() {
+              disposed += 1;
+              authorization.dispose();
+            },
+          }))
+        ),
+        'INVALID_CONFIGURATION'
+      );
+      expect(disposed).toBe(1);
+      const guest = harness.createTransport();
+      await guest.join(await joinInput(original, GUEST_IDS[0]));
+      await guest.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'original-still-valid',
+      });
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('failed old authorization cleanup aborts replacement and disposes the candidate', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      await host.host(
+        invitePolicy(undefined, 6, (authorization) => ({
+          ...authorization,
+          dispose() {
+            authorization.dispose();
+            throw new Error('private-cleanup-detail');
+          },
+        }))
+      );
+      const hostEvents = recordEvents(host);
+      let candidateDisposals = 0;
+      await expectTransportError(
+        host.host(
+          invitePolicy(undefined, 6, (authorization) => ({
+            ...authorization,
+            dispose() {
+              candidateDisposals += 1;
+              authorization.dispose();
+            },
+          }))
+        ),
+        'CONNECTION_INTERRUPTED'
+      );
+      expect(candidateDisposals).toBe(1);
+      await expectTransportError(
+        host.send({
+          delivery: { kind: 'broadcast' },
+          payload: 'must-not-send',
+        }),
+        'NOT_READY'
+      );
+      expect(hostEvents.events).toContainEqual({
+        kind: 'connection-state-changed',
+        state: 'terminal',
+        reason: 'connection-interrupted',
+      });
+      hostEvents.unsubscribe();
+      await host.dispose();
+    });
+
+    it('host leave reports cleanup failure while terminating connected guests', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const guest = harness.createTransport();
+      const invite = await host.host(
+        invitePolicy(undefined, 6, (authorization) => ({
+          ...authorization,
+          dispose() {
+            authorization.dispose();
+            throw new Error('private-cleanup-detail');
+          },
+        }))
+      );
+      await guest.join(await joinInput(invite, GUEST_IDS[0]));
+      const events = recordEvents(guest);
+      await expectTransportError(
+        host.leave('owner-left'),
+        'CONNECTION_INTERRUPTED'
+      );
+      expect(events.events).toContainEqual({
+        kind: 'connection-state-changed',
+        state: 'terminal',
+        reason: 'host-ended',
+      });
+      events.unsubscribe();
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it.each(['host', 'guest'] as const)(
+      'rejects a queued %s send when a recoverable condition starts before delivery',
+      async (sender) => {
+        const harness = createHarness();
+        const pair = await connectedPair(harness);
+        const hostEvents = recordEvents(pair.host);
+        const guestEvents = recordEvents(pair.guest);
+        const transport = pair[sender];
+        const rejected = expectTransportError(
+          transport.send({
+            delivery: { kind: 'broadcast' },
+            payload: 'must-not-deliver-during-reconnect',
+          }),
+          'CONNECTION_INTERRUPTED'
+        );
+        harness.interrupt(transport, 'network-changed');
+        await rejected;
+        expect(receivedPayloads(hostEvents.events)).toEqual([]);
+        expect(receivedPayloads(guestEvents.events)).toEqual([]);
+        hostEvents.unsubscribe();
+        guestEvents.unsubscribe();
+        await pair.guest.dispose();
+        await pair.host.dispose();
+      }
+    );
+
+    it('stops a recoverable idle-condition callback that disposes its endpoint', async () => {
+      const harness = createHarness();
+      const endpoint = harness.createTransport();
+      const disposals: Promise<void>[] = [];
+      endpoint.subscribe((event) => {
+        if (event.kind === 'transport-condition')
+          disposals.push(endpoint.dispose());
+      });
+      harness.interrupt(endpoint, 'network-changed');
+      await Promise.all(disposals);
+      expect(disposals).toHaveLength(1);
+      await expectTransportError(endpoint.leave('owner-left'), 'DISPOSED');
+    });
+
+    it.each(['host', 'guest'] as const)(
+      'honors %s departure from condition callbacks without reviving endpoints',
+      async (departing) => {
+        const harness = createHarness();
+        const { host, firstGuest, secondGuest } =
+          await connectedTriple(harness);
+        const exits: Promise<void>[] = [];
+        const subject = departing === 'host' ? host : firstGuest;
+        const unsubscribe = subject.subscribe((event) => {
+          if (event.kind === 'transport-condition')
+            exits.push(subject.leave('owner-left'));
+        });
+        const firstEvents = recordEvents(firstGuest);
+        const secondEvents = recordEvents(secondGuest);
+        harness.interrupt(host, 'network-changed');
+        await Promise.all(exits);
+        expect(exits).toHaveLength(1);
+        expect(
+          firstEvents.events.some(
+            (event) =>
+              event.kind === 'connection-state-changed' &&
+              event.state === 'terminal'
+          )
+        ).toBe(true);
+        if (departing === 'host')
+          expect(
+            secondEvents.events.some(
+              (event) =>
+                event.kind === 'connection-state-changed' &&
+                event.state === 'terminal'
+            )
+          ).toBe(true);
+        unsubscribe();
+        firstEvents.unsubscribe();
+        secondEvents.unsubscribe();
+        await firstGuest.dispose();
+        await secondGuest.dispose();
+        await host.dispose();
+      }
+    );
+
+    it('terminates a pending ready reservation on a recoverable condition', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const guest = harness.createTransport();
+      const enteredReady = deferred();
+      const releaseReady = deferred();
+      const invite = await host.host(
+        invitePolicy(async () => {
+          enteredReady.resolve();
+          await releaseReady.promise;
+        })
+      );
+      const joining = expectTransportError(
+        guest.join(await joinInput(invite, GUEST_IDS[0])),
+        'CONNECTION_INTERRUPTED'
+      );
+      await enteredReady.promise;
+      harness.interrupt(guest, 'network-changed');
+      releaseReady.resolve();
+      await joining;
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('guest permission denial terminates only that guest and permits a fresh host invite', async () => {
+      const harness = createHarness();
+      const { host, guest } = await connectedPair(harness);
+      const events = recordEvents(guest);
+      harness.interrupt(guest, 'local-network-permission-denied');
+      expect(events.events).toContainEqual({
+        kind: 'connection-state-changed',
+        state: 'terminal',
+        reason: 'local-network-permission-denied',
+      });
+      const replacement = harness.createTransport();
+      await replacement.join(
+        await joinInput(await host.host(invitePolicy()), GUEST_IDS[1])
+      );
+      await replacement.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'fresh guest',
+      });
+      events.unsubscribe();
+      await guest.dispose();
+      await replacement.dispose();
+      await host.dispose();
+    });
+
+    it('rejects generation changes caused during envelope and policy snapshots', async () => {
+      const harness = createHarness();
+      const pair = await connectedPair(harness);
+      let interrupted = false;
+      const envelope = new Proxy(
+        { delivery: { kind: 'broadcast' as const }, payload: 'not delivered' },
+        {
+          ownKeys(target) {
+            if (!interrupted) {
+              interrupted = true;
+              harness.interrupt(pair.guest, 'network-changed');
+            }
+            return Reflect.ownKeys(target);
+          },
+        }
+      );
+      await expectTransportError(
+        pair.guest.send(envelope),
+        'CONNECTION_INTERRUPTED'
+      );
+      expect(interrupted).toBe(true);
+      const idle = harness.createTransport();
+      let policyInterrupted = false;
+      const policy = new Proxy(invitePolicy(), {
+        ownKeys(target) {
+          if (!policyInterrupted) {
+            policyInterrupted = true;
+            harness.interrupt(idle, 'network-changed');
+          }
+          return Reflect.ownKeys(target);
+        },
+      });
+      await expectTransportError(idle.host(policy), 'CONNECTION_INTERRUPTED');
+      expect(policyInterrupted).toBe(true);
+      await expect(idle.host(invitePolicy())).resolves.toBeDefined();
+      await idle.dispose();
+      await pair.guest.dispose();
+      await pair.host.dispose();
+    });
+
+    it('masks unexpected serialization and clock failures and recovers after restoring each boundary', async () => {
+      const harness = createHarness();
+      const pair = await connectedPair(harness);
+      const encoding = spyOn(
+        TextEncoder.prototype,
+        'encode'
+      ).mockImplementationOnce(() => {
+        throw new Error('private encode failure');
+      });
+      try {
+        const message = await expectTransportError(
+          pair.guest.send({
+            delivery: { kind: 'broadcast' },
+            payload: 'normal payload',
+          }),
+          'INVALID_ENVELOPE'
+        );
+        expect(message).not.toContain('private');
+      } finally {
+        encoding.mockRestore();
+      }
+      const clock = spyOn(performance, 'now').mockImplementationOnce(() => {
+        throw new Error('private clock failure');
+      });
+      try {
+        const message = await expectTransportError(
+          pair.guest.send({
+            delivery: { kind: 'broadcast' },
+            payload: 'normal payload',
+          }),
+          'DELIVERY_FAILED'
+        );
+        expect(message).not.toContain('private');
+      } finally {
+        clock.mockRestore();
+      }
+      await pair.guest.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'restored delivery',
+      });
+      await pair.guest.dispose();
+      await pair.host.dispose();
+    });
+
+    it('rejects stale host completion when a hosting listener initiates reconnect', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      let changed = false;
+      const unsubscribe = host.subscribe((event) => {
+        if (
+          !changed &&
+          event.kind === 'connection-state-changed' &&
+          event.state === 'hosting'
+        ) {
+          changed = true;
+          harness.interrupt(host, 'network-changed');
+        }
+      });
+      await expectTransportError(
+        host.host(invitePolicy()),
+        'CONNECTION_INTERRUPTED'
+      );
+      expect(changed).toBe(true);
+      unsubscribe();
+      const guest = harness.createTransport();
+      await guest.join(
+        await joinInput(await host.host(invitePolicy()), GUEST_IDS[0])
+      );
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('rejects mismatching descriptors and repeated connected joins without consuming a valid join', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const otherHost = harness.createTransport();
+      const guest = harness.createTransport();
+      const invite = await host.host(invitePolicy());
+      const input = await joinInput(invite, GUEST_IDS[0]);
+      await expectTransportError(
+        guest.join({ ...input, invite: { ...input.invite, capacity: 2 } }),
+        'INVALID_CONFIGURATION'
+      );
+      await otherHost.host(invitePolicy());
+      await expectTransportError(otherHost.join(input), 'INVALID_STATE');
+      await guest.join(input);
+      await expectTransportError(guest.join(input), 'INVALID_STATE');
+      await guest.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'original connection',
+      });
+      await guest.dispose();
+      await otherHost.dispose();
+      await host.dispose();
+    });
+
+    it('does not route a broadcast to a guest that leaves during an earlier delivery', async () => {
+      const harness = createHarness();
+      const { host, firstGuest, secondGuest } = await connectedTriple(harness);
+      const leaves: Promise<void>[] = [];
+      const unsubscribe = firstGuest.subscribe((event) => {
+        if (event.kind === 'envelope-received')
+          leaves.push(secondGuest.leave('owner-left'));
+      });
+      const secondEvents = recordEvents(secondGuest);
+      await expectTransportError(
+        host.send({
+          delivery: { kind: 'broadcast' },
+          payload: 'private broadcast',
+        }),
+        'DELIVERY_FAILED'
+      );
+      await Promise.all(leaves);
+      expect(leaves).toHaveLength(1);
+      expect(receivedPayloads(secondEvents.events)).toEqual([]);
+      unsubscribe();
+      secondEvents.unsubscribe();
+      await firstGuest.dispose();
+      await secondGuest.dispose();
+      await host.dispose();
+    });
+
+    it('does not refresh a host ended by a membership callback during guest departure', async () => {
+      const harness = createHarness();
+      const { host, firstGuest, secondGuest } = await connectedTriple(harness);
+      const exits: Promise<void>[] = [];
+      const remaining = recordEvents(secondGuest);
+      const unsubscribe = host.subscribe((event) => {
+        if (event.kind === 'membership-changed' && event.change === 'left')
+          exits.push(host.leave('owner-left'));
+      });
+      await firstGuest.leave('owner-left');
+      await Promise.all(exits);
+      expect(exits).toHaveLength(1);
+      expect(remaining.events).toContainEqual({
+        kind: 'connection-state-changed',
+        state: 'terminal',
+        reason: 'host-ended',
+      });
+      unsubscribe();
+      remaining.unsubscribe();
+      await firstGuest.dispose();
+      await secondGuest.dispose();
+      await host.dispose();
+    });
+
+    it('skips a pending guest disposed by an earlier pending-condition callback', async () => {
+      const harness = createHarness();
+      const host = harness.createTransport();
+      const first = harness.createTransport();
+      const second = harness.createTransport();
+      const firstStarted = deferred();
+      const secondStarted = deferred();
+      const release = deferred();
+      let starts = 0;
+      const invite = await host.host(
+        invitePolicy(undefined, 6, (authorization) => ({
+          ...authorization,
+          async authorizeJoin(raw, fingerprint) {
+            starts += 1;
+            if (starts === 1) firstStarted.resolve();
+            else secondStarted.resolve();
+            await release.promise;
+            return authorization.authorizeJoin(raw, fingerprint);
+          },
+        }))
+      );
+      const firstJoin = expectTransportError(
+        first.join(await joinInput(invite, GUEST_IDS[0])),
+        'CONNECTION_INTERRUPTED'
+      );
+      await firstStarted.promise;
+      const secondJoin = expectTransportError(
+        second.join(await joinInput(invite, GUEST_IDS[1])),
+        'DISPOSED'
+      );
+      await secondStarted.promise;
+      const disposals: Promise<void>[] = [];
+      const unsubscribe = first.subscribe((event) => {
+        if (event.kind === 'transport-condition')
+          disposals.push(second.dispose());
+      });
+      harness.interrupt(host, 'network-changed');
+      release.resolve();
+      await Promise.all([firstJoin, secondJoin, ...disposals]);
+      expect(disposals).toHaveLength(1);
+      unsubscribe();
+      await first.dispose();
+      await second.dispose();
+      await host.dispose();
+    });
+
+    it('does not revive a terminal guest after reconnect readiness rejects', async () => {
+      const harness = createHarness();
+      const { host, guest, invite } = await connectedPair(harness);
+      harness.interrupt(guest, 'network-changed');
+      await expectTransportError(
+        guest.join(
+          await joinInput(invite, GUEST_IDS[0], async () => {
+            throw new Error('private readiness failure');
+          })
+        ),
+        'READY_REJECTED'
+      );
+      const guestEvents = recordEvents(guest);
+      harness.interrupt(host, 'network-changed');
+      expect(guestEvents.events).toHaveLength(0);
+      await expectTransportError(
+        guest.send({
+          delivery: { kind: 'broadcast' },
+          payload: 'must not revive',
+        }),
+        'NOT_READY'
+      );
+      await guest.dispose();
+      const fresh = harness.createTransport();
+      await fresh.join(
+        await joinInput(await host.host(invitePolicy()), GUEST_IDS[1])
+      );
+      await fresh.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'recovered after disposed terminal guest',
+      });
+      guestEvents.unsubscribe();
+      await fresh.dispose();
+      await host.dispose();
+    });
+
+    it('rejects reconnect readiness completed against a replaced host authorization', async () => {
+      const harness = createHarness();
+      const { host, guest, invite } = await connectedPair(harness);
+      harness.interrupt(guest, 'network-changed');
+      const readyStarted = deferred();
+      const finishReady = deferred();
+      const reconnecting = expectTransportError(
+        guest.join(
+          await joinInput(invite, GUEST_IDS[0], async () => {
+            readyStarted.resolve();
+            await finishReady.promise;
+          })
+        ),
+        'CONNECTION_INTERRUPTED'
+      );
+      await readyStarted.promise;
+      const replacement = await host.host(invitePolicy());
+      finishReady.resolve();
+      await reconnecting;
+      await expectTransportError(
+        guest.send({
+          delivery: { kind: 'broadcast' },
+          payload: 'stale authorization',
+        }),
+        'NOT_READY'
+      );
+      await guest.dispose();
+      const fresh = harness.createTransport();
+      await fresh.join(await joinInput(replacement, GUEST_IDS[1]));
+      await fresh.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'current authorization',
+      });
+      await fresh.dispose();
+      await host.dispose();
+    });
+
+    it('keeps a queued send valid while a host invite refresh advances operation generation', async () => {
+      const harness = createHarness();
+      const { host, guest } = await connectedPair(harness);
+      const events = recordEvents(guest);
+      const sending = host.send({
+        delivery: { kind: 'broadcast' },
+        payload: 'admitted before invite refresh',
+      });
+      const refreshing = host.host(invitePolicy());
+      await sending;
+      await refreshing;
+      expect(receivedPayloads(events.events)).toEqual([
+        'admitted before invite refresh',
+      ]);
+      events.unsubscribe();
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('distinguishes an in-flight route failure from queued invalidation during host exit', async () => {
+      const harness = createHarness();
+      const { host, guest } = await connectedPair(harness);
+      const exits: Promise<void>[] = [];
+      const events = recordEvents(guest);
+      const unsubscribe = guest.subscribe((event) => {
+        if (event.kind === 'envelope-received')
+          exits.push(host.leave('owner-left'));
+      });
+      const first = expectTransportError(
+        host.send({ delivery: { kind: 'broadcast' }, payload: 'in flight' }),
+        'DELIVERY_FAILED'
+      );
+      const second = expectTransportError(
+        host.send({ delivery: { kind: 'broadcast' }, payload: 'still queued' }),
+        'CONNECTION_INTERRUPTED'
+      );
+      await Promise.all([first, second]);
+      await Promise.all(exits);
+      expect(receivedPayloads(events.events)).toEqual(['in flight']);
+      expect(exits).toHaveLength(1);
+      unsubscribe();
+      events.unsubscribe();
+      await guest.dispose();
+      await host.dispose();
+    });
+
+    it('keeps synchronous reentrant enqueue order without an additional delivery turn', async () => {
+      const harness = createHarness();
+      const { host, guest } = await connectedPair(harness);
+      const followUps: Promise<void>[] = [];
+      const events = recordEvents(guest);
+      const unsubscribe = guest.subscribe((event) => {
+        if (
+          event.kind === 'envelope-received' &&
+          event.envelope.payload === 'first'
+        )
+          followUps.push(
+            host.send({ delivery: { kind: 'broadcast' }, payload: 'second' })
+          );
+      });
+      await host.send({ delivery: { kind: 'broadcast' }, payload: 'first' });
+      await Promise.all(followUps);
+      expect(receivedPayloads(events.events)).toEqual(['first', 'second']);
+      expect(followUps).toHaveLength(1);
+      unsubscribe();
+      events.unsubscribe();
+      await guest.dispose();
+      await host.dispose();
+    });
+
     it('実 Join Proof と Host / Guest Ready の完了後だけ接続し送信を許可する', async () => {
       const harness = createHarness();
       const host = harness.createTransport();

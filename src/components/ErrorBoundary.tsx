@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '../ui/theme';
 import { MIN_TOUCH_TARGET } from '../ui/touch-target';
 
@@ -64,18 +65,20 @@ export class ErrorBoundary extends Component<
     const { messages, onRecover } = this.props;
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View accessibilityRole="alert" style={styles.container}>
-          <Text style={styles.title}>{messages.title}</Text>
-          <Text style={styles.description}>{messages.description}</Text>
-          <Pressable
-            accessibilityLabel={messages.backButtonLabel}
-            accessibilityRole="button"
-            onPress={onRecover}
-            style={styles.button}
-          >
-            <Text style={styles.buttonLabel}>{messages.backButtonLabel}</Text>
-          </Pressable>
-        </View>
+        <ScrollView>
+          <View accessibilityRole="alert" style={styles.container}>
+            <Text style={styles.title}>{messages.title}</Text>
+            <Text style={styles.description}>{messages.description}</Text>
+            <Pressable
+              accessibilityLabel={messages.backButtonLabel}
+              accessibilityRole="button"
+              onPress={onRecover}
+              style={styles.button}
+            >
+              <Text style={styles.buttonLabel}>{messages.backButtonLabel}</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }

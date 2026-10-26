@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import { Keyboard, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import packageManifest from './package.json';
 import { createDefaultBackupSharePort } from './src/app/default-backup-share';
 import { createDefaultInitialLocalePort } from './src/app/default-initial-locale-port';
@@ -59,28 +60,30 @@ export default function App() {
     setLearningLocale(locale);
   }, []);
   return (
-    <LearningNavigation.Provider value={openLearning}>
-      <StatusBar style="dark" />
+    <SafeAreaProvider>
+      <LearningNavigation.Provider value={openLearning}>
+        <StatusBar style="dark" />
 
-      <View style={{ flex: 1, display: learningLocale ? 'none' : 'flex' }}>
-        <PassportApp
-          appVersion={packageManifest.version}
-          backupSharePort={backupSharePort}
-          localDataControl={localDataControl}
-          localProfileStorage={localProfileStorage}
-          introCardStorage={introCardStorage}
-          initialLocalePort={initialLocalePort}
-          localePreferenceStorage={localePreferenceStorage}
-        />
-      </View>
-      {learningLocale ? (
-        <LearningScreen
-          storage={learningStorage}
-          files={learningFiles}
-          locale={learningLocale}
-          onClose={() => setLearningLocale(null)}
-        />
-      ) : null}
-    </LearningNavigation.Provider>
+        <View style={{ flex: 1, display: learningLocale ? 'none' : 'flex' }}>
+          <PassportApp
+            appVersion={packageManifest.version}
+            backupSharePort={backupSharePort}
+            localDataControl={localDataControl}
+            localProfileStorage={localProfileStorage}
+            introCardStorage={introCardStorage}
+            initialLocalePort={initialLocalePort}
+            localePreferenceStorage={localePreferenceStorage}
+          />
+        </View>
+        {learningLocale ? (
+          <LearningScreen
+            storage={learningStorage}
+            files={learningFiles}
+            locale={learningLocale}
+            onClose={() => setLearningLocale(null)}
+          />
+        ) : null}
+      </LearningNavigation.Provider>
+    </SafeAreaProvider>
   );
 }

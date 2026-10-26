@@ -44,9 +44,9 @@ const CANDIDATE_NAMES = {
 } as const;
 
 const REPOSITORY_BASELINE = {
-  expoSdk: '57.0.28',
-  reactNative: '0.86.3',
-  androidCompileSdk: 36,
+  expoSdk: '58.0.19',
+  reactNative: '0.88.0',
+  androidCompileSdk: 37,
   androidTargetSdk: 36,
   iosMinimum: '16.4',
   xcodeMinimum: '26.4',
@@ -93,7 +93,7 @@ interface OfficialSourcePolicy {
 const OFFICIAL_SOURCE_CATALOG: Readonly<Record<string, OfficialSourcePolicy>> =
   {
     'expo-platform-baseline': {
-      url: 'https://docs.expo.dev/versions/v57.0.0/',
+      url: 'https://docs.expo.dev/versions/v58.0.0/',
       gateIds: ['officialSourceAndVersion', 'licenseAndMaintenance'],
       roles: ['baseline'],
     },

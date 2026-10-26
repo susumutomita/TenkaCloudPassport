@@ -101,9 +101,10 @@ const styles = StyleSheet.create({
     borderColor: colors.disabled,
     borderRadius: 6,
     borderWidth: 2,
-    height: 24,
+    minHeight: 24,
     justifyContent: 'center',
-    width: 24,
+    minWidth: 24,
+    flexShrink: 0,
   },
   checked: {
     backgroundColor: colors.primary,
@@ -116,6 +117,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   label: {
