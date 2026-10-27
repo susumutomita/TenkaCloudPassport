@@ -16,6 +16,7 @@ interface Props {
   readonly provider: GenerationPort;
   readonly locale: Locale;
   readonly disabled: boolean;
+  readonly onBusyChange: (busy: boolean) => void;
   readonly onCatalog: (catalog: Catalog) => void;
 }
 const reasons: Record<GenerationAvailability, readonly [string, string]> = {
@@ -53,21 +54,22 @@ const reasons: Record<GenerationAvailability, readonly [string, string]> = {
   ],
 };
 
-export default function PracticeGenerationPanel({
-  provider,
-  locale,
-  disabled,
-  onCatalog,
-}: Props) {
+function useGeneration(
+  provider: GenerationPort,
+  locale: Locale,
+  onCatalog: Props['onCatalog'],
+  onBusyChange: Props['onBusyChange']
+) {
   const [availability, setAvailability] =
     useState<GenerationAvailability>('unknown');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [outcome, setOutcome] = useState<'idle' | 'failed' | 'cancelled'>(
+    'idle'
+  );
   const alive = useRef(false);
   const inFlight = useRef(false);
   const cancellation = useRef<AbortController | null>(null);
   const generation = useRef(0);
-  const ja = locale === 'ja';
   const check = useCallback(async () => {
     const request = ++generation.current;
     try {
@@ -88,33 +90,62 @@ export default function PracticeGenerationPanel({
     });
     return () => {
       alive.current = false;
+      onBusyChange(false);
       cancellation.current?.abort();
       generation.current += 1;
       subscription.remove();
     };
-  }, [check]);
+  }, [check, onBusyChange]);
+  function reportFailure() {
+    const aborted = cancellation.current?.signal.aborted ?? false;
+    setOutcome(aborted ? 'cancelled' : 'failed');
+  }
   async function generate() {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
-    setError(false);
+    onBusyChange(true);
+    setOutcome('idle');
     try {
       const controller = new AbortController();
       cancellation.current = controller;
       const draft = await provider.generate(controller.signal);
       const catalog = practiceCatalog([draft], locale, 'apple');
-      if (alive.current) onCatalog(catalog);
+      if (!alive.current || controller.signal.aborted) return;
+      onCatalog(catalog);
     } catch {
       if (alive.current) {
-        setError(true);
+        reportFailure();
         void check();
       }
     } finally {
       inFlight.current = false;
       cancellation.current = null;
-      if (alive.current) setBusy(false);
+      if (alive.current) {
+        setBusy(false);
+        onBusyChange(false);
+      }
     }
   }
+  return {
+    availability,
+    busy,
+    outcome,
+    check,
+    generate,
+    cancel: () => cancellation.current?.abort(),
+  };
+}
+export default function PracticeGenerationPanel({
+  provider,
+  locale,
+  disabled,
+  onCatalog,
+  onBusyChange,
+}: Props) {
+  const { availability, busy, outcome, check, generate, cancel } =
+    useGeneration(provider, locale, onCatalog, onBusyChange);
+  const ja = locale === 'ja';
   return (
     <View style={{ gap: 12 }}>
       <Text>
@@ -153,19 +184,39 @@ export default function PracticeGenerationPanel({
         disabled={disabled || busy || availability !== 'available'}
         onPress={() => void generate()}
       />
+      {busy && (
+        <ActionButton
+          label={ja ? '生成を中断' : 'Cancel generation'}
+          variant="secondary"
+          onPress={cancel}
+        />
+      )}
       <ActionButton
         label={ja ? 'AIの利用可否を再確認' : 'Check AI availability again'}
         disabled={busy}
         onPress={() => void check()}
         variant="secondary"
       />
-      {error ? (
-        <Text accessibilityRole="alert">
-          {ja
-            ? '生成できませんでした。保存データは変更していません。同梱練習を利用するか再試行してください。'
-            : 'Generation failed. Saved data was not changed. Use bundled practice or retry.'}
-        </Text>
-      ) : null}
+      <GenerationOutcome outcome={outcome} ja={ja} />
     </View>
   );
+}
+
+function GenerationOutcome({
+  outcome,
+  ja,
+}: {
+  outcome: 'idle' | 'failed' | 'cancelled';
+  ja: boolean;
+}) {
+  if (outcome === 'idle') return null;
+  const text =
+    outcome === 'cancelled'
+      ? ja
+        ? '生成を中断しました。保存データは変更していません。'
+        : 'Generation cancelled. Saved data was not changed.'
+      : ja
+        ? '生成できませんでした。保存データは変更していません。同梱練習を利用するか再試行してください。'
+        : 'Generation failed. Saved data was not changed. Use bundled practice or retry.';
+  return <Text accessibilityRole="alert">{text}</Text>;
 }

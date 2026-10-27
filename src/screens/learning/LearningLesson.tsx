@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Linking, StyleSheet, Text, TextInput, View } from 'react-native';
 import { practiceText } from '../../app/learning/presentation';
 import ActionButton from '../../components/ActionButton';
+import CorrectReaction from '../../components/CorrectReaction';
 import {
   type Attempt,
   type Catalog,
@@ -95,6 +96,7 @@ function StepBody({
   readonly onAnswer: Props['onAnswer'];
   readonly onNext: () => void;
 }) {
+  const initialAttempt = useRef(attempt?.id);
   const accepted = attempt && attempt.result !== 'incorrect';
   return (
     <>
@@ -102,7 +104,9 @@ function StepBody({
         {index + 1}/{count} · {step.phase}
       </Text>
       {step.title ? <Text style={styles.heading}>{step.title}</Text> : null}
-      <Text style={styles.body}>{practiceText(step.prompt)}</Text>
+      <Text selectable style={styles.body}>
+        {practiceText(step.prompt)}
+      </Text>
       {step.code ? (
         <Text selectable style={styles.code}>
           {step.code}
@@ -120,7 +124,14 @@ function StepBody({
       {step.choices.length === 0 ? (
         <SelfAssessment step={step} busy={busy} onAnswer={onAnswer} />
       ) : null}
-      {attempt ? <Feedback attempt={attempt} step={step} /> : null}
+      {attempt ? (
+        <Feedback
+          key={attempt.id}
+          attempt={attempt}
+          step={step}
+          celebrate={attempt.id !== initialAttempt.current}
+        />
+      ) : null}
       <ActionButton
         label="次へ / Next"
         disabled={busy || !accepted}
@@ -290,10 +301,13 @@ function LessonDetails({ lesson }: { readonly lesson: Lesson }) {
 function Feedback({
   attempt,
   step,
+  celebrate,
 }: {
   readonly attempt: Attempt;
   readonly step: Step;
+  readonly celebrate: boolean;
 }) {
+  const [details, setDetails] = useState(false);
   const titles = {
     correct: '✓ 選択問題の正解 / Correct choice',
     incorrect: 'もう一度考えてみましょう / Try again',
@@ -306,11 +320,26 @@ function Feedback({
       accessibilityRole="alert"
       style={attempt.result === 'incorrect' ? styles.error : styles.success}
     >
-      <Text style={styles.heading}>{titles[attempt.result]}</Text>
-      <Text style={styles.body}>
-        {step.choices.find((choice) => choice.id === attempt.choiceID)
-          ?.explanation ?? step.explanation}
-      </Text>
+      {attempt.result === 'correct' ? (
+        <CorrectReaction label={titles.correct} active={celebrate} />
+      ) : (
+        <Text style={styles.heading}>{titles[attempt.result]}</Text>
+      )}
+      <ActionButton
+        label={
+          details
+            ? '解説を閉じる / Hide explanation'
+            : '解説を見る / Read explanation'
+        }
+        variant="secondary"
+        onPress={() => setDetails(!details)}
+      />
+      {details && (
+        <Text selectable style={styles.body}>
+          {step.choices.find((choice) => choice.id === attempt.choiceID)
+            ?.explanation ?? step.explanation}
+        </Text>
+      )}
     </View>
   );
 }

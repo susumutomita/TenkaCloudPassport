@@ -52,13 +52,14 @@ export default function LearningScreen({
   locale,
   onClose,
 }: Props) {
+  const [generationBusy, setGenerationBusy] = useState(false);
   const [practice, setPractice] = useState(false);
+  const [created, setCreated] = useState<Catalog | null>(null);
   const flow = useLearning(storage, files);
+  const uiFlow = { ...flow, busy: flow.busy || generationBusy };
   const ja = locale === 'ja';
-  const screenKey =
-    flow.selection && flow.state
-      ? `${lessonKey(flow.selection.catalog, flow.selection.lesson)}-${currentProgress(flow.state, flow.selection.catalog, flow.selection.lesson)?.index ?? 0}`
-      : 'home';
+  const screenKey = learningScreenKey(flow, created);
+  const createdSaved = hasCreated(flow, created);
   if (practice && forensicHost)
     return (
       <ForensicScreen
@@ -86,10 +87,24 @@ export default function LearningScreen({
           : 'Offline practice. Explanations are self-assessed; code is not executed or automatically graded. No mastery or interview outcome is guaranteed.'
       }
     >
+      {created && !flow.selection && (
+        <CreatedPractice
+          catalog={created}
+          flow={uiFlow}
+          locale={locale}
+          onDismiss={() => setCreated(null)}
+        />
+      )}
       <PracticeEntry
         provider={generationProvider}
-        flow={flow}
+        flow={uiFlow}
+        onBusyChange={setGenerationBusy}
         locale={locale}
+        onCatalog={(catalog) => {
+          setCreated(catalog);
+          flow.prepareCatalog(catalog);
+        }}
+        hidden={createdSaved}
       />
       {forensicHost && (
         <ActionButton
@@ -112,27 +127,106 @@ export default function LearningScreen({
           {flow.message}
         </Text>
       ) : null}
-      <LearningBody flow={flow} locale={locale} />
+      <LearningBody flow={uiFlow} locale={locale} />
     </AppScreen>
   );
+}
+function hasCreated(flow: Flow, created: Catalog | null): boolean {
+  if (!created) return false;
+  return (
+    flow.state?.catalogs.some((c) => catalogKey(c) === catalogKey(created)) ??
+    false
+  );
+}
+function learningScreenKey(flow: Flow, created: Catalog | null): string {
+  if (flow.selection && flow.state)
+    return `${lessonKey(flow.selection.catalog, flow.selection.lesson)}-${currentProgress(flow.state, flow.selection.catalog, flow.selection.lesson)?.index ?? 0}`;
+  if (flow.pending && created) return 'practice-preview';
+  return hasCreated(flow, created) ? 'practice-ready' : 'home';
 }
 function PracticeEntry({
   provider,
   flow,
   locale,
+  onCatalog,
+  onBusyChange,
+  hidden,
 }: {
+  readonly onBusyChange: (busy: boolean) => void;
+  readonly onCatalog: (catalog: Catalog) => void;
+  readonly hidden: boolean;
   readonly provider: GenerationPort | undefined;
   readonly flow: Flow;
   readonly locale: Locale;
 }) {
-  if (!provider || flow.selection || flow.pending) return null;
+  if (!provider || hidden || flow.selection || flow.pending) return null;
   return (
     <PracticeGenerationPanel
       provider={provider}
       locale={locale}
       disabled={flow.busy || !flow.state}
-      onCatalog={flow.prepareCatalog}
+      onCatalog={onCatalog}
+      onBusyChange={onBusyChange}
     />
+  );
+}
+function CreatedPractice({
+  catalog,
+  flow,
+  locale,
+  onDismiss,
+}: {
+  catalog: Catalog;
+  flow: Flow;
+  locale: Locale;
+  onDismiss(): void;
+}) {
+  const ja = locale === 'ja';
+  const saved = flow.state?.catalogs.find(
+    (c) => catalogKey(c) === catalogKey(catalog)
+  );
+  const proposed = flow.pending?.catalogs.some(
+    (c) => catalogKey(c) === catalogKey(catalog)
+  );
+  if (!saved && !proposed) return null;
+  return (
+    <View style={styles.card} testID="created-practice">
+      <Text style={styles.heading}>
+        {saved
+          ? ja
+            ? '練習を開けます'
+            : 'Your practice is ready'
+          : ja
+            ? '練習を作成しました・保存前の確認'
+            : 'Practice created · review before saving'}
+      </Text>
+      {(saved ?? catalog).lessons.map((lesson) => (
+        <View key={lesson.id} style={{ gap: spacing.sm }}>
+          <Text selectable>{lesson.steps[0]?.prompt}</Text>
+          {saved && (
+            <ActionButton
+              label={
+                ja
+                  ? `この問題を開く：${lesson.title}`
+                  : `Open this question: ${lesson.title}`
+              }
+              disabled={flow.busy || !!flow.pending}
+              onPress={() => {
+                if (!flow.pending) void flow.open(saved, lesson);
+              }}
+            />
+          )}
+        </View>
+      ))}
+      {saved && (
+        <ActionButton
+          label={ja ? '別の練習を作る' : 'Create another practice'}
+          disabled={flow.busy || !!flow.pending}
+          variant="secondary"
+          onPress={onDismiss}
+        />
+      )}
+    </View>
   );
 }
 function LearningBody({
