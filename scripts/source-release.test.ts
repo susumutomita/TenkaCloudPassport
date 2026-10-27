@@ -3360,35 +3360,60 @@ describe('directory generation identity races', () => {
       ref: 'HEAD',
       outputDirectory,
     });
+    const originalOpen = fsBoundary.open;
     const originalLstat = fsBoundary.lstat;
     let changed = false;
+    let candidateStats = 0;
+    let closed = 0;
+    let restoreClose: () => void = () => undefined;
+    // The second snapshot belongs to openDirectoryIdentity, after Promise.all's
+    // path checks settled. Give that helper a coherent NEW directory, leaving
+    // the outer path snapshot OLD so its descriptor comparison is exercised.
     const stating = spyOn(fsBoundary, 'lstat').mockImplementation(
       new Proxy(originalLstat, {
-        async apply(_target, _receiver, arguments_) {
-          const [file, ...options] = arguments_;
-          const result = await Reflect.apply(originalLstat, fsBoundary, [
-            file,
-            ...options,
-          ]);
-          if (!changed && String(file) === outputDirectory) {
-            changed = true;
-            renameSync(outputDirectory, held);
-            mkdirSync(outputDirectory);
+        async apply(target, receiver, arguments_) {
+          if (String(arguments_[0]) === outputDirectory) {
+            candidateStats += 1;
+            if (candidateStats === 2) {
+              changed = true;
+              renameSync(outputDirectory, held);
+              mkdirSync(outputDirectory);
+            }
           }
-          return result;
+          return Reflect.apply(target, receiver, arguments_);
         },
       })
+    );
+    const opening = spyOn(fsBoundary, 'open').mockImplementation(
+      async (file, ...options) => {
+        const handle = await originalOpen(file, ...options);
+        if (changed && String(file) === outputDirectory) {
+          const close = handle.close.bind(handle);
+          const closing = spyOn(handle, 'close').mockImplementation(
+            async () => {
+              closed += 1;
+              await close();
+            }
+          );
+          restoreClose = () => closing.mockRestore();
+        }
+        return handle;
+      }
     );
     try {
       await expect(
         validateSourceReleaseDirectory(outputDirectory, TEST_VERSION)
       ).rejects.toMatchObject({ code: 'UNSAFE_OUTPUT_DIRECTORY' });
       expect(changed).toBe(true);
+      expect(candidateStats).toBe(2);
+      expect(closed).toBe(1);
       expect(readFileSync(path.join(held, 'LICENSE'), 'utf8')).toBe(
         'Fixture MIT License\n'
       );
     } finally {
       stating.mockRestore();
+      opening.mockRestore();
+      restoreClose();
     }
     syncFsBoundary.rmdirSync(outputDirectory);
     renameSync(held, outputDirectory);

@@ -11,7 +11,10 @@ async function open(page: Page, id: string) {
   await expect(page.getByTestId('practice-score')).toHaveText('Score: 0 / 400');
 }
 async function answerFromEvidence(page: Page) {
-  await page.getByRole('button', { name: /^I-CLOUD ·/ }).click();
+  await page
+    .getByTestId('practice-files')
+    .getByRole('button', { name: /^I-CLOUD ·/ })
+    .click();
   const cloud = JSON.parse(
     await page.getByTestId('practice-evidence').innerText()
   ) as { events: { operation: string; session: string }[] };
@@ -19,17 +22,25 @@ async function answerFromEvidence(page: Page) {
     (e) => e.operation === 'EnableExternalExport'
   );
   if (!action) throw new Error('Missing displayed action');
-  await page.getByRole('button', { name: /^I-IDP ·/ }).click();
+  await page
+    .getByTestId('practice-files')
+    .getByRole('button', { name: /^I-IDP ·/ })
+    .click();
   const idp = JSON.parse(
     await page.getByTestId('practice-evidence').innerText()
   ) as { events: { session: string; account: string }[] };
   const login = idp.events.find((e) => e.session === action.session);
   if (!login) throw new Error('Missing displayed login');
+  await page.getByRole('button', { name: login.account, exact: true }).click();
   await page
-    .getByRole('textbox', { name: 'Answer', exact: true })
-    .fill(login.account);
-  await page.getByRole('button', { name: 'I-IDP', exact: true }).click();
-  await page.getByRole('button', { name: 'I-CLOUD', exact: true }).click();
+    .getByTestId('practice-citations')
+    .getByRole('button', { name: /^I-IDP ·/ })
+    .click();
+  await page
+    .getByTestId('practice-citations')
+    .getByRole('button', { name: /^I-CLOUD ·/ })
+    .click();
+  return login.account;
 }
 test('the original evidence-based answer survives navigation, SQLite connection restart and page restart', async ({
   page,
@@ -112,12 +123,27 @@ test('narrow/Duo-sized changes keep the answer and controls usable without horiz
 }) => {
   await page.setViewportSize({ width: 744, height: 900 });
   await open(page, 'resize');
-  const answer = page.getByRole('textbox', { name: 'Answer', exact: true });
-  await answer.fill('draft retained');
-  await answer.focus();
+  const account = page
+    .getByRole('button', { name: /@aster.example$/, exact: false })
+    .first();
+  const name = await account.getAttribute('aria-label');
+  if (!name) throw new Error('Missing public candidate');
+  await account.click();
   await page.setViewportSize({ width: 320, height: 480 });
-  await expect(answer).toHaveValue('draft retained');
-  await expect(answer).toBeFocused();
+  await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
+  await page
+    .getByRole('button', { name: 'Choose a question', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Back to question', exact: true })
+    .click();
+  await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  );
   await page.locator('body').evaluate((body) => {
     for (const element of body.querySelectorAll<HTMLElement>('[dir="auto"]')) {
       element.style.fontSize = `${parseFloat(getComputedStyle(element).fontSize) * 2}px`;
@@ -137,28 +163,98 @@ test('narrow/Duo-sized changes keep the answer and controls usable without horiz
     .click();
   await expect(page.getByTestId('practice-score')).toHaveText('Score: 0 / 400');
 });
-test('the screen respects the existing512-character/four-evidence admission instead of trapping invalid operations', async ({
+test('tap forms retain the four-evidence admission without requiring a text keyboard', async ({
   page,
 }) => {
   await open(page, 'admission');
-  const answer = page.getByRole('textbox', { name: 'Answer', exact: true });
-  await answer.fill('x'.repeat(513));
-  await expect(answer).toHaveValue('x'.repeat(512));
+  const correct = await answerFromEvidence(page);
+  const displayed = await page
+    .getByRole('button', { name: /@aster\.example$/ })
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute('aria-label'))
+    );
+  const distractor = displayed.find((name) => name && name !== correct);
+  if (!distractor) throw new Error('Missing displayed distractor');
+  await page.getByRole('button', { name: distractor, exact: true }).click();
   await page
     .getByRole('button', { name: 'Submit answer and evidence', exact: true })
     .click();
   await expect(page.getByTestId('practice-result')).toContainText(
     'Not correct yet'
   );
+  await expect(page.getByTestId('practice-score')).toHaveText('Score: 0 / 400');
+  await expect(
+    page.getByRole('button', { name: 'Next question', exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Read explanation', exact: true })
+  ).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.getByRole('button', { name: '10', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Choose a question', exact: true })
+    .click();
+  await page.getByRole('button', { name: /^Question 10 ·/ }).click();
+  await expect(page.getByTestId('practice-question-title')).toContainText(
+    'Question 10 / 15'
+  );
+  const citations = page.getByTestId('practice-citations');
   for (const id of ['E-INVENTORY', 'E-APPROVAL', 'E-HISTORY', 'E-PLAN'])
-    await page.getByRole('button', { name: id, exact: true }).click();
+    await citations
+      .getByRole('button', { name: new RegExp(`^${id} ·`) })
+      .click();
   await expect(
-    page.getByRole('button', { name: 'E-OBSERVATION', exact: true })
+    citations.getByRole('button', { name: /^E-OBSERVATION ·/ })
   ).toBeDisabled();
-  await page.getByRole('button', { name: '✓ E-PLAN', exact: true }).click();
+  await citations.getByRole('button', { name: /^E-PLAN ·/ }).click();
   await expect(
-    page.getByRole('button', { name: 'E-OBSERVATION', exact: true })
+    citations.getByRole('button', { name: /^E-OBSERVATION ·/ })
   ).toBeEnabled();
+  await expect(
+    page.getByRole('textbox', { name: 'Answer', exact: true })
+  ).toHaveCount(0);
+});
+
+test('question rows select their own global index, show current state, and never replay another question result', async ({
+  page,
+}) => {
+  await open(page, 'question-mapping');
+  for (const number of [2, 3, 4, 15, 1]) {
+    await page
+      .getByRole('button', { name: 'Choose a question', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: new RegExp(`^Question ${number} ·`) })
+      .click();
+    await expect(page.getByTestId('practice-question-title')).toContainText(
+      `Question ${number} / 15`
+    );
+    await page
+      .getByRole('button', { name: 'Choose a question', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: new RegExp(`^Question ${number} ·`) })
+    ).toHaveAttribute('aria-selected', 'true');
+    await page
+      .getByRole('button', { name: 'Back to question', exact: true })
+      .click();
+  }
+  await answerFromEvidence(page);
+  await page
+    .getByRole('button', { name: 'Submit answer and evidence', exact: true })
+    .click();
+  await expect(page.getByTestId('practice-result')).toContainText('Correct');
+  await expect(page.getByTestId('practice-question-title')).toContainText(
+    'Question 1 / 15'
+  );
+  await page
+    .getByRole('button', { name: 'Read explanation', exact: true })
+    .click();
+  await expect(page.getByText(/The common session links two/)).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Next question', exact: true })
+    .click();
+  await expect(page.getByTestId('practice-question-title')).toContainText(
+    'Question 2 / 15'
+  );
+  await expect(page.getByTestId('practice-result')).toHaveCount(0);
 });
