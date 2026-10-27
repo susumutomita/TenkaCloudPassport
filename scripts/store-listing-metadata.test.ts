@@ -27,7 +27,7 @@ it('preserves the reviewed historical Store snapshot and its release settings in
 });
 it('rejects relabeling historical screenshot evidence as the current TestFlight version', async () => {
   const { validateReviewedAssets } = await import('./apply-store-listing');
-  expect(app.expo.version).toBe('1.5.0');
+  expect(app.expo.version).toBe('1.5.1');
   expect(() =>
     validateReviewedAssets(new URL('..', import.meta.url).pathname, {
       ...config.apple,
