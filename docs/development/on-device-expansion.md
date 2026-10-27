@@ -84,10 +84,31 @@ Browser tests inject a clearly synthetic model boundary and exercise production
 screens, confirmation, save failure/retry, persistence and navigation. Browser
 storage is synthetic test data; it proves neither iOS Keychain nor model inference.
 
-Native module autolinking was resolved successfully on Linux. Swift compilation,
-Foundation Models inference/availability/cancellation, native persistence and
-Duo layout require a new isolated iOS build. No device or simulator success is
-claimed here. PR210 native evidence cannot validate this new module.
+Native QA on 2026-10-27 used an isolated Xcode27.1 local ad-hoc Simulator
+build of commit58ce9bcaee0ce66b117f901a01b2efb932c14de3, version1.5.0
+(local build1). Executable and JavaScript hashes, installed-app bindings,
+unchanged test-runner bindings, logs and active-display screenshots are retained
+in the private PR211 native QA archive. PR210 evidence is not used to establish
+this module's behavior.
+
+The Xcode build verified native compilation. The iOS27.0 phone Simulator
+verified availability and real Foundation Models generation, independent grading,
+confirmation, durable saving and cold restart. A generated Shamir exercise with
+points(1,23),(2,4) was independently checked as42. Generation observed running
+before navigation or OS-confirmed backgrounding was cancelled without publishing
+a pending catalog. Removing only the newly created QA catalogs survived restart.
+Normal and maximum text exposed the phone's full multiline answer and final line;
+The iOS27.1 Duo retained the same draft and software keyboard across actual466→951→466pt
+outer/inner transitions. The corrective keyboard implementation also addresses
+multiline growth after the predictive bar appears. Historical startup timeouts
+and the earlier screenshot-confirmed clipping failure remain recorded, rather
+than being counted as successes.
+
+These are Simulator results, not physical-device or distribution verification.
+Model availability varies with supported hardware, OS, enabled Apple Intelligence
+and model readiness; unit/browser faults cover unavailable/error boundaries and
+are not real-model successes. Production signing, Apple processing and Store
+review require separate artifact-bound confirmation.
 
 ## Official references
 
