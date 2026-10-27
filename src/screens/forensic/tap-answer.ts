@@ -96,13 +96,14 @@ export function answerLabel(value: string, locale: 'ja' | 'en'): string {
     approved: '承認されていた',
     unauthorized: '承認されていなかった',
     'owner-proven': 'アカウントの本人が操作したと断定できる',
-    'session-used;human-unknown': 'sessionは特定できるが、操作した人は不明',
+    'session-used;human-unknown':
+      '同じログイン後の操作だと分かるが、操作した人は不明',
     yes: 'はい',
     no: 'いいえ',
     snapshot: '変更前の記録を保全する',
     reboot: '模擬再起動する',
   };
-  return labels[value] ? `${labels[value]} (${value})` : value;
+  return labels[value] ?? value;
 }
 // These candidates come exclusively from the public evidence shown to the learner.
 // No private expected answers, citations, seeds or grading helpers belong here.

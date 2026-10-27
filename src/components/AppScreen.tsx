@@ -140,6 +140,8 @@ interface AppScreenProps {
   readonly title: string;
   readonly description: string;
   readonly children: ReactNode;
+  readonly compact?: boolean;
+  readonly maxWidth?: number;
   /**
    * Issue 90: 多くの単一行入力を持つ画面（`IntroCardEditScreen` 等）が、
    * スクロールでキーボードを閉じられるよう `"on-drag"` を渡せるようにする
@@ -182,11 +184,14 @@ export default function AppScreen({
   footer,
   locale,
   onChangeLocale,
+  compact = false,
+  maxWidth,
 }: AppScreenProps) {
   // code-reviewer 指摘: `footer !== undefined && footer !== null` だと
   // `footer={false}` 等の falsy な値でも「footer あり」判定になり、
   // 中身が空のボーダー付き footer バーが描画されてしまう。既存の
   // `{footer ? <View>...} : null}`（Issue 93）と同じ truthy 判定に揃える。
+  const appearance = screenAppearance(compact, maxWidth);
   const hasFooter = Boolean(footer);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const scrollOffset = useRef(0);
@@ -291,6 +296,7 @@ export default function AppScreen({
         <View
           style={[
             styles.footerContent,
+            appearance.width,
             { paddingHorizontal: inlineFooter ? 0 : horizontalPadding },
           ]}
         >
@@ -329,13 +335,14 @@ export default function AppScreen({
           }
           contentContainerStyle={[
             styles.content,
+            appearance.width,
             { paddingHorizontal: horizontalPadding },
           ]}
           keyboardDismissMode={keyboardDismissMode}
           automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.brandRow}>
+          <View style={[styles.brandRow, appearance.brand]}>
             <View style={styles.brandLockup}>
               <BrandMark size={20} />
               <Text style={styles.brand}>
@@ -362,9 +369,11 @@ export default function AppScreen({
             ) : null}
           </View>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.description}>{description}</Text>
-          <View style={styles.body}>{children}</View>
+          <Text style={[styles.title, appearance.title]}>{title}</Text>
+          <Text style={[styles.description, appearance.description]}>
+            {description}
+          </Text>
+          <View style={[styles.body, appearance.body]}>{children}</View>
           {inlineFooter ? footerContent : null}
         </ScrollView>
         {/* `hasFooter &&` は一見 `hideFooterForKeyboard` に畳み込めそうだが
@@ -486,3 +495,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
 });
+
+function screenAppearance(compact: boolean, maxWidth: number | undefined) {
+  return {
+    width: { maxWidth: maxWidth ?? 680 },
+    brand: compact ? { marginBottom: 16 } : null,
+    title: compact ? { fontSize: 26, lineHeight: 34 } : null,
+    description: compact
+      ? { marginTop: 6, fontSize: 14, lineHeight: 22 }
+      : null,
+    body: compact ? { marginTop: 16 } : null,
+  };
+}
