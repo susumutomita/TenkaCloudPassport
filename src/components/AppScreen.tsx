@@ -107,6 +107,8 @@ interface AppScreenProps {
    * まま変えず、他の全 Screen の挙動には影響しない。
    */
   readonly keyboardDismissMode?: ScrollViewProps['keyboardDismissMode'];
+  /** Let the iOS scroll view keep its focused input above the keyboard. */
+  readonly automaticallyAdjustKeyboardInsets?: boolean;
   /**
    * Issue 93: 保存・生成ボタン等を `ScrollView` の外（画面下部）へ固定したい
    * 画面向けの optional prop。高さ不足・文字拡大時は本文内へ戻し、
@@ -136,6 +138,7 @@ export default function AppScreen({
   description,
   children,
   keyboardDismissMode,
+  automaticallyAdjustKeyboardInsets = false,
   footer,
   locale,
   onChangeLocale,
@@ -189,7 +192,11 @@ export default function AppScreen({
       onLayout={(event) => setBounds(event.nativeEvent.layout)}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={
+          Platform.OS === 'ios' && !automaticallyAdjustKeyboardInsets
+            ? 'padding'
+            : undefined
+        }
         style={styles.keyboardAvoiding}
       >
         <ScrollView
@@ -199,6 +206,7 @@ export default function AppScreen({
             { paddingHorizontal: horizontalPadding },
           ]}
           keyboardDismissMode={keyboardDismissMode}
+          automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.brandRow}>

@@ -119,6 +119,7 @@ export default function ForensicScreen({
   const { view, busy, error, pending, current, refresh, send } = flow;
   return (
     <AppScreen
+      automaticallyAdjustKeyboardInsets
       eyebrow="TenkaCloud · offline practice"
       title={ja ? 'フォレンジック調査室' : 'Forensic casebook'}
       description={
