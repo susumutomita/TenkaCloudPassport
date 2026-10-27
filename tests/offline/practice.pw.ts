@@ -40,6 +40,7 @@ async function answerFromEvidence(page: Page) {
     .getByTestId('practice-citations')
     .getByRole('button', { name: /^I-CLOUD ·/ })
     .click();
+  return login.account;
 }
 test('the original evidence-based answer survives navigation, SQLite connection restart and page restart', async ({
   page,
@@ -166,6 +167,29 @@ test('tap forms retain the four-evidence admission without requiring a text keyb
   page,
 }) => {
   await open(page, 'admission');
+  const correct = await answerFromEvidence(page);
+  const displayed = await page
+    .getByRole('button', { name: /@aster\.example$/ })
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute('aria-label'))
+    );
+  const distractor = displayed.find((name) => name && name !== correct);
+  if (!distractor) throw new Error('Missing displayed distractor');
+  await page.getByRole('button', { name: distractor, exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Submit answer and evidence', exact: true })
+    .click();
+  await expect(page.getByTestId('practice-result')).toContainText(
+    'Not correct yet'
+  );
+  await expect(page.getByTestId('practice-score')).toHaveText('Score: 0 / 400');
+  await expect(
+    page.getByRole('button', { name: 'Next question', exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Read explanation', exact: true })
+  ).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await page
     .getByRole('button', { name: 'Choose a question', exact: true })
     .click();
