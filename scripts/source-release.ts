@@ -90,6 +90,9 @@ const ALLOWED_RELEASE_IMAGE_EXTENSIONS = new Set([
   '.webp',
 ]);
 const ALLOWED_RELEASE_SUPPORT_FILES = new Set([
+  'modules/passport-practice-generation/expo-module.config.json',
+  'modules/passport-practice-generation/ios/PassportPracticeGeneration.podspec',
+  'modules/passport-practice-generation/ios/PassportPracticeGenerationModule.swift',
   '.eas/build/ios-device-build.yml',
   '.eas/build/ios-simulator-build.yml',
   '.symphony/README.md',

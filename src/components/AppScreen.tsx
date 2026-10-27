@@ -1,7 +1,15 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import {
+  type ComponentRef,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
+  type KeyboardEvent,
   type LayoutChangeEvent,
   Platform,
   Pressable,
@@ -9,6 +17,7 @@ import {
   type ScrollViewProps,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -95,6 +104,37 @@ function useFooterHiddenForKeyboard(hasFooter: boolean): boolean {
   return hasFooter && keyboardVisible;
 }
 
+interface FocusedInputMeasurement {
+  readonly input: NonNullable<
+    ReturnType<typeof TextInput.State.currentlyFocusedInput>
+  >;
+  readonly scroll: ComponentRef<typeof ScrollView>;
+  readonly offset: number;
+  readonly isCurrent: () => boolean;
+  readonly keyboard: () => KeyboardEvent['endCoordinates'] | null;
+  readonly currentOffset: () => number;
+  readonly retry: () => void;
+}
+
+function measureFocusedInput(measurement: FocusedInputMeasurement): void {
+  const { input, scroll, offset } = measurement;
+  input.measureInWindow((x, y, width, height) => {
+    if (!measurement.isCurrent()) return;
+    const keyboard = measurement.keyboard();
+    if (!keyboard || keyboard.height <= 0) return;
+    if (x >= keyboard.screenX + keyboard.width || x + width <= keyboard.screenX)
+      return;
+    if (measurement.currentOffset() !== offset) {
+      measurement.retry();
+      return;
+    }
+    // RCTKeyboardObserver converts its frame to window coordinates. Use
+    // the same coordinates for the input, including safe-area origins.
+    const overlap = y + height + spacing.md - keyboard.screenY;
+    if (overlap > 0) scroll.scrollTo({ y: offset + overlap, animated: false });
+  });
+}
+
 interface AppScreenProps {
   readonly eyebrow: string;
   readonly title: string;
@@ -107,6 +147,8 @@ interface AppScreenProps {
    * まま変えず、他の全 Screen の挙動には影響しない。
    */
   readonly keyboardDismissMode?: ScrollViewProps['keyboardDismissMode'];
+  /** Let the iOS scroll view keep its focused input above the keyboard. */
+  readonly automaticallyAdjustKeyboardInsets?: boolean;
   /**
    * Issue 93: 保存・生成ボタン等を `ScrollView` の外（画面下部）へ固定したい
    * 画面向けの optional prop。高さ不足・文字拡大時は本文内へ戻し、
@@ -136,6 +178,7 @@ export default function AppScreen({
   description,
   children,
   keyboardDismissMode,
+  automaticallyAdjustKeyboardInsets = false,
   footer,
   locale,
   onChangeLocale,
@@ -145,6 +188,11 @@ export default function AppScreen({
   // 中身が空のボーダー付き footer バーが描画されてしまう。既存の
   // `{footer ? <View>...} : null}`（Issue 93）と同じ truthy 判定に揃える。
   const hasFooter = Boolean(footer);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const scrollOffset = useRef(0);
+  const keyboardFrame = useRef<KeyboardEvent['endCoordinates'] | null>(null);
+  const inputFrameRequest = useRef<number | null>(null);
+  const inputMeasurement = useRef(0);
   const hideFooterForKeyboard = useFooterHiddenForKeyboard(hasFooter);
   const [footerHeight, setFooterHeight] = useState(0);
   const window = useWindowDimensions();
@@ -164,6 +212,74 @@ export default function AppScreen({
   function handleFooterLayout(event: LayoutChangeEvent): void {
     setFooterHeight(event.nativeEvent.layout.height);
   }
+
+  const revealFocusedInput = useCallback((): void => {
+    if (Platform.OS !== 'ios' || !automaticallyAdjustKeyboardInsets) return;
+    const input = TextInput.State.currentlyFocusedInput();
+    if (!input || !keyboardFrame.current) return;
+    const measurement = ++inputMeasurement.current;
+    if (inputFrameRequest.current !== null) {
+      cancelAnimationFrame(inputFrameRequest.current);
+    }
+    // Native keyboard insets react to keyboard frames. A multiline input can
+    // grow afterwards, including when folding changes its wrapping width.
+    // Measure the new layout rather than retaining the pre-growth caret offset.
+    const measure = (retry: boolean): void => {
+      inputFrameRequest.current = requestAnimationFrame(() => {
+        inputFrameRequest.current = null;
+        if (
+          inputMeasurement.current !== measurement ||
+          TextInput.State.currentlyFocusedInput() !== input
+        )
+          return;
+        const scroll = scrollRef.current;
+        const offset = scrollOffset.current;
+        const isCurrent = (): boolean =>
+          inputMeasurement.current === measurement &&
+          scrollRef.current === scroll &&
+          TextInput.State.currentlyFocusedInput() === input;
+        if (!scroll) return;
+        measureFocusedInput({
+          input,
+          scroll,
+          offset,
+          isCurrent,
+          keyboard: () => keyboardFrame.current,
+          currentOffset: () => scrollOffset.current,
+          retry: () => {
+            if (retry) measure(false);
+          },
+        });
+      });
+    };
+    measure(true);
+  }, [automaticallyAdjustKeyboardInsets]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !automaticallyAdjustKeyboardInsets) return;
+    keyboardFrame.current = Keyboard.metrics() ?? null;
+    const shown = (event: KeyboardEvent): void => {
+      keyboardFrame.current = event.endCoordinates;
+      revealFocusedInput();
+    };
+    const show = Keyboard.addListener('keyboardDidShow', shown);
+    const frame = Keyboard.addListener('keyboardDidChangeFrame', shown);
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardFrame.current = null;
+      inputMeasurement.current += 1;
+    });
+    return () => {
+      show.remove();
+      frame.remove();
+      hide.remove();
+      keyboardFrame.current = null;
+      inputMeasurement.current += 1;
+      if (inputFrameRequest.current !== null) {
+        cancelAnimationFrame(inputFrameRequest.current);
+        inputFrameRequest.current = null;
+      }
+    };
+  }, [automaticallyAdjustKeyboardInsets, revealFocusedInput]);
 
   const footerContent =
     hasFooter && !hideFooterForKeyboard ? (
@@ -189,16 +305,34 @@ export default function AppScreen({
       onLayout={(event) => setBounds(event.nativeEvent.layout)}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={
+          Platform.OS === 'ios' && !automaticallyAdjustKeyboardInsets
+            ? 'padding'
+            : undefined
+        }
         style={styles.keyboardAvoiding}
       >
         <ScrollView
+          ref={scrollRef}
           style={styles.scroll}
+          onContentSizeChange={revealFocusedInput}
+          onLayout={revealFocusedInput}
+          onScroll={
+            automaticallyAdjustKeyboardInsets
+              ? (event) => {
+                  scrollOffset.current = event.nativeEvent.contentOffset.y;
+                }
+              : undefined
+          }
+          scrollEventThrottle={
+            automaticallyAdjustKeyboardInsets ? 16 : undefined
+          }
           contentContainerStyle={[
             styles.content,
             { paddingHorizontal: horizontalPadding },
           ]}
           keyboardDismissMode={keyboardDismissMode}
+          automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.brandRow}>

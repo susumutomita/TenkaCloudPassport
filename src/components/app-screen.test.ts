@@ -34,11 +34,34 @@ describe('AppScreen の footer キーボード表示中非表示のソース契�
   it('Android は windowSoftInputMode の既定挙動のままにし、did イベントへのフォールバックを追加しない（code-reviewer 指摘: 未検証・未報告の Android 退行を避ける）', async () => {
     const text = await source('AppScreen.tsx');
 
-    // コメント上の言及（却下理由の説明）は許容するが、実際に
-    // `Keyboard.addListener` へ did イベントを渡すコードは持たない。
-    expect(text).not.toContain("Keyboard.addListener('keyboardDidShow'");
-    expect(text).not.toContain("Keyboard.addListener('keyboardDidHide'");
-    expect(text).not.toMatch(/Platform\.OS === 'ios' \? 'keyboardWill/);
+    const footerHook = text.slice(
+      text.indexOf('function useFooterHiddenForKeyboard('),
+      text.indexOf('interface AppScreenProps')
+    );
+    expect(footerHook).toContain(
+      "if (!hasFooter || Platform.OS !== 'ios') return;"
+    );
+    expect(footerHook).not.toContain("Keyboard.addListener('keyboardDidShow'");
+    expect(footerHook).not.toContain("Keyboard.addListener('keyboardDidHide'");
+    expect(footerHook).not.toMatch(/Platform\.OS === 'ios' \? 'keyboardWill/);
+    // Input growth correction has a separate opt-in iOS-only subscription;
+    // did events must not become an Android footer fallback.
+    const inputSubscription = text.slice(
+      text.lastIndexOf(
+        'useEffect(() => {',
+        text.indexOf('keyboardFrame.current = Keyboard.metrics()')
+      ),
+      text.indexOf('const footerContent')
+    );
+    expect(inputSubscription).toContain(
+      "if (Platform.OS !== 'ios' || !automaticallyAdjustKeyboardInsets) return;"
+    );
+    expect(inputSubscription).toContain(
+      "Keyboard.addListener('keyboardDidShow'"
+    );
+    expect(inputSubscription).toContain('show.remove();');
+    expect(inputSubscription).toContain('frame.remove();');
+    expect(inputSubscription).toContain('hide.remove();');
   });
 
   it('キーボード表示中は footer を DOM から外し、入力欄・プレビューへ渡す領域を返す（隠すだけで領域を確保したままにしない）', async () => {

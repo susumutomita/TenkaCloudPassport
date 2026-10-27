@@ -854,6 +854,9 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
     'docs/field-study-participant-notes.md',
     'docs/bad\nname.md',
     'unknown-root/source.ts',
+    'modules/passport-practice-generation/ios/OtherModule.swift',
+    'modules/passport-practice-generation/ios/credentials.json',
+    'modules/other/Other.podspec',
     '.eas/build/credentials.json',
     '.eas/build/unreviewed-workflow.yml',
     '.symphony/token.md',
@@ -882,6 +885,9 @@ describe('Issue 29: Source Release Tree の秘密情報除外', () => {
     expect(() =>
       assertSafeTrackedPaths([
         'src/domain/passport.ts',
+        'modules/passport-practice-generation/expo-module.config.json',
+        'modules/passport-practice-generation/ios/PassportPracticeGeneration.podspec',
+        'modules/passport-practice-generation/ios/PassportPracticeGenerationModule.swift',
         'docs/privacy/data-inventory.md',
         'docs/evidence/nearby-transport-static-screening.json',
         'docs/research/event-aggregate.schema.json',

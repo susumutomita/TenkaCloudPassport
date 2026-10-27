@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/susumutomita/TenkaCloudChallenge",
+  "commit": "68b9fbe0d49f5f1d01e04cf8b52f284fd3153ee1",
+  "scope": "Original field/RSA/Shamir arithmetic only; not multiplayer Battle grading or score",
+  "adaptations": [
+    "Import suffix removal",
+    "Record property syntax",
+    "Formatting"
+  ],
+  "files": [
+    {
+      "path": "battles/crypto-battle/game/src/field.ts",
+      "sha256": "f4d0a640d6da55e3024a3809d10c4962f490398798e32a33927259bfd8e4ecf6"
+    },
+    {
+      "path": "battles/crypto-battle/game/src/rsa.ts",
+      "sha256": "dda20d321cf91cc399f64bed2230d31420eebb1e6cf8ee89726108519ed42cd5"
+    },
+    {
+      "path": "battles/crypto-battle/game/src/shamir.ts",
+      "sha256": "026ccc3300fdbb85af2fd427743d503f2a79a653cf0caea697a09e8543bdd948"
+    }
+  ]
+}

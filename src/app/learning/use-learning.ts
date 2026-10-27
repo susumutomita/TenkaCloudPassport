@@ -265,6 +265,18 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
   function prepareRemoval(catalog: Catalog) {
     if (state) setPending(removeCatalog(state, catalog));
   }
+  function prepareCatalog(catalog: Catalog) {
+    const active = session.current;
+    if (!active || operation.current) return;
+    try {
+      setPending(addCatalog(active.state, catalog));
+    } catch {
+      setMessageKind('error');
+      setMessage(
+        '教材を追加できません。保存済み教材の上限や重複を確認してください。 / Could not add practice. Check saved catalog limits or duplicates.'
+      );
+    }
+  }
   return {
     state,
     selection,
@@ -281,6 +293,7 @@ export function useLearning(storage: LearningStorage, files: LearningFilePort) {
     exportFile,
     apply,
     prepareRemoval,
+    prepareCatalog,
     retrieve,
     downloadLatest,
     downloadStatus,
