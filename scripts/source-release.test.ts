@@ -1030,7 +1030,12 @@ describe('Issue 29: 再現可能 Source Release Candidate', () => {
     { mode: 0o000, message: 'Release output path cannot be inspected safely.' },
     {
       mode: 0o111,
-      message: 'Release output parent could not be opened safely.',
+      // Darwin rejects this directory at inspection; Linux reaches open.
+      // Both must fail closed, with the exact error from that boundary.
+      message:
+        process.platform === 'darwin'
+          ? 'Release output parent must be an existing real directory.'
+          : 'Release output parent could not be opened safely.',
     },
     {
       mode: 0o555,
