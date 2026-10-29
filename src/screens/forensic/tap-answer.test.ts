@@ -214,7 +214,10 @@ it('does not submit a partial sequence, malformed number or overlong structured 
   expect(questionSummary('account', 'ja')).toContain('認証ログ');
   expect(questionSummary('account', 'en')).toContain('login');
   expect(questionSummary('future', 'en')).toBe('future');
-  expect(answerLabel('approved', 'ja')).toContain('承認');
+  expect(answerLabel('approved', 'ja')).toBe('承認されていた');
+  expect(answerLabel('session-used;human-unknown', 'ja')).not.toContain(
+    'human-unknown'
+  );
   expect(answerLabel('approved', 'en')).toBe('approved');
   expect(answerLabel('account-name', 'ja')).toBe('account-name');
 });

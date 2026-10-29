@@ -107,7 +107,10 @@ describe('AppScreen のヘッダー言語切替トグル（Issue 118）', () => 
 
   it('トグルは BrandMark ロックアップと同じ行の右側に、space-between で配置する', async () => {
     const text = await source('AppScreen.tsx');
-    const rowStart = text.indexOf('<View style={styles.brandRow}>');
+    const rowStart = text.indexOf(
+      '<View style={[styles.brandRow, appearance.brand]}>'
+    );
+    expect(rowStart).toBeGreaterThanOrEqual(0);
     const rowEnd = text.indexOf('<Text style={styles.eyebrow}>', rowStart);
     const rowBlock = text.slice(rowStart, rowEnd);
 

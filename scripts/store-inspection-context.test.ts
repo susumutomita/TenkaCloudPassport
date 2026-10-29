@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -19,7 +20,11 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'passport-store-context-'));
+  // macOS exposes /var through /private/var. Node's cwd is canonical while
+  // Bun's tmpdir may retain the alias; compare the same real directory.
+  const root = realpathSync(
+    mkdtempSync(join(tmpdir(), 'passport-store-context-'))
+  );
   roots.push(root);
   const inspection = join(root, 'scripts/store-inspection-project');
   mkdirSync(inspection, { recursive: true });
